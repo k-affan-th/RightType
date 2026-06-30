@@ -119,7 +119,7 @@ RightType/        # repo root
 4. ✅ `secret.rs` + tests — bail-out classifier (hex/base58/WIF/bech32/entropy/long/BIP39-run). *No OS.*
 5. ✅ `hook.rs` + `buffer.rs` + worker channel — capture words; zeroize on boundary; enqueue-only callback. *(Code complete & compiles under `--features winos`; manual capture smoke-test pending.)*
 6. ✅ `inject.rs` — release-held-mods + atomic Unicode `SendInput` batch; auto-mode wired (hook→detect→inject), boundary key re-emitted. *(Bug 2 fix. Undo stack + manual hotkeys still pending — step 9. Manual end-to-end test pending.)*
-7. ⏳ `session.rs` — power/WTS reinstall + watchdog. *(Bug 1 fix)*
+7. ✅ `session.rs` — power/WTS reinstall + watchdog. *(Bug 1 fix. Manual sleep/lock test pending.)*
 8. ⬜ `safety.rs` + tests — password-field & blacklist gating; RAM hardening (VirtualLock, dump-disable, non-elevated).
 9. ⬜ `manual.rs` full hotkey set incl. Convert-on-demand + Undo + pause/panic; auto mode wired hook→secret→detect→inject.
 10. ⬜ `ui/` — tray, settings dialog, correction toast, stats; config persistence; run-at-startup; portable `--release` build.

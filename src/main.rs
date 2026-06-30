@@ -19,6 +19,10 @@ mod inject;
 #[cfg(feature = "winos")]
 mod manual;
 #[cfg(feature = "winos")]
+mod session;
+#[cfg(feature = "winos")]
+mod toast;
+#[cfg(feature = "winos")]
 mod tray;
 
 #[cfg(not(feature = "winos"))]

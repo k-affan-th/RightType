@@ -9,8 +9,9 @@
 use std::rc::Rc;
 
 use native_windows_gui as nwg;
+use windows::Win32::Foundation::HWND;
 
-use crate::hook;
+use crate::{hook, session, toast};
 
 /// The tray icon, embedded so the binary stays portable (no external file).
 static ICON_BYTES: &[u8] = include_bytes!("../assets/icon.ico");
@@ -30,6 +31,9 @@ struct Tray {
 /// Build the tray UI, install the hook, and run the event loop until Quit.
 pub fn run() {
     nwg::init().expect("Failed to init Native Windows GUI");
+
+    // The small status toast (shown on layout switch / mode change).
+    toast::init();
 
     let mut window = nwg::MessageWindow::default();
     nwg::MessageWindow::builder()
@@ -124,19 +128,31 @@ pub fn run() {
                     let on = !hook::is_enabled();
                     hook::set_enabled(on);
                     ui_h.m_enabled.set_checked(on);
+                    toast::show(if on { "RightType: ON" } else { "RightType: OFF" });
                 } else if handle == ui_h.m_auto.handle {
                     hook::set_auto(true);
                     ui_h.m_auto.set_checked(true);
                     ui_h.m_manual.set_checked(false);
+                    toast::show("Auto mode");
                 } else if handle == ui_h.m_manual.handle {
                     hook::set_auto(false);
                     ui_h.m_auto.set_checked(false);
                     ui_h.m_manual.set_checked(true);
+                    toast::show("Manual mode");
                 }
             }
             _ => {}
         }
     });
+
+    // Session resilience: reinstall the hook across sleep/resume + lock/unlock by
+    // watching raw power/session messages on this window (Bug 1).
+    let hwnd = ui.window.handle.hwnd().map(|h| HWND(h as _));
+    let raw = nwg::bind_raw_event_handler(&ui.window.handle, 0x5254_0001, move |_h, msg, w, _l| {
+        unsafe { session::on_message(msg, w) };
+        None
+    })
+    .ok();
 
     // The hook lives on this (message-pumping) thread.
     if let Err(e) = unsafe { hook::install() } {
@@ -147,9 +163,18 @@ pub fn run() {
         );
         return;
     }
+    if let Some(hwnd) = hwnd {
+        unsafe { session::arm(hwnd) };
+    }
 
     nwg::dispatch_thread_events();
 
+    if let Some(hwnd) = hwnd {
+        unsafe { session::disarm(hwnd) };
+    }
     unsafe { hook::uninstall() };
+    if let Some(h) = raw {
+        let _ = nwg::unbind_raw_event_handler(&h);
+    }
     nwg::unbind_event_handler(&handler);
 }

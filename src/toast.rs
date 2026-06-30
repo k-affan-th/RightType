@@ -1,0 +1,182 @@
+//! Tiny, modern status toast — Windows only.
+//!
+//! Deliberately minimal: it flashes a small dark pill in the **bottom-right
+//! corner** only on rare, deliberate state changes — switching Auto/Manual mode
+//! (via the Ctrl+CapsLock shortcut or the tray) and enable/disable — then fades.
+//! It does NOT announce auto layout switches (too frequent — Windows' own language
+//! indicator already shows those) nor individual corrections (you see the word
+//! change). Custom-painted (GDI), borderless, and it never steals focus.
+
+use std::cell::RefCell;
+use std::ffi::c_void;
+
+use native_windows_gui as nwg;
+use windows::core::PCWSTR;
+use windows::Win32::Foundation::{COLORREF, HWND, RECT};
+use windows::Win32::Graphics::Gdi::{
+    BeginPaint, CreateFontW, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, DrawTextW,
+    EndPaint, FillRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor, SetWindowRgn,
+    CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET, DT_CENTER, DT_SINGLELINE, DT_VCENTER,
+    HGDIOBJ, OUT_DEFAULT_PRECIS, PAINTSTRUCT, TRANSPARENT,
+};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetClientRect, KillTimer, SetTimer, SetWindowPos, ShowWindow, SystemParametersInfoW,
+    HWND_TOPMOST, SPI_GETWORKAREA, SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE,
+    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+};
+
+const TIMER_ID: usize = 7;
+const SHOW_MS: u32 = 850;
+const W: i32 = 116;
+const H: i32 = 32;
+const MARGIN: i32 = 12;
+const WM_PAINT: u32 = 0x000F;
+const WM_ERASEBKGND: u32 = 0x0014;
+const WM_TIMER: u32 = 0x0113;
+
+/// `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` — float above everything,
+/// stay off the taskbar, and (crucially) never take focus from what's being typed.
+const EX_FLAGS: u32 = 0x0000_0008 | 0x0000_0080 | 0x0800_0000;
+
+struct Toast {
+    window: nwg::Window,
+    _raw: Option<nwg::RawEventHandler>,
+}
+
+thread_local! {
+    static TOAST: RefCell<Option<Toast>> = const { RefCell::new(None) };
+    static TEXT: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// Create the (hidden) toast window. Call once, on the UI thread, after `nwg::init`.
+pub fn init() {
+    let mut window = nwg::Window::default();
+    if nwg::Window::builder()
+        .flags(nwg::WindowFlags::POPUP)
+        .ex_flags(EX_FLAGS)
+        .size((W, H))
+        .position((-4000, -4000))
+        .title("")
+        .build(&mut window)
+        .is_err()
+    {
+        return;
+    }
+
+    if let Some(h) = window.handle.hwnd() {
+        unsafe {
+            // Rounded "pill" corners.
+            let rgn = CreateRoundRectRgn(0, 0, W + 1, H + 1, H, H);
+            SetWindowRgn(HWND(h as _), rgn, true);
+        }
+    }
+
+    // We custom-paint the window (dark pill + white text) and hide on the timer.
+    let raw = nwg::bind_raw_event_handler(&window.handle, 0x5254_0002, move |hwnd, msg, w, _l| {
+        let hwnd = HWND(hwnd as _);
+        match msg {
+            WM_ERASEBKGND => Some(1), // painted fully in WM_PAINT; skip default erase
+            WM_PAINT => {
+                unsafe { paint(hwnd) };
+                Some(0)
+            }
+            WM_TIMER if w == TIMER_ID => {
+                unsafe { hide(hwnd) };
+                Some(0)
+            }
+            _ => None,
+        }
+    })
+    .ok();
+
+    TOAST.with(|t| *t.borrow_mut() = Some(Toast { window, _raw: raw }));
+}
+
+/// Flash `text` briefly in the bottom-right corner. No-op if [`init`] hasn't run.
+/// UI thread only (all callers are on the hook/tray thread).
+pub fn show(text: &str) {
+    TEXT.with(|t| *t.borrow_mut() = text.to_string());
+    TOAST.with(|t| {
+        let guard = t.borrow();
+        let Some(toast) = guard.as_ref() else {
+            return;
+        };
+        let Some(h) = toast.window.handle.hwnd() else {
+            return;
+        };
+        let hwnd = HWND(h as _);
+        unsafe {
+            let (x, y) = bottom_right();
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                x,
+                y,
+                W,
+                H,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            );
+            let _ = InvalidateRect(hwnd, None, true);
+            let _ = KillTimer(hwnd, TIMER_ID);
+            SetTimer(hwnd, TIMER_ID, SHOW_MS, None);
+        }
+    });
+}
+
+/// Bottom-right of the work area (so it sits above the taskbar, wherever it is).
+unsafe fn bottom_right() -> (i32, i32) {
+    let mut wa = RECT::default();
+    let _ = SystemParametersInfoW(
+        SPI_GETWORKAREA,
+        0,
+        Some(&mut wa as *mut RECT as *mut c_void),
+        SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+    );
+    (wa.right - W - MARGIN, wa.bottom - H - MARGIN)
+}
+
+unsafe fn paint(hwnd: HWND) {
+    let mut ps = PAINTSTRUCT::default();
+    let hdc = BeginPaint(hwnd, &mut ps);
+
+    let mut rc = RECT::default();
+    let _ = GetClientRect(hwnd, &mut rc);
+
+    // Dark pill background (COLORREF is 0x00BBGGRR).
+    let brush = CreateSolidBrush(COLORREF(0x002A_2A2A));
+    FillRect(hdc, &rc, brush);
+    let _ = DeleteObject(HGDIOBJ(brush.0));
+
+    // White, centred Segoe UI text.
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, COLORREF(0x00FF_FFFF));
+    let face: Vec<u16> = "Segoe UI\0".encode_utf16().collect();
+    let font = CreateFontW(
+        -15,
+        0,
+        0,
+        0,
+        600,
+        0,
+        0,
+        0,
+        DEFAULT_CHARSET.0 as u32,
+        OUT_DEFAULT_PRECIS.0 as u32,
+        CLIP_DEFAULT_PRECIS.0 as u32,
+        CLEARTYPE_QUALITY.0 as u32,
+        0,
+        PCWSTR(face.as_ptr()),
+    );
+    let old = SelectObject(hdc, HGDIOBJ(font.0));
+    let mut text: Vec<u16> = TEXT.with(|t| t.borrow().encode_utf16().collect());
+    DrawTextW(hdc, &mut text, &mut rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    SelectObject(hdc, old);
+    let _ = DeleteObject(HGDIOBJ(font.0));
+
+    let _ = EndPaint(hwnd, &ps);
+}
+
+unsafe fn hide(hwnd: HWND) {
+    let _ = KillTimer(hwnd, TIMER_ID);
+    let _ = ShowWindow(hwnd, SW_HIDE);
+}

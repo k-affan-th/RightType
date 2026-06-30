@@ -171,6 +171,16 @@ pub unsafe fn uninstall() {
     }
 }
 
+/// Tear down and re-establish the hook — the recovery action after a power/session
+/// transition that may have silently evicted it (RightLang Bug 1).
+///
+/// # Safety
+/// Same thread + message-loop requirements as [`install`].
+pub unsafe fn reinstall() -> windows::core::Result<()> {
+    uninstall();
+    install()
+}
+
 unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
@@ -211,10 +221,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         if ctrl && !shift {
             // Ctrl+CapsLock: toggle Auto/Manual. Swallow so Caps never flips.
             let now_auto = !MODE_AUTO.fetch_xor(true, Ordering::Relaxed);
-            eprintln!(
-                "[righttype] mode: {}",
-                if now_auto { "AUTO" } else { "MANUAL" }
-            );
+            crate::toast::show(if now_auto { "Auto mode" } else { "Manual mode" });
             return true;
         }
         if shift && !ctrl {
@@ -360,6 +367,9 @@ unsafe fn activate_layout(primary: u16) {
                 WPARAM(0),
                 LPARAM(hkl.0 as isize),
             );
+            // No toast here: a layout switch happens on every ignition, which is
+            // too frequent — and Windows' own language indicator already reflects
+            // it. We only toast deliberate, rare changes (mode / enabled).
             return;
         }
     }
