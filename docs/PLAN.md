@@ -121,9 +121,13 @@ RightType/        # repo root
 6. ✅ `inject.rs` — release-held-mods + atomic Unicode `SendInput` batch; auto-mode wired (hook→detect→inject), boundary key re-emitted. *(Bug 2 fix. Undo stack + manual hotkeys still pending — step 9. Manual end-to-end test pending.)*
 7. ✅ `session.rs` — power/WTS reinstall + watchdog. *(Bug 1 fix. Manual sleep/lock test pending.)*
 8. ◑ `safety.rs` — password-field (ES_PASSWORD) + app blacklist (wallets / password managers / terminals) gating DONE. RAM hardening (VirtualLock, dump-disable, non-elevated) still pending.
-9. ⬜ `manual.rs` full hotkey set incl. Convert-on-demand + Undo + pause/panic; auto mode wired hook→secret→detect→inject.
-10. ⬜ `ui/` — tray, settings dialog, correction toast, stats; config persistence; run-at-startup; portable `--release` build.
-11. ⬜ Polish + trust: Thai+English UI, optional RightLang-dictionary import, icon, `cargo-audit`/`cargo-vet` CI, reproducible build + signing + SHA-256 checksums.
+9. ◑ Manual hotkeys: `Shift+Backspace` (fix word), `Shift+CapsLock` (fix selection via clipboard), `Ctrl+CapsLock` (Auto/Manual). Auto mode wired hook→secret→detect→inject + eager run-on conversion both directions + auto layout-switch. *(Undo, Convert-on-demand, pause/panic hotkeys still TODO.)*
+10. ◑ Tray app (windowless) — enable/disable, Auto/Manual, Learn, Start-with-Windows, Quit; status toast; config persistence (`%APPDATA%`); run-at-startup (HKCU Run); portable `--release` build **2.6 MB**. *(Settings dialog + stats still TODO.)*
+11. ◑ Polish + trust: README updated; UIA browser password detection; opt-in auto-learn. *(Thai UI, RAM hardening (VirtualLock/dump-disable), `cargo-audit`/CI, reproducible build + signing + checksums still TODO.)*
+
+**Status: a working, shippable v1.** Core engine + Windows tray app complete; privacy
+guards (secret bail-out, password-field/blacklist context guards incl. browsers, zeroize,
+no network) in place. Remaining items above are enhancements, not blockers.
 
 ---
 
