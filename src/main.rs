@@ -13,13 +13,19 @@
 #[cfg(feature = "winos")]
 mod clipboard;
 #[cfg(feature = "winos")]
+mod config;
+#[cfg(feature = "winos")]
 mod hook;
 #[cfg(feature = "winos")]
 mod inject;
 #[cfg(feature = "winos")]
 mod manual;
 #[cfg(feature = "winos")]
+mod safety;
+#[cfg(feature = "winos")]
 mod session;
+#[cfg(feature = "winos")]
+mod startup;
 #[cfg(feature = "winos")]
 mod toast;
 #[cfg(feature = "winos")]

@@ -45,7 +45,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_INPUTLANGCHANGEREQUEST, WM_KEYDOWN, WM_SYSKEYDOWN,
 };
 
-use crate::{inject, manual};
+use crate::{inject, manual, safety};
 
 /// Magic value stamped into `dwExtraInfo` on every event the injector sends, so
 /// the hook can recognise and skip our own input with zero timing dependency. The
@@ -100,6 +100,10 @@ struct HookState {
     /// hit (switching layout mid-sentence left stale context behind).
     last_hwnd: isize,
     last_hkl: isize,
+    /// Whether the current foreground app is blacklisted (wallet / password
+    /// manager / terminal). Recomputed only when the window changes — opening the
+    /// process every keystroke would be wasteful.
+    sensitive_app: bool,
 }
 
 impl HookState {
@@ -109,6 +113,7 @@ impl HookState {
             seed: secret::SeedTracker::new(),
             last_hwnd: 0,
             last_hkl: 0,
+            sensitive_app: false,
         }
     }
 }
@@ -214,6 +219,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // If focus or layout changed since the last key, the buffered word is stale.
     sync_context();
 
+    // Never run where secrets are typed: blacklisted apps or password fields.
+    if STATE.with(|s| s.borrow().sensitive_app) || safety::is_password_field() {
+        return false;
+    }
+
     // CapsLock: a hotkey carrier when chorded, otherwise a normal toggle.
     if vk == VK_CAPITAL.0 {
         let ctrl = is_down(VK_CONTROL);
@@ -222,6 +232,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             // Ctrl+CapsLock: toggle Auto/Manual. Swallow so Caps never flips.
             let now_auto = !MODE_AUTO.fetch_xor(true, Ordering::Relaxed);
             crate::toast::show(if now_auto { "Auto mode" } else { "Manual mode" });
+            crate::config::persist();
             return true;
         }
         if shift && !ctrl {
@@ -490,15 +501,22 @@ unsafe fn sync_context() {
     let hwnd_i = hwnd.0 as isize;
     let hkl_i = GetKeyboardLayout(tid).0 as isize;
 
-    STATE.with(|s| {
+    let window_changed = STATE.with(|s| {
         let mut st = s.borrow_mut();
-        if st.last_hwnd != hwnd_i || st.last_hkl != hkl_i {
+        let changed = st.last_hwnd != hwnd_i;
+        if changed || st.last_hkl != hkl_i {
             st.buf.clear();
             st.seed.reset();
             st.last_hwnd = hwnd_i;
             st.last_hkl = hkl_i;
         }
+        changed
     });
+    // Re-evaluate the (heavier) app blacklist only when the window changed.
+    if window_changed {
+        let blacklisted = safety::is_blacklisted_app(hwnd);
+        STATE.with(|s| s.borrow_mut().sensitive_app = blacklisted);
+    }
 }
 
 /// The keyboard layout (HKL) of whatever window currently has focus.

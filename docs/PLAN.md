@@ -120,7 +120,7 @@ RightType/        # repo root
 5. ✅ `hook.rs` + `buffer.rs` + worker channel — capture words; zeroize on boundary; enqueue-only callback. *(Code complete & compiles under `--features winos`; manual capture smoke-test pending.)*
 6. ✅ `inject.rs` — release-held-mods + atomic Unicode `SendInput` batch; auto-mode wired (hook→detect→inject), boundary key re-emitted. *(Bug 2 fix. Undo stack + manual hotkeys still pending — step 9. Manual end-to-end test pending.)*
 7. ✅ `session.rs` — power/WTS reinstall + watchdog. *(Bug 1 fix. Manual sleep/lock test pending.)*
-8. ⬜ `safety.rs` + tests — password-field & blacklist gating; RAM hardening (VirtualLock, dump-disable, non-elevated).
+8. ◑ `safety.rs` — password-field (ES_PASSWORD) + app blacklist (wallets / password managers / terminals) gating DONE. RAM hardening (VirtualLock, dump-disable, non-elevated) still pending.
 9. ⬜ `manual.rs` full hotkey set incl. Convert-on-demand + Undo + pause/panic; auto mode wired hook→secret→detect→inject.
 10. ⬜ `ui/` — tray, settings dialog, correction toast, stats; config persistence; run-at-startup; portable `--release` build.
 11. ⬜ Polish + trust: Thai+English UI, optional RightLang-dictionary import, icon, `cargo-audit`/`cargo-vet` CI, reproducible build + signing + SHA-256 checksums.

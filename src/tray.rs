@@ -11,7 +11,7 @@ use std::rc::Rc;
 use native_windows_gui as nwg;
 use windows::Win32::Foundation::HWND;
 
-use crate::{hook, session, toast};
+use crate::{config, hook, session, startup, toast};
 
 /// The tray icon, embedded so the binary stays portable (no external file).
 static ICON_BYTES: &[u8] = include_bytes!("../assets/icon.ico");
@@ -24,6 +24,7 @@ struct Tray {
     m_enabled: nwg::MenuItem,
     m_auto: nwg::MenuItem,
     m_manual: nwg::MenuItem,
+    m_startup: nwg::MenuItem,
     _sep: nwg::MenuSeparator,
     m_quit: nwg::MenuItem,
 }
@@ -34,6 +35,10 @@ pub fn run() {
 
     // The small status toast (shown on layout switch / mode change).
     toast::init();
+
+    // Restore saved settings (enabled + mode) before building the menu so its
+    // checkmarks reflect them.
+    config::apply(&config::load());
 
     let mut window = nwg::MessageWindow::default();
     nwg::MessageWindow::builder()
@@ -82,6 +87,13 @@ pub fn run() {
         .build(&mut m_manual)
         .expect("manual item");
 
+    let mut m_startup = nwg::MenuItem::default();
+    nwg::MenuItem::builder()
+        .text("Start with Windows")
+        .parent(&menu)
+        .build(&mut m_startup)
+        .expect("startup item");
+
     let mut sep = nwg::MenuSeparator::default();
     nwg::MenuSeparator::builder()
         .parent(&menu)
@@ -99,6 +111,7 @@ pub fn run() {
     m_enabled.set_checked(hook::is_enabled());
     m_auto.set_checked(hook::is_auto());
     m_manual.set_checked(!hook::is_auto());
+    m_startup.set_checked(startup::is_enabled());
 
     let ui = Rc::new(Tray {
         window,
@@ -108,6 +121,7 @@ pub fn run() {
         m_enabled,
         m_auto,
         m_manual,
+        m_startup,
         _sep: sep,
         m_quit,
     });
@@ -129,16 +143,23 @@ pub fn run() {
                     hook::set_enabled(on);
                     ui_h.m_enabled.set_checked(on);
                     toast::show(if on { "RightType: ON" } else { "RightType: OFF" });
+                    config::persist();
                 } else if handle == ui_h.m_auto.handle {
                     hook::set_auto(true);
                     ui_h.m_auto.set_checked(true);
                     ui_h.m_manual.set_checked(false);
                     toast::show("Auto mode");
+                    config::persist();
                 } else if handle == ui_h.m_manual.handle {
                     hook::set_auto(false);
                     ui_h.m_auto.set_checked(false);
                     ui_h.m_manual.set_checked(true);
                     toast::show("Manual mode");
+                    config::persist();
+                } else if handle == ui_h.m_startup.handle {
+                    let on = !startup::is_enabled();
+                    startup::set_enabled(on);
+                    ui_h.m_startup.set_checked(on);
                 }
             }
             _ => {}
