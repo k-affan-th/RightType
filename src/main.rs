@@ -15,9 +15,13 @@ mod clipboard;
 #[cfg(feature = "winos")]
 mod config;
 #[cfg(feature = "winos")]
+mod focus;
+#[cfg(feature = "winos")]
 mod hook;
 #[cfg(feature = "winos")]
 mod inject;
+#[cfg(feature = "winos")]
+mod learn;
 #[cfg(feature = "winos")]
 mod manual;
 #[cfg(feature = "winos")]

@@ -219,8 +219,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // If focus or layout changed since the last key, the buffered word is stale.
     sync_context();
 
-    // Never run where secrets are typed: blacklisted apps or password fields.
-    if STATE.with(|s| s.borrow().sensitive_app) || safety::is_password_field() {
+    // Never run where secrets are typed: blacklisted apps, or password fields
+    // (native ES_PASSWORD, or UIA-detected ones in browsers/Electron/UWP).
+    if STATE.with(|s| s.borrow().sensitive_app)
+        || safety::is_password_field()
+        || crate::focus::is_password_field()
+    {
         return false;
     }
 
@@ -266,6 +270,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         }
         return false;
     };
+
+    // Auto-learn this completed word (no-op unless the user enabled learning).
+    crate::learn::observe(&word);
 
     // Auto mode corrects on the boundary (the EN-on-Thai-layout direction, which
     // does have spaces); Manual mode waits for a hotkey.
@@ -334,7 +341,7 @@ unsafe fn auto_thai_layout_to_en() -> bool {
         return false;
     }
     let mut eng = th_to_en(&thai);
-    if !dict::english().contains(&eng) {
+    if !dict::english().contains(&eng) && !crate::learn::contains(&eng) {
         eng.zeroize();
         return false;
     }

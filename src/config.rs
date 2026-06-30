@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::hook;
+use crate::{hook, learn};
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
 #[serde(default)]
@@ -17,6 +17,8 @@ pub struct Config {
     pub enabled: bool,
     /// `true` = Auto mode, `false` = Manual.
     pub auto: bool,
+    /// Auto-learn new words (off by default — privacy).
+    pub learn: bool,
 }
 
 impl Default for Config {
@@ -24,6 +26,7 @@ impl Default for Config {
         Self {
             enabled: true,
             auto: false,
+            learn: false,
         }
     }
 }
@@ -47,6 +50,7 @@ pub fn load() -> Config {
 pub fn apply(cfg: &Config) {
     hook::set_enabled(cfg.enabled);
     hook::set_auto(cfg.auto);
+    learn::set_enabled(cfg.learn);
 }
 
 /// Snapshot the current runtime state and write it to disk. Best-effort.
@@ -54,6 +58,7 @@ pub fn persist() {
     let cfg = Config {
         enabled: hook::is_enabled(),
         auto: hook::is_auto(),
+        learn: learn::is_enabled(),
     };
     let Some(p) = config_path() else {
         return;

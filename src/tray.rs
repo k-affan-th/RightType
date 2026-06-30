@@ -11,7 +11,7 @@ use std::rc::Rc;
 use native_windows_gui as nwg;
 use windows::Win32::Foundation::HWND;
 
-use crate::{config, hook, session, startup, toast};
+use crate::{config, focus, hook, learn, session, startup, toast};
 
 /// The tray icon, embedded so the binary stays portable (no external file).
 static ICON_BYTES: &[u8] = include_bytes!("../assets/icon.ico");
@@ -24,6 +24,7 @@ struct Tray {
     m_enabled: nwg::MenuItem,
     m_auto: nwg::MenuItem,
     m_manual: nwg::MenuItem,
+    m_learn: nwg::MenuItem,
     m_startup: nwg::MenuItem,
     _sep: nwg::MenuSeparator,
     m_quit: nwg::MenuItem,
@@ -36,8 +37,9 @@ pub fn run() {
     // The small status toast (shown on layout switch / mode change).
     toast::init();
 
-    // Restore saved settings (enabled + mode) before building the menu so its
-    // checkmarks reflect them.
+    // Load the learned-words dictionary, then restore saved settings (enabled +
+    // mode + learn) before building the menu so its checkmarks reflect them.
+    learn::load();
     config::apply(&config::load());
 
     let mut window = nwg::MessageWindow::default();
@@ -87,6 +89,13 @@ pub fn run() {
         .build(&mut m_manual)
         .expect("manual item");
 
+    let mut m_learn = nwg::MenuItem::default();
+    nwg::MenuItem::builder()
+        .text("Learn new words")
+        .parent(&menu)
+        .build(&mut m_learn)
+        .expect("learn item");
+
     let mut m_startup = nwg::MenuItem::default();
     nwg::MenuItem::builder()
         .text("Start with Windows")
@@ -111,6 +120,7 @@ pub fn run() {
     m_enabled.set_checked(hook::is_enabled());
     m_auto.set_checked(hook::is_auto());
     m_manual.set_checked(!hook::is_auto());
+    m_learn.set_checked(learn::is_enabled());
     m_startup.set_checked(startup::is_enabled());
 
     let ui = Rc::new(Tray {
@@ -121,6 +131,7 @@ pub fn run() {
         m_enabled,
         m_auto,
         m_manual,
+        m_learn,
         m_startup,
         _sep: sep,
         m_quit,
@@ -156,6 +167,12 @@ pub fn run() {
                     ui_h.m_manual.set_checked(true);
                     toast::show("Manual mode");
                     config::persist();
+                } else if handle == ui_h.m_learn.handle {
+                    let on = !learn::is_enabled();
+                    learn::set_enabled(on);
+                    ui_h.m_learn.set_checked(on);
+                    toast::show(if on { "Learning: ON" } else { "Learning: OFF" });
+                    config::persist();
                 } else if handle == ui_h.m_startup.handle {
                     let on = !startup::is_enabled();
                     startup::set_enabled(on);
@@ -187,9 +204,12 @@ pub fn run() {
     if let Some(hwnd) = hwnd {
         unsafe { session::arm(hwnd) };
     }
+    // UIA focus hook for password-field detection (incl. browsers).
+    unsafe { focus::arm() };
 
     nwg::dispatch_thread_events();
 
+    unsafe { focus::disarm() };
     if let Some(hwnd) = hwnd {
         unsafe { session::disarm(hwnd) };
     }
