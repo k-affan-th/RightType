@@ -1,0 +1,499 @@
+//! Low-level keyboard hook (`WH_KEYBOARD_LL`) — Windows only.
+//!
+//! This is the whole input→correct pipeline, run **synchronously on the hook
+//! thread**. Keys pass through normally while we accumulate the current word; in
+//! Auto mode a boundary that completes a wrong-layout word is **swallowed** and we
+//! inject `backspaces + correction + boundary` in one atomic batch. Doing it
+//! synchronously and swallowing the trigger makes the replacement race-free: the
+//! mistyped letters are already in the target app before we inject, and because
+//! every keystroke is serialised through this one thread, nothing can interleave —
+//! even under fast typing. (An earlier async-worker design raced and garbled.)
+//!
+//! Modifier state (Shift/Ctrl/Alt/Caps) is read live from `GetAsyncKeyState` /
+//! `GetKeyState` rather than tracked from the event stream. Tracking it ourselves
+//! let a modifier *stick* whenever a key-up was missed — e.g. the Alt+Shift used to
+//! switch keyboard layout — which then captured every following letter as if Shift
+//! were held. Reading the real key state each time makes sticking impossible.
+//!
+//! The work here is tiny (a `ToUnicodeEx` call + two hashed dictionary lookups +
+//! a small `SendInput`), so the callback stays far under the `LowLevelHooksTimeout`
+//! that evicts slow hooks — see `docs/PLAN.md`, Bug 1. We also ignore our own
+//! injected events (tagged in `dwExtraInfo`, plus `LLKHF_INJECTED`) so a
+//! correction can never feed back into itself.
+
+use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+
+use zeroize::Zeroize;
+
+use righttype::buffer::{Key, WordBuffer};
+use righttype::layout::{auto_convert, en_to_th, th_to_en};
+use righttype::{detect, dict, secret, segment};
+
+use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, GetKeyState, GetKeyboardLayout, GetKeyboardLayoutList, ToUnicodeEx, HKL,
+    VIRTUAL_KEY, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_HOME,
+    VK_INSERT, VK_LEFT, VK_MENU, VK_NEXT, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE, VK_TAB,
+    VK_UP,
+};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CallNextHookEx, GetForegroundWindow, GetWindowThreadProcessId, PostMessageW, SetWindowsHookExW,
+    UnhookWindowsHookEx, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, LLKHF_INJECTED, WH_KEYBOARD_LL,
+    WM_INPUTLANGCHANGEREQUEST, WM_KEYDOWN, WM_SYSKEYDOWN,
+};
+
+use crate::{inject, manual};
+
+/// Magic value stamped into `dwExtraInfo` on every event the injector sends, so
+/// the hook can recognise and skip our own input with zero timing dependency. The
+/// flag travels *with* the event, unlike a shared "injecting" boolean. ("RTYP")
+pub const INJECT_TAG: usize = 0x5254_5950;
+
+/// Set while we inject, as a secondary guard. The tag above is authoritative.
+pub static INJECTING: AtomicBool = AtomicBool::new(false);
+
+/// Correction mode: `false` = Manual (hotkeys only — the default, which avoids the
+/// awkward press-space-to-convert workflow), `true` = Auto (correct on a boundary).
+/// Toggled with Ctrl+CapsLock. Real-time Thai-segmenting auto is a later step.
+static MODE_AUTO: AtomicBool = AtomicBool::new(false);
+
+/// Master on/off, controlled from the tray. When off the hook passes every key
+/// straight through and touches nothing.
+static ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Is RightType currently enabled?
+pub fn is_enabled() -> bool {
+    ENABLED.load(Ordering::Relaxed)
+}
+
+/// Enable or disable all correction.
+pub fn set_enabled(on: bool) {
+    ENABLED.store(on, Ordering::Relaxed);
+}
+
+/// Is Auto mode on (vs Manual)?
+pub fn is_auto() -> bool {
+    MODE_AUTO.load(Ordering::Relaxed)
+}
+
+/// Select Auto (`true`) or Manual (`false`) mode.
+pub fn set_auto(auto: bool) {
+    MODE_AUTO.store(auto, Ordering::Relaxed);
+}
+
+thread_local! {
+    /// Per-thread pipeline state. The hook callback always runs on the installing
+    /// thread, so this persists across callbacks without locking.
+    static STATE: RefCell<HookState> = RefCell::new(HookState::new());
+}
+
+struct HookState {
+    buf: WordBuffer,
+    seed: secret::SeedTracker,
+    /// Foreground window + keyboard layout the buffer belongs to. When either
+    /// changes — Alt-Tab, a click into another app, or a Thai/Eng layout switch —
+    /// the buffered word no longer matches what's in front of the caret, so we
+    /// drop it. This keeps the buffer honest across exactly the cases the user
+    /// hit (switching layout mid-sentence left stale context behind).
+    last_hwnd: isize,
+    last_hkl: isize,
+}
+
+impl HookState {
+    fn new() -> Self {
+        Self {
+            buf: WordBuffer::new(),
+            seed: secret::SeedTracker::new(),
+            last_hwnd: 0,
+            last_hkl: 0,
+        }
+    }
+}
+
+/// The installed hook handle, kept only so [`uninstall`] can remove it. The raw
+/// handle is not `Send`; this wrapper asserts it is safe to move between threads
+/// (we only ever touch it from install/uninstall, never concurrently).
+struct HookHandle(HHOOK);
+unsafe impl Send for HookHandle {}
+static HOOK: Mutex<Option<HookHandle>> = Mutex::new(None);
+
+/// Is `vk` physically held right now? Read from the real async key state so it
+/// can never go stale (the reason we don't track modifiers from the event stream).
+unsafe fn is_down(vk: VIRTUAL_KEY) -> bool {
+    (GetAsyncKeyState(vk.0 as i32) as u16 & 0x8000) != 0
+}
+
+/// Is CapsLock currently toggled on?
+unsafe fn caps_on() -> bool {
+    (GetKeyState(VK_CAPITAL.0 as i32) & 0x0001) != 0
+}
+
+/// The modifier virtual-keys currently held down, for the injector to release
+/// before a correction (the Bug 2 fix).
+pub fn held_modifiers() -> Vec<u16> {
+    let mut v = Vec::new();
+    unsafe {
+        if is_down(VK_SHIFT) {
+            v.push(VK_SHIFT.0);
+        }
+        if is_down(VK_CONTROL) {
+            v.push(VK_CONTROL.0);
+        }
+        if is_down(VK_MENU) {
+            v.push(VK_MENU.0);
+        }
+    }
+    v
+}
+
+/// Install the low-level keyboard hook for this thread.
+///
+/// # Safety
+/// The calling thread must run a message loop for the duration of the hook, and
+/// must call [`uninstall`] before exiting.
+pub unsafe fn install() -> windows::core::Result<()> {
+    let hmod = GetModuleHandleW(None)?;
+    let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(ll_proc), HINSTANCE(hmod.0), 0)?;
+    *HOOK.lock().unwrap() = Some(HookHandle(hook));
+    Ok(())
+}
+
+/// Remove the hook if installed.
+///
+/// # Safety
+/// Must be called on the same thread that called [`install`].
+pub unsafe fn uninstall() {
+    if let Some(h) = HOOK.lock().unwrap().take() {
+        let _ = UnhookWindowsHookEx(h.0);
+    }
+}
+
+unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code == HC_ACTION as i32 {
+        let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
+        // Skip anything we generated: our tag is authoritative and timing-free.
+        let ours = kb.dwExtraInfo == INJECT_TAG
+            || (kb.flags.0 & LLKHF_INJECTED.0) != 0
+            || INJECTING.load(Ordering::Relaxed);
+        if !ours && process(wparam.0 as u32, kb) {
+            // We handled this key as a hotkey/correction; swallow it.
+            return LRESULT(1);
+        }
+    }
+    CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
+/// Process one event. Returns `true` to swallow the current key (we handled a
+/// hotkey or corrected a word and re-injected its boundary), `false` to let it
+/// pass through normally.
+unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
+    let vk = kb.vkCode as u16;
+    let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+    if !down {
+        return false;
+    }
+
+    // Master switch: when disabled, pass everything through untouched.
+    if !ENABLED.load(Ordering::Relaxed) {
+        return false;
+    }
+
+    // If focus or layout changed since the last key, the buffered word is stale.
+    sync_context();
+
+    // CapsLock: a hotkey carrier when chorded, otherwise a normal toggle.
+    if vk == VK_CAPITAL.0 {
+        let ctrl = is_down(VK_CONTROL);
+        let shift = is_down(VK_SHIFT);
+        if ctrl && !shift {
+            // Ctrl+CapsLock: toggle Auto/Manual. Swallow so Caps never flips.
+            let now_auto = !MODE_AUTO.fetch_xor(true, Ordering::Relaxed);
+            eprintln!(
+                "[righttype] mode: {}",
+                if now_auto { "AUTO" } else { "MANUAL" }
+            );
+            return true;
+        }
+        if shift && !ctrl {
+            // Shift+CapsLock: convert the current selection. Swallow.
+            manual::request_convert_selection();
+            return true;
+        }
+        return false;
+    }
+
+    // Shift+Backspace: flip the current word in place. Always swallowed — even
+    // when there's nothing to convert — so the key's auto-repeat can't fall
+    // through to a destructive Backspace and delete the result we just injected.
+    if vk == VK_BACK.0 && is_down(VK_SHIFT) && !is_down(VK_CONTROL) && !is_down(VK_MENU) {
+        convert_last_word();
+        return true;
+    }
+
+    let Some(key) = classify(vk, kb.scanCode as u16) else {
+        return false;
+    };
+
+    // Drive the buffer; only a boundary can return a completed word.
+    let completed = STATE.with(|s| s.borrow_mut().buf.observe(key));
+    let Some(mut word) = completed else {
+        // No boundary yet. In Auto mode, eagerly convert a complete wrong-layout
+        // Thai word the moment it's recognised — this is the no-space case that a
+        // boundary trigger can't handle.
+        if MODE_AUTO.load(Ordering::Relaxed) && matches!(key, Key::Char(_)) {
+            return auto_convert_live();
+        }
+        return false;
+    };
+
+    // Auto mode corrects on the boundary (the EN-on-Thai-layout direction, which
+    // does have spaces); Manual mode waits for a hotkey.
+    let swallow = if MODE_AUTO.load(Ordering::Relaxed) {
+        maybe_correct(&word, vk)
+    } else {
+        false
+    };
+    word.zeroize();
+    swallow
+}
+
+/// Auto mode, no-space (run-on) conversion, in whichever direction matches the
+/// active layout. Returns `true` to swallow the keystroke that completed the word
+/// — its character belongs to the injected text and must not also reach the app.
+///
+/// Eager by design: because the layout flip is 1:1 per character, committing at
+/// the first complete word is always correct (splitting a longer word changes
+/// nothing in the output), so we never need to look ahead. After a conversion we
+/// switch the active layout to the produced language so the rest types natively.
+unsafe fn auto_convert_live() -> bool {
+    if foreground_is_thai() {
+        auto_thai_layout_to_en()
+    } else {
+        auto_en_layout_to_thai()
+    }
+}
+
+/// Typing on a non-Thai layout, producing ASCII that is really wrong-layout Thai.
+unsafe fn auto_en_layout_to_thai() -> bool {
+    let ascii = STATE.with(|s| s.borrow().buf.current().to_string());
+    let n = ascii.chars().count();
+    // ≥2 chars, pure ASCII, not a secret, not a genuine English word.
+    if n < 2
+        || !ascii.is_ascii()
+        || secret::is_secret_token(&ascii)
+        || dict::english().contains(&ascii)
+    {
+        return false;
+    }
+    let mut thai = en_to_th(&ascii);
+    // Strong signal: the whole run partitions into real Thai words.
+    if !segment::is_fully_known(&thai, dict::thai()) {
+        thai.zeroize();
+        return false;
+    }
+    STATE.with(|s| s.borrow_mut().buf.clear());
+    inject::apply(n - 1, &thai, None);
+    thai.zeroize();
+    activate_layout(PRIMARYLANG_THAI);
+    true
+}
+
+/// Typing on the Thai layout, producing Thai that is really wrong-layout English.
+unsafe fn auto_thai_layout_to_en() -> bool {
+    let thai = STATE.with(|s| s.borrow().buf.current().to_string());
+    let n = thai.chars().count();
+    // ≥4 chars: a single English-word match is a weaker signal than full Thai
+    // segmentation, and short English words (the/and/in/on) would false-trigger on
+    // ordinary Thai prefixes — those convert via the space-boundary path instead.
+    if n < 4
+        || thai.is_ascii()
+        || secret::is_secret_token(&thai)
+        || dict::thai().contains(&thai)
+    {
+        return false;
+    }
+    let mut eng = th_to_en(&thai);
+    if !dict::english().contains(&eng) {
+        eng.zeroize();
+        return false;
+    }
+    STATE.with(|s| s.borrow_mut().buf.clear());
+    inject::apply(n - 1, &eng, None);
+    eng.zeroize();
+    activate_layout(PRIMARYLANG_EN);
+    true
+}
+
+/// PRIMARYLANGID values (the low 10 bits of a LANGID). Matching the *primary*
+/// language, not the full LANGID, accepts any sub-variant the user has installed
+/// (US/UK English, Thai Kedmanee/Pattachote, …).
+const PRIMARYLANG_THAI: u16 = 0x1E;
+const PRIMARYLANG_EN: u16 = 0x09;
+
+/// The primary language of the foreground window's keyboard layout.
+unsafe fn foreground_primary_lang() -> u16 {
+    (foreground_layout().0 as usize & 0x3FF) as u16
+}
+
+/// Is the foreground window's keyboard layout Thai?
+unsafe fn foreground_is_thai() -> bool {
+    foreground_primary_lang() == PRIMARYLANG_THAI
+}
+
+/// Switch the foreground window's input language to the first loaded layout whose
+/// primary language matches `primary`. No-op if no such layout is installed.
+unsafe fn activate_layout(primary: u16) {
+    let count = GetKeyboardLayoutList(None);
+    if count <= 0 {
+        return;
+    }
+    let mut list = vec![HKL::default(); count as usize];
+    let got = GetKeyboardLayoutList(Some(&mut list)).max(0) as usize;
+    for hkl in list.iter().take(got) {
+        if ((hkl.0 as usize & 0x3FF) as u16) == primary {
+            let _ = PostMessageW(
+                GetForegroundWindow(),
+                WM_INPUTLANGCHANGEREQUEST,
+                WPARAM(0),
+                LPARAM(hkl.0 as isize),
+            );
+            return;
+        }
+    }
+}
+
+/// Manual: flip the layout of the word currently in the buffer, in place. A no-op
+/// when the buffer is empty (e.g. an auto-repeat after the word was already
+/// converted) — the caller swallows the key either way.
+unsafe fn convert_last_word() {
+    let mut word = STATE.with(|s| s.borrow().buf.current().to_string());
+    if word.is_empty() {
+        return;
+    }
+    STATE.with(|s| s.borrow_mut().buf.clear());
+
+    let backspaces = word.chars().count();
+    let mut converted = auto_convert(&word);
+    let changed = converted != word;
+    word.zeroize();
+    if changed {
+        inject::apply(backspaces, &converted, None);
+    }
+    converted.zeroize();
+}
+
+/// Run the seed guard + detection on a completed `word`; inject the fix if any.
+/// `boundary_vk` is the separator key that completed the word, re-emitted after
+/// the correction. Returns `true` if a correction was injected (caller swallows
+/// the boundary), `false` otherwise.
+unsafe fn maybe_correct(word: &str, boundary_vk: u16) -> bool {
+    // A run of BIP39 words is a seed phrase — never touch it.
+    if STATE.with(|s| s.borrow_mut().seed.observe(word)) {
+        return false;
+    }
+    // `detect` already refuses secret-shaped and too-short tokens internally.
+    let Some(d) = detect::detect(word, dict::english(), dict::thai()) else {
+        return false;
+    };
+    // The boundary is swallowed, so only the word's own characters are deleted.
+    let backspaces = word.chars().count();
+    let mut corrected = d.corrected;
+    inject::apply(backspaces, &corrected, Some(boundary_vk));
+
+    // Switch to whichever language we just produced, so the rest of the sentence
+    // types natively — same idea as the live Thai path, now for the EN direction.
+    let to_thai = corrected
+        .chars()
+        .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+    corrected.zeroize();
+    activate_layout(if to_thai {
+        PRIMARYLANG_THAI
+    } else {
+        PRIMARYLANG_EN
+    });
+    true
+}
+
+/// Translate a raw key into a [`Key`] for the buffer, or `None` to ignore it.
+unsafe fn classify(vk: u16, scan: u16) -> Option<Key> {
+    // Any Ctrl/Alt chord is a command, not text: drop the in-progress word.
+    if is_down(VK_CONTROL) || is_down(VK_MENU) {
+        return Some(Key::Reset);
+    }
+    if vk == VK_BACK.0 {
+        return Some(Key::Backspace);
+    }
+    if vk == VK_SPACE.0 || vk == VK_RETURN.0 || vk == VK_TAB.0 {
+        return Some(Key::Boundary);
+    }
+    // Navigation / editing keys move the caret: the buffered word is no longer
+    // contiguous with what we'd correct, so discard it.
+    if matches!(
+        vk,
+        v if v == VK_ESCAPE.0
+            || v == VK_LEFT.0
+            || v == VK_RIGHT.0
+            || v == VK_UP.0
+            || v == VK_DOWN.0
+            || v == VK_HOME.0
+            || v == VK_END.0
+            || v == VK_PRIOR.0
+            || v == VK_NEXT.0
+            || v == VK_DELETE.0
+            || v == VK_INSERT.0
+    ) {
+        return Some(Key::Reset);
+    }
+    translate(vk, scan).map(Key::Char)
+}
+
+/// Reproduce the character the keystroke produced, using the foreground layout
+/// and the live Shift/Caps state.
+unsafe fn translate(vk: u16, scan: u16) -> Option<char> {
+    let mut state = [0u8; 256];
+    if is_down(VK_SHIFT) {
+        state[VK_SHIFT.0 as usize] = 0x80;
+    }
+    if caps_on() {
+        state[VK_CAPITAL.0 as usize] = 0x01;
+    }
+
+    let hkl = foreground_layout();
+    let mut out = [0u16; 8];
+    let n = ToUnicodeEx(vk as u32, scan as u32, &state, &mut out, 0, hkl);
+    if n == 1 {
+        char::from_u32(out[0] as u32).filter(|c| !c.is_control())
+    } else {
+        // 0 = no mapping (e.g. F-keys / modifiers), -1 = dead key, >1 = ligature.
+        None
+    }
+}
+
+/// Drop the buffered word if the focused window or keyboard layout changed since
+/// the previous key — the buffer only describes one editing context at a time.
+unsafe fn sync_context() {
+    let hwnd = GetForegroundWindow();
+    let tid = GetWindowThreadProcessId(hwnd, None);
+    let hwnd_i = hwnd.0 as isize;
+    let hkl_i = GetKeyboardLayout(tid).0 as isize;
+
+    STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        if st.last_hwnd != hwnd_i || st.last_hkl != hkl_i {
+            st.buf.clear();
+            st.seed.reset();
+            st.last_hwnd = hwnd_i;
+            st.last_hkl = hkl_i;
+        }
+    });
+}
+
+/// The keyboard layout (HKL) of whatever window currently has focus.
+unsafe fn foreground_layout() -> HKL {
+    let hwnd = GetForegroundWindow();
+    let tid = GetWindowThreadProcessId(hwnd, None);
+    GetKeyboardLayout(tid)
+}
