@@ -108,6 +108,11 @@ struct HookState {
     /// Cleared after use and whenever focus/layout changes (an undo that retypes
     /// into a different window/context than the one it corrected would be wrong).
     undo: Option<UndoRecord>,
+    /// The layout we requested to switch to, if we are waiting for the OS to complete it.
+    pending_hkl: Option<isize>,
+    /// The last completed word and the boundary key code that completed it.
+    /// Used for manual Shift+Backspace correction immediately after a boundary.
+    last_completed: Option<(String, u16)>,
 }
 
 impl HookState {
@@ -119,6 +124,8 @@ impl HookState {
             last_hkl: 0,
             sensitive_app: false,
             undo: None,
+            pending_hkl: None,
+            last_completed: None,
         }
     }
 }
@@ -263,6 +270,46 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
 }
 
+fn is_modifier(vk: u16) -> bool {
+    matches!(
+        vk,
+        v if v == VK_SHIFT.0
+            || v == 0xA0 // VK_LSHIFT
+            || v == 0xA1 // VK_RSHIFT
+            || v == VK_CONTROL.0
+            || v == 0xA2 // VK_LCONTROL
+            || v == 0xA3 // VK_RCONTROL
+            || v == VK_MENU.0
+            || v == 0xA4 // VK_LMENU
+            || v == 0xA5 // VK_RMENU
+            || v == VK_CAPITAL.0
+    )
+}
+
+unsafe fn is_layout_switch_trigger(vk: u16) -> bool {
+    // 1. Grave Accent (VK_OEM_3 = 0xC0)
+    if vk == 0xC0 {
+        return true;
+    }
+    // 2. Win + Space
+    if vk == VK_SPACE.0 && (is_down(VIRTUAL_KEY(0x5B)) || is_down(VIRTUAL_KEY(0x5C))) { // VK_LWIN = 0x5B, VK_RWIN = 0x5C
+        return true;
+    }
+    // 3. Alt + Shift / Ctrl + Shift (when one of them is pressed while the other modifier is held)
+    let is_shift = vk == VK_SHIFT.0 || vk == 0xA0 || vk == 0xA1;
+    let is_menu = vk == VK_MENU.0 || vk == 0xA4 || vk == 0xA5;
+    let is_ctrl = vk == VK_CONTROL.0 || vk == 0xA2 || vk == 0xA3;
+    
+    if (is_shift && (is_down(VK_MENU) || is_down(VK_CONTROL)))
+        || (is_menu && is_down(VK_SHIFT))
+        || (is_ctrl && is_down(VK_SHIFT))
+    {
+        return true;
+    }
+    
+    false
+}
+
 /// Process one event. Returns `true` to swallow the current key (we handled a
 /// hotkey or corrected a word and re-injected its boundary), `false` to let it
 /// pass through normally.
@@ -271,6 +318,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
     if !down {
         return false;
+    }
+
+    // Shift+Backspace hotkey.
+    let is_shift_backspace = vk == VK_BACK.0 && is_down(VK_SHIFT) && !is_down(VK_CONTROL) && !is_down(VK_MENU);
+    if !is_shift_backspace && !is_modifier(vk) {
+        STATE.with(|s| s.borrow_mut().last_completed = None);
     }
 
     // Panic switch: Ctrl+Alt+CapsLock instantly flips master enable, either way.
@@ -287,6 +340,28 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // Master switch: when disabled, pass everything through untouched.
     if !ENABLED.load(Ordering::Relaxed) {
         return false;
+    }
+
+    // User initiated manual layout switch (Grave accent, Alt+Shift, Ctrl+Shift, Win+Space)
+    if is_layout_switch_trigger(vk) {
+        let current_is_thai = foreground_is_thai();
+        let target_primary = if current_is_thai { PRIMARYLANG_EN } else { PRIMARYLANG_THAI };
+        let count = GetKeyboardLayoutList(None);
+        if count > 0 {
+            let mut list = vec![HKL::default(); count as usize];
+            let got = GetKeyboardLayoutList(Some(&mut list)).max(0) as usize;
+            for hkl in list.iter().take(got) {
+                if ((hkl.0 as usize & 0x3FF) as u16) == target_primary {
+                    STATE.with(|s| {
+                        let mut st = s.borrow_mut();
+                        st.pending_hkl = Some(hkl.0 as isize);
+                        st.buf.clear();
+                        st.last_completed = None;
+                    });
+                    break;
+                }
+            }
+        }
     }
 
     // If focus or layout changed since the last key, the buffered word is stale.
@@ -359,6 +434,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     } else {
         false
     };
+    if swallow {
+        STATE.with(|s| s.borrow_mut().last_completed = None);
+    } else {
+        STATE.with(|s| s.borrow_mut().last_completed = Some((word.clone(), vk)));
+    }
     word.zeroize();
     swallow
 }
@@ -367,15 +447,17 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 /// active layout. Returns `true` to swallow the keystroke that completed the word
 /// — its character belongs to the injected text and must not also reach the app.
 ///
-/// Eager by design: because the layout flip is 1:1 per character, committing at
-/// the first complete word is always correct (splitting a longer word changes
-/// nothing in the output), so we never need to look ahead. After a conversion we
-/// switch the active layout to the produced language so the rest types natively.
+/// Only Thai-layout → EN runs eagerly without a word boundary. Thai text writes
+/// words with no spaces, so we must commit at the first recognised word.
+/// EN-layout → Thai is intentionally excluded from this path: English text always
+/// has spaces, so the boundary path handles it safely. Running EN→Thai live caused
+/// false triggers mid-word (e.g. "fu" = "ดี", "idio" = "รกรน") which disrupted
+/// typing English words like "fucking" or "idiot".
 unsafe fn auto_convert_live() -> bool {
     if foreground_is_thai() {
         auto_thai_layout_to_en()
     } else {
-        auto_en_layout_to_thai()
+        false // EN → Thai: boundary path only, never live
     }
 }
 
@@ -453,6 +535,10 @@ unsafe fn foreground_is_thai() -> bool {
 /// Switch the foreground window's input language to the first loaded layout whose
 /// primary language matches `primary`. No-op if no such layout is installed.
 unsafe fn activate_layout(primary: u16) {
+    if foreground_primary_lang() == primary {
+        STATE.with(|s| s.borrow_mut().pending_hkl = None);
+        return;
+    }
     let count = GetKeyboardLayoutList(None);
     if count <= 0 {
         return;
@@ -467,6 +553,10 @@ unsafe fn activate_layout(primary: u16) {
                 WPARAM(0),
                 LPARAM(hkl.0 as isize),
             );
+            // Record that we are waiting for this HKL to activate
+            STATE.with(|s| {
+                s.borrow_mut().pending_hkl = Some(hkl.0 as isize);
+            });
             // No toast here: a layout switch happens on every ignition, which is
             // too frequent — and Windows' own language indicator already reflects
             // it. We only toast deliberate, rare changes (mode / enabled).
@@ -481,9 +571,33 @@ unsafe fn activate_layout(primary: u16) {
 unsafe fn convert_last_word() {
     let mut word = STATE.with(|s| s.borrow().buf.current().to_string());
     if word.is_empty() {
+        // Try to convert the last completed word if we just hit a boundary (e.g. Space)
+        let last = STATE.with(|s| s.borrow_mut().last_completed.take());
+        if let Some((mut last_word, boundary_vk)) = last {
+            let backspaces = last_word.chars().count() + 1; // +1 for the boundary character
+            let mut converted = auto_convert(&last_word);
+            let changed = converted != last_word;
+            if changed {
+                inject::apply(backspaces, &converted, Some(boundary_vk));
+                set_undo(
+                    converted.chars().count() + 1,
+                    &format!("{}{}", last_word, boundary_literal(boundary_vk)),
+                );
+                crate::stats::record_manual();
+                
+                // Switch language layout to the one of the converted word
+                let to_thai = converted.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+                activate_layout(if to_thai { PRIMARYLANG_THAI } else { PRIMARYLANG_EN });
+            }
+            converted.zeroize();
+            last_word.zeroize();
+        }
         return;
     }
-    STATE.with(|s| s.borrow_mut().buf.clear());
+    STATE.with(|s| {
+        s.borrow_mut().buf.clear();
+        s.borrow_mut().last_completed = None;
+    });
 
     let backspaces = word.chars().count();
     let mut converted = auto_convert(&word);
@@ -492,6 +606,10 @@ unsafe fn convert_last_word() {
         inject::apply(backspaces, &converted, None);
         set_undo(converted.chars().count(), &word);
         crate::stats::record_manual();
+
+        // Switch language layout to the one of the converted word
+        let to_thai = converted.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+        activate_layout(if to_thai { PRIMARYLANG_THAI } else { PRIMARYLANG_EN });
     }
     word.zeroize();
     converted.zeroize();
@@ -597,7 +715,29 @@ unsafe fn sync_context() {
     let hwnd = GetForegroundWindow();
     let tid = GetWindowThreadProcessId(hwnd, None);
     let hwnd_i = hwnd.0 as isize;
-    let hkl_i = GetKeyboardLayout(tid).0 as isize;
+
+    // If we have a pending HKL switch, wait for the target application thread
+    // to process the message and actually apply the layout, so the next key
+    // is translated correctly under the new layout.
+    let mut hkl_i = GetKeyboardLayout(tid).0 as isize;
+    let pending = STATE.with(|s| s.borrow().pending_hkl);
+    if let Some(target) = pending {
+        if hkl_i == target {
+            STATE.with(|s| s.borrow_mut().pending_hkl = None);
+        } else {
+            let start = std::time::Instant::now();
+            let limit = std::time::Duration::from_millis(50);
+            while std::time::Instant::now() - start < limit {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+                hkl_i = GetKeyboardLayout(tid).0 as isize;
+                if hkl_i == target {
+                    break;
+                }
+            }
+            // Always clear to prevent getting stuck in a perpetual 50ms delay loop
+            STATE.with(|s| s.borrow_mut().pending_hkl = None);
+        }
+    }
 
     let window_changed = STATE.with(|s| {
         let mut st = s.borrow_mut();

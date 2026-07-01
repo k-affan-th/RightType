@@ -95,7 +95,7 @@ unsafe fn convert_selection() {
     crate::stats::record_manual();
 
     // Let the paste land before we put the user's clipboard back.
-    thread::sleep(Duration::from_millis(120));
+    thread::sleep(Duration::from_millis(30));
     restore(original);
 }
 

@@ -107,7 +107,7 @@ pub fn run() {
 
     let mut m_settings = nwg::MenuItem::default();
     nwg::MenuItem::builder()
-        .text("Blocked apps...")
+        .text("Settings...")
         .parent(&menu)
         .build(&mut m_settings)
         .expect("settings item");
