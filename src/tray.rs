@@ -141,8 +141,13 @@ pub fn run() {
     let handler = nwg::full_bind_event_handler(&ui.window.handle, move |evt, _data, handle| {
         use nwg::Event as E;
         match evt {
-            // Right-click on the tray icon opens the menu at the cursor.
+            // Right-click on the tray icon opens the menu at the cursor. Refresh
+            // every checkmark first — hotkeys (mode toggle, panic switch) change
+            // this state without going through the menu, so it can be stale.
             E::OnContextMenu => {
+                ui_h.m_enabled.set_checked(hook::is_enabled());
+                ui_h.m_auto.set_checked(hook::is_auto());
+                ui_h.m_manual.set_checked(!hook::is_auto());
                 let (x, y) = nwg::GlobalCursor::position();
                 ui_h.menu.popup(x, y);
             }

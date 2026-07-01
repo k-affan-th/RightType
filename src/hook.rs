@@ -104,6 +104,10 @@ struct HookState {
     /// manager / terminal). Recomputed only when the window changes — opening the
     /// process every keystroke would be wasteful.
     sensitive_app: bool,
+    /// The most recent correction, kept for one-shot Undo (Ctrl+Shift+CapsLock).
+    /// Cleared after use and whenever focus/layout changes (an undo that retypes
+    /// into a different window/context than the one it corrected would be wrong).
+    undo: Option<UndoRecord>,
 }
 
 impl HookState {
@@ -114,7 +118,57 @@ impl HookState {
             last_hwnd: 0,
             last_hkl: 0,
             sensitive_app: false,
+            undo: None,
         }
+    }
+}
+
+/// A reversible correction: how many characters to delete, and what to retype
+/// to restore the pre-correction text exactly.
+struct UndoRecord {
+    /// Characters now present in the app (after the correction) to delete.
+    injected_len: usize,
+    /// Text to retype to restore what was there before.
+    restore_text: String,
+}
+
+impl Drop for UndoRecord {
+    fn drop(&mut self) {
+        self.restore_text.zeroize();
+    }
+}
+
+/// Record `restore_text` (what to retype) as the one-shot Undo target for the
+/// correction that just replaced it with `injected_len` characters. Refuses
+/// secret-shaped text — `detect::detect` already guards the automatic paths, but
+/// the manual convert-word hotkey doesn't, so this is the one place that matters.
+fn set_undo(injected_len: usize, restore_text: &str) {
+    let record = (!secret::is_secret_token(restore_text)).then(|| UndoRecord {
+        injected_len,
+        restore_text: restore_text.to_string(),
+    });
+    STATE.with(|s| s.borrow_mut().undo = record);
+}
+
+/// Ctrl+Shift+CapsLock: revert the most recent correction, if any. One-shot —
+/// the record is consumed whether or not this call finds one.
+unsafe fn undo_last_correction() {
+    let Some(rec) = STATE.with(|s| s.borrow_mut().undo.take()) else {
+        return;
+    };
+    inject::apply(rec.injected_len, &rec.restore_text, None);
+    crate::toast::show("Undo");
+}
+
+/// The literal character a boundary key inserts (matches what a real keypress
+/// would produce as `WM_CHAR`), for reconstructing exact Undo text.
+fn boundary_literal(vk: u16) -> char {
+    if vk == VK_RETURN.0 {
+        '\r'
+    } else if vk == VK_TAB.0 {
+        '\t'
+    } else {
+        ' '
     }
 }
 
@@ -219,6 +273,17 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return false;
     }
 
+    // Panic switch: Ctrl+Alt+CapsLock instantly flips master enable, either way.
+    // Checked before the enabled gate and the sensitive-context guard below so
+    // it always works — including turning back ON, and even from inside a
+    // password field or blacklisted app.
+    if vk == VK_CAPITAL.0 && is_down(VK_CONTROL) && is_down(VK_MENU) {
+        let now_on = !ENABLED.fetch_xor(true, Ordering::Relaxed);
+        crate::toast::show(if now_on { "RightType: ON" } else { "RightType: OFF" });
+        crate::config::persist();
+        return true;
+    }
+
     // Master switch: when disabled, pass everything through untouched.
     if !ENABLED.load(Ordering::Relaxed) {
         return false;
@@ -240,14 +305,19 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     if vk == VK_CAPITAL.0 {
         let ctrl = is_down(VK_CONTROL);
         let shift = is_down(VK_SHIFT);
-        if ctrl && !shift {
+        if ctrl && shift {
+            // Ctrl+Shift+CapsLock: undo the last correction (one-shot). Swallow.
+            undo_last_correction();
+            return true;
+        }
+        if ctrl {
             // Ctrl+CapsLock: toggle Auto/Manual. Swallow so Caps never flips.
             let now_auto = !MODE_AUTO.fetch_xor(true, Ordering::Relaxed);
             crate::toast::show(if now_auto { "Auto mode" } else { "Manual mode" });
             crate::config::persist();
             return true;
         }
-        if shift && !ctrl {
+        if shift {
             // Shift+CapsLock: convert the current selection. Swallow.
             manual::request_convert_selection();
             return true;
@@ -329,6 +399,7 @@ unsafe fn auto_en_layout_to_thai() -> bool {
     }
     STATE.with(|s| s.borrow_mut().buf.clear());
     inject::apply(n - 1, &thai, None);
+    set_undo(thai.chars().count(), &ascii);
     thai.zeroize();
     activate_layout(PRIMARYLANG_THAI);
     true
@@ -355,6 +426,7 @@ unsafe fn auto_thai_layout_to_en() -> bool {
     }
     STATE.with(|s| s.borrow_mut().buf.clear());
     inject::apply(n - 1, &eng, None);
+    set_undo(eng.chars().count(), &thai);
     eng.zeroize();
     activate_layout(PRIMARYLANG_EN);
     true
@@ -414,10 +486,11 @@ unsafe fn convert_last_word() {
     let backspaces = word.chars().count();
     let mut converted = auto_convert(&word);
     let changed = converted != word;
-    word.zeroize();
     if changed {
         inject::apply(backspaces, &converted, None);
+        set_undo(converted.chars().count(), &word);
     }
+    word.zeroize();
     converted.zeroize();
 }
 
@@ -438,6 +511,12 @@ unsafe fn maybe_correct(word: &str, boundary_vk: u16) -> bool {
     let backspaces = word.chars().count();
     let mut corrected = d.corrected;
     inject::apply(backspaces, &corrected, Some(boundary_vk));
+
+    // Undo target: retype the original word plus the boundary it would have
+    // gotten anyway (the boundary keystroke itself never reached the app).
+    let mut restore = format!("{word}{}", boundary_literal(boundary_vk));
+    set_undo(corrected.chars().count() + 1, &restore);
+    restore.zeroize();
 
     // Switch to whichever language we just produced, so the rest of the sentence
     // types natively — same idea as the live Thai path, now for the EN direction.
@@ -522,6 +601,7 @@ unsafe fn sync_context() {
         if changed || st.last_hkl != hkl_i {
             st.buf.clear();
             st.seed.reset();
+            st.undo = None;
             st.last_hwnd = hwnd_i;
             st.last_hkl = hkl_i;
         }
