@@ -25,6 +25,8 @@ mod learn;
 #[cfg(feature = "winos")]
 mod manual;
 #[cfg(feature = "winos")]
+mod ram;
+#[cfg(feature = "winos")]
 mod safety;
 #[cfg(feature = "winos")]
 mod session;
@@ -49,6 +51,9 @@ fn main() {
 
 #[cfg(feature = "winos")]
 fn main() {
+    // RAM hardening: exclude our heap from crash dumps, suppress the fault
+    // dialog. Best-effort, before anything else touches secret-adjacent memory.
+    unsafe { ram::harden_process() };
     // The clipboard "convert selection" worker runs off the hook thread.
     let _manual = manual::spawn();
     // Build the tray, install the hook, and run the message loop until Quit.

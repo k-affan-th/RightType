@@ -163,6 +163,14 @@ pub unsafe fn install() -> windows::core::Result<()> {
     let hmod = GetModuleHandleW(None)?;
     let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(ll_proc), HINSTANCE(hmod.0), 0)?;
     *HOOK.lock().unwrap() = Some(HookHandle(hook));
+    // RAM hardening: pin the word buffer's (already-stable) allocation in
+    // physical RAM so a typed secret can never be paged to disk. Locking it
+    // here, once, is safe precisely because `WordBuffer` pre-reserves its
+    // capacity and never reallocates for its lifetime (see `stable_region`).
+    STATE.with(|s| {
+        let (ptr, len) = s.borrow().buf.stable_region();
+        crate::ram::lock_region(ptr, len);
+    });
     Ok(())
 }
 

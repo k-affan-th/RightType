@@ -23,6 +23,9 @@
 use crate::secret::MAX_WORD_LEN;
 use zeroize::Zeroize;
 
+/// Widest a single UTF-8 character can be, in bytes.
+const MAX_UTF8_BYTES: usize = 4;
+
 /// A keystroke as seen by the buffer — already translated from a raw OS event to
 /// a produced character or a control action by the hook layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,12 +61,29 @@ impl WordBuffer {
     }
 
     /// A buffer with an explicit character cap (used by tests).
+    ///
+    /// Reserves capacity for `cap + 1` chars at the worst-case UTF-8 width up
+    /// front (the `+1` covers the over-cap char that triggers poisoning), so
+    /// this buffer's heap allocation **never reallocates** for its whole
+    /// lifetime. That matters beyond performance: `Vec`/`String`'s `Zeroize`
+    /// impl can only ever wipe the *current* allocation — its own docs note it
+    /// "cannot ensure previous reallocations did not leave values on the heap".
+    /// A stable allocation closes that gap, and lets the Windows layer
+    /// `VirtualLock` this exact region once so it's never swapped to disk.
     pub fn with_cap(cap: usize) -> Self {
         Self {
-            buf: String::new(),
+            buf: String::with_capacity((cap + 1) * MAX_UTF8_BYTES),
             cap,
             poisoned: false,
         }
+    }
+
+    /// This buffer's stable backing allocation — `(pointer, byte capacity)` —
+    /// for the OS layer to lock into RAM once (e.g. `VirtualLock` on Windows).
+    /// Valid for the lifetime of this `WordBuffer` (capacity is fixed at
+    /// construction and never grows).
+    pub fn stable_region(&self) -> (*const u8, usize) {
+        (self.buf.as_ptr(), self.buf.capacity())
     }
 
     /// Feed one translated key.
@@ -253,6 +273,21 @@ mod tests {
         let too_long = "a".repeat(MAX_WORD_LEN + 1);
         type_chars(&mut b, &too_long);
         assert_eq!(b.observe(Key::Boundary), None);
+    }
+
+    #[test]
+    fn capacity_never_changes_even_at_worst_case_utf8_width() {
+        // Thai letters are 3 bytes each in UTF-8 — the worst case we actually
+        // see. Filling the buffer to its cap, and one past it (poisoning),
+        // must never trigger a reallocation: RAM hardening depends on this
+        // buffer's pointer staying valid for its whole lifetime.
+        let mut b = WordBuffer::new();
+        let (_, cap0) = b.stable_region();
+        for c in "ก".repeat(MAX_WORD_LEN + 1).chars() {
+            b.observe(Key::Char(c));
+            let (_, cap_now) = b.stable_region();
+            assert_eq!(cap_now, cap0, "capacity must never grow");
+        }
     }
 
     #[test]
