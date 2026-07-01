@@ -11,7 +11,7 @@ use std::rc::Rc;
 use native_windows_gui as nwg;
 use windows::Win32::Foundation::HWND;
 
-use crate::{config, focus, hook, learn, session, startup, toast};
+use crate::{config, focus, hook, learn, session, settings, startup, stats, toast};
 
 /// The tray icon, embedded so the binary stays portable (no external file).
 static ICON_BYTES: &[u8] = include_bytes!("../assets/icon.ico");
@@ -26,6 +26,8 @@ struct Tray {
     m_manual: nwg::MenuItem,
     m_learn: nwg::MenuItem,
     m_startup: nwg::MenuItem,
+    m_settings: nwg::MenuItem,
+    m_stats: nwg::MenuItem,
     _sep: nwg::MenuSeparator,
     m_quit: nwg::MenuItem,
 }
@@ -103,6 +105,20 @@ pub fn run() {
         .build(&mut m_startup)
         .expect("startup item");
 
+    let mut m_settings = nwg::MenuItem::default();
+    nwg::MenuItem::builder()
+        .text("Blocked apps...")
+        .parent(&menu)
+        .build(&mut m_settings)
+        .expect("settings item");
+
+    let mut m_stats = nwg::MenuItem::default();
+    nwg::MenuItem::builder()
+        .text("Stats...")
+        .parent(&menu)
+        .build(&mut m_stats)
+        .expect("stats item");
+
     let mut sep = nwg::MenuSeparator::default();
     nwg::MenuSeparator::builder()
         .parent(&menu)
@@ -133,6 +149,8 @@ pub fn run() {
         m_manual,
         m_learn,
         m_startup,
+        m_settings,
+        m_stats,
         _sep: sep,
         m_quit,
     });
@@ -182,6 +200,22 @@ pub fn run() {
                     let on = !startup::is_enabled();
                     startup::set_enabled(on);
                     ui_h.m_startup.set_checked(on);
+                } else if handle == ui_h.m_settings.handle {
+                    settings::open();
+                } else if handle == ui_h.m_stats.handle {
+                    let (auto, manual) = stats::snapshot();
+                    nwg::modal_info_message(
+                        &ui_h.window.handle,
+                        "RightType — Stats",
+                        &format!(
+                            "This session:\n\n\
+                             Corrected automatically: {auto}\n\
+                             Corrected via hotkey: {manual}\n\
+                             Total: {}\n\n\
+                             (Counts reset when RightType restarts — nothing typed is ever saved.)",
+                            auto + manual
+                        ),
+                    );
                 }
             }
             _ => {}

@@ -6,6 +6,8 @@
 //! secret-shaped bail-out in `secret` is the per-token backstop; this is the
 //! per-context one (see `docs/PLAN.md`, the security section).
 
+use std::sync::Mutex;
+
 use windows::core::PWSTR;
 use windows::Win32::Foundation::{CloseHandle, HWND};
 use windows::Win32::System::Threading::{
@@ -19,7 +21,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 const ES_PASSWORD: isize = 0x0020;
 
 /// Foreground apps we stay completely out of (lowercased executable names).
-const BLACKLIST: &[&str] = &[
+/// Fixed and **not user-editable** — [`CUSTOM_BLACKLIST`] is the extension
+/// point, so this baseline can only ever be added to, never weakened.
+pub const BLACKLIST: &[&str] = &[
     // terminals
     "cmd.exe",
     "powershell.exe",
@@ -44,13 +48,31 @@ const BLACKLIST: &[&str] = &[
     "trezor suite.exe",
 ];
 
+/// User-added blacklist entries (lowercased exe names), layered on top of the
+/// fixed [`BLACKLIST`]. Edited via the settings window, persisted in config.
+static CUSTOM_BLACKLIST: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// The user's custom blacklist entries, for the settings UI and config save.
+pub fn custom_list() -> Vec<String> {
+    CUSTOM_BLACKLIST.lock().unwrap().clone()
+}
+
+/// Replace the custom blacklist (e.g. from the settings window or loaded config).
+pub fn set_custom_list(entries: Vec<String>) {
+    *CUSTOM_BLACKLIST.lock().unwrap() =
+        entries.into_iter().map(|s| s.to_lowercase()).collect();
+}
+
 /// Is the foreground app one we must not run in? Heavier (opens the process), so
 /// the caller caches this per foreground window rather than per keystroke.
 ///
 /// # Safety
 /// `hwnd` must be a valid window handle (the current foreground window).
 pub unsafe fn is_blacklisted_app(hwnd: HWND) -> bool {
-    foreground_exe(hwnd).is_some_and(|exe| BLACKLIST.contains(&exe.as_str()))
+    let Some(exe) = foreground_exe(hwnd) else {
+        return false;
+    };
+    BLACKLIST.contains(&exe.as_str()) || CUSTOM_BLACKLIST.lock().unwrap().contains(&exe)
 }
 
 /// Is the currently focused control a password / concealed-text field? Cheap

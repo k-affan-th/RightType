@@ -400,6 +400,7 @@ unsafe fn auto_en_layout_to_thai() -> bool {
     STATE.with(|s| s.borrow_mut().buf.clear());
     inject::apply(n - 1, &thai, None);
     set_undo(thai.chars().count(), &ascii);
+    crate::stats::record_auto();
     thai.zeroize();
     activate_layout(PRIMARYLANG_THAI);
     true
@@ -427,6 +428,7 @@ unsafe fn auto_thai_layout_to_en() -> bool {
     STATE.with(|s| s.borrow_mut().buf.clear());
     inject::apply(n - 1, &eng, None);
     set_undo(eng.chars().count(), &thai);
+    crate::stats::record_auto();
     eng.zeroize();
     activate_layout(PRIMARYLANG_EN);
     true
@@ -489,6 +491,7 @@ unsafe fn convert_last_word() {
     if changed {
         inject::apply(backspaces, &converted, None);
         set_undo(converted.chars().count(), &word);
+        crate::stats::record_manual();
     }
     word.zeroize();
     converted.zeroize();
@@ -516,6 +519,7 @@ unsafe fn maybe_correct(word: &str, boundary_vk: u16) -> bool {
     // gotten anyway (the boundary keystroke itself never reached the app).
     let mut restore = format!("{word}{}", boundary_literal(boundary_vk));
     set_undo(corrected.chars().count() + 1, &restore);
+    crate::stats::record_auto();
     restore.zeroize();
 
     // Switch to whichever language we just produced, so the rest of the sentence

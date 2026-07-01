@@ -31,7 +31,11 @@ mod safety;
 #[cfg(feature = "winos")]
 mod session;
 #[cfg(feature = "winos")]
+mod settings;
+#[cfg(feature = "winos")]
 mod startup;
+#[cfg(feature = "winos")]
+mod stats;
 #[cfg(feature = "winos")]
 mod toast;
 #[cfg(feature = "winos")]

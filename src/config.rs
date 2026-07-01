@@ -8,9 +8,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{hook, learn};
+use crate::{hook, learn, safety};
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Config {
     /// Master on/off.
@@ -19,6 +19,8 @@ pub struct Config {
     pub auto: bool,
     /// Auto-learn new words (off by default — privacy).
     pub learn: bool,
+    /// User-added app names to block (layered on top of the fixed defaults).
+    pub custom_blacklist: Vec<String>,
 }
 
 impl Default for Config {
@@ -27,6 +29,7 @@ impl Default for Config {
             enabled: true,
             auto: false,
             learn: false,
+            custom_blacklist: Vec::new(),
         }
     }
 }
@@ -51,6 +54,7 @@ pub fn apply(cfg: &Config) {
     hook::set_enabled(cfg.enabled);
     hook::set_auto(cfg.auto);
     learn::set_enabled(cfg.learn);
+    safety::set_custom_list(cfg.custom_blacklist.clone());
 }
 
 /// Snapshot the current runtime state and write it to disk. Best-effort.
@@ -59,6 +63,7 @@ pub fn persist() {
         enabled: hook::is_enabled(),
         auto: hook::is_auto(),
         learn: learn::is_enabled(),
+        custom_blacklist: safety::custom_list(),
     };
     let Some(p) = config_path() else {
         return;

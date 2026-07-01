@@ -92,6 +92,7 @@ unsafe fn convert_selection() {
         return;
     }
     send_chord(VK_V.0);
+    crate::stats::record_manual();
 
     // Let the paste land before we put the user's clipboard back.
     thread::sleep(Duration::from_millis(120));
