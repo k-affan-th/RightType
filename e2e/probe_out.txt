@@ -1,0 +1,5 @@
+BASELINE: 'กับ' pass=True
+>>> LOCK NOW: Win+L then log back in (optionally sleep+wake). 5 min window <<<
+events: ['[rt-e2e] session: unlock reinstall']
+POST live='สวัสดี' boundary='correct'
+{'results': {'baseline': True, 'reinstall_evidence': True, 'post_enth': True, 'post_then': True, 'process_alive': True}, 'pass': True}

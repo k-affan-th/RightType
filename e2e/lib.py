@@ -95,6 +95,29 @@ def type_text(window, text: str):
         window.type_keys(text, with_spaces=True, pause=0.03)
 
 
+def read_browser_text(app) -> str:
+    """Content heuristic that survives Chromium differences: longest non-empty
+    value that isn't an address/URL string."""
+    import re
+
+    best_val = ""
+    best_len = -1
+    for d in app.top_window().descendants():
+        try:
+            ct = d.element_info.control_type
+            if ct not in ("Document", "Edit", "EditText"):
+                continue
+            v = d.legacy_properties().get("Value")
+        except Exception:
+            continue
+        if not isinstance(v, str) or re.match(r"^(https?:)?//|^127\.0\.0\.1|chrome://", v):
+            continue
+        if len(v) > best_len:
+            best_len = len(v)
+            best_val = v
+    return best_val
+
+
 def read_text_value(app, largest: bool = False, edits_only: bool = False) -> str:
     best_val = ""
     best_score = -1
@@ -133,10 +156,11 @@ def screenshot(name: str) -> Path:
 
 
 EDGE_EXE = Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+CHROME_EXE = Path(os.environ.get("PROGRAMFILES", "")) / "Google" / "Chrome" / "Application" / "chrome.exe"
 HERE = Path(__file__).resolve().parent
 
 
-def start_edge(html: Path):
+def start_edge(html: Path, exe: Path = EDGE_EXE):
     import functools
     import http.server
     import socketserver
@@ -164,7 +188,7 @@ def start_edge(html: Path):
     before = set(browser_windows())
     subprocess.Popen(
         [
-            str(EDGE_EXE),
+            str(exe),
             "--new-window",
             url,
             f"--user-data-dir={tempfile.gettempdir()}/rt_e2e_edge_{int(time.time())}",
@@ -214,3 +238,4 @@ def close_app(app):
 
 def list_windows():
     return [w.window_text() for w in Desktop(backend="uia").windows()]
+

@@ -554,6 +554,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // produce real Thai natively — no stutter, and no fabricated spaces.
         if let Key::Char(_) = key {
             let pending = STATE.with(|s| s.borrow().buf.current().to_string());
+            e2e_trace(format!("live-eval {pending:?}"));
             if pending.chars().count() >= MIN_LIVE_COMMIT_CHARS
                 && policy::supported_layout_id(layout_id(foreground_layout()))
                     == Some(policy::InputLayout::UsQwerty)

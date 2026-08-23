@@ -13,10 +13,12 @@ import tempfile
 import time
 from pathlib import Path
 
+import lib
 from lib import (
     close_app,
     read_text_value,
     set_layout,
+    
     start_edge,
     start_notepad,
     start_righttype,
@@ -27,7 +29,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 HERE = Path(__file__).resolve().parent
 
 p = argparse.ArgumentParser()
-p.add_argument("--app", choices=["notepad", "edge"], default="notepad")
+p.add_argument("--app", choices=["notepad", "edge", "chrome"], default="notepad")
 p.add_argument("--text", required=True)
 p.add_argument("--lang", choices=["en", "th"], default="en")
 p.add_argument("--expect", required=True)
@@ -40,21 +42,26 @@ httpd = None
 result = {"typed": args.text, "expected": args.expect, "actual": "<no run>", "pass": False}
 tmp_files = []
 try:
-    if args.app == "edge":
-        app, httpd = start_edge(HERE / "target.html")
+    if args.app in ("edge", "chrome"):
+        exe = lib.CHROME_EXE if args.app == "chrome" else lib.EDGE_EXE
+        app, httpd = start_edge(HERE / "target.html", exe=exe)
+        import matrix as mx
+
+        mx.type_token(app, args.text, args.lang)
+        actual = lib.read_browser_text(app)
     else:
         doc = Path(tempfile.gettempdir()) / f"rt_e2e_{os.getpid()}_{int(time.time())}.txt"
         doc.write_text("", encoding="utf-8")
         tmp_files.append(doc)
         app = start_notepad(doc=doc)
 
-    win = app.top_window()
-    set_layout(win.handle, args.lang)
-    win.set_focus()
-    time.sleep(1.0)
-    type_text(win, args.text + " ")
-    time.sleep(3.0)
-    actual = read_text_value(app, largest=(args.app == "edge"))
+        win = app.top_window()
+        set_layout(win.handle, args.lang)
+        win.set_focus()
+        time.sleep(1.0)
+        type_text(win, args.text + " ")
+        time.sleep(3.0)
+        actual = read_text_value(app)
     result = {
         "typed": args.text,
         "expected": args.expect + " ",
@@ -76,3 +83,4 @@ finally:
 
 print(json.dumps(result, ensure_ascii=False))
 raise SystemExit(0 if result["pass"] else 1)
+

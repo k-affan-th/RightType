@@ -86,7 +86,7 @@ def type_token(app, token: str, lang: str, pause: float = 0.03):
 
 
 def read_out(app) -> str:
-    return lib.read_text_value(app, largest=True, edits_only=True)
+    return lib.read_browser_text(app)
 
 
 def case_result(name, got, want, ok=None):
@@ -279,3 +279,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

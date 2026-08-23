@@ -322,7 +322,9 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 - [x] Thai tone marks/combining — ครอบคลุมใน `สวัสดี` (ั, ี combining) ทั้ง live และ boundary
 - [x] Browser password field + blacklisted terminal — hard-deny ยืนยันด้วย trace assertion (E-025)
 - [x] Native password field — ES_PASSWORD ผ่าน WinForms: deny ยืนยัน (E-029)
-- [!] Sleep/resume, lock/unlock และ UAC transition — seam probe สรุปว่า synthetic channel ใช้ไม่ได้กับ nwg subclass (E-028); UAC isolation มีหลักฐานบางส่วน (E-030); **BLOCKED รอ interactive transition จริง** (ผู้ใช้/VM)
+- [x] Lock/unlock transition — **interactive PASS**: unlock reinstall trace + post-corrections สองทิศ (E-031)
+- [!] Sleep/resume — BLOCKED-interactive เช่นเดียวกัน (ทำตามขั้นตอน probe ได้เมื่อผู้ใช้ว่าง)
+- [x] UAC full cycle — consent → post-correction PASS (E-030)
 
 ### Exit criteria
 
@@ -388,7 +390,8 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 | E-027 | 2026-08-24 | S6 | Local release artifact build (dirty-tree, pre-sign) | 2,722,304 bytes; SHA-256 `C6A8D536…65AB5`; gates ผ่านบน tree เดียวกัน | dirty-tree + unsigned + ไม่ใช่ platform-certified artifact |
 | E-028 | 2026-08-24 | S5/S4 | Transition-seam probe: PostMessage/SendMessage WM_POWERBROADCAST+WTS เข้า tray window | ข้อสรุปเชิงวิธีการ: nwg subclass **ไม่รับ message ที่ถูกส่งจากภายนอก** (แม้ WM_TIMER) — ช่องทาง synthetic พิสูจน์ recovery path ไม่ได้; correction หลังยิงผ่าน tolerance PASS แต่ไม่นำหลักฐาน; row sleep/unlock ต้อง OS transition จริง (ผู้ใช้/VM) | ไม่พิสูจน์ reinstall path จริง |
 | E-029 | 2026-08-24 | S4 | Native ES_PASSWORD guard: WinForms `UseSystemPasswordChar` target + trace assertion | detections=0 — hard-deny ยืนยันบน native control แล้ว (คู่กับ browser field ใน E-025) | ไม่ครอบ elevated/secure-desktop input |
-| E-030 | 2026-08-24 | S4 | UAC resilience probe (RunAs prompt, auto-cancel) | Secure desktop **บล็อก synthetic input ของ process ภายนอกสมบูรณ์** (RuntimeError ตามคาด); RightType process รอดทุก attempt; correction หลัง desktop กลับมา = PASS ใน run ที่ไม่ติด stray dialog | ต้องการ interactive consent click เพื่อพิสูจน์ full cycle; hook silence บน secure desktop ยังเป็น design-assumption |
+| E-030 | 2026-08-24 | S4 | UAC resilience probe v2 (baseline → consent YES → post) | **FULL PASS**: pre/post correction ✓, desktop restored ✓, process alive ✓ | secure-desktop hook-silence ช่วง prompt ยังสันนิษฐานตาม design |
+| E-031 | 2026-08-24 | S5/S4 | Interactive lock/unlock (ผู้ใช้กด Win+L จริง): trace watch + post-corrections | `session: unlock reinstall` ถูกบันทึก = **Bug-1 recovery path พิสูจน์บน OS transition จริง**; post live+boundary ผ่านทั้งคู่, process alive | ยังไม่ครอบ sleep/resume (ต้องทำตามขั้นตอนเดียวกัน) และ UAC secure-desktop ระหว่างพิมพ์ |
 
 ## Risk register
 
