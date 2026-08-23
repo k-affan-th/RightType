@@ -41,7 +41,7 @@ result = {"typed": args.text, "expected": args.expect, "actual": "<no run>", "pa
 tmp_files = []
 try:
     if args.app == "edge":
-        app, httpd = start_edge(HERE / "edge_target.html")
+        app, httpd = start_edge(HERE / "target.html")
     else:
         doc = Path(tempfile.gettempdir()) / f"rt_e2e_{os.getpid()}_{int(time.time())}.txt"
         doc.write_text("", encoding="utf-8")

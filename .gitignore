@@ -5,3 +5,4 @@ Cargo.lock.bak
 e2e/.venv/
 e2e/shots/
 __pycache__/
+e2e/rt_stderr.log

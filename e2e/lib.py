@@ -95,13 +95,15 @@ def type_text(window, text: str):
         window.type_keys(text, with_spaces=True, pause=0.03)
 
 
-def read_text_value(app, largest: bool = False) -> str:
+def read_text_value(app, largest: bool = False, edits_only: bool = False) -> str:
     best_val = ""
     best_score = -1
     for d in app.top_window().descendants():
         try:
             ct = d.element_info.control_type
             if ct not in ("Document", "Edit", "EditText"):
+                continue
+            if edits_only and ct != "Edit":
                 continue
             v = d.legacy_properties().get("Value")
         except Exception:

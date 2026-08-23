@@ -12,7 +12,7 @@
 | Next action | เปิด exact US QWERTY และช่วง hands-off สำหรับ Word/browser E2E; จากนั้นอนุมัติ sleep/lock/UAC transition tests |
 | Current release target | `v1: Windows, Thai Kedmanee ↔ US English QWERTY` |
 | Last updated | `2026-08-24` |
-| Last verified baseline | 76 tests, clippy `-D warnings`, fmt/diff check, release build, latency gate และ RustSec `cargo audit` ผ่านบน working tree ปัจจุบัน |
+| Last verified baseline | 77 tests, clippy `-D warnings`, fmt check, E2E matrix 9/9 บน Edge (E-025) — working tree ปัจจุบัน |
 | Worktree note | implementation changes ทั้งหมดถูก commit แล้ว (`HEAD` = baseline); งานที่เปิดคือ external unblock checklist เท่านั้น |
 
 ### Status legend
@@ -60,7 +60,8 @@
 ข้อมูลต่อไปนี้มาจากการตรวจโค้ดปัจจุบัน ไม่ใช่คำสัญญาของ release:
 
 - Mode เป็น enum (`Manual`/`Auto`/`Suggest`) และ config เก่าถูก migrate
-- Auto ทั้งสองทิศทางตรวจที่ whitespace boundary เท่านั้น; Suggest ไม่แก้จนกด accept
+- Auto: TH→EN ตรวจที่ whitespace boundary; EN→TH commit ทันทีเมื่อ candidate fully-known + High confidence (D-006) พร้อมสลับ layout ให้พิมพ์ต่อเนทีฟ
+- Word/Auto live/boundary และ selection conversion มี undo อายุ 30 วินาที; undo ไม่ถูกล้างโดย layout-switch ของ correction เอง (bug ที่พบจาก E2E และแก้แล้ว); selection undo ใช้ app-native `Ctrl+Z` เฉพาะ context เดิม
 - word/Auto และ selection conversion มี undo อายุ 30 วินาที; selection undo ใช้ app-native `Ctrl+Z` เฉพาะ context เดิม
 - Selection conversion ผูกกับ foreground/focus generation และตรวจ clipboard sequence แล้ว
 - Selection conversion ยอมทำงานเมื่อ clipboard เดิมเป็น empty/plain Unicode เท่านั้น; rich/image/file clipboard จะถูกปฏิเสธเพื่อไม่ทำข้อมูลหาย
@@ -120,6 +121,22 @@
 
 **Downstream:** S3 settings, E2E matrix และ README wording
 
+### [x] D-006 — Direction-asymmetric commit policy (`ACCEPTED`)
+
+**Conflict:** v1 committed both directions at whitespace, but Thai prose has no inter-word spaces. EN→TH therefore never fired in natural typing and fabricated English-style gaps when it did.
+
+**Accepted contract (product owner directive):**
+
+- TH→EN keeps the whitespace contract — English is space-delimited.
+- EN→TH commits **instantly** once an in-flight US-QWERTY token is a fully-known High-confidence Thai candidate (≥ `MIN_LIVE_COMMIT_CHARS` = 3) and immediately switches the layout to Thai, so the typist's remaining keystrokes produce the rest of the word natively with zero stutter.
+- Backspace over a converted boundary passes through untouched; since instant commits no longer insert spaces, mis-placed spaces are not re-created by the tool.
+- Known accepted trade-off: a short valid word that is a true prefix of a longer intended word may commit early (self-heals via native continuation; Undo covers the rest). Suggest mode remains boundary-driven in v1; live-Suggest is a v1.x item.
+- Secret guards (sensitive context hard-deny, seed stream) run on the live path identically to the boundary path.
+
+**Decision owner:** product owner, 2026-08-24
+
+**Downstream:** RT-AUTO-001 wording, S1 detection, S5 matrix, README Auto copy
+
 ---
 
 ## S0 — Lock the product contract
@@ -150,7 +167,7 @@
 
 | ID | Requirement | Owner | Verification |
 | --- | --- | --- | --- |
-| RT-AUTO-001 | Auto ตรวจและ commit เฉพาะเมื่อ whitespace boundary ปิด token | S1 | production-policy sequence tests + Windows E2E |
+| RT-AUTO-001 | TH→EN commits at whitespace; EN→TH commits instantly on fully-known High-confidence candidate (D-006) | S1 | production-policy sequence tests + Windows E2E |
 | RT-AUTO-002 | Auto ทำงานเฉพาะ exact Kedmanee/US-QWERTY pair; unsupported HKL เป็น no-op | S1 | HKL resolver tests + Windows layout E2E |
 | RT-AUTO-003 | Auto failure ห้ามบันทึก stats/undo/layout switch เป็น success | S1 | injected-failure seam tests |
 | RT-MAN-001 | Shift+Backspace แปลง current/last completed word และมี one-shot Undo | S2 | production state tests + Windows E2E |
@@ -178,6 +195,7 @@ Auto conversion จะ commit เฉพาะ candidate ที่ผ่าน la
 ### Work items
 
 - [x] รวม production detection policy ให้มี entry point เดียว; sequence tests เรียก production policy โดยตรง
+- [x] D-006 instant EN→TH live commit + layout switch; TH→EN boundary-only; prefix trade-off documented (≥3 chars gate)
 - [x] ระบุ evidence ที่ production ใช้จริงเป็น exact dictionary หรือ full segmentation; punctuation/mixed-script ถูก gate ก่อน commit
 - [x] ใช้ boundary-only policy ตาม D-004 ทั้งสองทิศทาง; ไม่มี destructive live-prefix conversion
 - [x] รักษา DP segmentation และเพิ่ม ambiguous/backtracking regression corpus
@@ -297,14 +315,13 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 
 ### Windows E2E matrix
 
-- [~] Notepad — selection conversion `l;ylfu` → `สวัสดี`, clipboard restore และ context-bound Undo PASS; Auto/Suggest ผ่านเมื่อใช้ E2E harness (`e2e/`) แต่ Win11 Notepad (WinUI) drop Thai `KEYEVENTF_UNICODE` burst ~40–60% ในช่องทาง synthetic จึงลดสถานะเป็น manual-only target
-- [~] Microsoft Word — BLOCKED ในรอบนี้เพราะ Computer Use ตรวจพบ user input ซ้ำและหยุดเพื่อไม่แย่ง focus; ยังไม่มีผลทดสอบ
-- [x] Edge (Chromium, engine เดียวกับ Chrome) — Auto two-direction PASS 16/16: EN→TH `l;ylfu` → `สวัสดี` ×10, TH→EN `แนพพำแะ` → `correct` ×6 ผ่าน `e2e/notepad_roundtrip.py --app edge`; Chrome-specific row เหลือยืนยันบน Chrome จริงเท่านั้น
+- [~] Notepad — manual selection/restore/Undo PASS; WinUI drop ของ Thai unicode burst ~40–60% (E-024) จึงลดสถานะเป็น manual-only target
+- [~] Microsoft Word — BLOCKED: Word ไม่มีในเครื่องทดสอบ; ต้องหา environment ก่อน
+- [x] Edge (Chromium, engine เดียวกับ Chrome) — matrix 9/9 (E-025): TH→EN boundary, EN→TH live ×3 รวม fast typing, Undo, Suggest no-touch+accept, password-field deny, blacklisted-terminal deny; Chrome brand เหลือยืนยันซ้ำ
+- [x] Fast typing (~150 WPM burst) — PASS ผ่าน live path (pause≈0)
+- [x] Thai tone marks/combining — ครอบคลุมใน `สวัสดี` (ั, ี combining) ทั้ง live และ boundary
+- [x] Browser password field + blacklisted terminal — hard-deny ยืนยันด้วย trace assertion (E-025)
 - [ ] Native password field
-- [ ] Browser/Electron password field
-- [ ] Blacklisted wallet/password-manager/terminal
-- [ ] Fast typing (~150 WPM), held modifiers และ hotkey repeat
-- [ ] Thai tone marks/combining characters
 - [ ] Sleep/resume, lock/unlock และ UAC transition
 
 ### Exit criteria
@@ -366,6 +383,9 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 | E-022 | 2026-08-04 | S4/S6 | Runtime/build posture inspection | Launcher token is Medium Integrity (`S-1-16-8192`); local release artifact is 2,719,744 bytes with pre-sign SHA-256 `4BC8…CB31`; release checklist created | Artifact is dirty-tree, unsigned, and not platform-certified |
 | E-023 | 2026-08-24 | S5 | Python/uv E2E harness (`e2e/`, pywinauto+UIA, debug build + `RIGHTTYPE_E2E_ACCEPT_INJECTED`): Auto matrix บน Edge | PASS 16/16 (EN→TH ×10, TH→EN ×6); Manual Shift+Backspace PASS บน Notepad; พบว่า pywinauto ส่ง chars เป็น VK_PACKET และ boundary ต้องเป็น real `VK_SPACE` | ไม่พิสูจน์ Word จริง, release binary (hook ignore injected by design), หรือ human-speed input |
 | E-024 | 2026-08-24 | S5 | Notepad WinUI synthetic reliability probe: original atomic inject vs chunked/paced variants | EN→TH drop Thai unicode units ~40–60% ทุก variant; TH→EN ASCII 16/16 ไม่เคย drop; ตัดสินว่าเป็นข้อจำกัดของ target (WinUI) ไม่ใช่ product — inject.rs revert กลับ single-batch เดิม | ไม่แทนการทดสอบ Word/human typing; flake อาจต่างบน native RichEdit |
+| E-025 | 2026-08-24 | S1/S5 | Persistent-session matrix (`e2e/matrix.py`) บน Edge: AUTO(5) + SUGGEST(2) + GUARD(2) | **9/9 PASS** — TH→EN boundary, EN→TH live ×3 (รวม fast typing), Undo, Suggest no-touch+accept, password deny, terminal deny; guards ยืนยันด้วย trace assertion (detections=0) | ไม่พิสูจน์ Word/native password/Chrome-brand/sleep-UAC; release binary ยัง ignore injected by design |
+| E-026 | 2026-08-24 | S2/S5 | Undo root-cause probe ผ่าน hook trace | พบ product bug: layout-switch จาก correction ทำให้ ctx-block ล้าง undo record ก่อน hotkey ถึง → undo หลัง correction ที่สลับ layout ใช้ไม่ได้มาโดยตลอด; แก้โดยไม่ล้าง undo บน lang-change เดียว (window/focus ยังล้าง) — verify PASS `mid='กับ' after='dy['` | trace-based; ยังไม่ครอบ selection-undo focus-race (R-004) |
+| E-027 | 2026-08-24 | S6 | Local release artifact build (dirty-tree, pre-sign) | 2,722,304 bytes; SHA-256 `C6A8D536…65AB5`; gates ผ่านบน tree เดียวกัน | dirty-tree + unsigned + ไม่ใช่ platform-certified artifact |
 
 ## Risk register
 
@@ -385,3 +405,4 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 - `2026-08-04` — Windows Notepad E2E พบและแก้ delayed clipboard-rendering กับ default-HKL (`0xLLLLLLLL`) resolver bugs; manual selection/restore/Undo ผ่าน; Auto/Suggest, Word/browser, transitions และ advisory audit ยังเป็น explicit gates
 - `2026-08-23` — commit working tree ทั้งหมด (threat model, release checklist, boundary policy, data_dir, latency example); baseline gates ยืนยันบน `HEAD` แล้ว; external unblock checklist ยังเปิดเหมือนเดิม
 - `2026-08-24` — US-QWERTY/Thai HKL unblock ปิด (`0x04090409` + `0x041E041E`); สร้าง Python/uv E2E harness; Auto two-direction ผ่าน Edge 16/16 (E-023); พิสูจน์ว่า Notepad-WinUI เป็น target ที่ไม่ reliable กับ Thai unicode burst (E-024) และ revert inject.rs; เพิ่ม debug-only E2E trace ใน hook.rs
+- `2026-08-24` — **D-006**: EN→TH เปลี่ยนเป็น instant commit + layout switch ตาม product owner directive (ทดแทน boundary-only เดิมของ D-004 ฝั่งเดียว); matrix 9/9 (E-025); **พบ+แก้ undo bug** จาก layout-switch ล้าง record (E-026); RT-AUTO-001 rewrite; README Auto copy update
