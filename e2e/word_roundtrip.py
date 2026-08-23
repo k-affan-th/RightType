@@ -39,7 +39,7 @@ def read_word_text(app) -> str:
     return best
 
 
-def word_case(app, token, lang, expect, pause=0.03):
+def word_case(app, token, lang, pause=0.03):
     win = app.top_window()
     win.set_focus()
     time.sleep(0.3)
@@ -48,14 +48,8 @@ def word_case(app, token, lang, expect, pause=0.03):
     r = win.rectangle()
     mouse.click(button="left", coords=((r.left + r.right) // 2, (r.top + r.bottom) // 2))
     time.sleep(0.3)
-    win.type_keys("^a{DEL}", pause=0.02)
-    if pause <= 0.001 or not lang:
-        pass
     win.type_keys(token, with_spaces=True, pause=pause)
-    if lang == "en":
-        # D-006 live: no space needed; give the pipeline a beat.
-        pass
-    else:
+    if lang == "th":
         time.sleep(0.15)
         win.type_keys("{SPACE}", pause=0.02)
     time.sleep(2.5)
@@ -125,24 +119,40 @@ def main():
         win.type_keys("{ESC}")
         time.sleep(0.5)
 
-        got = word_case(app, "แนพพำแะ", "th", "correct")
-        results.append({"case": "word_then_boundary", "actual": got.strip(), "pass": got.strip() == "correct"})
+        got = word_case(app, "แนพพำแะ", "th")
+        # Word's own AutoCorrect may capitalize; single accumulating document —
+        # every case asserts on the tail, which also evidences space survival.
+        results.append({
+            "case": "word_then_boundary",
+            "actual": got,
+            "pass": got.strip().lower().endswith("correct"),
+        })
 
-        got = word_case(app, "l;ylfu", "en", "สวัสดี")
-        results.append({"case": "word_enth_live", "actual": got.strip(), "pass": got.strip() == "สวัสดี"})
+        got = word_case(app, "l;ylfu", "en")
+        results.append({
+            "case": "word_enth_live",
+            "actual": got,
+            "pass": got.strip().endswith("สวัสดี"),
+        })
 
-        got = word_case(app, "dy[", "en", "กับ")
-        mid = got.strip()
+        mid_full = read_word_text(app)
+        got = word_case(app, "dy[", "en")
+        mid = read_word_text(app)
         win = app.top_window()
         win.set_focus()
         time.sleep(0.3)
         win.type_keys("^+{CAPSLOCK}")
         time.sleep(2.5)
-        after = read_word_text(app).strip()
+        after = read_word_text(app)
+        ok = (
+            mid.strip().endswith("กับ")
+            and after.lower().endswith("dy[")
+            and len(after) >= len(mid_full) - 2
+        )
         results.append({
             "case": "word_undo",
             "actual": f"mid={mid!r} after={after!r}",
-            "pass": mid == "กับ" and after == "dy[",
+            "pass": ok,
         })
 
         passed = sum(1 for r in results if r["pass"])

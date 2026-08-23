@@ -850,9 +850,12 @@ unsafe fn maybe_correct_with<F>(
 where
     F: FnOnce(usize, &str, Option<u16>) -> bool,
 {
-    // The triggering key (when any) is swallowed, so only the word's own
-    // characters are deleted.
-    let backspaces = word.chars().count();
+    // Deletion count depends on the trigger:
+    // - Boundary path: every token char reached the app (the separator itself
+    //   was swallowed), so delete exactly `word.len()`.
+    // - D-006 live path: the *current* char was swallowed before reaching the
+    //   app, so only `word.len() - 1` characters exist to delete.
+    let backspaces = word.chars().count() - usize::from(boundary_vk.is_none());
     let mut corrected = d.corrected;
     if !apply(backspaces, &corrected, boundary_vk) {
         crate::toast::show("RightType: correction injection failed");

@@ -316,7 +316,7 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 ### Windows E2E matrix
 
 - [~] Notepad — manual selection/restore/Undo PASS; WinUI drop ของ Thai unicode burst ~40–60% (E-024) จึงลดสถานะเป็น manual-only target
-- [~] Microsoft Word — BLOCKED: Word ไม่มีในเครื่องทดสอบ; ต้องหา environment ก่อน
+- [~] Microsoft Word — **3/3 PASS บน Word จริง** (boundary/live/undo, E-033); เหลือ fast-typing burst เฉพาะ Word เป็น optional polish
 - [x] Edge (Chromium, engine เดียวกับ Chrome) — matrix 9/9 (E-025): TH→EN boundary, EN→TH live ×3 รวม fast typing, Undo, Suggest no-touch+accept, password-field deny, blacklisted-terminal deny; Chrome brand เหลือยืนยันซ้ำ
 - [x] Fast typing (~150 WPM burst) — PASS ผ่าน live path (pause≈0)
 - [x] Thai tone marks/combining — ครอบคลุมใน `สวัสดี` (ั, ี combining) ทั้ง live และ boundary
@@ -392,6 +392,8 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 | E-029 | 2026-08-24 | S4 | Native ES_PASSWORD guard: WinForms `UseSystemPasswordChar` target + trace assertion | detections=0 — hard-deny ยืนยันบน native control แล้ว (คู่กับ browser field ใน E-025) | ไม่ครอบ elevated/secure-desktop input |
 | E-030 | 2026-08-24 | S4 | UAC resilience probe v2 (baseline → consent YES → post) | **FULL PASS**: pre/post correction ✓, desktop restored ✓, process alive ✓ | secure-desktop hook-silence ช่วง prompt ยังสันนิษฐานตาม design |
 | E-031 | 2026-08-24 | S5/S4 | Interactive lock/unlock (ผู้ใช้กด Win+L จริง): trace watch + post-corrections | `session: unlock reinstall` ถูกบันทึก = **Bug-1 recovery path พิสูจน์บน OS transition จริง**; post live+boundary ผ่านทั้งคู่, process alive | ยังไม่ครอบ sleep/resume (ต้องทำตามขั้นตอนเดียวกัน) และ UAC secure-desktop ระหว่างพิมพ์ |
+| E-032 | 2026-08-24 | S1/S2 | Mixed-spacing probe (`spacing_probe.py`): EN␣TH / TH␣EN / trailing ␣ | พบ off-by-one: live commit ลบ `len` แต่ trigger char ถูก swallow = **ลบเกิน 1 กิน space ผู้ใช้**; แก้ `backspaces = len − (boundary.is_none())` แล้ว A/B/C PASS — space รอดทุกลำดับ | ครอบ Edge; Word ยืนยันต่อใน E-033 |
+| E-033 | 2026-08-24 | S5 | Microsoft Word (Office16 จริง): accumulating-document roundtrip | **3/3 PASS** — TH→EN boundary (AC capitalize เป็น artifact ของ Word เอง), EN→TH live, Undo; ข้อความสะสม `'Correct สวัสดีกับ'→'…dy['` พิสูจน์ space-preservation ต่อเนื่อง | ไม่ครอบ fast-typing burst บน Word / ribbon-focus edge cases |
 
 ## Risk register
 
@@ -413,3 +415,4 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 - `2026-08-24` — US-QWERTY/Thai HKL unblock ปิด (`0x04090409` + `0x041E041E`); สร้าง Python/uv E2E harness; Auto two-direction ผ่าน Edge 16/16 (E-023); พิสูจน์ว่า Notepad-WinUI เป็น target ที่ไม่ reliable กับ Thai unicode burst (E-024) และ revert inject.rs; เพิ่ม debug-only E2E trace ใน hook.rs
 - `2026-08-24` — **D-006**: EN→TH เปลี่ยนเป็น instant commit + layout switch ตาม product owner directive (ทดแทน boundary-only เดิมของ D-004 ฝั่งเดียว); matrix 9/9 (E-025); **พบ+แก้ undo bug** จาก layout-switch ล้าง record (E-026); RT-AUTO-001 rewrite; README Auto copy update
 - `2026-08-24` — Native ES_PASSWORD guard PASS (E-029); UAC secure-desktop isolation มีหลักฐานบางส่วน (E-030); transition seam probe สรุป synthetic channel ใช้ไม่ได้ → row sleep/unlock ย้ายเป็น BLOCKED-interactive อย่างซื่อสัตย์ (E-028)
+- `2026-08-24` — UAC full cycle PASS หลังผู้ใช้กด consent (E-030); lock/unlock interactive PASS = Bug-1 proof จริง (E-031); **ผู้ใช้แจ้ง space ถูกกิน → พบ off-by-one ใน live commit** แก้แล้ว (E-032); **Word 3/3** (E-033) — S5 matrix เหลือ sleep/resume + polish เท่านั้น
