@@ -36,7 +36,7 @@ pub fn supported_layout_id(hkl: u32) -> Option<InputLayout> {
 }
 
 /// Evaluate one token completed by a whitespace boundary.
-pub fn detect_at_boundary(
+pub fn detect_token(
     token: &str,
     layout: InputLayout,
     en: &Dictionary,
@@ -60,6 +60,20 @@ pub fn detect_at_boundary(
 /// dictionary and repeat-count guards remain in the learning module itself.
 pub fn allows_learning(layout: Option<InputLayout>, correction_proposed: bool) -> bool {
     layout == Some(InputLayout::UsQwerty) && !correction_proposed
+}
+
+/// D-006: EN→TH commits without waiting for whitespace.
+///
+/// Thai prose has no inter-word spaces, so a whitespace trigger would never
+/// fire during natural typing and would fabricate English-style gaps when it
+/// did. A growing US-QWERTY token may therefore commit as soon as its complete
+/// conversion is a fully-known High-confidence Thai candidate. TH→EN keeps the
+/// whitespace contract — English really is space-delimited — and Suggest/
+/// Manual paths are unchanged.
+pub fn allows_live_thai_commit(layout: Option<InputLayout>, d: &detect::Detection) -> bool {
+    layout == Some(InputLayout::UsQwerty)
+        && d.confidence == detect::Confidence::High
+        && !d.corrected.chars().any(|c| c.is_ascii_whitespace())
 }
 
 #[cfg(test)]
@@ -99,18 +113,17 @@ mod tests {
     #[test]
     fn boundary_policy_handles_both_supported_directions() {
         let (en, th) = dicts();
-        let to_thai = detect_at_boundary("l;ylfu", InputLayout::UsQwerty, &en, &th).unwrap();
+        let to_thai = detect_token("l;ylfu", InputLayout::UsQwerty, &en, &th).unwrap();
         assert_eq!(to_thai.corrected, "สวัสดี");
-        let to_english =
-            detect_at_boundary("แนพพำแะ", InputLayout::ThaiKedmanee, &en, &th).unwrap();
+        let to_english = detect_token("แนพพำแะ", InputLayout::ThaiKedmanee, &en, &th).unwrap();
         assert_eq!(to_english.corrected, "correct");
     }
 
     #[test]
     fn boundary_policy_rejects_wrong_layout_direction() {
         let (en, th) = dicts();
-        assert!(detect_at_boundary("l;ylfu", InputLayout::ThaiKedmanee, &en, &th).is_none());
-        assert!(detect_at_boundary("แนพพำแะ", InputLayout::UsQwerty, &en, &th).is_none());
+        assert!(detect_token("l;ylfu", InputLayout::ThaiKedmanee, &en, &th).is_none());
+        assert!(detect_token("แนพพำแะ", InputLayout::UsQwerty, &en, &th).is_none());
     }
 
     #[test]
@@ -119,5 +132,23 @@ mod tests {
         assert!(!allows_learning(Some(InputLayout::UsQwerty), true));
         assert!(!allows_learning(Some(InputLayout::ThaiKedmanee), false));
         assert!(!allows_learning(None, false));
+    }
+
+    #[test]
+    fn live_thai_commit_only_on_us_layout_high_confidence() {
+        let (en, th) = dicts();
+        let d = detect_token("l;ylfu", InputLayout::UsQwerty, &en, &th).unwrap();
+        assert!(allows_live_thai_commit(Some(InputLayout::UsQwerty), &d));
+        assert!(!allows_live_thai_commit(
+            Some(InputLayout::ThaiKedmanee),
+            &d
+        ));
+        assert!(!allows_live_thai_commit(None, &d));
+
+        let to_en = detect_token("แนพพำแะ", InputLayout::ThaiKedmanee, &en, &th).unwrap();
+        assert!(!allows_live_thai_commit(
+            Some(InputLayout::ThaiKedmanee),
+            &to_en
+        ));
     }
 }

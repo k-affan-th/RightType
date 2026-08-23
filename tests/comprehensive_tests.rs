@@ -115,7 +115,7 @@ fn test_url_and_email_behavior() {
 fn test_qwerty_to_thai_is_detected_at_the_boundary() {
     // EN→Thai deliberately waits for a word boundary: live conversion of a two
     // character prefix such as "l;" would make ordinary English typing unsafe.
-    let det = policy::detect_at_boundary(
+    let det = policy::detect_token(
         "l;ylfu",
         InputLayout::UsQwerty,
         dict::english(),
@@ -132,7 +132,7 @@ fn test_thai_to_qwerty_waits_for_boundary() {
         assert!(buffer.observe(Key::Char(c)).is_none());
     }
     let completed = buffer.observe(Key::Boundary).unwrap();
-    let det = policy::detect_at_boundary(
+    let det = policy::detect_token(
         &completed,
         InputLayout::ThaiKedmanee,
         dict::english(),
@@ -302,7 +302,7 @@ fn test_antigravity_prefixes() {
             );
         }
         let completed = buffer.observe(Key::Boundary).unwrap();
-        assert!(policy::detect_at_boundary(
+        assert!(policy::detect_token(
             &completed,
             InputLayout::UsQwerty,
             dict::english(),
@@ -327,13 +327,8 @@ fn test_code_commands_and_paths_do_not_auto_convert() {
         "https://example.com",
     ] {
         assert!(
-            policy::detect_at_boundary(
-                token,
-                InputLayout::UsQwerty,
-                dict::english(),
-                dict::thai(),
-            )
-            .is_none(),
+            policy::detect_token(token, InputLayout::UsQwerty, dict::english(), dict::thai(),)
+                .is_none(),
             "code/command token converted: {token}"
         );
     }
@@ -344,7 +339,7 @@ fn test_no_space_thai_segmentation_examples() {
     // Natural demo for users.
     let natural = "สวัสดีครับวันนี้";
     let natural_raw = th_to_en(natural);
-    let natural_detection = policy::detect_at_boundary(
+    let natural_detection = policy::detect_token(
         &natural_raw,
         InputLayout::UsQwerty,
         dict::english(),
@@ -357,7 +352,7 @@ fn test_no_space_thai_segmentation_examples() {
     // for repeated-word/full-segmentation behavior rather than the best UX demo.
     let stress = "สวัสดีดี";
     let stress_raw = th_to_en(stress);
-    let stress_detection = policy::detect_at_boundary(
+    let stress_detection = policy::detect_token(
         &stress_raw,
         InputLayout::UsQwerty,
         dict::english(),

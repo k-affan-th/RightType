@@ -37,15 +37,22 @@ with a hotkey:
 | `Ctrl`+`Shift`+`CapsLock` | Undo the last correction (selection undo requires the same focused context) |
 | `Ctrl`+`Alt`+`CapsLock` | Enable/disable RightType immediately |
 
-**Auto mode** — checks completed tokens at a whitespace boundary in both directions.
-It converts only high-confidence dictionary/segmentation matches and then switches the
-active keyboard layout for the next token. It deliberately does not destructively
-convert mid-word: Thai runs with no boundary remain available to Manual mode (and the
-non-destructive Suggest mode) rather than risking a prefix false-positive.
+**Auto mode** — direction-aware, built for how each language is actually written:
 
-**Suggest mode** uses the same completed-token policy as Auto, but only displays a
-hint. It changes text only after `Alt`+`CapsLock`, and discards the hint when focus,
-layout, mode, or typing context changes.
+- **EN → TH (instant)**: the moment your in-flight keystrokes form a known Thai
+  word with high confidence, RightType fixes it **and switches to Thai** — your
+  remaining keystrokes finish the word natively. No spaces required, none
+  inserted: Thai doesn't work that way.
+- **TH → EN (at whitespace)**: English *is* space-delimited, so the token
+  commits when you hit space.
+- Ambiguous prefixes (a short valid word that begins a longer one) resolve in
+  your favour as you keep typing; `Shift`+`Backspace` and 30-second Undo cover
+  the rare miss. It deliberately does not destructively convert mid-word runs
+  that aren't fully-known Thai — those stay available to Manual and Suggest.
+
+**Suggest mode** uses the same completed-token policy as Auto's boundary path,
+but only displays a hint. It changes text only after `Alt`+`CapsLock`, and
+discards the hint when focus, layout, mode, or typing context changes.
 
 Version 1 intentionally supports only the exact Thai Kedmanee ↔ US English QWERTY
 pair and the fixed hotkeys above. Pattachote/Dvorak/UK-AU-CA layouts, remappable

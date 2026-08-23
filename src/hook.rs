@@ -233,12 +233,16 @@ fn set_undo(injected_len: usize, restore_text: &str) {
 /// the record is consumed whether or not this call finds one.
 unsafe fn undo_last_correction() {
     let Some(rec) = STATE.with(|s| s.borrow_mut().undo.take()) else {
+        e2e_trace("undo: no record".to_string());
         return;
     };
     if rec.created_at.elapsed() > Duration::from_secs(30) {
+        e2e_trace("undo: record expired".to_string());
         return;
     }
-    if inject::apply(rec.injected_len, &rec.restore_text, None) {
+    let ok = inject::apply(rec.injected_len, &rec.restore_text, None);
+    e2e_trace(format!("undo apply len={} -> {ok}", rec.injected_len));
+    if ok {
         crate::toast::show("Undo");
     } else {
         crate::toast::show("RightType: undo injection failed");
@@ -336,6 +340,12 @@ pub unsafe fn reinstall() -> windows::core::Result<()> {
 unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
+        e2e_trace(format!(
+            "raw vk={:#04x} up={} inj={}",
+            kb.vkCode,
+            kb.flags.0 & 0x80 != 0,
+            kb.flags.0 & LLKHF_INJECTED.0 != 0
+        ));
         // Skip anything we generated: our tag is authoritative and timing-free.
         let externally_injected = (kb.flags.0 & LLKHF_INJECTED.0) != 0;
         let ours = kb.dwExtraInfo == INJECT_TAG
@@ -374,6 +384,14 @@ fn e2e_trace(msg: String) {
 
 #[cfg(not(debug_assertions))]
 fn e2e_trace(_: String) {}
+
+/// D-006 instant EN→TH commit gate data: minimum token length before an
+/// in-flight commit may fire. Two-character candidates are excluded because
+/// valid short words (`สว`) are frequently true prefixes of longer intended
+/// words (`สวัสดี`); from three characters up, a fully-known High-confidence
+/// candidate plus the layout switch that follows lets the typist finish the
+/// word natively without stutter.
+pub const MIN_LIVE_COMMIT_CHARS: usize = 3;
 
 fn is_modifier(vk: u16) -> bool {
     matches!(
@@ -488,6 +506,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         let alt = is_down(VK_MENU);
         if ctrl && shift {
             // Ctrl+Shift+CapsLock: undo the last correction (one-shot). Swallow.
+            e2e_trace("undo-hotkey received".to_string());
             if !manual::request_undo_selection(
                 GetForegroundWindow().0 as isize,
                 crate::focus::generation(),
@@ -537,13 +556,50 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     let completed = STATE.with(|s| s.borrow_mut().buf.observe(key));
     e2e_trace(format!("completed={}", completed.is_some()));
     let Some(mut word) = completed else {
+        // D-006 instant EN→TH: the moment an in-flight token becomes a
+        // fully-known High-confidence Thai candidate (>= MIN_LIVE_COMMIT_CHARS),
+        // correct it and switch to Thai. The typist's remaining keystrokes then
+        // produce real Thai natively — no stutter, and no fabricated spaces.
+        if let Key::Char(_) = key {
+            let pending = STATE.with(|s| s.borrow().buf.current().to_string());
+            if pending.chars().count() >= MIN_LIVE_COMMIT_CHARS
+                && policy::supported_layout_id(layout_id(foreground_layout()))
+                    == Some(policy::InputLayout::UsQwerty)
+            {
+                let d = policy::detect_token(
+                    &pending,
+                    policy::InputLayout::UsQwerty,
+                    dict::english(),
+                    dict::thai(),
+                );
+                if let Some(d) = d {
+                    let tripped = STATE.with(|s| {
+                        s.borrow_mut()
+                            .seed
+                            .observe_candidate(&pending, Some(d.corrected.as_str()))
+                    });
+                    e2e_trace(format!(
+                        "live pending={pending:?} det={:?} seed={tripped}",
+                        d.corrected.clone()
+                    ));
+                    if !tripped
+                        && mode() == Mode::Auto
+                        && policy::allows_live_thai_commit(Some(policy::InputLayout::UsQwerty), &d)
+                        && maybe_correct(&pending, None, d)
+                    {
+                        STATE.with(|s| s.borrow_mut().buf.clear());
+                        return true;
+                    }
+                }
+            }
+        }
+        // Backspace and friends simply pass through; the buffer already shrank.
         return false;
     };
 
     let active_layout = policy::supported_layout_id(layout_id(foreground_layout()));
-    let mut detection = active_layout.and_then(|layout| {
-        policy::detect_at_boundary(&word, layout, dict::english(), dict::thai())
-    });
+    let mut detection = active_layout
+        .and_then(|layout| policy::detect_token(&word, layout, dict::english(), dict::thai()));
     e2e_trace(format!(
         "layout={active_layout:?} det={:?} mode={:?}",
         detection.as_ref().map(|d| d.corrected.clone()),
@@ -573,7 +629,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // Auto mode commits only at this boundary; Manual mode retains the token for
     // Shift+Backspace.
     let swallow = match (mode(), detection) {
-        (Mode::Auto, Some(d)) => maybe_correct(&word, vk, d),
+        (Mode::Auto, Some(d)) => maybe_correct(&word, Some(vk), d),
         (Mode::Suggest, Some(d)) => {
             STATE.with(|s| {
                 s.borrow_mut().suggestion = Some(SuggestionRecord {
@@ -778,10 +834,15 @@ unsafe fn convert_last_word() {
 }
 
 /// Inject a completed `word` after the caller's stream and detection guards pass.
-/// `boundary_vk` is the separator key that completed the word, re-emitted after
-/// the correction. Returns `true` if a correction was injected (caller swallows
-/// the boundary), `false` otherwise.
-unsafe fn maybe_correct(word: &str, boundary_vk: u16, d: righttype::detect::Detection) -> bool {
+/// `boundary_vk` is the separator that completed the word (re-emitted after the
+/// correction), or `None` for D-006 live EN→TH commits where nothing was typed
+/// beyond the token itself. Returns `true` if a correction was injected (caller
+/// swallows the triggering key), `false` otherwise.
+unsafe fn maybe_correct(
+    word: &str,
+    boundary_vk: Option<u16>,
+    d: righttype::detect::Detection,
+) -> bool {
     maybe_correct_with(word, boundary_vk, d, |backspaces, text, trailing_vk| {
         inject::apply(backspaces, text, trailing_vk)
     })
@@ -789,17 +850,18 @@ unsafe fn maybe_correct(word: &str, boundary_vk: u16, d: righttype::detect::Dete
 
 unsafe fn maybe_correct_with<F>(
     word: &str,
-    boundary_vk: u16,
+    boundary_vk: Option<u16>,
     d: righttype::detect::Detection,
     apply: F,
 ) -> bool
 where
     F: FnOnce(usize, &str, Option<u16>) -> bool,
 {
-    // The boundary is swallowed, so only the word's own characters are deleted.
+    // The triggering key (when any) is swallowed, so only the word's own
+    // characters are deleted.
     let backspaces = word.chars().count();
     let mut corrected = d.corrected;
-    if !apply(backspaces, &corrected, Some(boundary_vk)) {
+    if !apply(backspaces, &corrected, boundary_vk) {
         crate::toast::show("RightType: correction injection failed");
         corrected.zeroize();
         return false;
@@ -807,8 +869,14 @@ where
 
     // Undo target: retype the original word plus the boundary it would have
     // gotten anyway (the boundary keystroke itself never reached the app).
-    let mut restore = format!("{word}{}", boundary_literal(boundary_vk));
-    set_undo(corrected.chars().count() + 1, &restore);
+    let mut restore = match boundary_vk {
+        Some(vk) => format!("{word}{}", boundary_literal(vk)),
+        None => word.to_string(),
+    };
+    set_undo(
+        corrected.chars().count() + usize::from(boundary_vk.is_some()),
+        &restore,
+    );
     crate::stats::record_auto();
     restore.zeroize();
 
@@ -905,10 +973,19 @@ unsafe fn sync_context() {
     let window_changed = STATE.with(|s| {
         let mut st = s.borrow_mut();
         let changed = st.last_hwnd != hwnd_i;
-        if changed || st.last_hkl != hkl_i || st.last_focus_generation != focus_generation {
+        let lang_changed = st.last_hkl != hkl_i;
+        let focus_changed = st.last_focus_generation != focus_generation;
+        if changed || lang_changed || focus_changed {
+            // A layout switch alone must NOT drop the pending Undo: it is
+            // usually our own correction switching the layout, and the very
+            // next keypress (e.g. the Undo hotkey itself) would otherwise
+            // erase the record it is about to use. Window/focus changes are
+            // genuine context loss.
+            if changed || focus_changed {
+                st.undo = None;
+            }
             st.buf.clear();
             st.seed.reset();
-            st.undo = None;
             st.last_completed = None;
             st.suggestion = None;
             st.last_hwnd = hwnd_i;
@@ -958,7 +1035,12 @@ mod tests {
         };
 
         let committed = unsafe {
-            super::maybe_correct_with("l;ylfu", 0x20, detection, |_backspaces, _text, _vk| false)
+            super::maybe_correct_with(
+                "l;ylfu",
+                Some(0x20),
+                detection,
+                |_backspaces, _text, _vk| false,
+            )
         };
 
         assert!(!committed);

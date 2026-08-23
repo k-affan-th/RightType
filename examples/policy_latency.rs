@@ -14,7 +14,7 @@ fn main() {
     let en = dict::english();
     let th = dict::thai();
     // Warm lazy dictionary initialization before measurement.
-    black_box(policy::detect_at_boundary(
+    black_box(policy::detect_token(
         "แนพพำแะ",
         InputLayout::ThaiKedmanee,
         en,
@@ -31,7 +31,7 @@ fn main() {
             } else {
                 ("l;ylfu", InputLayout::UsQwerty)
             };
-            black_box(policy::detect_at_boundary(token, layout, en, th));
+            black_box(policy::detect_token(token, layout, en, th));
         }
         let elapsed = started.elapsed();
         total += elapsed;
