@@ -365,6 +365,16 @@ fn debug_e2e_accepts_injected() -> bool {
     }
 }
 
+#[cfg(debug_assertions)]
+fn e2e_trace(msg: String) {
+    if debug_e2e_accepts_injected() {
+        eprintln!("[rt-e2e] {msg}");
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn e2e_trace(_: String) {}
+
 fn is_modifier(vk: u16) -> bool {
     matches!(
         vk,
@@ -523,7 +533,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     };
 
     // Drive the buffer; only a boundary can return a completed word.
+    e2e_trace(format!("vk={vk:#06x} classify={key:?}"));
     let completed = STATE.with(|s| s.borrow_mut().buf.observe(key));
+    e2e_trace(format!("completed={}", completed.is_some()));
     let Some(mut word) = completed else {
         return false;
     };
@@ -532,6 +544,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     let mut detection = active_layout.and_then(|layout| {
         policy::detect_at_boundary(&word, layout, dict::english(), dict::thai())
     });
+    e2e_trace(format!(
+        "layout={active_layout:?} det={:?} mode={:?}",
+        detection.as_ref().map(|d| d.corrected.clone()),
+        mode()
+    ));
 
     // Track the meaningful English stream, including a wrong-layout candidate.
     // This cannot retroactively protect the first words of a phrase (ordinary

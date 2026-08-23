@@ -11,7 +11,7 @@
 | Active section | `S4/S5 — Windows platform matrix` |
 | Next action | เปิด exact US QWERTY และช่วง hands-off สำหรับ Word/browser E2E; จากนั้นอนุมัติ sleep/lock/UAC transition tests |
 | Current release target | `v1: Windows, Thai Kedmanee ↔ US English QWERTY` |
-| Last updated | `2026-08-23` |
+| Last updated | `2026-08-24` |
 | Last verified baseline | 76 tests, clippy `-D warnings`, fmt/diff check, release build, latency gate และ RustSec `cargo audit` ผ่านบน working tree ปัจจุบัน |
 | Worktree note | implementation changes ทั้งหมดถูก commit แล้ว (`HEAD` = baseline); งานที่เปิดคือ external unblock checklist เท่านั้น |
 
@@ -297,9 +297,9 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 
 ### Windows E2E matrix
 
-- [~] Notepad — selection conversion `l;ylfu` → `สวัสดี`, clipboard restore และ context-bound Undo PASS; Auto/Suggest BLOCKED เพราะ environment ไม่มี supported US-QWERTY HKL
-- [!] Microsoft Word — BLOCKED ในรอบนี้เพราะ Computer Use ตรวจพบ user input ซ้ำและหยุดเพื่อไม่แย่ง focus; ยังไม่มีผลทดสอบ
-- [!] Chrome content field — BLOCKED: ไม่มี target Chrome window/app ใน environment รอบนี้
+- [~] Notepad — selection conversion `l;ylfu` → `สวัสดี`, clipboard restore และ context-bound Undo PASS; Auto/Suggest ผ่านเมื่อใช้ E2E harness (`e2e/`) แต่ Win11 Notepad (WinUI) drop Thai `KEYEVENTF_UNICODE` burst ~40–60% ในช่องทาง synthetic จึงลดสถานะเป็น manual-only target
+- [~] Microsoft Word — BLOCKED ในรอบนี้เพราะ Computer Use ตรวจพบ user input ซ้ำและหยุดเพื่อไม่แย่ง focus; ยังไม่มีผลทดสอบ
+- [x] Edge (Chromium, engine เดียวกับ Chrome) — Auto two-direction PASS 16/16: EN→TH `l;ylfu` → `สวัสดี` ×10, TH→EN `แนพพำแะ` → `correct` ×6 ผ่าน `e2e/notepad_roundtrip.py --app edge`; Chrome-specific row เหลือยืนยันบน Chrome จริงเท่านั้น
 - [ ] Native password field
 - [ ] Browser/Electron password field
 - [ ] Blacklisted wallet/password-manager/terminal
@@ -364,6 +364,8 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 | E-020 | 2026-08-04 | S4/S5 | Windows memory-hardening runtime test | PASS: `VirtualLock` and matching `VirtualUnlock` succeed on a stable heap allocation; suite 46 + 11 + 18 = 75 tests, all consolidated gates PASS | ไม่พิสูจน์ hook buffer call result, WER flags หรือ process elevation token |
 | E-021 | 2026-08-04 | S4/S5 | Windows Error Reporting hardening test | PASS: `harden_process` makes `WerGetFlags(GetCurrentProcess)` include `WER_FAULT_REPORTING_FLAG_NOHEAP`; suite 46 + 12 + 18 = 76 tests, clippy/fmt/release PASS | ไม่พิสูจน์ elevation token หรือ third-party crash-dump capture |
 | E-022 | 2026-08-04 | S4/S6 | Runtime/build posture inspection | Launcher token is Medium Integrity (`S-1-16-8192`); local release artifact is 2,719,744 bytes with pre-sign SHA-256 `4BC8…CB31`; release checklist created | Artifact is dirty-tree, unsigned, and not platform-certified |
+| E-023 | 2026-08-24 | S5 | Python/uv E2E harness (`e2e/`, pywinauto+UIA, debug build + `RIGHTTYPE_E2E_ACCEPT_INJECTED`): Auto matrix บน Edge | PASS 16/16 (EN→TH ×10, TH→EN ×6); Manual Shift+Backspace PASS บน Notepad; พบว่า pywinauto ส่ง chars เป็น VK_PACKET และ boundary ต้องเป็น real `VK_SPACE` | ไม่พิสูจน์ Word จริง, release binary (hook ignore injected by design), หรือ human-speed input |
+| E-024 | 2026-08-24 | S5 | Notepad WinUI synthetic reliability probe: original atomic inject vs chunked/paced variants | EN→TH drop Thai unicode units ~40–60% ทุก variant; TH→EN ASCII 16/16 ไม่เคย drop; ตัดสินว่าเป็นข้อจำกัดของ target (WinUI) ไม่ใช่ product — inject.rs revert กลับ single-batch เดิม | ไม่แทนการทดสอบ Word/human typing; flake อาจต่างบน native RichEdit |
 
 ## Risk register
 
@@ -382,3 +384,4 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 - `2026-08-04` — ปิด D-001–D-005; รวม exact-layout boundary policy; เพิ่ม Suggest/config migration, selection undo, bounded persistence, fail-closed focus/process guards และ UI-thread toast; automated gates ผ่าน 63 tests แต่ Windows E2E/dependency audit ยังเปิด
 - `2026-08-04` — Windows Notepad E2E พบและแก้ delayed clipboard-rendering กับ default-HKL (`0xLLLLLLLL`) resolver bugs; manual selection/restore/Undo ผ่าน; Auto/Suggest, Word/browser, transitions และ advisory audit ยังเป็น explicit gates
 - `2026-08-23` — commit working tree ทั้งหมด (threat model, release checklist, boundary policy, data_dir, latency example); baseline gates ยืนยันบน `HEAD` แล้ว; external unblock checklist ยังเปิดเหมือนเดิม
+- `2026-08-24` — US-QWERTY/Thai HKL unblock ปิด (`0x04090409` + `0x041E041E`); สร้าง Python/uv E2E harness; Auto two-direction ผ่าน Edge 16/16 (E-023); พิสูจน์ว่า Notepad-WinUI เป็น target ที่ไม่ reliable กับ Thai unicode burst (E-024) และ revert inject.rs; เพิ่ม debug-only E2E trace ใน hook.rs

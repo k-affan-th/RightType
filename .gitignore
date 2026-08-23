@@ -2,3 +2,6 @@
 **/*.rs.bk
 Cargo.lock.bak
 *.pdb
+e2e/.venv/
+e2e/shots/
+__pycache__/
