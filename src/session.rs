@@ -70,10 +70,12 @@ pub unsafe fn on_message(msg: u32, wparam: usize) {
             }
         }
         WM_POWERBROADCAST if wparam == PBT_APMRESUMEAUTOMATIC || wparam == PBT_APMRESUMESUSPEND => {
+            crate::hook::e2e_trace(format!("session: power resume ({wparam:#x}) reinstall"));
             let _ = hook::reinstall();
             NEEDS_REINSTALL.store(true, Ordering::Relaxed);
         }
         WM_WTSSESSION_CHANGE if wparam == WTS_SESSION_UNLOCK => {
+            crate::hook::e2e_trace("session: unlock reinstall".to_string());
             let _ = hook::reinstall();
             NEEDS_REINSTALL.store(true, Ordering::Relaxed);
         }

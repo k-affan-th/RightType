@@ -321,8 +321,8 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 - [x] Fast typing (~150 WPM burst) — PASS ผ่าน live path (pause≈0)
 - [x] Thai tone marks/combining — ครอบคลุมใน `สวัสดี` (ั, ี combining) ทั้ง live และ boundary
 - [x] Browser password field + blacklisted terminal — hard-deny ยืนยันด้วย trace assertion (E-025)
-- [ ] Native password field
-- [ ] Sleep/resume, lock/unlock และ UAC transition
+- [x] Native password field — ES_PASSWORD ผ่าน WinForms: deny ยืนยัน (E-029)
+- [!] Sleep/resume, lock/unlock และ UAC transition — seam probe สรุปว่า synthetic channel ใช้ไม่ได้กับ nwg subclass (E-028); UAC isolation มีหลักฐานบางส่วน (E-030); **BLOCKED รอ interactive transition จริง** (ผู้ใช้/VM)
 
 ### Exit criteria
 
@@ -386,6 +386,9 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 | E-025 | 2026-08-24 | S1/S5 | Persistent-session matrix (`e2e/matrix.py`) บน Edge: AUTO(5) + SUGGEST(2) + GUARD(2) | **9/9 PASS** — TH→EN boundary, EN→TH live ×3 (รวม fast typing), Undo, Suggest no-touch+accept, password deny, terminal deny; guards ยืนยันด้วย trace assertion (detections=0) | ไม่พิสูจน์ Word/native password/Chrome-brand/sleep-UAC; release binary ยัง ignore injected by design |
 | E-026 | 2026-08-24 | S2/S5 | Undo root-cause probe ผ่าน hook trace | พบ product bug: layout-switch จาก correction ทำให้ ctx-block ล้าง undo record ก่อน hotkey ถึง → undo หลัง correction ที่สลับ layout ใช้ไม่ได้มาโดยตลอด; แก้โดยไม่ล้าง undo บน lang-change เดียว (window/focus ยังล้าง) — verify PASS `mid='กับ' after='dy['` | trace-based; ยังไม่ครอบ selection-undo focus-race (R-004) |
 | E-027 | 2026-08-24 | S6 | Local release artifact build (dirty-tree, pre-sign) | 2,722,304 bytes; SHA-256 `C6A8D536…65AB5`; gates ผ่านบน tree เดียวกัน | dirty-tree + unsigned + ไม่ใช่ platform-certified artifact |
+| E-028 | 2026-08-24 | S5/S4 | Transition-seam probe: PostMessage/SendMessage WM_POWERBROADCAST+WTS เข้า tray window | ข้อสรุปเชิงวิธีการ: nwg subclass **ไม่รับ message ที่ถูกส่งจากภายนอก** (แม้ WM_TIMER) — ช่องทาง synthetic พิสูจน์ recovery path ไม่ได้; correction หลังยิงผ่าน tolerance PASS แต่ไม่นำหลักฐาน; row sleep/unlock ต้อง OS transition จริง (ผู้ใช้/VM) | ไม่พิสูจน์ reinstall path จริง |
+| E-029 | 2026-08-24 | S4 | Native ES_PASSWORD guard: WinForms `UseSystemPasswordChar` target + trace assertion | detections=0 — hard-deny ยืนยันบน native control แล้ว (คู่กับ browser field ใน E-025) | ไม่ครอบ elevated/secure-desktop input |
+| E-030 | 2026-08-24 | S4 | UAC resilience probe (RunAs prompt, auto-cancel) | Secure desktop **บล็อก synthetic input ของ process ภายนอกสมบูรณ์** (RuntimeError ตามคาด); RightType process รอดทุก attempt; correction หลัง desktop กลับมา = PASS ใน run ที่ไม่ติด stray dialog | ต้องการ interactive consent click เพื่อพิสูจน์ full cycle; hook silence บน secure desktop ยังเป็น design-assumption |
 
 ## Risk register
 
@@ -406,3 +409,4 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 - `2026-08-23` — commit working tree ทั้งหมด (threat model, release checklist, boundary policy, data_dir, latency example); baseline gates ยืนยันบน `HEAD` แล้ว; external unblock checklist ยังเปิดเหมือนเดิม
 - `2026-08-24` — US-QWERTY/Thai HKL unblock ปิด (`0x04090409` + `0x041E041E`); สร้าง Python/uv E2E harness; Auto two-direction ผ่าน Edge 16/16 (E-023); พิสูจน์ว่า Notepad-WinUI เป็น target ที่ไม่ reliable กับ Thai unicode burst (E-024) และ revert inject.rs; เพิ่ม debug-only E2E trace ใน hook.rs
 - `2026-08-24` — **D-006**: EN→TH เปลี่ยนเป็น instant commit + layout switch ตาม product owner directive (ทดแทน boundary-only เดิมของ D-004 ฝั่งเดียว); matrix 9/9 (E-025); **พบ+แก้ undo bug** จาก layout-switch ล้าง record (E-026); RT-AUTO-001 rewrite; README Auto copy update
+- `2026-08-24` — Native ES_PASSWORD guard PASS (E-029); UAC secure-desktop isolation มีหลักฐานบางส่วน (E-030); transition seam probe สรุป synthetic channel ใช้ไม่ได้ → row sleep/unlock ย้ายเป็น BLOCKED-interactive อย่างซื่อสัตย์ (E-028)

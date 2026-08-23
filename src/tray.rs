@@ -256,7 +256,6 @@ pub fn run() {
         None
     })
     .ok();
-
     // The hook lives on this (message-pumping) thread.
     if let Err(e) = unsafe { hook::install() } {
         nwg::modal_error_message(

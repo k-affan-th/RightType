@@ -340,12 +340,6 @@ pub unsafe fn reinstall() -> windows::core::Result<()> {
 unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
-        e2e_trace(format!(
-            "raw vk={:#04x} up={} inj={}",
-            kb.vkCode,
-            kb.flags.0 & 0x80 != 0,
-            kb.flags.0 & LLKHF_INJECTED.0 != 0
-        ));
         // Skip anything we generated: our tag is authoritative and timing-free.
         let externally_injected = (kb.flags.0 & LLKHF_INJECTED.0) != 0;
         let ours = kb.dwExtraInfo == INJECT_TAG
@@ -376,7 +370,7 @@ fn debug_e2e_accepts_injected() -> bool {
 }
 
 #[cfg(debug_assertions)]
-fn e2e_trace(msg: String) {
+pub(crate) fn e2e_trace(msg: String) {
     if debug_e2e_accepts_injected() {
         eprintln!("[rt-e2e] {msg}");
     }
@@ -552,9 +546,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     };
 
     // Drive the buffer; only a boundary can return a completed word.
-    e2e_trace(format!("vk={vk:#06x} classify={key:?}"));
     let completed = STATE.with(|s| s.borrow_mut().buf.observe(key));
-    e2e_trace(format!("completed={}", completed.is_some()));
     let Some(mut word) = completed else {
         // D-006 instant EN→TH: the moment an in-flight token becomes a
         // fully-known High-confidence Thai candidate (>= MIN_LIVE_COMMIT_CHARS),
