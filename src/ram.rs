@@ -45,12 +45,37 @@ pub unsafe fn harden_process() {
 /// `ptr` must be valid for `len` bytes for as long as the lock should hold, and
 /// the caller must not let the underlying allocation move or be freed while
 /// still locked.
-pub unsafe fn lock_region(ptr: *const u8, len: usize) {
+pub unsafe fn lock_region(ptr: *const u8, len: usize) -> bool {
     if len == 0 {
-        return;
+        return true;
     }
-    let _ = VirtualLock(ptr as *const _, len);
+    let locked = VirtualLock(ptr as *const _, len).is_ok();
     // No matching unlock: this buffer lives for the whole process, and Windows
     // automatically unlocks (and reclaims) all VirtualLock'd pages when the
     // process exits — an explicit VirtualUnlock has nothing left to protect.
+    locked
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{harden_process, lock_region};
+    use windows::Win32::System::ErrorReporting::{WerGetFlags, WER_FAULT_REPORTING_FLAG_NOHEAP};
+    use windows::Win32::System::Memory::VirtualUnlock;
+    use windows::Win32::System::Threading::GetCurrentProcess;
+
+    #[test]
+    fn virtual_lock_accepts_a_small_stable_allocation() {
+        let allocation = Box::new([0u8; 64]);
+        let ptr = allocation.as_ptr();
+        let len = allocation.len();
+        assert!(unsafe { lock_region(ptr, len) });
+        assert!(unsafe { VirtualUnlock(ptr as *const _, len) }.is_ok());
+    }
+
+    #[test]
+    fn process_hardening_sets_wer_no_heap_flag() {
+        unsafe { harden_process() };
+        let flags = unsafe { WerGetFlags(GetCurrentProcess()) }.unwrap();
+        assert_ne!(flags.0 & WER_FAULT_REPORTING_FLAG_NOHEAP.0, 0);
+    }
 }

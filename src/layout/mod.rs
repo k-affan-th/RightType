@@ -70,7 +70,9 @@ pub fn th_to_en(input: &str) -> String {
 /// (`en_to_th`). Characters the chosen direction doesn't remap pass through, so a
 /// mixed selection only flips the part that belongs to that layout.
 pub fn auto_convert(input: &str) -> String {
-    let has_thai = input.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+    let has_thai = input
+        .chars()
+        .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
     if has_thai {
         th_to_en(input)
     } else {

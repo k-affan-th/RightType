@@ -9,7 +9,7 @@
 //!
 //! Pure-logic modules:
 //! - [`layout`] — N-layout-generic conversion engine (Kedmanee ↔ QWERTY in v1).
-//! - [`secret`] — secret-shaped bail-out (keys / seeds / passwords are never touched).
+//! - [`secret`] — hard-deny key/address shapes plus password/BIP39 stream guards.
 //! - [`dict`] — word dictionaries for membership checks.
 //! - [`detect`] — layout-mismatch detection over completed words.
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
@@ -19,5 +19,6 @@ pub mod buffer;
 pub mod detect;
 pub mod dict;
 pub mod layout;
-pub mod segment;
+pub mod policy;
 pub mod secret;
+pub mod segment;

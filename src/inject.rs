@@ -35,7 +35,7 @@ use crate::hook::{held_modifiers, INJECTING, INJECT_TAG};
 /// # Safety
 /// Calls `SendInput`; must run while the keyboard hook is installed so its own
 /// events are recognised (via `LLKHF_INJECTED`) and ignored.
-pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) {
+pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> bool {
     let mut inputs: Vec<INPUT> = Vec::with_capacity(backspaces * 2 + text.len() * 2 + 4);
 
     // 1. Release any modifier still physically held, so it can't taint the batch.
@@ -62,13 +62,14 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) {
     }
 
     if inputs.is_empty() {
-        return;
+        return true;
     }
 
     // One atomic batch, guarded so the hook skips every event we generate.
     INJECTING.store(true, Ordering::SeqCst);
-    SendInput(&inputs, size_of::<INPUT>() as i32);
+    let sent = SendInput(&inputs, size_of::<INPUT>() as i32);
     INJECTING.store(false, Ordering::SeqCst);
+    sent as usize == inputs.len()
 }
 
 /// A virtual-key press or release.

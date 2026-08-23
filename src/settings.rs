@@ -34,6 +34,7 @@ struct SettingsWindow {
     cb_startup: nwg::CheckBox,
     rb_auto: nwg::RadioButton,
     rb_manual: nwg::RadioButton,
+    rb_suggest: nwg::RadioButton,
     cb_learn: nwg::CheckBox,
     editor: nwg::TextBox,
     apply: nwg::Button,
@@ -53,7 +54,7 @@ pub fn open() {
     let mut window = nwg::Window::default();
     if nwg::Window::builder()
         .flags(nwg::WindowFlags::WINDOW)
-        .size((492, 604))
+        .size((492, 670))
         .position((340, 180))
         .title("RightType — Settings")
         .build(&mut window)
@@ -100,11 +101,20 @@ pub fn open() {
         .parent(&window)
         .build(&mut rb_manual);
 
+    let mut rb_suggest = nwg::RadioButton::default();
+    let _ = nwg::RadioButton::builder()
+        .text("Suggest — show a hint, accept manually")
+        .font(Some(&font))
+        .position((26, 164))
+        .size((330, 22))
+        .parent(&window)
+        .build(&mut rb_suggest);
+
     let mut cb_learn = nwg::CheckBox::default();
     let _ = nwg::CheckBox::builder()
         .text("Learn new words automatically")
         .font(Some(&font))
-        .position((26, 168))
+        .position((26, 192))
         .size((300, 22))
         .parent(&window)
         .build(&mut cb_learn);
@@ -113,12 +123,13 @@ pub fn open() {
     let hotkeys = [
         ("Fix last word", "Shift + Backspace"),
         ("Convert selection", "Shift + CapsLock"),
-        ("Toggle Auto / Manual", "Ctrl + CapsLock"),
+        ("Cycle Manual / Auto / Suggest", "Ctrl + CapsLock"),
         ("Undo last correction", "Ctrl + Shift + CapsLock"),
+        ("Accept suggestion", "Alt + CapsLock"),
         ("Turn on / off (panic)", "Ctrl + Alt + CapsLock"),
     ];
     for (i, (action, keys)) in hotkeys.iter().enumerate() {
-        let y = 226 + (i as i32) * 22;
+        let y = 250 + (i as i32) * 22;
         let mut l = nwg::Label::default();
         let _ = nwg::Label::builder()
             .text(action)
@@ -147,7 +158,7 @@ pub fn open() {
              Add more below — one .exe name per line.",
         )
         .font(Some(&font))
-        .position((26, 372))
+        .position((26, 424))
         .size((440, 36))
         .parent(&window)
         .build(&mut info);
@@ -157,8 +168,12 @@ pub fn open() {
     let _ = nwg::TextBox::builder()
         .text(&safety::custom_list().join("\r\n"))
         .font(Some(&font))
-        .flags(nwg::TextBoxFlags::VISIBLE | nwg::TextBoxFlags::VSCROLL | nwg::TextBoxFlags::AUTOVSCROLL)
-        .position((26, 410))
+        .flags(
+            nwg::TextBoxFlags::VISIBLE
+                | nwg::TextBoxFlags::VSCROLL
+                | nwg::TextBoxFlags::AUTOVSCROLL,
+        )
+        .position((26, 462))
         .size((440, 96))
         .parent(&window)
         .build(&mut editor);
@@ -168,7 +183,7 @@ pub fn open() {
     let _ = nwg::Button::builder()
         .text("Apply")
         .font(Some(&font))
-        .position((214, 524))
+        .position((214, 576))
         .size((80, 28))
         .parent(&window)
         .build(&mut apply);
@@ -177,7 +192,7 @@ pub fn open() {
     let _ = nwg::Button::builder()
         .text("OK")
         .font(Some(&font))
-        .position((300, 524))
+        .position((300, 576))
         .size((80, 28))
         .parent(&window)
         .build(&mut ok);
@@ -186,7 +201,7 @@ pub fn open() {
     let _ = nwg::Button::builder()
         .text("Cancel")
         .font(Some(&font))
-        .position((386, 524))
+        .position((386, 576))
         .size((80, 28))
         .parent(&window)
         .build(&mut cancel);
@@ -198,9 +213,9 @@ pub fn open() {
             let parent = HWND(h as _);
             let hfont = font.handle as usize;
             group_box(parent, hfont, "General", 12, 8, 452, 78);
-            group_box(parent, hfont, "Correction mode", 12, 96, 452, 104);
-            group_box(parent, hfont, "Hotkeys", 12, 208, 452, 130);
-            group_box(parent, hfont, "Blocked apps", 12, 348, 452, 168);
+            group_box(parent, hfont, "Correction mode", 12, 96, 452, 128);
+            group_box(parent, hfont, "Hotkeys", 12, 232, 452, 160);
+            group_box(parent, hfont, "Blocked apps", 12, 400, 452, 168);
         }
     }
 
@@ -208,8 +223,9 @@ pub fn open() {
     cb_enabled.set_check_state(bool_cb(hook::is_enabled()));
     cb_startup.set_check_state(bool_cb(startup::is_enabled()));
     cb_learn.set_check_state(bool_cb(learn::is_enabled()));
-    rb_auto.set_check_state(bool_rb(hook::is_auto()));
-    rb_manual.set_check_state(bool_rb(!hook::is_auto()));
+    rb_auto.set_check_state(bool_rb(hook::mode() == hook::Mode::Auto));
+    rb_manual.set_check_state(bool_rb(hook::mode() == hook::Mode::Manual));
+    rb_suggest.set_check_state(bool_rb(hook::mode() == hook::Mode::Suggest));
 
     window.set_visible(true);
 
@@ -220,6 +236,7 @@ pub fn open() {
         cb_startup,
         rb_auto,
         rb_manual,
+        rb_suggest,
         cb_learn,
         editor,
         apply,
@@ -235,8 +252,13 @@ pub fn open() {
             E::OnButtonClick => {
                 if handle == ui_h.rb_auto.handle {
                     ui_h.rb_manual.set_check_state(Rbs::Unchecked);
+                    ui_h.rb_suggest.set_check_state(Rbs::Unchecked);
                 } else if handle == ui_h.rb_manual.handle {
                     ui_h.rb_auto.set_check_state(Rbs::Unchecked);
+                    ui_h.rb_suggest.set_check_state(Rbs::Unchecked);
+                } else if handle == ui_h.rb_suggest.handle {
+                    ui_h.rb_auto.set_check_state(Rbs::Unchecked);
+                    ui_h.rb_manual.set_check_state(Rbs::Unchecked);
                 } else if handle == ui_h.apply.handle {
                     apply_settings(&ui_h);
                     toast::show("Saved");
@@ -257,7 +279,14 @@ pub fn open() {
 /// Push the dialog's state into the running app + persist it.
 fn apply_settings(ui: &Rc<SettingsWindow>) {
     hook::set_enabled(ui.cb_enabled.check_state() == Cbs::Checked);
-    hook::set_auto(ui.rb_auto.check_state() == Rbs::Checked);
+    let mode = if ui.rb_auto.check_state() == Rbs::Checked {
+        hook::Mode::Auto
+    } else if ui.rb_suggest.check_state() == Rbs::Checked {
+        hook::Mode::Suggest
+    } else {
+        hook::Mode::Manual
+    };
+    hook::set_mode(mode);
     learn::set_enabled(ui.cb_learn.check_state() == Cbs::Checked);
     startup::set_enabled(ui.cb_startup.check_state() == Cbs::Checked);
 

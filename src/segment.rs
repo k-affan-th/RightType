@@ -46,7 +46,10 @@ pub fn segment(text: &str, dict: &Dictionary) -> Vec<Segment> {
 
         match hit {
             Some((word, end)) => {
-                out.push(Segment { text: word, known: true });
+                out.push(Segment {
+                    text: word,
+                    known: true,
+                });
                 i = end;
             }
             None => {
@@ -68,8 +71,32 @@ pub fn segment(text: &str, dict: &Dictionary) -> Vec<Segment> {
 
 /// Does `text` partition entirely into known dictionary words? A strong signal the
 /// run is genuine Thai (and thus that a wrong-layout conversion was correct).
+///
+/// This deliberately uses dynamic programming rather than [`segment`]'s greedy
+/// display-oriented split.  Greedy longest-match can take a valid longer prefix
+/// that leaves an unknown suffix even though a shorter prefix would partition the
+/// complete text.
 pub fn is_fully_known(text: &str, dict: &Dictionary) -> bool {
-    !text.is_empty() && segment(text, dict).iter().all(|s| s.known)
+    let chars: Vec<char> = text.chars().collect();
+    if chars.is_empty() {
+        return false;
+    }
+
+    let mut reachable = vec![false; chars.len() + 1];
+    reachable[0] = true;
+    for start in 0..chars.len() {
+        if !reachable[start] {
+            continue;
+        }
+        let end = (start + MAX_WORD_CHARS).min(chars.len());
+        for next in (start + MIN_WORD_CHARS)..=end {
+            let candidate: String = chars[start..next].iter().collect();
+            if dict.contains(&candidate) {
+                reachable[next] = true;
+            }
+        }
+    }
+    reachable[chars.len()]
 }
 
 #[cfg(test)]
@@ -81,7 +108,10 @@ mod tests {
     }
 
     fn known(s: &str) -> Segment {
-        Segment { text: s.to_string(), known: true }
+        Segment {
+            text: s.to_string(),
+            known: true,
+        }
     }
 
     #[test]
@@ -102,7 +132,13 @@ mod tests {
         let segs = segment("วันxyz", &dict());
         assert_eq!(
             segs,
-            vec![known("วัน"), Segment { text: "xyz".into(), known: false }]
+            vec![
+                known("วัน"),
+                Segment {
+                    text: "xyz".into(),
+                    known: false
+                }
+            ]
         );
     }
 
@@ -113,6 +149,15 @@ mod tests {
         assert!(is_fully_known("วันนี้วันจันทร์", &d));
         assert!(!is_fully_known("สวัสดีqq", &d));
         assert!(!is_fully_known("", &d));
+    }
+
+    #[test]
+    fn fully_known_backtracks_when_greedy_split_dead_ends() {
+        let d = Dictionary::from_words(["มี", "มีเทน", "เทนนิส"]);
+        // `segment` greedily takes "มีเทน" and leaves "นิส" unknown, but
+        // "มี" + "เทนนิส" is a complete valid split.
+        assert!(!segment("มีเทนนิส", &d).iter().all(|s| s.known));
+        assert!(is_fully_known("มีเทนนิส", &d));
     }
 
     #[test]

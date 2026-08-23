@@ -24,6 +24,7 @@ struct Tray {
     m_enabled: nwg::MenuItem,
     m_auto: nwg::MenuItem,
     m_manual: nwg::MenuItem,
+    m_suggest: nwg::MenuItem,
     m_learn: nwg::MenuItem,
     m_startup: nwg::MenuItem,
     m_settings: nwg::MenuItem,
@@ -91,6 +92,13 @@ pub fn run() {
         .build(&mut m_manual)
         .expect("manual item");
 
+    let mut m_suggest = nwg::MenuItem::default();
+    nwg::MenuItem::builder()
+        .text("Suggest mode")
+        .parent(&menu)
+        .build(&mut m_suggest)
+        .expect("suggest item");
+
     let mut m_learn = nwg::MenuItem::default();
     nwg::MenuItem::builder()
         .text("Learn new words")
@@ -134,8 +142,9 @@ pub fn run() {
 
     // Reflect current state in the menu checkmarks.
     m_enabled.set_checked(hook::is_enabled());
-    m_auto.set_checked(hook::is_auto());
-    m_manual.set_checked(!hook::is_auto());
+    m_auto.set_checked(hook::mode() == hook::Mode::Auto);
+    m_manual.set_checked(hook::mode() == hook::Mode::Manual);
+    m_suggest.set_checked(hook::mode() == hook::Mode::Suggest);
     m_learn.set_checked(learn::is_enabled());
     m_startup.set_checked(startup::is_enabled());
 
@@ -147,6 +156,7 @@ pub fn run() {
         m_enabled,
         m_auto,
         m_manual,
+        m_suggest,
         m_learn,
         m_startup,
         m_settings,
@@ -164,8 +174,11 @@ pub fn run() {
             // this state without going through the menu, so it can be stale.
             E::OnContextMenu => {
                 ui_h.m_enabled.set_checked(hook::is_enabled());
-                ui_h.m_auto.set_checked(hook::is_auto());
-                ui_h.m_manual.set_checked(!hook::is_auto());
+                ui_h.m_auto.set_checked(hook::mode() == hook::Mode::Auto);
+                ui_h.m_manual
+                    .set_checked(hook::mode() == hook::Mode::Manual);
+                ui_h.m_suggest
+                    .set_checked(hook::mode() == hook::Mode::Suggest);
                 let (x, y) = nwg::GlobalCursor::position();
                 ui_h.menu.popup(x, y);
             }
@@ -176,19 +189,32 @@ pub fn run() {
                     let on = !hook::is_enabled();
                     hook::set_enabled(on);
                     ui_h.m_enabled.set_checked(on);
-                    toast::show(if on { "RightType: ON" } else { "RightType: OFF" });
+                    toast::show(if on {
+                        "RightType: ON"
+                    } else {
+                        "RightType: OFF"
+                    });
                     config::persist();
                 } else if handle == ui_h.m_auto.handle {
-                    hook::set_auto(true);
+                    hook::set_mode(hook::Mode::Auto);
                     ui_h.m_auto.set_checked(true);
                     ui_h.m_manual.set_checked(false);
+                    ui_h.m_suggest.set_checked(false);
                     toast::show("Auto mode");
                     config::persist();
                 } else if handle == ui_h.m_manual.handle {
-                    hook::set_auto(false);
+                    hook::set_mode(hook::Mode::Manual);
                     ui_h.m_auto.set_checked(false);
                     ui_h.m_manual.set_checked(true);
+                    ui_h.m_suggest.set_checked(false);
                     toast::show("Manual mode");
+                    config::persist();
+                } else if handle == ui_h.m_suggest.handle {
+                    hook::set_mode(hook::Mode::Suggest);
+                    ui_h.m_auto.set_checked(false);
+                    ui_h.m_manual.set_checked(false);
+                    ui_h.m_suggest.set_checked(true);
+                    toast::show("Suggest mode");
                     config::persist();
                 } else if handle == ui_h.m_learn.handle {
                     let on = !learn::is_enabled();

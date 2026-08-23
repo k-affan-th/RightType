@@ -1,7 +1,8 @@
 use righttype::buffer::{Key, WordBuffer};
 use righttype::detect;
 use righttype::dict;
-use righttype::layout::{en_to_th, th_to_en, auto_convert};
+use righttype::layout::{auto_convert, en_to_th, th_to_en};
+use righttype::policy::{self, InputLayout};
 use righttype::secret::{self, SeedTracker};
 use righttype::segment;
 
@@ -9,7 +10,10 @@ use righttype::segment;
 fn test_layout_conversion_basics() {
     // English QWERTY to Thai Kedmanee
     assert_eq!(en_to_th("correct"), "แนพพำแะ");
-    assert_eq!(en_to_th("hello"), "\u{0e49}\u{0e33}\u{0e2a}\u{0e2a}\u{0e19}");
+    assert_eq!(
+        en_to_th("hello"),
+        "\u{0e49}\u{0e33}\u{0e2a}\u{0e2a}\u{0e19}"
+    );
     assert_eq!(en_to_th("what"), "ไ้ฟะ");
     assert_eq!(en_to_th("twitter"), "ะไระะำพ");
 
@@ -27,7 +31,7 @@ fn test_segmentation_edge_cases() {
     let segs = segment::segment("สวัสดีครับวันนี้วันจันทร์", dict_th);
     // Ensure it segments into known words
     assert!(segment::is_fully_known("สวัสดีครับวันนี้วันจันทร์", dict_th));
-    
+
     // Check that all segments are known
     for seg in &segs {
         assert!(seg.known, "Segment {:?} should be known", seg);
@@ -51,15 +55,19 @@ fn test_segmentation_edge_cases() {
 fn test_secret_entropy_detection() {
     // 1. Passwords with mixed character classes (should be detected as secret)
     assert!(secret::is_secret_token("P@ssw0rd123")); // Upper, lower, digit, symbol
-    assert!(secret::is_secret_token("aA1!bB2#"));    // Mixed classes
-    assert!(secret::is_secret_token("zX9#mLq!"));    // Mixed classes
+    assert!(secret::is_secret_token("aA1!bB2#")); // Mixed classes
+    assert!(secret::is_secret_token("zX9#mLq!")); // Mixed classes
 
     // 2. High-entropy strings
     assert!(secret::is_secret_token("4f8a9c2b1d0e")); // Hex private key fragment
-    
+
     // 3. Cryptographic addresses and keys
-    assert!(secret::is_secret_token("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")); // Bech32
-    assert!(secret::is_secret_token("5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ")); // WIF
+    assert!(secret::is_secret_token(
+        "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+    )); // Bech32
+    assert!(secret::is_secret_token(
+        "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ"
+    )); // WIF
     assert!(secret::is_secret_token("xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet")); // xpub
 
     // 4. Ordinary long words (TooLong)
@@ -69,7 +77,7 @@ fn test_secret_entropy_detection() {
     // 5. Ordinary words that should NOT be classified as secrets
     assert!(!secret::is_secret_token("hello"));
     assert!(!secret::is_secret_token("password")); // only lowercase letters (1 class, low entropy)
-    assert!(!secret::is_secret_token("สวัสดี"));  // Thai script is never secret
+    assert!(!secret::is_secret_token("สวัสดี")); // Thai script is never secret
 }
 
 #[test]
@@ -96,7 +104,7 @@ fn test_url_and_email_behavior() {
     let wrong_email = en_to_th(email);
     // Since it contains Thai characters, it is NOT ASCII and thus NOT classified as secret.
     assert!(!secret::is_secret_token(&wrong_email));
-    
+
     // But it converts to "john@example.com", which is NOT in the English dictionary.
     // So detect should return None.
     let det = detect::detect(&wrong_email, dict_en, dict_th);
@@ -104,101 +112,34 @@ fn test_url_and_email_behavior() {
 }
 
 #[test]
-fn test_live_conversion_qwerty_to_thai() {
-    let dict_th = dict::thai();
-    
-    // Simulate typing "สวัสดี" on QWERTY layout: "l;ylfu"
-    // Since QWERTY layout is active, we check en_to_th conversion.
-    // We simulate key-by-key input.
-    let mut input = String::new();
-    let keys = vec!['l', ';', 'y', 'l', 'f', 'u'];
-    
-    let mut triggered = false;
-    let mut corrected_text = String::new();
-
-    for c in keys {
-        input.push(c);
-        
-        // Simulating the logic inside auto_en_layout_to_thai():
-        let current = input.clone();
-        let n = current.chars().count();
-        
-        if n >= 2 
-            && current.is_ascii() 
-            && !secret::is_secret_token(&current)
-            && !dict::english().contains(&current)
-        {
-            let thai = en_to_th(&current);
-            if segment::is_fully_known(&thai, dict_th) {
-                triggered = true;
-                corrected_text = thai;
-                break;
-            }
-        }
-    }
-
-    // It should trigger at "l;" (which converts to "สว", a valid Thai word).
-    assert!(triggered);
-    assert_eq!(corrected_text, "สว");
+fn test_qwerty_to_thai_is_detected_at_the_boundary() {
+    // EN→Thai deliberately waits for a word boundary: live conversion of a two
+    // character prefix such as "l;" would make ordinary English typing unsafe.
+    let det = policy::detect_at_boundary(
+        "l;ylfu",
+        InputLayout::UsQwerty,
+        dict::english(),
+        dict::thai(),
+    )
+    .unwrap();
+    assert_eq!(det.corrected, "สวัสดี");
 }
 
 #[test]
-fn test_live_conversion_thai_to_qwerty() {
-    let dict_en = dict::english();
-    
-    // Simulate typing "correct" on Thai layout: "แนพพำแะ"
-    // Since Thai layout is active, we check th_to_en conversion.
-    // Live conversion requires length >= 4.
-    let mut input = String::new();
-    let keys = vec!['แ', 'น', 'พ', 'พ', 'ำ', 'แ', 'ะ'];
-    
-    let mut triggered = false;
-    let mut corrected_text = String::new();
-
-    for c in keys {
-        input.push(c);
-        
-        // Simulating the logic inside auto_thai_layout_to_en():
-        let current = input.clone();
-        let n = current.chars().count();
-        
-        if n >= 4
-            && !current.is_ascii()
-            && !secret::is_secret_token(&current)
-            && !dict::thai().contains(&current)
-        {
-            let eng = th_to_en(&current);
-            if dict_en.contains(&eng) {
-                triggered = true;
-                corrected_text = eng;
-                break;
-            }
-        }
+fn test_thai_to_qwerty_waits_for_boundary() {
+    let mut buffer = WordBuffer::new();
+    for c in "แนพพำแะ".chars() {
+        assert!(buffer.observe(Key::Char(c)).is_none());
     }
-
-    // "correct" should trigger at length 4 ("แนพพ" -> "corr", which is a valid word).
-    assert!(triggered);
-    assert_eq!(corrected_text, "corr");
-
-    // Let's test a shorter word like "the" typed on Thai layout: "ะ้ำ" (3 chars)
-    // It should NOT trigger live conversion because n < 4.
-    let mut short_input = String::new();
-    let short_keys = vec!['ะ', '้', 'ำ']; // "the"
-    let mut short_triggered = false;
-
-    for c in short_keys {
-        short_input.push(c);
-        let current = short_input.clone();
-        let n = current.chars().count();
-        if n >= 4 {
-            let eng = th_to_en(&current);
-            if dict_en.contains(&eng) {
-                short_triggered = true;
-                break;
-            }
-        }
-    }
-    assert!(!short_triggered);
+    let completed = buffer.observe(Key::Boundary).unwrap();
+    let det = policy::detect_at_boundary(
+        &completed,
+        InputLayout::ThaiKedmanee,
+        dict::english(),
+        dict::thai(),
+    )
+    .unwrap();
+    assert_eq!(det.corrected, "correct");
 }
 
 #[test]
@@ -227,43 +168,38 @@ fn test_bip39_seed_tracker_straight_ascii() {
     // 1. BIP39 sequence
     assert!(!tracker.observe("abandon")); // run = 1
     assert!(!tracker.observe("ability")); // run = 2
-    assert!(!tracker.observe("able"));    // run = 3
-    assert!(tracker.observe("about"));     // run = 4 -> trips!
+    assert!(!tracker.observe("able")); // run = 3
+    assert!(tracker.observe("about")); // run = 4 -> trips!
 
     // 2. Resets on non-BIP39 word
     tracker.reset();
     assert!(!tracker.observe("abandon")); // run = 1
-    assert!(!tracker.observe("hello"));   // run = 0 -> resets!
+    assert!(!tracker.observe("hello")); // run = 0 -> resets!
     assert!(!tracker.observe("ability")); // run = 1
 }
 
 #[test]
-fn test_bip39_seed_tracker_wrong_layout_fails_to_trip() {
+fn test_bip39_seed_tracker_uses_wrong_layout_candidate() {
     let mut tracker = SeedTracker::new();
-
-    // Verify the edge case: if a user types a seed phrase in the wrong layout (Thai),
-    // the seed tracker does NOT trip on the raw typed word because it checks ASCII.
-    // e.g. "abandon" typed on Thai layout: "ฟิฟืกนด"
-    // "ability" typed on Thai layout: "ฟิิสระั"
-    // "able" typed on Thai layout: "ฟิกสำ"
-    // "about" typed on Thai layout: "ฟินีะ"
-    
-    assert!(!tracker.observe("ฟิฟืกนด")); // resets or stays at 0 because it's Thai
-    assert!(!tracker.observe("ฟิิสระั")); // run = 0
-    assert!(!tracker.observe("ฟิกสำ"));   // run = 0
-    assert!(!tracker.observe("ฟินีะ"));   // run = 0 -> does NOT trip!
+    // The production stream guard observes the English candidate, not only the
+    // Thai glyphs emitted by the wrong layout. It trips at the documented fourth
+    // word, while remaining deliberately non-retrospective.
+    for (index, candidate) in ["abandon", "ability", "able", "about"].iter().enumerate() {
+        let raw = en_to_th(candidate);
+        assert_eq!(tracker.observe_candidate(&raw, Some(candidate)), index == 3);
+    }
 }
 
 #[test]
 fn test_word_buffer_poisoning_and_backspace() {
-    // WordBuffer capacity is 24 chars by default.
+    // The default cap admits a Thai sentence typed without spaces on QWERTY.
     let mut buf = WordBuffer::new();
 
-    // 1. Type 24 characters (exactly at cap)
-    for _ in 0..24 {
+    // 1. Type exactly the default cap.
+    for _ in 0..righttype::buffer::MAX_BUFFER_CHARS {
         buf.observe(Key::Char('a'));
     }
-    assert_eq!(buf.current().len(), 24);
+    assert_eq!(buf.current().len(), righttype::buffer::MAX_BUFFER_CHARS);
 
     // 2. Type 1 more character -> exceeds cap, poisons and clears immediately
     buf.observe(Key::Char('a'));
@@ -294,7 +230,7 @@ fn test_mixed_script_handling() {
 
     // Mixed script word like "Helloสวัสดี"
     let mixed = "Helloสวัสดี";
-    
+
     // detect::detect should ignore mixed scripts (returns None)
     let det = detect::detect(mixed, dict_en, dict_th);
     assert!(det.is_none());
@@ -333,13 +269,13 @@ fn test_manual_convert_last_word_after_boundary() {
     // Simulating: typing "ok" (buffer has "ok"), pressing Space (buffer completed),
     // then manually converting the last completed word.
     let mut last_completed: Option<(String, u16)> = Some(("ok".to_string(), 0x20)); // 0x20 = VK_SPACE
-    
+
     // Simulate convert_last_word logic when buffer is empty:
     let last = last_completed.take();
     let mut triggered = false;
     let mut corrected_text = String::new();
     let mut delete_count = 0;
-    
+
     if let Some((last_word, boundary_vk)) = last {
         delete_count = last_word.chars().count() + 1;
         let converted = auto_convert(&last_word);
@@ -349,34 +285,123 @@ fn test_manual_convert_last_word_after_boundary() {
         }
         assert_eq!(boundary_vk, 0x20);
     }
-    
+
     assert!(triggered);
     assert_eq!(corrected_text, "นา"); // "ok" on Thai layout maps to "นา"
-    assert_eq!(delete_count, 3);      // 2 chars for "ok" + 1 for space
+    assert_eq!(delete_count, 3); // 2 chars for "ok" + 1 for space
 }
 
 #[test]
 fn test_antigravity_prefixes() {
-    let dict_th = dict::thai();
-    for word in &["Antigravity", "fucking", "idiot"] {
-        println!("--- Word: {} ---", word);
-        for i in 1..=word.len() {
-            let prefix = &word[0..i];
-            let thai = en_to_th(prefix);
-            let fully_known = segment::is_fully_known(&thai, dict_th);
-            println!("Prefix: {}, Thai: {}, Fully Known: {}", prefix, thai, fully_known);
+    for word in ["Antigravity", "fucking", "idiot", "correct", "something"] {
+        let mut buffer = WordBuffer::new();
+        for c in word.chars() {
+            assert!(
+                buffer.observe(Key::Char(c)).is_none(),
+                "{word} converted mid-word"
+            );
         }
+        let completed = buffer.observe(Key::Boundary).unwrap();
+        assert!(policy::detect_at_boundary(
+            &completed,
+            InputLayout::UsQwerty,
+            dict::english(),
+            dict::thai(),
+        )
+        .is_none());
     }
+}
+
+#[test]
+fn test_code_commands_and_paths_do_not_auto_convert() {
+    for token in [
+        "cargo",
+        "kubectl",
+        "println!",
+        "main()",
+        "--release",
+        "git-status",
+        "C:\\Windows\\System32",
+        "SELECT*FROM",
+        "user@example.com",
+        "https://example.com",
+    ] {
+        assert!(
+            policy::detect_at_boundary(
+                token,
+                InputLayout::UsQwerty,
+                dict::english(),
+                dict::thai(),
+            )
+            .is_none(),
+            "code/command token converted: {token}"
+        );
+    }
+}
+
+#[test]
+fn test_no_space_thai_segmentation_examples() {
+    // Natural demo for users.
+    let natural = "สวัสดีครับวันนี้";
+    let natural_raw = th_to_en(natural);
+    let natural_detection = policy::detect_at_boundary(
+        &natural_raw,
+        InputLayout::UsQwerty,
+        dict::english(),
+        dict::thai(),
+    )
+    .unwrap();
+    assert_eq!(natural_detection.corrected, natural);
+
+    // "สวัสดีดี" is intentionally awkward Thai, but it is a useful regression
+    // for repeated-word/full-segmentation behavior rather than the best UX demo.
+    let stress = "สวัสดีดี";
+    let stress_raw = th_to_en(stress);
+    let stress_detection = policy::detect_at_boundary(
+        &stress_raw,
+        InputLayout::UsQwerty,
+        dict::english(),
+        dict::thai(),
+    )
+    .unwrap();
+    assert_eq!(stress_detection.corrected, stress);
 }
 
 #[test]
 fn test_fucking_idiot_conversion() {
     let dict_en = dict::english();
     let dict_th = dict::thai();
-    
+
     let th_word = "รกรนะ";
     assert!(!dict_th.contains(th_word));
     let en_word = th_to_en(th_word);
     assert_eq!(en_word, "idiot");
     assert!(dict_en.contains(&en_word));
+}
+
+#[test]
+fn test_thai_on_english_layout_with_symbols() {
+    let cases = [
+        ("0ib'vp^jmuj;jklk,ki5cx]'d]y[wfh", "จริงอยู่ที่ว่าสามารถแปลงกลับได้"),
+        (
+            "c9j-hv8;k,ouhpy'w,jcx]'.sh9yh'c9jcidfh;p:he",
+            "แต่ข้อความนี้ยังไม่แปลงให้ตั้งแต่แรกด้วยซ้ำ",
+        ),
+        ("clf';jk,uvtwime'kozbf", "แสดงว่ามีอะไรทำงานผิด"),
+    ];
+
+    for (raw, expected) in cases {
+        // These are intentionally secret-shaped ASCII strings because Thai
+        // layout keys include digits and punctuation. The valid full Thai
+        // segmentation is the stronger signal.
+        assert!(secret::is_secret_token(raw));
+
+        let mut buffer = WordBuffer::new();
+        for c in raw.chars() {
+            buffer.observe(Key::Char(c));
+        }
+        let completed = buffer.observe(Key::Boundary).unwrap();
+        let det = detect::detect(&completed, dict::english(), dict::thai()).unwrap();
+        assert_eq!(det.corrected, expected);
+    }
 }

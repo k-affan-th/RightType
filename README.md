@@ -13,7 +13,7 @@ RightLang is excellent but unmaintained, and its design causes real bugs:
 
 | RightLang bug | RightType fix |
 | --- | --- |
-| Dies after the PC wakes from sleep (must kill & reopen) | Auto-reinstalls the keyboard hook on power/session events + a watchdog |
+| Dies after the PC wakes from sleep (must kill & reopen) | Reinstalls the keyboard hook on power/session events, with one delayed retry |
 | Manual switch sometimes emits `ggg…` garbage | Releases held modifiers + injects one atomic Unicode batch (never replays keys) |
 | Dropped/reordered characters in Word | Injects raw Unicode codepoints — no layout switching, no race |
 
@@ -22,7 +22,7 @@ RightLang is excellent but unmaintained, and its design causes real bugs:
 ## How it works
 
 RightType lives in the **system tray** (no window, no console). Right-click the tray
-icon for: **Enable**, **Auto/Manual** mode, **Learn new words**, **Start with Windows**,
+icon for: **Enable**, **Manual/Auto/Suggest** mode, **Learn new words**, **Start with Windows**,
 and **Quit**.
 
 **Manual mode (default)** — type freely; when you notice a wrong-layout word, fix it
@@ -31,14 +31,25 @@ with a hotkey:
 | Hotkey | Action |
 | --- | --- |
 | `Shift`+`Backspace` | Convert the last word in place |
-| `Shift`+`CapsLock` | Convert the current **selection** (any length — works for whole sentences, via the clipboard) |
-| `Ctrl`+`CapsLock` | Toggle **Auto** / **Manual** |
+| `Shift`+`CapsLock` | Convert the current **selection** (v1 temporarily reads it with Copy, restores an empty/plain-Unicode clipboard, then injects Unicode; any non-text/app-specific clipboard format is refused) |
+| `Ctrl`+`CapsLock` | Cycle **Manual** → **Auto** → **Suggest** |
+| `Alt`+`CapsLock` | Accept the current Suggest hint |
+| `Ctrl`+`Shift`+`CapsLock` | Undo the last correction (selection undo requires the same focused context) |
+| `Ctrl`+`Alt`+`CapsLock` | Enable/disable RightType immediately |
 
-**Auto mode** — corrects as you type, in **both** directions, even for Thai (which has
-no spaces between words): it segments the text against a dictionary, and the moment a
-run is recognised as a real word in the *other* layout it's converted in place. When it
-detects you've started a language, it also **switches the active keyboard layout** for
-you, so the rest of the sentence is typed natively.
+**Auto mode** — checks completed tokens at a whitespace boundary in both directions.
+It converts only high-confidence dictionary/segmentation matches and then switches the
+active keyboard layout for the next token. It deliberately does not destructively
+convert mid-word: Thai runs with no boundary remain available to Manual mode (and the
+non-destructive Suggest mode) rather than risking a prefix false-positive.
+
+**Suggest mode** uses the same completed-token policy as Auto, but only displays a
+hint. It changes text only after `Alt`+`CapsLock`, and discards the hint when focus,
+layout, mode, or typing context changes.
+
+Version 1 intentionally supports only the exact Thai Kedmanee ↔ US English QWERTY
+pair and the fixed hotkeys above. Pattachote/Dvorak/UK-AU-CA layouts, remappable
+hotkeys, and per-app mode profiles are tracked for v1.x.
 
 Short, genuinely ambiguous words (e.g. `ok` vs Thai `นา`, which share keys) are left for
 you to fix manually — no tool can resolve those without guessing.
@@ -50,8 +61,11 @@ A keyboard tool sees everything you type. RightType is designed so secrets never
 - **Sensitive-context guards** — it disables itself entirely in **password fields**
   (native `ES_PASSWORD`, and browser/Electron/UWP fields via UI Automation) and in a
   default blacklist of **wallets, password managers, and terminals**.
-- **Secret-shaped bail-out** — even elsewhere, it ignores any token shaped like a
-  private key (hex/WIF/base58/bech32), a high-entropy password, or a BIP39 seed phrase.
+- **Secret-shaped bail-out** — even elsewhere, identifiable private keys and addresses
+  are always ignored. Consecutive BIP39 words trigger a phrase-level stream guard.
+  Password-like/long ASCII can be wrong-layout Thai;
+  it is eligible only when the complete conversion is fully-known Thai, and it is never
+  sent to the learning/persistence path.
 - **Minimal in-memory footprint** — it holds only the current word, **zeroized on every
   word boundary**, and runs **non-elevated**.
 - **No telemetry, zero network code** — verifiable in `Cargo.lock`; there is no HTTP,
@@ -60,6 +74,11 @@ A keyboard tool sees everything you type. RightType is designed so secrets never
   (`%APPDATA%\RightType\config.toml`) and, *if you opt into* "Learn new words", the
   learned words themselves (`learned.txt`). Learning is **off by default** and never
   runs in the sensitive contexts above.
+
+The detailed data lifetimes, controls, and known residual risks are documented in
+[`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md). In particular, ordinary English
+words overlap the BIP39 list, so phrase-level protection is contextual/stream-based
+rather than a blanket ban on every individual BIP39 word.
 
 ## For end users
 
@@ -84,7 +103,10 @@ The crate is split into an OS-free **core** (`layout`, `secret`, `dict`, `detect
 `segment`, `buffer` — exhaustively unit-tested) and a Windows **integration layer**
 behind the `winos` feature (`hook`, `inject`, `manual`, `safety`, `focus`, `session`,
 `tray`, `toast`, `config`, `startup`, `learn`). Keeping the core OS-free makes it
-testable anywhere and a future macOS backend additive. See [`docs/PLAN.md`](docs/PLAN.md).
+testable anywhere and a future macOS backend additive. See the long-term
+[`docs/PLAN.md`](docs/PLAN.md) and the current
+[`docs/DYNAMIC_PLAN.md`](docs/DYNAMIC_PLAN.md) for active decisions, evidence, and
+the next implementation step.
 
 ## License
 

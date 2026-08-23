@@ -15,9 +15,11 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
+use std::sync::{Mutex, OnceLock};
 
 use righttype::{dict, secret};
+use zeroize::Zeroize;
 
 const MIN_LEN: usize = 3;
 const MAX_LEN: usize = 20;
@@ -26,6 +28,7 @@ const REPEATS: u8 = 3;
 static ENABLED: AtomicBool = AtomicBool::new(false);
 static LEARNED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 static PENDING: Mutex<BTreeMap<String, u8>> = Mutex::new(BTreeMap::new());
+static PERSIST_TX: OnceLock<SyncSender<String>> = OnceLock::new();
 
 pub fn is_enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
@@ -33,11 +36,16 @@ pub fn is_enabled() -> bool {
 
 pub fn set_enabled(on: bool) {
     ENABLED.store(on, Ordering::Relaxed);
+    if !on {
+        let pending = std::mem::take(&mut *PENDING.lock().unwrap());
+        for (mut word, _) in pending {
+            word.zeroize();
+        }
+    }
 }
 
 fn learned_path() -> Option<PathBuf> {
-    let mut p = PathBuf::from(std::env::var_os("APPDATA")?);
-    p.push("RightType");
+    let mut p = crate::data_dir::righttype_dir()?;
     p.push("learned.txt");
     Some(p)
 }
@@ -73,14 +81,10 @@ pub fn observe(word: &str) {
     if !is_enabled() {
         return;
     }
-    let n = word.chars().count();
-    if !(MIN_LEN..=MAX_LEN).contains(&n) || !word.bytes().all(|b| b.is_ascii_alphabetic()) {
+    if !eligible_shape(word) {
         return;
     }
-    if secret::is_secret_token(word) {
-        return;
-    }
-    let key = word.to_ascii_lowercase();
+    let mut key = word.to_ascii_lowercase();
     if dict::english().contains(&key) || contains(&key) {
         return; // already known
     }
@@ -99,6 +103,14 @@ pub fn observe(word: &str) {
     if ready {
         commit(&key);
     }
+    key.zeroize();
+}
+
+fn eligible_shape(word: &str) -> bool {
+    let len = word.chars().count();
+    (MIN_LEN..=MAX_LEN).contains(&len)
+        && word.bytes().all(|byte| byte.is_ascii_alphabetic())
+        && !secret::is_secret_token(word)
 }
 
 fn commit(word: &str) {
@@ -107,7 +119,32 @@ fn commit(word: &str) {
             return;
         }
     }
-    // Append to the file (best-effort).
+    queue_persist(word.to_string());
+}
+
+fn queue_persist(word: String) {
+    let tx = PERSIST_TX.get_or_init(|| {
+        let (tx, rx) = sync_channel::<String>(64);
+        let _ = std::thread::Builder::new()
+            .name("righttype-learn".into())
+            .spawn(move || {
+                while let Ok(mut word) = rx.recv() {
+                    persist_word(&word);
+                    word.zeroize();
+                }
+            });
+        tx
+    });
+    if let Err(err) = tx.try_send(word) {
+        let mut word = match err {
+            TrySendError::Full(word) | TrySendError::Disconnected(word) => word,
+        };
+        word.zeroize();
+    }
+}
+
+fn persist_word(word: &str) {
+    // Append to the file (best-effort, off the keyboard-hook thread).
     let Some(p) = learned_path() else {
         return;
     };
@@ -115,7 +152,34 @@ fn commit(word: &str) {
         let _ = std::fs::create_dir_all(dir);
     }
     use std::io::Write;
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(p)
+    {
         let _ = writeln!(f, "{word}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::eligible_shape;
+
+    #[test]
+    fn learning_shape_rejects_secrets_non_ascii_and_non_words() {
+        assert!(eligible_shape("kubernetes"));
+        for denied in [
+            "ab",
+            "P@ssw0rd123",
+            "abc123",
+            "l;ylfu",
+            "สวัสดี",
+            "thiswordisfarbeyondthelearningcap",
+        ] {
+            assert!(
+                !eligible_shape(denied),
+                "unexpected learning candidate: {denied}"
+            );
+        }
     }
 }

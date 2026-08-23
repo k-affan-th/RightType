@@ -20,11 +20,18 @@
 //! shred exactly the gibberish we exist to repair, so every printable character
 //! accumulates and only true separators split words.
 
-use crate::secret::MAX_WORD_LEN;
 use zeroize::Zeroize;
 
 /// Widest a single UTF-8 character can be, in bytes.
 const MAX_UTF8_BYTES: usize = 4;
+/// Longest uninterrupted token retained for wrong-layout detection.
+///
+/// This is intentionally longer than the 24-character secret heuristic. Thai
+/// has no spaces between words, and a user who types Thai on an English layout
+/// can produce a valid multi-word run full of punctuation and digits. Keeping 64
+/// characters lets the auto path recognise those runs while still bounding the
+/// amount of transient text held in memory.
+pub const MAX_BUFFER_CHARS: usize = 64;
 
 /// A keystroke as seen by the buffer — already translated from a raw OS event to
 /// a produced character or a control action by the hook layer.
@@ -54,10 +61,10 @@ pub struct WordBuffer {
 }
 
 impl WordBuffer {
-    /// A buffer capped at [`MAX_WORD_LEN`] — anything longer is treated as
-    /// secret-ish/too-long and never emitted.
+    /// A buffer capped at [`MAX_BUFFER_CHARS`] — anything longer is discarded
+    /// without analysis.
     pub fn new() -> Self {
-        Self::with_cap(MAX_WORD_LEN)
+        Self::with_cap(MAX_BUFFER_CHARS)
     }
 
     /// A buffer with an explicit character cap (used by tests).
@@ -263,14 +270,14 @@ mod tests {
     }
 
     #[test]
-    fn default_cap_is_max_word_len() {
+    fn default_cap_is_max_buffer_chars() {
         let mut b = WordBuffer::new();
-        let exactly = "a".repeat(MAX_WORD_LEN);
+        let exactly = "a".repeat(MAX_BUFFER_CHARS);
         type_chars(&mut b, &exactly);
         assert_eq!(b.observe(Key::Boundary), Some(exactly));
 
         let mut b = WordBuffer::new();
-        let too_long = "a".repeat(MAX_WORD_LEN + 1);
+        let too_long = "a".repeat(MAX_BUFFER_CHARS + 1);
         type_chars(&mut b, &too_long);
         assert_eq!(b.observe(Key::Boundary), None);
     }
@@ -283,7 +290,7 @@ mod tests {
         // buffer's pointer staying valid for its whole lifetime.
         let mut b = WordBuffer::new();
         let (_, cap0) = b.stable_region();
-        for c in "ก".repeat(MAX_WORD_LEN + 1).chars() {
+        for c in "ก".repeat(MAX_BUFFER_CHARS + 1).chars() {
             b.observe(Key::Char(c));
             let (_, cap_now) = b.stable_region();
             assert_eq!(cap_now, cap0, "capacity must never grow");
@@ -295,7 +302,11 @@ mod tests {
         let mut b = WordBuffer::new();
         let mut words = Vec::new();
         for c in "the quick brown".chars() {
-            if let Some(w) = b.observe(if c == ' ' { Key::Boundary } else { Key::Char(c) }) {
+            if let Some(w) = b.observe(if c == ' ' {
+                Key::Boundary
+            } else {
+                Key::Char(c)
+            }) {
                 words.push(w);
             }
         }

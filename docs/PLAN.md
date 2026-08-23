@@ -1,5 +1,9 @@
 # Plan: Rebuild RightLang as "RightType" — Rust / Windows
 
+> **Execution status:** แผนนี้เก็บ vision และ architecture ระยะยาว ส่วนสถานะงาน,
+> decision gates, verification evidence และ next action ปัจจุบันอยู่ที่
+> [DYNAMIC_PLAN.md](DYNAMIC_PLAN.md) ซึ่งเป็น source of truth สำหรับการลงมือทำ
+
 > **Name:** project **RightType**, Cargo package/crate `righttype`.
 
 ## Context
@@ -12,7 +16,7 @@
 
 Plus the documented Word/Windows-layout bug class (dropped/reordered chars during correction).
 
-**Goal (confirmed with user).** A from-scratch **Windows-only**, **open-source**, **portable single-exe** Rust reimplementation with **full RightLang parity** that fixes both bugs by design, injects corrections as **raw Unicode**, and goes beyond the original with the enhancements below. **v1 ships TH Kedmanee ↔ EN QWERTY only**, but the engine is **N-layout generic** so future languages (Lao, Khmer, Russian, Pattachote, …) are a data-table add.
+**Goal (confirmed with user).** A from-scratch **Windows-only**, **open-source**, **portable single-exe** Rust reimplementation that fixes both bugs by design and injects corrections as **raw Unicode**. **v1 ships Thai Kedmanee ↔ US English QWERTY only**; full RightLang layout parity (Pattachote/Dvorak/UK-AU-CA) is a v1.x track. The engine remains N-layout-oriented so future layouts do not require replacing the core conversion model.
 
 **Confirmed feature scope:**
 - Core reliability fixes for both user bugs (below).
@@ -34,12 +38,12 @@ Plus the documented Word/Windows-layout bug class (dropped/reordered chars durin
 ## How each bug is fixed (the heart of the rebuild)
 
 **Bug 1 — hook dies after sleep/lock.** `WH_KEYBOARD_LL` is torn down by Windows on callback timeout (`LowLevelHooksTimeout`) and on session transitions (sleep/resume, lock/unlock, UAC secure desktop). Original never recovers.
-→ **`session.rs`**: register `WM_POWERBROADCAST` (PBT_APMRESUMEAUTOMATIC) + WTS session-change notifications (`WTSRegisterSessionNotification`) and **auto-reinstall the hook**; plus a ~1–2 s **watchdog** timer that verifies the hook handle and reinstalls if dead. The hook callback does *only* enqueue-and-return (real work on a worker thread) so it can never hit the timeout. → no more kill/restart.
+→ **`session.rs`**: register `WM_POWERBROADCAST` (PBT_APMRESUMEAUTOMATIC) + WTS session-change notifications (`WTSRegisterSessionNotification`) and auto-reinstall the hook. The keyboard callback keeps only bounded in-memory classification and the synchronous atomic correction needed to preserve input order; clipboard waits, UI dispatch and disk I/O stay outside the hook. Hook liveness and latency remain release gates in the dynamic plan.
 
 **Bug 2 — `ggg…` garbage on manual switch.** Synthetic injection collides with a physically-held key (hotkey pressed while a letter/modifier is still down) → OS sees auto-repeat / inherits a stuck modifier. Original replays virtual keys, which is exactly what repeats.
 → **`inject.rs`**: before any correction, **release all currently-held keys/modifiers** (send key-ups, clear modifier state); inject the corrected text as a **single atomic Unicode `SendInput` batch** (`KEYEVENTF_UNICODE`), never VK replay; set an `INJECTING` re-entrancy guard and ignore `LLKHF_INJECTED` events so we never reprocess our own input. An **Undo** hotkey reverts instantly if anything still looks wrong.
 
-**Word/Windows-layout class.** Unicode codepoint injection means Word/Chrome/etc. receive `WM_CHAR` directly — **no `ActivateKeyboardLayout`, no layout race**, and Thai combining-char (vowel/tone) order is preserved. Selection fixes go via the clipboard (uniformly reliable in Word), restoring prior clipboard after.
+**Word/Windows-layout class.** Unicode codepoint injection means Word/Chrome/etc. receive `WM_CHAR` directly — **no virtual-key replay**, and Thai combining-char (vowel/tone) order is preserved. Selection fixes use Copy only to read selected text, restore the allowed plain clipboard, then inject Unicode directly. Word/Chrome reliability remains a Windows E2E gate rather than an implementation claim.
 
 ---
 
@@ -49,7 +53,7 @@ Plus the documented Word/Windows-layout bug class (dropped/reordered chars durin
 
 **1. Secret-shaped bail-out (aggressive) — `secret.rs`.** Before the current token is ever analyzed/corrected/learned, classify its *shape* (never its value). Bail (stop, wipe buffer, do nothing) on:
 - hex runs, base58/WIF, bech32 addresses (`bc1…`), high-entropy mixed case+digit+symbol, tokens longer than any real word, **and**
-- **consecutive BIP39 words** — bundle the public 2,048-word BIP39 list (`assets/bip39.txt`) *solely to recognize and avoid* seed phrases (≥N exact consecutive matches ⇒ bail). Exact-wordlist matching means normal TH/EN prose is unaffected.
+- **consecutive BIP39 words** — bundle the public 2,048-word BIP39 list (`assets/bip39.txt`) solely for a stream guard (≥N exact consecutive raw/candidate matches ⇒ bail from that point). Individual words cannot be denied safely because ordinary English overlaps the list; see `THREAT_MODEL.md` TM-001.
 
 **2. Minimize exposure — `buffer.rs`.** Hold only the current word, hard length cap; **zeroize** on every word boundary (`zeroize`/`SecureString`). Undo keeps ≤1 entry, zeroized after use/short timeout.
 
@@ -83,7 +87,7 @@ RightType/        # repo root
   src/
     main.rs          # nwg app, message loop, wire hook+worker+tray+session
     config.rs        # TOML, hotkeys, mode, per-app profiles, run-at-startup (HKCU Run)
-    session.rs       # power/WTS notifications + watchdog -> reinstall hook   (Bug 1)
+    session.rs       # power/WTS notifications + one delayed retry -> reinstall hook
     hook.rs          # WH_KEYBOARD_LL: enqueue only, fast; injecting guard; skip LLKHF_INJECTED
     buffer.rs        # current-word buffer (zeroized on boundary), word boundaries, focus tracking
     secret.rs        # secret-shaped bail-out: hex/base58/WIF/bech32/entropy/long/BIP39-run
@@ -106,9 +110,9 @@ RightType/        # repo root
 
 ### Key module notes
 - **`layout/mod.rs`** — `LayoutId`, a registry, and pure `convert(from, to, &str)` keyed by physical key position so it's robust; round-trip-testable with no Win32. v1 registers only Kedmanee + QWERTY.
-- **`detect.rs`** — given a buffered word + candidate target layouts, choose the conversion that yields a valid dictionary word with the best n-gram score above a confidence threshold; returns `Auto(corrected)`, `Suggest(corrected)`, or `None`. Handles wrong-language numbers/symbols. Feeds `dict.rs` auto-learn.
+- **`detect.rs`** — given a completed token and the supported layout pair, produce evidence for an exact dictionary or full-segmentation candidate. Auto commits only at a boundary in v1; Suggest remains non-destructive and is tracked in the dynamic plan.
 - **`safety.rs`** — before buffering/correcting, check the focused control: concealed/`ES_PASSWORD` field or excluded app ⇒ disable. **Never writes keystrokes to disk**; only counts (for stats) live in memory/config.
-- **`manual.rs`** — `Shift+Backspace` (fix buffered word), `Shift+CapsLock` (fix selection via clipboard), `Ctrl+CapsLock` (cycle Auto/Manual/Suggest), Undo, Convert-on-demand; hotkeys configurable, with non-CapsLock alternatives, and the hook **consumes** them so CapsLock state never toggles.
+- **`manual.rs`** — v1 uses `Shift+Backspace` (fix buffered word), `Shift+CapsLock` (read selection through a plain-Unicode clipboard transaction, then inject Unicode), `Ctrl+CapsLock` (Manual/Auto/Suggest), and one-shot Undo. Configurable hotkeys and non-CapsLock alternatives are v1.x work.
 
 ---
 
@@ -117,17 +121,17 @@ RightType/        # repo root
 2. ✅ `layout/` + tests — round-trip `correct`↔`แนพพำแะ`, `สวัสดี`↔`l;ylfu`, `www`↔`ไไไ`, shifted glyphs. *No OS.*
 3. ✅ `dict.rs` + wordlists + `detect.rs` + tests — gibberish detected, real words untouched.
 4. ✅ `secret.rs` + tests — bail-out classifier (hex/base58/WIF/bech32/entropy/long/BIP39-run). *No OS.*
-5. ✅ `hook.rs` + `buffer.rs` + worker channel — capture words; zeroize on boundary; enqueue-only callback. *(Code complete & compiles under `--features winos`; manual capture smoke-test pending.)*
+5. ◑ `hook.rs` + `buffer.rs` — capture words and zeroize on boundary. Callback latency, disk-I/O removal and Windows capture evidence remain open in the dynamic plan.
 6. ✅ `inject.rs` — release-held-mods + atomic Unicode `SendInput` batch; auto-mode wired (hook→detect→inject), boundary key re-emitted. *(Bug 2 fix. Undo stack + manual hotkeys still pending — step 9. Manual end-to-end test pending.)*
-7. ✅ `session.rs` — power/WTS reinstall + watchdog. *(Bug 1 fix. Manual sleep/lock test pending.)*
+7. ◑ `session.rs` — power/WTS reinstall + one delayed retry. *(Transition E2E and independent liveness detection remain open.)*
 8. ✅ `safety.rs` — password-field (ES_PASSWORD, + UIA for browsers via `focus.rs`) + app blacklist (wallets / password managers / terminals) gating. `ram.rs` — VirtualLock on the word buffer's stable allocation, WerSetFlags(NOHEAP) + SetErrorMode to keep the buffer out of crash dumps; non-elevated confirmed (no manifest).
-9. ✅ Manual hotkeys: `Shift+Backspace` (fix word), `Shift+CapsLock` (fix selection via clipboard — doubles as Convert-on-demand), `Ctrl+CapsLock` (Auto/Manual), `Ctrl+Shift+CapsLock` (Undo last correction, one-shot), `Ctrl+Alt+CapsLock` (panic — instant enable/disable, works even in sensitive contexts). Auto mode wired hook→secret→detect→inject + eager run-on conversion both directions + auto layout-switch.
+9. ◑ Manual hotkeys are wired for word, selection, Auto/Manual, Undo and panic. Selection is plain-Unicode-clipboard-only and Auto is boundary-only in v1; remaining transaction/E2E evidence is tracked in the dynamic plan.
 10. ✅ Tray app (windowless) — enable/disable, Auto/Manual, Learn, Start-with-Windows, Blocked apps... (settings), Stats..., Quit; status toast; config persistence (`%APPDATA%`); run-at-startup (HKCU Run); portable `--release` build **2.6 MB**.
 11. ◑ Polish + trust: README updated; UIA browser password detection; opt-in auto-learn. *(Thai UI, RAM hardening (VirtualLock/dump-disable), `cargo-audit`/CI, reproducible build + signing + checksums still TODO.)*
 
-**Status: a working, shippable v1.** Core engine + Windows tray app complete; privacy
-guards (secret bail-out, password-field/blacklist context guards incl. browsers, zeroize,
-no network) in place. Remaining items above are enhancements, not blockers.
+**Status: implementation in progress, not release-certified.** The core and Windows
+shell build, but privacy/manual/hook resilience, Windows E2E, clean-release and audit
+gates remain blockers. Current status and evidence live in `DYNAMIC_PLAN.md`.
 
 ---
 
@@ -141,7 +145,7 @@ no network) in place. Remaining items above are enhancements, not blockers.
 - **Bug 2 regression:** trigger manual fixes rapidly while keys are held / at ~150 WPM — confirm **no `ggg…` / no repeated or reordered chars**; Undo reverts cleanly.
 - **Word-specific:** rapid Thai words with tone marks — no dropped/reordered characters, no layout confusion.
 - Hotkeys: `Shift+Backspace`, `Shift+CapsLock` (selection only, clipboard restored), `Ctrl+CapsLock` cycles Auto/Manual/Suggest **without** toggling the CapsLock light; Convert-on-demand on arbitrary copied text.
-- **Safety:** focus a password field — no buffering/correction, nothing on disk. Blacklisted app (wallet/terminal) — disabled. Type a hex key / WIF / `bc1…` address / a BIP39 seed in a normal field — tool must **bail and ignore** it. Confirm `VirtualLock`/dump-disable active and process is non-elevated.
+- **Safety:** focus a password field — no buffering/correction, nothing on disk. Blacklisted app (wallet/terminal) — disabled. Type a hex key / WIF / `bc1…` address in a normal field — tool must bail immediately. Test raw and wrong-layout BIP39 streams against the threshold/non-retrospective contract in `THREAT_MODEL.md`. Confirm `VirtualLock`/dump-disable active and process is non-elevated.
 - **Performance:** `criterion` micro-bench for `convert`/`detect` (assert sub-ms); measure hook-callback time; working set against the ~5–15 MB target; ~0% idle CPU.
 
 **Out of scope (v1):** macOS; non-TH/EN layouts (engine supports them, content not bundled); cloud/sync.
@@ -151,10 +155,10 @@ Event-driven native Rust (no GC / Electron / async runtime); sleeps at ~0% CPU u
 
 | Metric | Target | How |
 |---|---|---|
-| Hook callback latency | < ~100 µs (never near ~300 ms `LowLevelHooksTimeout`) | callback only copies + enqueues to a channel; all real work on a worker thread (also avoids the timeout that contributes to **Bug 1**) |
-| Typing throughput | ≥ 200 WPM, no perceptible lag | per-key cost is µs; ~100× headroom |
-| Per-word detection | sub-ms | memory-mapped `fst` set, runs at word boundaries off-thread |
-| Idle CPU | ~0% | event-driven; only the ~1–2 s watchdog timer (one handle check) |
+| Ordinary-key hook callback latency | < ~100 µs (never near ~300 ms `LowLevelHooksTimeout`) | bounded in-memory buffer/context checks; no waits or disk I/O |
+| Typing throughput | ≥ 200 WPM, no perceptible lag | per-key work stays bounded; Windows stress evidence remains required |
+| Per-word boundary policy | sub-ms | synchronous hash-set lookup/DP segmentation at a boundary; measured by `examples/policy_latency.rs` |
+| Idle CPU | ~0% | event-driven; the 1.5 s retry timer performs only an atomic flag check |
 | RAM working set | ~5–15 MB | `fst`-compressed wordlists (~1–3 MB); one worker thread; tiny zeroized buffers |
 | Binary | ~2–5 MB single portable exe | static MSVC build; release profile LTO + `codegen-units=1` + `panic="abort"` + `strip=true` + size-opt |
 | Hot-path allocations | zero | reused buffers in the callback |

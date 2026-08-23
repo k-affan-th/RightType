@@ -8,11 +8,12 @@
 //! hook** and query UIA only when focus moves, caching the answer in an atomic the
 //! keyboard hook reads for free.
 //!
-//! Entirely best-effort: if COM/UIA init or any query fails we just never set the
-//! flag (ES_PASSWORD stays the fallback) — it can never break the app.
+//! Failure is conservative: if COM/UIA init or a query fails, the cache remains
+//! `UNKNOWN` and the keyboard pipeline treats the field as protected until UIA
+//! explicitly reports a safe focus.
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{
@@ -23,8 +24,16 @@ use windows::Win32::UI::Accessibility::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{EVENT_OBJECT_FOCUS, WINEVENT_OUTOFCONTEXT};
 
-/// Cached result, read cheaply by the keyboard hook on every keystroke.
-static IS_PASSWORD: AtomicBool = AtomicBool::new(false);
+const FIELD_UNKNOWN: u8 = 0;
+const FIELD_SAFE: u8 = 1;
+const FIELD_PASSWORD: u8 = 2;
+
+/// Cached UIA result, read cheaply by the keyboard hook on every keystroke.
+static FIELD_STATUS: AtomicU8 = AtomicU8::new(FIELD_UNKNOWN);
+/// Changes whenever Windows reports that the focused UI element changed.  The
+/// keyboard hook uses this to invalidate text that belongs to an old caret,
+/// including two controls inside the same top-level window.
+static FOCUS_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 thread_local! {
     static UIA: RefCell<Option<IUIAutomation>> = const { RefCell::new(None) };
@@ -33,7 +42,20 @@ thread_local! {
 
 /// Is the currently focused element a password field (per UIA)?
 pub fn is_password_field() -> bool {
-    IS_PASSWORD.load(Ordering::Relaxed)
+    status_is_protected(FIELD_STATUS.load(Ordering::Relaxed))
+}
+
+fn status_is_protected(status: u8) -> bool {
+    status != FIELD_SAFE
+}
+
+/// Monotonically increasing identity for the current focused UI element.
+///
+/// This is deliberately cheaper than querying UI Automation from the keyboard
+/// hook.  It is best-effort: native controls still have the top-level-window
+/// guard in the hook if an app does not publish focus events.
+pub fn generation() -> u64 {
+    FOCUS_GENERATION.load(Ordering::Relaxed)
 }
 
 /// Initialise COM + UIA and install the focus hook. Best-effort.
@@ -42,10 +64,12 @@ pub fn is_password_field() -> bool {
 /// UI thread only; call [`disarm`] before exit.
 pub unsafe fn arm() {
     let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-    if let Ok(uia) = CoCreateInstance::<_, IUIAutomation>(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
+    if let Ok(uia) =
+        CoCreateInstance::<_, IUIAutomation>(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
     {
         UIA.with(|u| *u.borrow_mut() = Some(uia));
     }
+    refresh_status();
     let hook = SetWinEventHook(
         EVENT_OBJECT_FOCUS,
         EVENT_OBJECT_FOCUS,
@@ -79,13 +103,38 @@ unsafe extern "system" fn on_focus(
     _thread: u32,
     _time: u32,
 ) {
-    let is_pw = UIA
-        .with(|u| {
-            u.borrow().as_ref().and_then(|uia| {
+    FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
+    refresh_status();
+}
+
+unsafe fn refresh_status() {
+    let status = UIA.with(|u| {
+        u.borrow()
+            .as_ref()
+            .and_then(|uia| {
                 let el = uia.GetFocusedElement().ok()?;
                 el.CurrentIsPassword().ok().map(|b| b.as_bool())
             })
-        })
-        .unwrap_or(false);
-    IS_PASSWORD.store(is_pw, Ordering::Relaxed);
+            .map(|is_password| {
+                if is_password {
+                    FIELD_PASSWORD
+                } else {
+                    FIELD_SAFE
+                }
+            })
+            .unwrap_or(FIELD_UNKNOWN)
+    });
+    FIELD_STATUS.store(status, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{status_is_protected, FIELD_PASSWORD, FIELD_SAFE, FIELD_UNKNOWN};
+
+    #[test]
+    fn unknown_and_password_statuses_fail_closed() {
+        assert!(status_is_protected(FIELD_UNKNOWN));
+        assert!(status_is_protected(FIELD_PASSWORD));
+        assert!(!status_is_protected(FIELD_SAFE));
+    }
 }

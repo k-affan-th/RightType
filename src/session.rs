@@ -8,9 +8,10 @@
 //! - `RegisterSuspendResumeNotification` → `WM_POWERBROADCAST` on resume,
 //! - `WTSRegisterSessionNotification` → `WM_WTSSESSION_CHANGE` on unlock.
 //!
-//! A `WM_TIMER` watchdog reinstalls again shortly after such an event, in case the
-//! immediate reinstall ran before the system had fully resumed. Feed every raw
-//! window message to [`on_message`].
+//! A `WM_TIMER` performs one delayed retry after such an event, in case the
+//! immediate reinstall ran before the system had fully resumed. It is not an
+//! independent hook-liveness probe. Feed every raw window message to
+//! [`on_message`].
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -19,7 +20,7 @@ use windows::Win32::System::Power::RegisterSuspendResumeNotification;
 use windows::Win32::System::RemoteDesktop::{
     WTSRegisterSessionNotification, WTSUnRegisterSessionNotification, NOTIFY_FOR_THIS_SESSION,
 };
-use windows::Win32::UI::WindowsAndMessaging::{DEVICE_NOTIFY_WINDOW_HANDLE, KillTimer, SetTimer};
+use windows::Win32::UI::WindowsAndMessaging::{KillTimer, SetTimer, DEVICE_NOTIFY_WINDOW_HANDLE};
 
 use crate::hook;
 
@@ -33,10 +34,10 @@ const WTS_SESSION_UNLOCK: usize = 0x8;
 const WATCHDOG_TIMER_ID: usize = 1;
 const WATCHDOG_INTERVAL_MS: u32 = 1500;
 
-/// Set by a resume/unlock event; the next watchdog tick reinstalls and clears it.
+/// Set by a resume/unlock event; the next timer tick reinstalls and clears it.
 static NEEDS_REINSTALL: AtomicBool = AtomicBool::new(false);
 
-/// Start listening for power/session transitions on `hwnd` and start the watchdog.
+/// Start listening for power/session transitions on `hwnd` and start the retry timer.
 ///
 /// # Safety
 /// `hwnd` must be a valid window on the calling (message-pumping) thread.
@@ -46,7 +47,7 @@ pub unsafe fn arm(hwnd: HWND) {
     SetTimer(hwnd, WATCHDOG_TIMER_ID, WATCHDOG_INTERVAL_MS, None);
 }
 
-/// Stop the watchdog and session notifications (the power notification is released
+/// Stop the retry timer and session notifications (the power notification is released
 /// by the OS on exit).
 ///
 /// # Safety
@@ -57,7 +58,7 @@ pub unsafe fn disarm(hwnd: HWND) {
 }
 
 /// Handle one raw window message. On resume/unlock it reinstalls the hook now and
-/// flags a follow-up reinstall; the watchdog `WM_TIMER` performs that follow-up.
+/// flags a follow-up reinstall; the retry `WM_TIMER` performs that follow-up.
 ///
 /// # Safety
 /// Must run on the hook's message-pumping thread.
@@ -68,9 +69,7 @@ pub unsafe fn on_message(msg: u32, wparam: usize) {
                 let _ = hook::reinstall();
             }
         }
-        WM_POWERBROADCAST
-            if wparam == PBT_APMRESUMEAUTOMATIC || wparam == PBT_APMRESUMESUSPEND =>
-        {
+        WM_POWERBROADCAST if wparam == PBT_APMRESUMEAUTOMATIC || wparam == PBT_APMRESUMESUSPEND => {
             let _ = hook::reinstall();
             NEEDS_REINSTALL.store(true, Ordering::Relaxed);
         }

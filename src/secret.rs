@@ -1,14 +1,15 @@
 //! Secret-shaped **bail-out** — the core privacy defense.
 //!
-//! Before any token is analyzed, corrected, or learned, we classify its *shape*
-//! (never its meaning). If it looks like a secret — a private key, an address, a
-//! high-entropy password, or part of a BIP39 seed phrase — the caller must stop,
-//! wipe its buffer, and do nothing. Bailing out is always safe: it simply leaves
-//! the text untouched.
+//! Before a token is corrected or learned, we classify its *shape* (never its
+//! meaning). Identifiable keys and addresses are hard denies. High-entropy and
+//! overlong tokens are ambiguous because wrong-layout Thai often has that shape;
+//! detection may inspect their conversion but may accept only a complete known-Thai
+//! segmentation, and learning must still reject them. A denied token is wiped and
+//! left untouched.
 //!
-//! Heuristics are intentionally *aggressive* (safety-first): a false positive
-//! only means "don't auto-correct this token," which is harmless, whereas a false
-//! negative could expose a seed or key.
+//! Heuristics are intentionally safety-first, but token-level BIP39 checks cannot
+//! deny every individual dictionary word: ordinary English words can also belong
+//! to BIP39. Phrase-level callers must track consecutive seed words.
 
 use std::collections::HashSet;
 use std::sync::OnceLock;
@@ -95,10 +96,7 @@ pub fn classify_token(token: &str) -> Option<SecretKind> {
 
     let all_base58 = chars.iter().all(|c| BASE58_ALPHABET.contains(*c));
     // Explicit WIF: starts 5/K/L, 51–52 base58 chars.
-    if all_base58
-        && (51..=52).contains(&len)
-        && matches!(chars[0], '5' | 'K' | 'L')
-    {
+    if all_base58 && (51..=52).contains(&len) && matches!(chars[0], '5' | 'K' | 'L') {
         return Some(SecretKind::Base58Wif);
     }
     // General long base58 token with class variety (address / key fragment).
@@ -148,6 +146,17 @@ impl SeedTracker {
             self.run = 0;
         }
         self.run >= SEED_MIN_RUN
+    }
+
+    /// Observe the English-bearing side of a wrong-layout decision. When the
+    /// candidate is ASCII it represents what the raw token means; otherwise the
+    /// raw token is the only useful BIP39 signal. Keeping this selection here
+    /// makes the production hook's phrase policy directly regression-testable.
+    pub fn observe_candidate(&mut self, raw: &str, candidate: Option<&str>) -> bool {
+        let word = candidate
+            .filter(|candidate| candidate.is_ascii())
+            .unwrap_or(raw);
+        self.observe(word)
     }
 
     pub fn reset(&mut self) {
@@ -200,7 +209,9 @@ mod tests {
 
     #[test]
     fn ordinary_words_pass() {
-        for w in ["hello", "correct", "twitter", "the", "Bitcoin", "decade", "deadbeef"] {
+        for w in [
+            "hello", "correct", "twitter", "the", "Bitcoin", "decade", "deadbeef",
+        ] {
             assert_eq!(classify_token(w), None, "{w} should be safe");
         }
         // Thai is never secret-shaped.
@@ -266,5 +277,14 @@ mod tests {
         // One BIP39 word in isolation is just a normal English word; only a *run* bails.
         assert!(is_bip39_word("zoo"));
         assert_eq!(classify_token("zoo"), None);
+    }
+
+    #[test]
+    fn wrong_layout_candidates_contribute_to_seed_run() {
+        let mut tracker = SeedTracker::new();
+        for (index, candidate) in ["abandon", "ability", "able", "about"].iter().enumerate() {
+            let raw = crate::layout::en_to_th(candidate);
+            assert_eq!(tracker.observe_candidate(&raw, Some(candidate)), index == 3);
+        }
     }
 }

@@ -22,27 +22,32 @@
 //! correction can never feed back into itself.
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Mutex;
+#[cfg(debug_assertions)]
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 use zeroize::Zeroize;
 
 use righttype::buffer::{Key, WordBuffer};
-use righttype::layout::{auto_convert, en_to_th, th_to_en};
-use righttype::{detect, dict, secret, segment};
+use righttype::layout::auto_convert;
+use righttype::{dict, policy, secret};
 
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+#[cfg(debug_assertions)]
+use windows::Win32::UI::Input::KeyboardAndMouse::VK_PACKET;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, GetKeyboardLayout, GetKeyboardLayoutList, ToUnicodeEx, HKL,
     VIRTUAL_KEY, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_HOME,
-    VK_INSERT, VK_LEFT, VK_MENU, VK_NEXT, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE, VK_TAB,
-    VK_UP,
+    VK_INSERT, VK_LEFT, VK_MENU, VK_NEXT, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE,
+    VK_TAB, VK_UP,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, GetForegroundWindow, GetWindowThreadProcessId, PostMessageW, SetWindowsHookExW,
-    UnhookWindowsHookEx, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, LLKHF_INJECTED, WH_KEYBOARD_LL,
-    WM_INPUTLANGCHANGEREQUEST, WM_KEYDOWN, WM_SYSKEYDOWN,
+    CallNextHookEx, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, PostMessageW,
+    SetWindowsHookExW, UnhookWindowsHookEx, GUITHREADINFO, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT,
+    LLKHF_INJECTED, WH_KEYBOARD_LL, WM_INPUTLANGCHANGEREQUEST, WM_KEYDOWN, WM_SYSKEYDOWN,
 };
 
 use crate::{inject, manual, safety};
@@ -55,10 +60,33 @@ pub const INJECT_TAG: usize = 0x5254_5950;
 /// Set while we inject, as a secondary guard. The tag above is authoritative.
 pub static INJECTING: AtomicBool = AtomicBool::new(false);
 
-/// Correction mode: `false` = Manual (hotkeys only — the default, which avoids the
-/// awkward press-space-to-convert workflow), `true` = Auto (correct on a boundary).
-/// Toggled with Ctrl+CapsLock. Real-time Thai-segmenting auto is a later step.
-static MODE_AUTO: AtomicBool = AtomicBool::new(false);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Mode {
+    Manual = 0,
+    Auto = 1,
+    Suggest = 2,
+}
+
+impl Mode {
+    fn next(self) -> Self {
+        match self {
+            Self::Manual => Self::Auto,
+            Self::Auto => Self::Suggest,
+            Self::Suggest => Self::Manual,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Manual => "Manual mode",
+            Self::Auto => "Auto mode",
+            Self::Suggest => "Suggest mode",
+        }
+    }
+}
+
+static MODE: AtomicU8 = AtomicU8::new(Mode::Manual as u8);
 
 /// Master on/off, controlled from the tray. When off the hook passes every key
 /// straight through and touches nothing.
@@ -72,16 +100,28 @@ pub fn is_enabled() -> bool {
 /// Enable or disable all correction.
 pub fn set_enabled(on: bool) {
     ENABLED.store(on, Ordering::Relaxed);
+    if !on {
+        STATE.with(|s| {
+            let mut st = s.borrow_mut();
+            st.buf.clear();
+            st.undo = None;
+            st.last_completed = None;
+            st.suggestion = None;
+        });
+    }
 }
 
-/// Is Auto mode on (vs Manual)?
-pub fn is_auto() -> bool {
-    MODE_AUTO.load(Ordering::Relaxed)
+pub fn mode() -> Mode {
+    match MODE.load(Ordering::Relaxed) {
+        1 => Mode::Auto,
+        2 => Mode::Suggest,
+        _ => Mode::Manual,
+    }
 }
 
-/// Select Auto (`true`) or Manual (`false`) mode.
-pub fn set_auto(auto: bool) {
-    MODE_AUTO.store(auto, Ordering::Relaxed);
+pub fn set_mode(mode: Mode) {
+    MODE.store(mode as u8, Ordering::Relaxed);
+    STATE.with(|s| s.borrow_mut().suggestion = None);
 }
 
 thread_local! {
@@ -100,6 +140,9 @@ struct HookState {
     /// hit (switching layout mid-sentence left stale context behind).
     last_hwnd: isize,
     last_hkl: isize,
+    /// Focus generation supplied by the UIA WinEvent hook. This catches focus
+    /// changes between controls in the same top-level window.
+    last_focus_generation: u64,
     /// Whether the current foreground app is blacklisted (wallet / password
     /// manager / terminal). Recomputed only when the window changes — opening the
     /// process every keystroke would be wasteful.
@@ -112,7 +155,8 @@ struct HookState {
     pending_hkl: Option<isize>,
     /// The last completed word and the boundary key code that completed it.
     /// Used for manual Shift+Backspace correction immediately after a boundary.
-    last_completed: Option<(String, u16)>,
+    last_completed: Option<LastCompleted>,
+    suggestion: Option<SuggestionRecord>,
 }
 
 impl HookState {
@@ -122,11 +166,37 @@ impl HookState {
             seed: secret::SeedTracker::new(),
             last_hwnd: 0,
             last_hkl: 0,
+            last_focus_generation: 0,
             sensitive_app: false,
             undo: None,
             pending_hkl: None,
             last_completed: None,
+            suggestion: None,
         }
+    }
+}
+
+struct SuggestionRecord {
+    original: String,
+    corrected: String,
+    boundary_vk: u16,
+}
+
+struct LastCompleted {
+    word: String,
+    boundary_vk: u16,
+}
+
+impl Drop for LastCompleted {
+    fn drop(&mut self) {
+        self.word.zeroize();
+    }
+}
+
+impl Drop for SuggestionRecord {
+    fn drop(&mut self) {
+        self.original.zeroize();
+        self.corrected.zeroize();
     }
 }
 
@@ -137,6 +207,7 @@ struct UndoRecord {
     injected_len: usize,
     /// Text to retype to restore what was there before.
     restore_text: String,
+    created_at: Instant,
 }
 
 impl Drop for UndoRecord {
@@ -153,6 +224,7 @@ fn set_undo(injected_len: usize, restore_text: &str) {
     let record = (!secret::is_secret_token(restore_text)).then(|| UndoRecord {
         injected_len,
         restore_text: restore_text.to_string(),
+        created_at: Instant::now(),
     });
     STATE.with(|s| s.borrow_mut().undo = record);
 }
@@ -163,8 +235,14 @@ unsafe fn undo_last_correction() {
     let Some(rec) = STATE.with(|s| s.borrow_mut().undo.take()) else {
         return;
     };
-    inject::apply(rec.injected_len, &rec.restore_text, None);
-    crate::toast::show("Undo");
+    if rec.created_at.elapsed() > Duration::from_secs(30) {
+        return;
+    }
+    if inject::apply(rec.injected_len, &rec.restore_text, None) {
+        crate::toast::show("Undo");
+    } else {
+        crate::toast::show("RightType: undo injection failed");
+    }
 }
 
 /// The literal character a boundary key inserts (matches what a real keypress
@@ -230,7 +308,7 @@ pub unsafe fn install() -> windows::core::Result<()> {
     // capacity and never reallocates for its lifetime (see `stable_region`).
     STATE.with(|s| {
         let (ptr, len) = s.borrow().buf.stable_region();
-        crate::ram::lock_region(ptr, len);
+        let _ = crate::ram::lock_region(ptr, len);
     });
     Ok(())
 }
@@ -259,8 +337,9 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
     if code == HC_ACTION as i32 {
         let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
         // Skip anything we generated: our tag is authoritative and timing-free.
+        let externally_injected = (kb.flags.0 & LLKHF_INJECTED.0) != 0;
         let ours = kb.dwExtraInfo == INJECT_TAG
-            || (kb.flags.0 & LLKHF_INJECTED.0) != 0
+            || (externally_injected && !debug_e2e_accepts_injected())
             || INJECTING.load(Ordering::Relaxed);
         if !ours && process(wparam.0 as u32, kb) {
             // We handled this key as a hotkey/correction; swallow it.
@@ -268,6 +347,22 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         }
     }
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
+/// Computer-driven Windows E2E necessarily uses `SendInput`, which Windows marks
+/// as injected. A debug build may opt into processing those events so the real
+/// hook pipeline can be exercised. Release builds compile this escape hatch to
+/// `false` and always ignore third-party injected input.
+fn debug_e2e_accepts_injected() -> bool {
+    #[cfg(debug_assertions)]
+    {
+        static ACCEPT: OnceLock<bool> = OnceLock::new();
+        *ACCEPT.get_or_init(|| std::env::var_os("RIGHTTYPE_E2E_ACCEPT_INJECTED").is_some())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        false
+    }
 }
 
 fn is_modifier(vk: u16) -> bool {
@@ -292,21 +387,22 @@ unsafe fn is_layout_switch_trigger(vk: u16) -> bool {
         return true;
     }
     // 2. Win + Space
-    if vk == VK_SPACE.0 && (is_down(VIRTUAL_KEY(0x5B)) || is_down(VIRTUAL_KEY(0x5C))) { // VK_LWIN = 0x5B, VK_RWIN = 0x5C
+    if vk == VK_SPACE.0 && (is_down(VIRTUAL_KEY(0x5B)) || is_down(VIRTUAL_KEY(0x5C))) {
+        // VK_LWIN = 0x5B, VK_RWIN = 0x5C
         return true;
     }
     // 3. Alt + Shift / Ctrl + Shift (when one of them is pressed while the other modifier is held)
     let is_shift = vk == VK_SHIFT.0 || vk == 0xA0 || vk == 0xA1;
     let is_menu = vk == VK_MENU.0 || vk == 0xA4 || vk == 0xA5;
     let is_ctrl = vk == VK_CONTROL.0 || vk == 0xA2 || vk == 0xA3;
-    
+
     if (is_shift && (is_down(VK_MENU) || is_down(VK_CONTROL)))
         || (is_menu && is_down(VK_SHIFT))
         || (is_ctrl && is_down(VK_SHIFT))
     {
         return true;
     }
-    
+
     false
 }
 
@@ -321,9 +417,14 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
 
     // Shift+Backspace hotkey.
-    let is_shift_backspace = vk == VK_BACK.0 && is_down(VK_SHIFT) && !is_down(VK_CONTROL) && !is_down(VK_MENU);
+    let is_shift_backspace =
+        vk == VK_BACK.0 && is_down(VK_SHIFT) && !is_down(VK_CONTROL) && !is_down(VK_MENU);
     if !is_shift_backspace && !is_modifier(vk) {
-        STATE.with(|s| s.borrow_mut().last_completed = None);
+        STATE.with(|s| {
+            let mut st = s.borrow_mut();
+            st.last_completed = None;
+            st.suggestion = None;
+        });
     }
 
     // Panic switch: Ctrl+Alt+CapsLock instantly flips master enable, either way.
@@ -332,8 +433,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // password field or blacklisted app.
     if vk == VK_CAPITAL.0 && is_down(VK_CONTROL) && is_down(VK_MENU) {
         let now_on = !ENABLED.fetch_xor(true, Ordering::Relaxed);
-        crate::toast::show(if now_on { "RightType: ON" } else { "RightType: OFF" });
-        crate::config::persist();
+        crate::toast::show(if now_on {
+            "RightType: ON"
+        } else {
+            "RightType: OFF"
+        });
+        crate::config::persist_async();
         return true;
     }
 
@@ -342,26 +447,15 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return false;
     }
 
-    // User initiated manual layout switch (Grave accent, Alt+Shift, Ctrl+Shift, Win+Space)
+    // A user-initiated layout switch invalidates buffered caret context. Windows
+    // performs the switch itself; we only discard state here.
     if is_layout_switch_trigger(vk) {
-        let current_is_thai = foreground_is_thai();
-        let target_primary = if current_is_thai { PRIMARYLANG_EN } else { PRIMARYLANG_THAI };
-        let count = GetKeyboardLayoutList(None);
-        if count > 0 {
-            let mut list = vec![HKL::default(); count as usize];
-            let got = GetKeyboardLayoutList(Some(&mut list)).max(0) as usize;
-            for hkl in list.iter().take(got) {
-                if ((hkl.0 as usize & 0x3FF) as u16) == target_primary {
-                    STATE.with(|s| {
-                        let mut st = s.borrow_mut();
-                        st.pending_hkl = Some(hkl.0 as isize);
-                        st.buf.clear();
-                        st.last_completed = None;
-                    });
-                    break;
-                }
-            }
-        }
+        STATE.with(|s| {
+            let mut st = s.borrow_mut();
+            st.pending_hkl = None;
+            st.buf.clear();
+            st.last_completed = None;
+        });
     }
 
     // If focus or layout changed since the last key, the buffered word is stale.
@@ -373,6 +467,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         || safety::is_password_field()
         || crate::focus::is_password_field()
     {
+        STATE.with(|s| s.borrow_mut().suggestion = None);
         return false;
     }
 
@@ -380,21 +475,36 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     if vk == VK_CAPITAL.0 {
         let ctrl = is_down(VK_CONTROL);
         let shift = is_down(VK_SHIFT);
+        let alt = is_down(VK_MENU);
         if ctrl && shift {
             // Ctrl+Shift+CapsLock: undo the last correction (one-shot). Swallow.
-            undo_last_correction();
+            if !manual::request_undo_selection(
+                GetForegroundWindow().0 as isize,
+                crate::focus::generation(),
+            ) {
+                undo_last_correction();
+            }
             return true;
         }
         if ctrl {
-            // Ctrl+CapsLock: toggle Auto/Manual. Swallow so Caps never flips.
-            let now_auto = !MODE_AUTO.fetch_xor(true, Ordering::Relaxed);
-            crate::toast::show(if now_auto { "Auto mode" } else { "Manual mode" });
-            crate::config::persist();
+            // Ctrl+CapsLock: cycle Manual → Auto → Suggest. Swallow so Caps
+            // never flips.
+            let next = mode().next();
+            set_mode(next);
+            crate::toast::show(next.label());
+            crate::config::persist_async();
+            return true;
+        }
+        if alt {
+            accept_suggestion();
             return true;
         }
         if shift {
             // Shift+CapsLock: convert the current selection. Swallow.
-            manual::request_convert_selection();
+            manual::request_convert_selection(
+                GetForegroundWindow().0 as isize,
+                crate::focus::generation(),
+            );
             return true;
         }
         return false;
@@ -415,127 +525,76 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // Drive the buffer; only a boundary can return a completed word.
     let completed = STATE.with(|s| s.borrow_mut().buf.observe(key));
     let Some(mut word) = completed else {
-        // No boundary yet. In Auto mode, eagerly convert a complete wrong-layout
-        // Thai word the moment it's recognised — this is the no-space case that a
-        // boundary trigger can't handle.
-        if MODE_AUTO.load(Ordering::Relaxed) && matches!(key, Key::Char(_)) {
-            return auto_convert_live();
-        }
         return false;
     };
 
-    // Auto-learn this completed word (no-op unless the user enabled learning).
-    crate::learn::observe(&word);
+    let active_layout = policy::supported_layout_id(layout_id(foreground_layout()));
+    let mut detection = active_layout.and_then(|layout| {
+        policy::detect_at_boundary(&word, layout, dict::english(), dict::thai())
+    });
 
-    // Auto mode corrects on the boundary (the EN-on-Thai-layout direction, which
-    // does have spaces); Manual mode waits for a hotkey.
-    let swallow = if MODE_AUTO.load(Ordering::Relaxed) {
-        maybe_correct(&word, vk)
-    } else {
-        false
+    // Track the meaningful English stream, including a wrong-layout candidate.
+    // This cannot retroactively protect the first words of a phrase (ordinary
+    // English overlaps BIP39), but once the run reaches the threshold it blocks
+    // Auto, Suggest and learning for the current and following seed words.
+    let seed_run = STATE.with(|s| {
+        s.borrow_mut()
+            .seed
+            .observe_candidate(&word, detection.as_ref().map(|d| d.corrected.as_str()))
+    });
+    if seed_run {
+        detection = None;
+    }
+
+    // Learning sees only ordinary US-QWERTY input for which the production
+    // policy found no wrong-layout candidate. This keeps converted candidates
+    // and unsupported layouts out of the persistence path.
+    if !seed_run && policy::allows_learning(active_layout, detection.is_some()) {
+        crate::learn::observe(&word);
+    }
+
+    // Auto mode commits only at this boundary; Manual mode retains the token for
+    // Shift+Backspace.
+    let swallow = match (mode(), detection) {
+        (Mode::Auto, Some(d)) => maybe_correct(&word, vk, d),
+        (Mode::Suggest, Some(d)) => {
+            STATE.with(|s| {
+                s.borrow_mut().suggestion = Some(SuggestionRecord {
+                    original: word.clone(),
+                    corrected: d.corrected,
+                    boundary_vk: vk,
+                });
+            });
+            crate::toast::show("Suggestion: Alt+CapsLock");
+            false
+        }
+        _ => false,
     };
     if swallow {
         STATE.with(|s| s.borrow_mut().last_completed = None);
     } else {
-        STATE.with(|s| s.borrow_mut().last_completed = Some((word.clone(), vk)));
+        STATE.with(|s| {
+            s.borrow_mut().last_completed = Some(LastCompleted {
+                word: word.clone(),
+                boundary_vk: vk,
+            });
+        });
     }
     word.zeroize();
     swallow
 }
 
-/// Auto mode, no-space (run-on) conversion, in whichever direction matches the
-/// active layout. Returns `true` to swallow the keystroke that completed the word
-/// — its character belongs to the injected text and must not also reach the app.
-///
-/// Only Thai-layout → EN runs eagerly without a word boundary. Thai text writes
-/// words with no spaces, so we must commit at the first recognised word.
-/// EN-layout → Thai is intentionally excluded from this path: English text always
-/// has spaces, so the boundary path handles it safely. Running EN→Thai live caused
-/// false triggers mid-word (e.g. "fu" = "ดี", "idio" = "รกรน") which disrupted
-/// typing English words like "fucking" or "idiot".
-unsafe fn auto_convert_live() -> bool {
-    if foreground_is_thai() {
-        auto_thai_layout_to_en()
-    } else {
-        false // EN → Thai: boundary path only, never live
-    }
+/// Exact 32-bit keyboard layout identifiers supported by the v1 mapping tables.
+/// Checking the whole KLID keeps UK English and Thai Pattachote out of Auto mode;
+/// sharing a primary language does not make their physical-key mapping compatible.
+fn layout_id(hkl: HKL) -> u32 {
+    hkl.0 as usize as u32
 }
 
-/// Typing on a non-Thai layout, producing ASCII that is really wrong-layout Thai.
-unsafe fn auto_en_layout_to_thai() -> bool {
-    let ascii = STATE.with(|s| s.borrow().buf.current().to_string());
-    let n = ascii.chars().count();
-    // ≥2 chars, pure ASCII, not a secret, not a genuine English word.
-    if n < 2
-        || !ascii.is_ascii()
-        || secret::is_secret_token(&ascii)
-        || dict::english().contains(&ascii)
-    {
-        return false;
-    }
-    let mut thai = en_to_th(&ascii);
-    // Strong signal: the whole run partitions into real Thai words.
-    if !segment::is_fully_known(&thai, dict::thai()) {
-        thai.zeroize();
-        return false;
-    }
-    STATE.with(|s| s.borrow_mut().buf.clear());
-    inject::apply(n - 1, &thai, None);
-    set_undo(thai.chars().count(), &ascii);
-    crate::stats::record_auto();
-    thai.zeroize();
-    activate_layout(PRIMARYLANG_THAI);
-    true
-}
-
-/// Typing on the Thai layout, producing Thai that is really wrong-layout English.
-unsafe fn auto_thai_layout_to_en() -> bool {
-    let thai = STATE.with(|s| s.borrow().buf.current().to_string());
-    let n = thai.chars().count();
-    // ≥4 chars: a single English-word match is a weaker signal than full Thai
-    // segmentation, and short English words (the/and/in/on) would false-trigger on
-    // ordinary Thai prefixes — those convert via the space-boundary path instead.
-    if n < 4
-        || thai.is_ascii()
-        || secret::is_secret_token(&thai)
-        || dict::thai().contains(&thai)
-    {
-        return false;
-    }
-    let mut eng = th_to_en(&thai);
-    if !dict::english().contains(&eng) && !crate::learn::contains(&eng) {
-        eng.zeroize();
-        return false;
-    }
-    STATE.with(|s| s.borrow_mut().buf.clear());
-    inject::apply(n - 1, &eng, None);
-    set_undo(eng.chars().count(), &thai);
-    crate::stats::record_auto();
-    eng.zeroize();
-    activate_layout(PRIMARYLANG_EN);
-    true
-}
-
-/// PRIMARYLANGID values (the low 10 bits of a LANGID). Matching the *primary*
-/// language, not the full LANGID, accepts any sub-variant the user has installed
-/// (US/UK English, Thai Kedmanee/Pattachote, …).
-const PRIMARYLANG_THAI: u16 = 0x1E;
-const PRIMARYLANG_EN: u16 = 0x09;
-
-/// The primary language of the foreground window's keyboard layout.
-unsafe fn foreground_primary_lang() -> u16 {
-    (foreground_layout().0 as usize & 0x3FF) as u16
-}
-
-/// Is the foreground window's keyboard layout Thai?
-unsafe fn foreground_is_thai() -> bool {
-    foreground_primary_lang() == PRIMARYLANG_THAI
-}
-
-/// Switch the foreground window's input language to the first loaded layout whose
-/// primary language matches `primary`. No-op if no such layout is installed.
-unsafe fn activate_layout(primary: u16) {
-    if foreground_primary_lang() == primary {
+/// Switch the foreground window to one exact layout supported by the v1 mapping
+/// tables. No-op if that layout is not installed.
+unsafe fn activate_layout(target: policy::InputLayout) {
+    if policy::supported_layout_id(layout_id(foreground_layout())) == Some(target) {
         STATE.with(|s| s.borrow_mut().pending_hkl = None);
         return;
     }
@@ -546,13 +605,36 @@ unsafe fn activate_layout(primary: u16) {
     let mut list = vec![HKL::default(); count as usize];
     let got = GetKeyboardLayoutList(Some(&mut list)).max(0) as usize;
     for hkl in list.iter().take(got) {
-        if ((hkl.0 as usize & 0x3FF) as u16) == primary {
+        if policy::supported_layout_id(layout_id(*hkl)) == Some(target) {
+            let foreground = GetForegroundWindow();
+            let mut gui = GUITHREADINFO {
+                cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+                ..Default::default()
+            };
+            let thread_id = GetWindowThreadProcessId(foreground, None);
+            let target =
+                if GetGUIThreadInfo(thread_id, &mut gui).is_ok() && !gui.hwndFocus.0.is_null() {
+                    gui.hwndFocus
+                } else {
+                    foreground
+                };
             let _ = PostMessageW(
-                GetForegroundWindow(),
+                target,
                 WM_INPUTLANGCHANGEREQUEST,
                 WPARAM(0),
                 LPARAM(hkl.0 as isize),
             );
+            // Some modern apps put focus on a custom child that does not pass
+            // the request to DefWindowProc. Also notify the top-level window;
+            // requesting the same explicit HKL twice is idempotent.
+            if target != foreground {
+                let _ = PostMessageW(
+                    foreground,
+                    WM_INPUTLANGCHANGEREQUEST,
+                    WPARAM(0),
+                    LPARAM(hkl.0 as isize),
+                );
+            }
             // Record that we are waiting for this HKL to activate
             STATE.with(|s| {
                 s.borrow_mut().pending_hkl = Some(hkl.0 as isize);
@@ -565,6 +647,45 @@ unsafe fn activate_layout(primary: u16) {
     }
 }
 
+/// Accept the one context-bound, non-destructive suggestion produced at the
+/// previous boundary. Any intervening non-modifier key or context change clears
+/// the record before this function can run.
+unsafe fn accept_suggestion() {
+    let Some(mut suggestion) = STATE.with(|s| s.borrow_mut().suggestion.take()) else {
+        return;
+    };
+    let backspaces = suggestion.original.chars().count() + 1;
+    if !inject::apply(
+        backspaces,
+        &suggestion.corrected,
+        Some(suggestion.boundary_vk),
+    ) {
+        crate::toast::show("RightType: suggestion injection failed");
+        return;
+    }
+
+    let mut restore = format!(
+        "{}{}",
+        suggestion.original,
+        boundary_literal(suggestion.boundary_vk)
+    );
+    set_undo(suggestion.corrected.chars().count() + 1, &restore);
+    restore.zeroize();
+    crate::stats::record_manual();
+
+    let to_thai = suggestion
+        .corrected
+        .chars()
+        .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+    activate_layout(if to_thai {
+        policy::InputLayout::ThaiKedmanee
+    } else {
+        policy::InputLayout::UsQwerty
+    });
+    suggestion.original.zeroize();
+    suggestion.corrected.zeroize();
+}
+
 /// Manual: flip the layout of the word currently in the buffer, in place. A no-op
 /// when the buffer is empty (e.g. an auto-repeat after the word was already
 /// converted) — the caller swallows the key either way.
@@ -573,21 +694,34 @@ unsafe fn convert_last_word() {
     if word.is_empty() {
         // Try to convert the last completed word if we just hit a boundary (e.g. Space)
         let last = STATE.with(|s| s.borrow_mut().last_completed.take());
-        if let Some((mut last_word, boundary_vk)) = last {
+        if let Some(mut last) = last {
+            let mut last_word = std::mem::take(&mut last.word);
+            let boundary_vk = last.boundary_vk;
             let backspaces = last_word.chars().count() + 1; // +1 for the boundary character
             let mut converted = auto_convert(&last_word);
             let changed = converted != last_word;
             if changed {
-                inject::apply(backspaces, &converted, Some(boundary_vk));
+                if !inject::apply(backspaces, &converted, Some(boundary_vk)) {
+                    crate::toast::show("RightType: correction injection failed");
+                    converted.zeroize();
+                    last_word.zeroize();
+                    return;
+                }
                 set_undo(
                     converted.chars().count() + 1,
                     &format!("{}{}", last_word, boundary_literal(boundary_vk)),
                 );
                 crate::stats::record_manual();
-                
+
                 // Switch language layout to the one of the converted word
-                let to_thai = converted.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
-                activate_layout(if to_thai { PRIMARYLANG_THAI } else { PRIMARYLANG_EN });
+                let to_thai = converted
+                    .chars()
+                    .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+                activate_layout(if to_thai {
+                    policy::InputLayout::ThaiKedmanee
+                } else {
+                    policy::InputLayout::UsQwerty
+                });
             }
             converted.zeroize();
             last_word.zeroize();
@@ -603,35 +737,56 @@ unsafe fn convert_last_word() {
     let mut converted = auto_convert(&word);
     let changed = converted != word;
     if changed {
-        inject::apply(backspaces, &converted, None);
+        if !inject::apply(backspaces, &converted, None) {
+            crate::toast::show("RightType: correction injection failed");
+            word.zeroize();
+            converted.zeroize();
+            return;
+        }
         set_undo(converted.chars().count(), &word);
         crate::stats::record_manual();
 
         // Switch language layout to the one of the converted word
-        let to_thai = converted.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
-        activate_layout(if to_thai { PRIMARYLANG_THAI } else { PRIMARYLANG_EN });
+        let to_thai = converted
+            .chars()
+            .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+        activate_layout(if to_thai {
+            policy::InputLayout::ThaiKedmanee
+        } else {
+            policy::InputLayout::UsQwerty
+        });
     }
     word.zeroize();
     converted.zeroize();
 }
 
-/// Run the seed guard + detection on a completed `word`; inject the fix if any.
+/// Inject a completed `word` after the caller's stream and detection guards pass.
 /// `boundary_vk` is the separator key that completed the word, re-emitted after
 /// the correction. Returns `true` if a correction was injected (caller swallows
 /// the boundary), `false` otherwise.
-unsafe fn maybe_correct(word: &str, boundary_vk: u16) -> bool {
-    // A run of BIP39 words is a seed phrase — never touch it.
-    if STATE.with(|s| s.borrow_mut().seed.observe(word)) {
-        return false;
-    }
-    // `detect` already refuses secret-shaped and too-short tokens internally.
-    let Some(d) = detect::detect(word, dict::english(), dict::thai()) else {
-        return false;
-    };
+unsafe fn maybe_correct(word: &str, boundary_vk: u16, d: righttype::detect::Detection) -> bool {
+    maybe_correct_with(word, boundary_vk, d, |backspaces, text, trailing_vk| {
+        inject::apply(backspaces, text, trailing_vk)
+    })
+}
+
+unsafe fn maybe_correct_with<F>(
+    word: &str,
+    boundary_vk: u16,
+    d: righttype::detect::Detection,
+    apply: F,
+) -> bool
+where
+    F: FnOnce(usize, &str, Option<u16>) -> bool,
+{
     // The boundary is swallowed, so only the word's own characters are deleted.
     let backspaces = word.chars().count();
     let mut corrected = d.corrected;
-    inject::apply(backspaces, &corrected, Some(boundary_vk));
+    if !apply(backspaces, &corrected, Some(boundary_vk)) {
+        crate::toast::show("RightType: correction injection failed");
+        corrected.zeroize();
+        return false;
+    }
 
     // Undo target: retype the original word plus the boundary it would have
     // gotten anyway (the boundary keystroke itself never reached the app).
@@ -647,9 +802,9 @@ unsafe fn maybe_correct(word: &str, boundary_vk: u16) -> bool {
         .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
     corrected.zeroize();
     activate_layout(if to_thai {
-        PRIMARYLANG_THAI
+        policy::InputLayout::ThaiKedmanee
     } else {
-        PRIMARYLANG_EN
+        policy::InputLayout::UsQwerty
     });
     true
 }
@@ -662,6 +817,10 @@ unsafe fn classify(vk: u16, scan: u16) -> Option<Key> {
     }
     if vk == VK_BACK.0 {
         return Some(Key::Backspace);
+    }
+    #[cfg(debug_assertions)]
+    if vk == VK_PACKET.0 && debug_e2e_accepts_injected() {
+        return char::from_u32(scan as u32).map(Key::Char);
     }
     if vk == VK_SPACE.0 || vk == VK_RETURN.0 || vk == VK_TAB.0 {
         return Some(Key::Boundary);
@@ -716,38 +875,28 @@ unsafe fn sync_context() {
     let tid = GetWindowThreadProcessId(hwnd, None);
     let hwnd_i = hwnd.0 as isize;
 
-    // If we have a pending HKL switch, wait for the target application thread
-    // to process the message and actually apply the layout, so the next key
-    // is translated correctly under the new layout.
-    let mut hkl_i = GetKeyboardLayout(tid).0 as isize;
-    let pending = STATE.with(|s| s.borrow().pending_hkl);
-    if let Some(target) = pending {
-        if hkl_i == target {
-            STATE.with(|s| s.borrow_mut().pending_hkl = None);
-        } else {
-            let start = std::time::Instant::now();
-            let limit = std::time::Duration::from_millis(50);
-            while std::time::Instant::now() - start < limit {
-                std::thread::sleep(std::time::Duration::from_millis(1));
-                hkl_i = GetKeyboardLayout(tid).0 as isize;
-                if hkl_i == target {
-                    break;
-                }
-            }
-            // Always clear to prevent getting stuck in a perpetual 50ms delay loop
-            STATE.with(|s| s.borrow_mut().pending_hkl = None);
-        }
+    // A layout-switch request is asynchronous. Never wait for it inside the
+    // global low-level hook: a slow target window used to add up to 50 ms of
+    // latency to the next physical key. If the layout has not changed yet, the
+    // normal context comparison below keeps the buffer conservative.
+    let hkl_i = GetKeyboardLayout(tid).0 as isize;
+    if STATE.with(|s| s.borrow().pending_hkl).is_some() {
+        STATE.with(|s| s.borrow_mut().pending_hkl = None);
     }
 
+    let focus_generation = crate::focus::generation();
     let window_changed = STATE.with(|s| {
         let mut st = s.borrow_mut();
         let changed = st.last_hwnd != hwnd_i;
-        if changed || st.last_hkl != hkl_i {
+        if changed || st.last_hkl != hkl_i || st.last_focus_generation != focus_generation {
             st.buf.clear();
             st.seed.reset();
             st.undo = None;
+            st.last_completed = None;
+            st.suggestion = None;
             st.last_hwnd = hwnd_i;
             st.last_hkl = hkl_i;
+            st.last_focus_generation = focus_generation;
         }
         changed
     });
@@ -763,4 +912,44 @@ unsafe fn foreground_layout() -> HKL {
     let hwnd = GetForegroundWindow();
     let tid = GetWindowThreadProcessId(hwnd, None);
     GetKeyboardLayout(tid)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Mode, STATE};
+    use righttype::detect::{Confidence, Detection, Evidence};
+
+    #[test]
+    fn mode_cycle_is_manual_auto_suggest() {
+        assert_eq!(Mode::Manual.next(), Mode::Auto);
+        assert_eq!(Mode::Auto.next(), Mode::Suggest);
+        assert_eq!(Mode::Suggest.next(), Mode::Manual);
+    }
+
+    #[test]
+    fn failed_auto_injection_has_no_success_side_effects() {
+        STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            state.undo = None;
+            state.pending_hkl = None;
+        });
+        let stats_before = crate::stats::snapshot();
+        let detection = Detection {
+            corrected: "สวัสดี".to_string(),
+            confidence: Confidence::High,
+            evidence: Evidence::ExactDictionary,
+        };
+
+        let committed = unsafe {
+            super::maybe_correct_with("l;ylfu", 0x20, detection, |_backspaces, _text, _vk| false)
+        };
+
+        assert!(!committed);
+        assert_eq!(crate::stats::snapshot(), stats_before);
+        STATE.with(|state| {
+            let state = state.borrow();
+            assert!(state.undo.is_none());
+            assert!(state.pending_hkl.is_none());
+        });
+    }
 }

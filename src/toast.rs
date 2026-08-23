@@ -9,19 +9,22 @@
 
 use std::cell::RefCell;
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
+use std::sync::Mutex;
 
 use native_windows_gui as nwg;
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{COLORREF, HWND, RECT};
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateFontW, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, DrawTextW,
     EndPaint, FillRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor, SetWindowRgn,
     CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET, DT_CENTER, DT_SINGLELINE, DT_VCENTER,
     HGDIOBJ, OUT_DEFAULT_PRECIS, PAINTSTRUCT, TRANSPARENT,
 };
+use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClientRect, KillTimer, SetTimer, SetWindowPos, ShowWindow, SystemParametersInfoW,
-    HWND_TOPMOST, SPI_GETWORKAREA, SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE,
+    GetClientRect, KillTimer, PostMessageW, SetTimer, SetWindowPos, ShowWindow,
+    SystemParametersInfoW, HWND_TOPMOST, SPI_GETWORKAREA, SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE,
     SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
 };
 
@@ -33,13 +36,18 @@ const MARGIN: i32 = 12;
 const WM_PAINT: u32 = 0x000F;
 const WM_ERASEBKGND: u32 = 0x0014;
 const WM_TIMER: u32 = 0x0113;
+const WM_SHOW_TOAST: u32 = 0x8000 + 0x525;
+
+static TOAST_HWND: AtomicIsize = AtomicIsize::new(0);
+static UI_THREAD_ID: AtomicU32 = AtomicU32::new(0);
+static PENDING_TEXT: Mutex<Option<String>> = Mutex::new(None);
 
 /// `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` — float above everything,
 /// stay off the taskbar, and (crucially) never take focus from what's being typed.
 const EX_FLAGS: u32 = 0x0000_0008 | 0x0000_0080 | 0x0800_0000;
 
 struct Toast {
-    window: nwg::Window,
+    _window: nwg::Window,
     _raw: Option<nwg::RawEventHandler>,
 }
 
@@ -64,6 +72,8 @@ pub fn init() {
     }
 
     if let Some(h) = window.handle.hwnd() {
+        TOAST_HWND.store(h as isize, Ordering::Release);
+        UI_THREAD_ID.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
         unsafe {
             // Rounded "pill" corners.
             let rgn = CreateRoundRectRgn(0, 0, W + 1, H + 1, H, H);
@@ -84,43 +94,58 @@ pub fn init() {
                 unsafe { hide(hwnd) };
                 Some(0)
             }
+            WM_SHOW_TOAST => {
+                if let Some(text) = PENDING_TEXT.lock().unwrap().take() {
+                    unsafe { show_on_ui(hwnd, &text) };
+                }
+                Some(0)
+            }
             _ => None,
         }
     })
     .ok();
 
-    TOAST.with(|t| *t.borrow_mut() = Some(Toast { window, _raw: raw }));
+    TOAST.with(|t| {
+        *t.borrow_mut() = Some(Toast {
+            _window: window,
+            _raw: raw,
+        })
+    });
 }
 
-/// Flash `text` briefly in the bottom-right corner. No-op if [`init`] hasn't run.
-/// UI thread only (all callers are on the hook/tray thread).
+/// Flash `text` briefly in the bottom-right corner. Calls from workers are posted
+/// back to the UI thread that owns the toast window.
 pub fn show(text: &str) {
-    TEXT.with(|t| *t.borrow_mut() = text.to_string());
-    TOAST.with(|t| {
-        let guard = t.borrow();
-        let Some(toast) = guard.as_ref() else {
-            return;
-        };
-        let Some(h) = toast.window.handle.hwnd() else {
-            return;
-        };
-        let hwnd = HWND(h as _);
+    let raw = TOAST_HWND.load(Ordering::Acquire);
+    if raw == 0 {
+        return;
+    }
+    let hwnd = HWND(raw as *mut c_void);
+    if unsafe { GetCurrentThreadId() } == UI_THREAD_ID.load(Ordering::Acquire) {
+        unsafe { show_on_ui(hwnd, text) };
+    } else {
+        *PENDING_TEXT.lock().unwrap() = Some(text.to_string());
         unsafe {
-            let (x, y) = bottom_right();
-            let _ = SetWindowPos(
-                hwnd,
-                HWND_TOPMOST,
-                x,
-                y,
-                W,
-                H,
-                SWP_NOACTIVATE | SWP_SHOWWINDOW,
-            );
-            let _ = InvalidateRect(hwnd, None, true);
-            let _ = KillTimer(hwnd, TIMER_ID);
-            SetTimer(hwnd, TIMER_ID, SHOW_MS, None);
+            let _ = PostMessageW(hwnd, WM_SHOW_TOAST, WPARAM(0), LPARAM(0));
         }
-    });
+    }
+}
+
+unsafe fn show_on_ui(hwnd: HWND, text: &str) {
+    TEXT.with(|t| *t.borrow_mut() = text.to_string());
+    let (x, y) = bottom_right();
+    let _ = SetWindowPos(
+        hwnd,
+        HWND_TOPMOST,
+        x,
+        y,
+        W,
+        H,
+        SWP_NOACTIVATE | SWP_SHOWWINDOW,
+    );
+    let _ = InvalidateRect(hwnd, None, true);
+    let _ = KillTimer(hwnd, TIMER_ID);
+    SetTimer(hwnd, TIMER_ID, SHOW_MS, None);
 }
 
 /// Bottom-right of the work area (so it sits above the taskbar, wherever it is).
@@ -169,7 +194,12 @@ unsafe fn paint(hwnd: HWND) {
     );
     let old = SelectObject(hdc, HGDIOBJ(font.0));
     let mut text: Vec<u16> = TEXT.with(|t| t.borrow().encode_utf16().collect());
-    DrawTextW(hdc, &mut text, &mut rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    DrawTextW(
+        hdc,
+        &mut text,
+        &mut rc,
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+    );
     SelectObject(hdc, old);
     let _ = DeleteObject(HGDIOBJ(font.0));
 
