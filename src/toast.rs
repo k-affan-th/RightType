@@ -43,11 +43,10 @@ const WM_SHOW_TOAST: u32 = 0x8000 + 0x525;
 static TOAST_HWND: AtomicIsize = AtomicIsize::new(0);
 static UI_THREAD_ID: AtomicU32 = AtomicU32::new(0);
 static PENDING_TEXT: Mutex<Option<String>> = Mutex::new(None);
-static ALPHA: AtomicU32 = AtomicU32::new(255);
+static ALPHA: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(255);
 
-/// `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED` —
-/// float above everything, stay off the taskbar, never take focus, and allow
-/// the fade-out animation.
+/// `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` — float above everything,
+/// stay off the taskbar, and (crucially) never take focus from what's being typed.
 const EX_FLAGS: u32 = 0x0000_0008 | 0x0000_0080 | 0x0800_0000 | 0x0008_0000;
 
 struct Toast {
@@ -60,8 +59,15 @@ thread_local! {
     static TEXT: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
-/// Create the (hidden) toast window. Call once, on the UI thread, after `nwg::init`.
-pub fn init() {
+/// Create the toast window lazily on the UI thread. Returns true when the
+/// window exists. Deliberately NOT called at startup: creating a layered,
+/// region-shaped window while an exclusive-fullscreen game owns the display
+/// can raise a fatal DWM user callback — so under fullscreen we simply run
+/// toast-less for the session instead of crashing.
+fn ensure_created() -> bool {
+    if TOAST_HWND.load(Ordering::Acquire) != 0 {
+        return true;
+    }
     let mut window = nwg::Window::default();
     if nwg::Window::builder()
         .flags(nwg::WindowFlags::POPUP)
@@ -72,15 +78,18 @@ pub fn init() {
         .build(&mut window)
         .is_err()
     {
-        return;
+        return false;
     }
 
     if let Some(h) = window.handle.hwnd() {
         TOAST_HWND.store(h as isize, Ordering::Release);
         UI_THREAD_ID.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
         unsafe {
-            // Layered window: enable per-pixel alpha for the fade-out.
+            // Layered window: enables per-pixel alpha for the fade-out.
             let _ = SetLayeredWindowAttributes(HWND(h as _), COLORREF(0), 255_u8, LWA_ALPHA);
+            // Rounded "pill" corners.
+            let rgn = CreateRoundRectRgn(0, 0, W + 1, H + 1, H, H);
+            SetWindowRgn(HWND(h as _), rgn, true);
         }
     }
 
@@ -94,7 +103,7 @@ pub fn init() {
                 Some(0)
             }
             WM_TIMER if w == TIMER_ID => {
-                // Hold period over: begin the fade-out animation.
+                // Hold period over: start the fade-out animation.
                 unsafe {
                     let _ = KillTimer(hwnd, TIMER_ID);
                     ALPHA.store(220, Ordering::Relaxed);
@@ -128,21 +137,30 @@ pub fn init() {
     })
     .ok();
 
+    let hwnd_isz = window.handle.hwnd().map(|h| h as isize).unwrap_or(0);
     TOAST.with(|t| {
         *t.borrow_mut() = Some(Toast {
             _window: window,
             _raw: raw,
-        })
+        });
     });
+    TOAST_HWND.store(hwnd_isz, Ordering::Release);
+    UI_THREAD_ID.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
+    true
 }
 
 /// Flash `text` briefly in the bottom-right corner. Calls from workers are posted
 /// back to the UI thread that owns the toast window.
 pub fn show(text: &str) {
-    let raw = TOAST_HWND.load(Ordering::Acquire);
-    if raw == 0 {
-        return;
+    if TOAST_HWND.load(Ordering::Acquire) == 0 {
+        if unsafe { GetCurrentThreadId() } != UI_THREAD_ID.load(Ordering::Acquire) {
+            return; // worker thread + no window yet (e.g. fullscreen) — skip
+        }
+        if !ensure_created() {
+            return;
+        }
     }
+    let raw = TOAST_HWND.load(Ordering::Acquire);
     let hwnd = HWND(raw as *mut c_void);
     if unsafe { GetCurrentThreadId() } == UI_THREAD_ID.load(Ordering::Acquire) {
         unsafe { show_on_ui(hwnd, text) };
@@ -156,28 +174,22 @@ pub fn show(text: &str) {
 
 unsafe fn show_on_ui(hwnd: HWND, text: &str) {
     TEXT.with(|t| *t.borrow_mut() = text.to_string());
-<<<<<<< Updated upstream
-    let (x, y) = bottom_right();
-=======
     // Width grows with the message (suggestion previews are longer than the
-    // original mode labels) but stays a compact pill. The rounded region must
-    // be recomputed too — it was sized for the default width at creation.
+    // original mode labels) but stays a compact pill.
     let units: Vec<u16> = text.encode_utf16().collect();
-    let w = (units.len() as i32 * 7 + 32).clamp(W, 520);
+    let w = (units.len() as i32 * 7 + 28).clamp(W, 520);
     let (x, y) = bottom_right(w);
->>>>>>> Stashed changes
     let _ = SetWindowPos(
         hwnd,
         HWND_TOPMOST,
         x,
         y,
-        W,
+        w,
         H,
         SWP_NOACTIVATE | SWP_SHOWWINDOW,
     );
     let rgn = CreateRoundRectRgn(0, 0, w + 1, H + 1, H, H);
     SetWindowRgn(hwnd, rgn, true);
-    // Reset alpha in case a previous toast was mid-fade, then hold.
     ALPHA.store(255, Ordering::Relaxed);
     let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
     let hold = (SHOW_MS_BASE + units.len() as u32 * 18).min(2400);
@@ -188,7 +200,7 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str) {
 }
 
 /// Bottom-right of the work area (so it sits above the taskbar, wherever it is).
-unsafe fn bottom_right() -> (i32, i32) {
+unsafe fn bottom_right(width: i32) -> (i32, i32) {
     let mut wa = RECT::default();
     let _ = SystemParametersInfoW(
         SPI_GETWORKAREA,
@@ -196,7 +208,7 @@ unsafe fn bottom_right() -> (i32, i32) {
         Some(&mut wa as *mut RECT as *mut c_void),
         SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
     );
-    (wa.right - W - MARGIN, wa.bottom - H - MARGIN)
+    (wa.right - width - MARGIN, wa.bottom - H - MARGIN)
 }
 
 unsafe fn paint(hwnd: HWND) {
@@ -206,7 +218,7 @@ unsafe fn paint(hwnd: HWND) {
     let mut rc = RECT::default();
     let _ = GetClientRect(hwnd, &mut rc);
 
-    // Dark pill background (COLORREF is 0x00BBGGRR) + hairline border.
+    // Dark pill background (COLORREF is 0x00BBGGRR).
     let brush = CreateSolidBrush(COLORREF(0x002A_2A2A));
     FillRect(hdc, &rc, brush);
     let _ = DeleteObject(HGDIOBJ(brush.0));

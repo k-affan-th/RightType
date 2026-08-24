@@ -34,22 +34,17 @@ struct Welcome {
 /// true, dismissing marks config onboarding complete.
 pub fn show(first_run: bool) {
     let mut font = nwg::Font::default();
-    eprintln!("[rt-boot] onboard font1");
     let _ = nwg::Font::builder()
         .family("Segoe UI")
         .size(15)
         .build(&mut font);
-    eprintln!("[rt-boot] onboard font1 ok");
     let mut big = nwg::Font::default();
-    eprintln!("[rt-boot] onboard font2");
     let _ = nwg::Font::builder()
         .family("Segoe UI")
         .size(20)
         .build(&mut big);
-    eprintln!("[rt-boot] onboard font2 ok");
 
     let mut window = nwg::Window::default();
-    eprintln!("[rt-boot] onboard pre-build");
     let _ = nwg::Window::builder()
         .flags(nwg::WindowFlags::WINDOW)
         .size((460, 470))
@@ -61,7 +56,6 @@ pub fn show(first_run: bool) {
         })
         .topmost(true)
         .build(&mut window);
-    eprintln!("[rt-boot] onboard built");
 
     let mut labels: Vec<nwg::Label> = Vec::new();
     macro_rules! label {
@@ -118,7 +112,6 @@ pub fn show(first_run: bool) {
         .size((110, 32))
         .parent(&window)
         .build(&mut start);
-    eprintln!("[rt-boot] onboard controls done");
 
     let themed = theme::subclass_colors(
         window
@@ -128,7 +121,6 @@ pub fn show(first_run: bool) {
             .unwrap_or_default(),
         0x5254_0011,
     );
-    eprintln!("[rt-boot] onboard themed");
     theme::apply_frame(
         window
             .handle
@@ -136,9 +128,7 @@ pub fn show(first_run: bool) {
             .map(|h| windows::Win32::Foundation::HWND(h as _))
             .unwrap_or_default(),
     );
-    eprintln!("[rt-boot] onboard frame");
     window.set_visible(true);
-    eprintln!("[rt-boot] onboard visible");
 
     let ui = Rc::new(Welcome {
         window,

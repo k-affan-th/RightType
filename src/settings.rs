@@ -18,11 +18,7 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
-<<<<<<< Updated upstream
-use crate::{config, hook, learn, safety, startup, toast};
-=======
 use crate::{config, hook, learn, onboard, safety, startup, theme, toast};
->>>>>>> Stashed changes
 
 const WM_CLOSE: u32 = 0x0010;
 
@@ -41,16 +37,6 @@ struct SettingsWindow {
     rb_suggest: nwg::RadioButton,
     cb_learn: nwg::CheckBox,
     editor: nwg::TextBox,
-<<<<<<< Updated upstream
-    apply: nwg::Button,
-    ok: nwg::Button,
-    cancel: nwg::Button,
-    handler: RefCell<Option<nwg::EventHandler>>,
-}
-
-/// Open the settings window.
-pub fn open() {
-=======
     clear_learned: nwg::Button,
     cancel: nwg::Button,
     apply: nwg::Button,
@@ -72,7 +58,6 @@ pub fn open() {
         toast::show("Settings");
     }
 
->>>>>>> Stashed changes
     let mut font = nwg::Font::default();
     let _ = nwg::Font::builder()
         .family("Segoe UI")
@@ -237,9 +222,6 @@ pub fn open() {
         .parent(&window)
         .build(&mut editor);
 
-<<<<<<< Updated upstream
-    // --- Buttons ---
-=======
     // --- Buttons -----------------------------------------------------------
     let mut clear_learned = nwg::Button::default();
     let _ = nwg::Button::builder()
@@ -259,7 +241,6 @@ pub fn open() {
         .parent(&window)
         .build(&mut cancel);
 
->>>>>>> Stashed changes
     let mut apply = nwg::Button::default();
     let _ = nwg::Button::builder()
         .text("Apply")
@@ -304,17 +285,11 @@ pub fn open() {
         rb_suggest,
         cb_learn,
         editor,
-<<<<<<< Updated upstream
-        apply,
-        ok,
-        cancel,
-=======
         clear_learned,
         cancel,
         apply,
         ok,
         _theme: themed,
->>>>>>> Stashed changes
         handler: RefCell::new(None),
     });
 
@@ -332,6 +307,9 @@ pub fn open() {
                 } else if handle == ui_h.rb_suggest.handle {
                     ui_h.rb_auto.set_check_state(Rbs::Unchecked);
                     ui_h.rb_manual.set_check_state(Rbs::Unchecked);
+                } else if handle == ui_h.clear_learned.handle {
+                    learn::clear();
+                    toast::show("Learned words cleared");
                 } else if handle == ui_h.apply.handle {
                     apply_settings(&ui_h);
                     toast::show("Saved");
@@ -391,16 +369,6 @@ fn apply_settings(ui: &Rc<SettingsWindow>) {
     config::persist();
 }
 
-<<<<<<< Updated upstream
-fn cleanup(ui: &Rc<SettingsWindow>) {
-    if let Some(h) = ui.handler.borrow_mut().take() {
-        nwg::unbind_event_handler(&h);
-    }
-    ui.window.close();
-}
-
-=======
->>>>>>> Stashed changes
 fn bool_cb(v: bool) -> Cbs {
     if v {
         Cbs::Checked

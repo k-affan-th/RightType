@@ -35,17 +35,12 @@ struct Tray {
 
 /// Build the tray UI, install the hook, and run the event loop until Quit.
 pub fn run() {
-    eprintln!("[rt-boot] init");
     nwg::init().expect("Failed to init Native Windows GUI");
-    eprintln!("[rt-boot] init ok");
 
     // The small status toast (shown on layout switch / mode change).
-    eprintln!("[rt-boot] toast");
-    toast::init();
 
     // Load the learned-words dictionary, then restore saved settings (enabled +
     // mode + learn) before building the menu so its checkmarks reflect them.
-    eprintln!("[rt-boot] config");
     learn::load();
     config::apply(&config::load());
 
@@ -233,23 +228,7 @@ pub fn run() {
                 } else if handle == ui_h.m_settings.handle {
                     settings::open();
                 } else if handle == ui_h.m_stats.handle {
-<<<<<<< Updated upstream
-                    let (auto, manual) = stats::snapshot();
-                    nwg::modal_info_message(
-                        &ui_h.window.handle,
-                        "RightType — Stats",
-                        &format!(
-                            "This session:\n\n\
-                             Corrected automatically: {auto}\n\
-                             Corrected via hotkey: {manual}\n\
-                             Total: {}\n\n\
-                             (Counts reset when RightType restarts — nothing typed is ever saved.)",
-                            auto + manual
-                        ),
-                    );
-=======
                     stats::open();
->>>>>>> Stashed changes
                 }
             }
             _ => {}
@@ -259,11 +238,7 @@ pub fn run() {
     // Session resilience: reinstall the hook across sleep/resume + lock/unlock by
     // watching raw power/session messages on this window (Bug 1).
     let hwnd = ui.window.handle.hwnd().map(|h| HWND(h as _));
-<<<<<<< Updated upstream
-=======
-    eprintln!("[rt-boot] sync");
     sync_state(&ui);
-    eprintln!("[rt-boot] onboard-check");
     if !config::onboarded() {
         crate::onboard::show(true);
     }
@@ -275,7 +250,6 @@ pub fn run() {
             _ => {}
         }
     }
->>>>>>> Stashed changes
     let raw = nwg::bind_raw_event_handler(&ui.window.handle, 0x5254_0001, move |_h, msg, w, _l| {
         unsafe { session::on_message(msg, w) };
         None
@@ -308,8 +282,6 @@ pub fn run() {
     }
     nwg::unbind_event_handler(&handler);
 }
-<<<<<<< Updated upstream
-=======
 
 /// Refresh every state-bearing surface: the disabled status header, the tray
 /// tooltip, and the mode/enable checkmarks. Called before the menu opens and
@@ -328,6 +300,3 @@ fn sync_state(ui: &Rc<Tray>) {
     ui.m_suggest
         .set_checked(hook::mode() == hook::Mode::Suggest);
 }
-
-
->>>>>>> Stashed changes

@@ -75,6 +75,26 @@ pub fn contains(word: &str) -> bool {
         .is_some_and(|s| s.contains(&key))
 }
 
+/// Number of learned words (for the stats dialog).
+pub fn count() -> usize {
+    LEARNED
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|s| s.len())
+        .unwrap_or(0)
+}
+
+/// Forget every learned word (settings button). Also clears the file.
+pub fn clear() {
+    if let Some(p) = learned_path() {
+        let _ = std::fs::write(p, "");
+    }
+    if let Some(s) = LEARNED.lock().unwrap().as_mut() {
+        s.clear();
+    }
+}
+
 /// Observe a completed word. After [`REPEATS`] sightings of a qualifying English
 /// word, learn it (persist + add to the live set). No-op unless enabled.
 pub fn observe(word: &str) {

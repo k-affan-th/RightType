@@ -6,3 +6,5 @@ e2e/.venv/
 e2e/shots/
 __pycache__/
 e2e/rt_stderr.log
+e2e/probe_out.txt
+e2e/probe_err.txt

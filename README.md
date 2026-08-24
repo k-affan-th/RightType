@@ -89,9 +89,19 @@ rather than a blanket ban on every individual BIP39 word.
 
 ## For end users
 
-Download `RightType.exe` and run it — it appears in the tray. **No installer, no
-dependencies** beyond the Universal C Runtime already present on Windows 10/11. Use
-"Start with Windows" to launch it at login.
+**Install (per-user, no admin):**
+
+```powershell
+# after extracting the release zip:
+pwsh -File packaging\install.ps1 -Autostart
+```
+
+- Installs to `%LOCALAPPDATA%\RightType`, adds a **Start Menu shortcut**, and
+  (with `-Autostart`) launches at login.
+- Uninstall anytime: `pwsh -File packaging\uninstall.ps1` (add `-KeepSettings`
+  to preserve your config/learned words).
+- Unsigned builds show a SmartScreen prompt — "More info → Run anyway".
+  Signed releases will ship under Azure Trusted Signing in v1.x.
 
 ## For developers
 

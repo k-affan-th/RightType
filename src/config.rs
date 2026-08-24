@@ -29,6 +29,9 @@ pub struct Config {
     pub learn: bool,
     /// User-added app names to block (layered on top of the fixed defaults).
     pub custom_blacklist: Vec<String>,
+    /// First-run onboarding shown? UX: the welcome/hotkeys window appears once.
+    #[serde(default)]
+    pub onboarded: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -67,6 +70,7 @@ impl Default for Config {
             auto: None,
             learn: false,
             custom_blacklist: Vec::new(),
+            onboarded: false,
         }
     }
 }
@@ -104,6 +108,24 @@ pub fn apply(cfg: &Config) {
     safety::set_custom_list(cfg.custom_blacklist.clone());
 }
 
+/// Has the first-run onboarding been shown/completed?
+pub fn onboarded() -> bool {
+    load().onboarded
+}
+
+/// Mark onboarding done and persist (best-effort, async-safe).
+pub fn mark_onboarded() {
+    let mut cfg = load();
+    cfg.onboarded = true;
+    let Some(p) = config_path() else { return };
+    if let Some(dir) = p.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(s) = toml::to_string_pretty(&cfg) {
+        let _ = std::fs::write(p, s);
+    }
+}
+
 /// Snapshot the current runtime state and write it to disk. Best-effort.
 pub fn persist() {
     let cfg = Config {
@@ -112,6 +134,7 @@ pub fn persist() {
         auto: None,
         learn: learn::is_enabled(),
         custom_blacklist: safety::custom_list(),
+        onboarded: onboarded(),
     };
     let Some(p) = config_path() else {
         return;

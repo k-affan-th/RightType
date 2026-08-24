@@ -27,6 +27,8 @@ mod learn;
 #[cfg(feature = "winos")]
 mod manual;
 #[cfg(feature = "winos")]
+mod onboard;
+#[cfg(feature = "winos")]
 mod ram;
 #[cfg(feature = "winos")]
 mod safety;
@@ -38,6 +40,8 @@ mod settings;
 mod startup;
 #[cfg(feature = "winos")]
 mod stats;
+#[cfg(feature = "winos")]
+mod theme;
 #[cfg(feature = "winos")]
 mod toast;
 #[cfg(feature = "winos")]

@@ -377,7 +377,7 @@ pub(crate) fn e2e_trace(msg: String) {
 }
 
 #[cfg(not(debug_assertions))]
-fn e2e_trace(_: String) {}
+pub(crate) fn e2e_trace(_: String) {}
 
 /// D-006 instant EN→TH commit gate data: minimum token length before an
 /// in-flight commit may fire. Two-character candidates are excluded because

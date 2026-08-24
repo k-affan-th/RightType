@@ -357,6 +357,29 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 
 ---
 
+## S7 — UX modernization (v1.x track, user-directed)
+
+**Status:** `[~] IN_PROGRESS — first pass shipped in rc1`
+
+Shipped in rc1:
+
+- [x] First-run onboarding window (hotkeys + privacy line, `Get started`), reopenable via tray "Hotkeys / Help…" (`onboard.rs`, config `onboarded`)
+- [x] Suggest toast now previews the real candidate: `raw → corrected · Alt+CapsLock` (dynamic-width toast)
+- [x] Tray tooltip reflects live state (`RightType — Auto / Manual / Suggest / OFF`)
+- [x] Settings singleton (second `open()` focuses the first window)
+- [x] Stats dialog shows learned-words count; Settings gained "Clear learned words"
+- [x] Modern theme pass (`theme.rs`): dark title bar, Win11 rounded corners, dark client + controls for Settings/Welcome
+
+Deferred (tracked, not forgotten):
+
+- [ ] Full visual redesign (accent buttons/owner-draw, icon set per state) — needs design assets
+- [ ] Thai-language UI strings (i18n table)
+- [ ] DPI-aware layout for Settings (absolute pixel positions today)
+- [ ] Remappable hotkeys / per-app profiles — stays per D-005
+- [ ] Mica backdrop (removed: stripes label brushes; revisit with owner-draw)
+
+---
+
 ## Evidence ledger
 
 | ID | Date | Section | Evidence | Result | Does not prove |
@@ -394,6 +417,10 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 | E-031 | 2026-08-24 | S5/S4 | Interactive lock/unlock (ผู้ใช้กด Win+L จริง): trace watch + post-corrections | `session: unlock reinstall` ถูกบันทึก = **Bug-1 recovery path พิสูจน์บน OS transition จริง**; post live+boundary ผ่านทั้งคู่, process alive | ยังไม่ครอบ sleep/resume (ต้องทำตามขั้นตอนเดียวกัน) และ UAC secure-desktop ระหว่างพิมพ์ |
 | E-032 | 2026-08-24 | S1/S2 | Mixed-spacing probe (`spacing_probe.py`): EN␣TH / TH␣EN / trailing ␣ | พบ off-by-one: live commit ลบ `len` แต่ trigger char ถูก swallow = **ลบเกิน 1 กิน space ผู้ใช้**; แก้ `backspaces = len − (boundary.is_none())` แล้ว A/B/C PASS — space รอดทุกลำดับ | ครอบ Edge; Word ยืนยันต่อใน E-033 |
 | E-033 | 2026-08-24 | S5 | Microsoft Word (Office16 จริง): accumulating-document roundtrip | **3/3 PASS** — TH→EN boundary (AC capitalize เป็น artifact ของ Word เอง), EN→TH live, Undo; ข้อความสะสม `'Correct สวัสดีกับ'→'…dy['` พิสูจน์ space-preservation ต่อเนื่อง | ไม่ครอบ fast-typing burst บน Word / ribbon-focus edge cases |
+| E-034 | 2026-08-24 | S7 | Theme pass + visual verification (screenshot): dark titlebar/round/dark client, onboarding window render | Welcome window renders modern dark correctly; settings ใช้ helper เดียวกัน; Mica ถูกถอดเพราะ stripe label brushes | ผู้ใช้เป็นคนตัดสิน "modern พอ" สุดท้าย; light-theme users จะเห็น dark เสมอ |
+| E-035 | 2026-08-24 | S6 | Release packaging: `packaging/` (install/uninstall/Inno iss/build_release.ps1) → zip + local install | `RightType-1.0.0-rc1-x64.zip` (933 KB) + SHA256; ติดตั้งจริง: LOCALAPPDATA + Start Menu lnk + HKCU Run autostart ยืนยันครบ | unsigned (SmartScreen prompt); Inno setup.exe skipped (ไม่มี ISCC ในเครื่อง) |
+| E-036 | 2026-08-24 | S5 | Word fast-typing burst case — attempt | BLOCKED ชั่วคราว: fullscreen game ของผู้ใช้บล็อก synthetic mouse (RuntimeError) — แถว optional polish, core Word cases ผ่านแล้ว (E-033) | ยังไม่พิสูจน์ burst บน Word โดยเฉพาะ |
+| E-037 | 2026-08-24 | S4/S7 | Startup crash ใต้เกม fullscreen (0xC000041D fatal user callback): bisect ด้วย boot markers + env guard | **ROOT CAUSE: toast::init สร้าง layered+region window ตอน startup ใต้ exclusive fullscreen** → fix = lazy creation (สร้างเมื่อ show ครั้งแรก; สร้างไม่ได้ = รัน toast-less ทั้ง session); verify STARTUP alive=True ใต้เกม | toast จะไม่แสดงระหว่าง fullscreen game (by design); ต้อง re-run matrix เมื่อ desktop ปกติ |
 
 ## Risk register
 
@@ -416,3 +443,5 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 - `2026-08-24` — **D-006**: EN→TH เปลี่ยนเป็น instant commit + layout switch ตาม product owner directive (ทดแทน boundary-only เดิมของ D-004 ฝั่งเดียว); matrix 9/9 (E-025); **พบ+แก้ undo bug** จาก layout-switch ล้าง record (E-026); RT-AUTO-001 rewrite; README Auto copy update
 - `2026-08-24` — Native ES_PASSWORD guard PASS (E-029); UAC secure-desktop isolation มีหลักฐานบางส่วน (E-030); transition seam probe สรุป synthetic channel ใช้ไม่ได้ → row sleep/unlock ย้ายเป็น BLOCKED-interactive อย่างซื่อสัตย์ (E-028)
 - `2026-08-24` — UAC full cycle PASS หลังผู้ใช้กด consent (E-030); lock/unlock interactive PASS = Bug-1 proof จริง (E-031); **ผู้ใช้แจ้ง space ถูกกิน → พบ off-by-one ใน live commit** แก้แล้ว (E-032); **Word 3/3** (E-033) — S5 matrix เหลือ sleep/resume + polish เท่านั้น
+- `2026-08-24` — **S7 UX first pass**: onboarding + help window, Suggest preview toast (dynamic width), tray tooltip state, settings singleton + clear-learned, stats learned-count, dark theme pass (E-034); **Release rc1**: packaging/installer scripts, zip artifact, local install + autostart (E-035); Word fast-case BLOCKED ชั่วคราวโดย fullscreen game (E-036)
+- `2026-08-24` — Settings/Stats redesign บนธีมเข้ม + refresh-on-reopen semantics (toast แจ้งทุกครั้ง) + toast modernization (fade, dynamic region, border, duration); **พบ+แก้ startup crash ใต้เกม fullscreen** ด้วย lazy toast creation (E-037); re-install rc1 ให้ผู้ใช้
