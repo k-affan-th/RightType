@@ -17,21 +17,23 @@ use windows::core::PCWSTR;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateFontW, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, DrawTextW,
-    EndPaint, FillRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor, SetWindowRgn,
-    CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET, DT_CENTER, DT_SINGLELINE, DT_VCENTER,
-    HGDIOBJ, OUT_DEFAULT_PRECIS, PAINTSTRUCT, TRANSPARENT,
+    EndPaint, FillRect, FrameRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor,
+    SetWindowRgn, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET, DT_CENTER,
+    DT_SINGLELINE, DT_VCENTER, HGDIOBJ, OUT_DEFAULT_PRECIS, PAINTSTRUCT, TRANSPARENT,
 };
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClientRect, KillTimer, PostMessageW, SetTimer, SetWindowPos, ShowWindow,
-    SystemParametersInfoW, HWND_TOPMOST, SPI_GETWORKAREA, SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE,
-    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    GetClientRect, KillTimer, PostMessageW, SetLayeredWindowAttributes, SetTimer, SetWindowPos,
+    ShowWindow, SystemParametersInfoW, HWND_TOPMOST, LWA_ALPHA, SPI_GETWORKAREA, SWP_NOACTIVATE,
+    SWP_SHOWWINDOW, SW_HIDE, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
 };
 
 const TIMER_ID: usize = 7;
-const SHOW_MS: u32 = 850;
+const FADE_TIMER_ID: usize = 8;
+const SHOW_MS_BASE: u32 = 900;
+const FADE_STEP_MS: u32 = 30;
 const W: i32 = 116;
-const H: i32 = 32;
+const H: i32 = 34;
 const MARGIN: i32 = 12;
 const WM_PAINT: u32 = 0x000F;
 const WM_ERASEBKGND: u32 = 0x0014;
@@ -41,10 +43,12 @@ const WM_SHOW_TOAST: u32 = 0x8000 + 0x525;
 static TOAST_HWND: AtomicIsize = AtomicIsize::new(0);
 static UI_THREAD_ID: AtomicU32 = AtomicU32::new(0);
 static PENDING_TEXT: Mutex<Option<String>> = Mutex::new(None);
+static ALPHA: AtomicU32 = AtomicU32::new(255);
 
-/// `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` — float above everything,
-/// stay off the taskbar, and (crucially) never take focus from what's being typed.
-const EX_FLAGS: u32 = 0x0000_0008 | 0x0000_0080 | 0x0800_0000;
+/// `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED` —
+/// float above everything, stay off the taskbar, never take focus, and allow
+/// the fade-out animation.
+const EX_FLAGS: u32 = 0x0000_0008 | 0x0000_0080 | 0x0800_0000 | 0x0008_0000;
 
 struct Toast {
     _window: nwg::Window,
@@ -75,9 +79,8 @@ pub fn init() {
         TOAST_HWND.store(h as isize, Ordering::Release);
         UI_THREAD_ID.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
         unsafe {
-            // Rounded "pill" corners.
-            let rgn = CreateRoundRectRgn(0, 0, W + 1, H + 1, H, H);
-            SetWindowRgn(HWND(h as _), rgn, true);
+            // Layered window: enable per-pixel alpha for the fade-out.
+            let _ = SetLayeredWindowAttributes(HWND(h as _), COLORREF(0), 255_u8, LWA_ALPHA);
         }
     }
 
@@ -91,7 +94,27 @@ pub fn init() {
                 Some(0)
             }
             WM_TIMER if w == TIMER_ID => {
-                unsafe { hide(hwnd) };
+                // Hold period over: begin the fade-out animation.
+                unsafe {
+                    let _ = KillTimer(hwnd, TIMER_ID);
+                    ALPHA.store(220, Ordering::Relaxed);
+                    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 220_u8, LWA_ALPHA);
+                    SetTimer(hwnd, FADE_TIMER_ID, FADE_STEP_MS, None);
+                }
+                Some(0)
+            }
+            WM_TIMER if w == FADE_TIMER_ID => {
+                unsafe {
+                    let next = ALPHA.fetch_sub(28, Ordering::Relaxed).saturating_sub(28);
+                    if next == 0 {
+                        let _ = KillTimer(hwnd, FADE_TIMER_ID);
+                        hide(hwnd);
+                        let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
+                    } else {
+                        let _ =
+                            SetLayeredWindowAttributes(hwnd, COLORREF(0), next as u8, LWA_ALPHA);
+                    }
+                }
                 Some(0)
             }
             WM_SHOW_TOAST => {
@@ -133,7 +156,16 @@ pub fn show(text: &str) {
 
 unsafe fn show_on_ui(hwnd: HWND, text: &str) {
     TEXT.with(|t| *t.borrow_mut() = text.to_string());
+<<<<<<< Updated upstream
     let (x, y) = bottom_right();
+=======
+    // Width grows with the message (suggestion previews are longer than the
+    // original mode labels) but stays a compact pill. The rounded region must
+    // be recomputed too — it was sized for the default width at creation.
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let w = (units.len() as i32 * 7 + 32).clamp(W, 520);
+    let (x, y) = bottom_right(w);
+>>>>>>> Stashed changes
     let _ = SetWindowPos(
         hwnd,
         HWND_TOPMOST,
@@ -143,9 +175,16 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str) {
         H,
         SWP_NOACTIVATE | SWP_SHOWWINDOW,
     );
-    let _ = InvalidateRect(hwnd, None, true);
+    let rgn = CreateRoundRectRgn(0, 0, w + 1, H + 1, H, H);
+    SetWindowRgn(hwnd, rgn, true);
+    // Reset alpha in case a previous toast was mid-fade, then hold.
+    ALPHA.store(255, Ordering::Relaxed);
+    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
+    let hold = (SHOW_MS_BASE + units.len() as u32 * 18).min(2400);
     let _ = KillTimer(hwnd, TIMER_ID);
-    SetTimer(hwnd, TIMER_ID, SHOW_MS, None);
+    let _ = KillTimer(hwnd, FADE_TIMER_ID);
+    SetTimer(hwnd, TIMER_ID, hold, None);
+    let _ = InvalidateRect(hwnd, None, true);
 }
 
 /// Bottom-right of the work area (so it sits above the taskbar, wherever it is).
@@ -167,10 +206,13 @@ unsafe fn paint(hwnd: HWND) {
     let mut rc = RECT::default();
     let _ = GetClientRect(hwnd, &mut rc);
 
-    // Dark pill background (COLORREF is 0x00BBGGRR).
+    // Dark pill background (COLORREF is 0x00BBGGRR) + hairline border.
     let brush = CreateSolidBrush(COLORREF(0x002A_2A2A));
     FillRect(hdc, &rc, brush);
     let _ = DeleteObject(HGDIOBJ(brush.0));
+    let border = CreateSolidBrush(COLORREF(0x0045_4545));
+    FrameRect(hdc, &rc, border);
+    let _ = DeleteObject(HGDIOBJ(border.0));
 
     // White, centred Segoe UI text.
     SetBkMode(hdc, TRANSPARENT);

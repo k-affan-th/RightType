@@ -1,13 +1,12 @@
 //! Settings window — Windows only.
 //!
-//! A single, organised dialog (in the spirit of RightLang's): grouped sections
-//! with titled boxes, a proper Segoe UI font on every control (without which
-//! Win32 controls fall back to the dated bitmap system font), and the standard
-//! Apply / OK / Cancel buttons.
+//! Modern dark dialog: section headers instead of dated group boxes, generous
+//! spacing, hotkeys listed from the same table the onboarding window uses.
 //!
-//! The built-in app blacklist (terminals, password managers, wallets) is shown
-//! for reference but is **not editable** — only the user's *additional* list is,
-//! so a settings bug can never weaken the safety baseline, only extend it.
+//! Refresh-on-reopen: opening while visible closes the old window and opens a
+//! fresh one, announced with a toast. The built-in app blacklist stays shown
+//! for reference but is **not editable** — only the user's *additional* list
+//! is, so a settings bug can never weaken the safety baseline.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -15,21 +14,26 @@ use std::rc::Rc;
 use native_windows_gui as nwg;
 use nwg::{CheckBoxState as Cbs, RadioButtonState as Rbs};
 
-use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, WPARAM};
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, SendMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_SETFONT, WS_CHILD, WS_VISIBLE,
-};
+use windows::Win32::Foundation::HWND;
+use windows::Win32::Foundation::{LPARAM, WPARAM};
+use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
+<<<<<<< Updated upstream
 use crate::{config, hook, learn, safety, startup, toast};
+=======
+use crate::{config, hook, learn, onboard, safety, startup, theme, toast};
+>>>>>>> Stashed changes
 
-/// `BS_GROUPBOX` — a BUTTON that draws a titled group frame.
-const BS_GROUPBOX: u32 = 0x0000_0007;
+const WM_CLOSE: u32 = 0x0010;
+
+/// Only one settings window at a time; reopening refreshes it.
+static OPEN: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 
 struct SettingsWindow {
     window: nwg::Window,
     _font: nwg::Font,
+    _head: nwg::Font,
+    _labels: Vec<nwg::Label>,
     cb_enabled: nwg::CheckBox,
     cb_startup: nwg::CheckBox,
     rb_auto: nwg::RadioButton,
@@ -37,6 +41,7 @@ struct SettingsWindow {
     rb_suggest: nwg::RadioButton,
     cb_learn: nwg::CheckBox,
     editor: nwg::TextBox,
+<<<<<<< Updated upstream
     apply: nwg::Button,
     ok: nwg::Button,
     cancel: nwg::Button,
@@ -45,31 +50,114 @@ struct SettingsWindow {
 
 /// Open the settings window.
 pub fn open() {
+=======
+    clear_learned: nwg::Button,
+    cancel: nwg::Button,
+    apply: nwg::Button,
+    ok: nwg::Button,
+    _theme: Option<nwg::RawEventHandler>,
+    handler: RefCell<Option<nwg::EventHandler>>,
+}
+
+/// Open (or refresh) the settings window.
+pub fn open() {
+    use std::sync::atomic::Ordering;
+    let existing = OPEN.load(Ordering::Acquire);
+    if existing != 0 {
+        unsafe {
+            let _ = PostMessageW(HWND(existing as *mut _), WM_CLOSE, WPARAM(0), LPARAM(0));
+        }
+        toast::show("Settings refreshed");
+    } else {
+        toast::show("Settings");
+    }
+
+>>>>>>> Stashed changes
     let mut font = nwg::Font::default();
     let _ = nwg::Font::builder()
         .family("Segoe UI")
-        .size(16)
+        .size(15)
         .build(&mut font);
+    let mut head = nwg::Font::default();
+    let _ = nwg::Font::builder()
+        .family("Segoe UI")
+        .size(16)
+        .build(&mut head);
 
     let mut window = nwg::Window::default();
-    if nwg::Window::builder()
+    let _ = nwg::Window::builder()
         .flags(nwg::WindowFlags::WINDOW)
-        .size((492, 670))
-        .position((340, 180))
+        .size((560, 690))
+        .position((180, 120))
         .title("RightType — Settings")
-        .build(&mut window)
-        .is_err()
-    {
-        return;
+        .build(&mut window);
+    let hwnd = window
+        .handle
+        .hwnd()
+        .map(|h| HWND(h as _))
+        .unwrap_or(HWND(std::ptr::null_mut()));
+    theme::apply_frame(hwnd);
+    let themed = theme::subclass_colors(hwnd, 0x5254_0010);
+
+    let mut labels: Vec<nwg::Label> = Vec::new();
+    macro_rules! header {
+        ($text:expr, $y:expr) => {{
+            let mut l = nwg::Label::default();
+            let _ = nwg::Label::builder()
+                .text($text)
+                .font(Some(&head))
+                .position((24, $y))
+                .size((500, 26))
+                .parent(&window)
+                .build(&mut l);
+            labels.push(l);
+        }};
+    }
+    macro_rules! hint {
+        ($text:expr, $y:expr) => {{
+            let mut l = nwg::Label::default();
+            let _ = nwg::Label::builder()
+                .text($text)
+                .font(Some(&font))
+                .position((28, $y))
+                .size((496, $crate::settings::H_HINT))
+                .parent(&window)
+                .build(&mut l);
+            labels.push(l);
+        }};
+    }
+    macro_rules! hotrow {
+        ($action:expr, $keys:expr, $y:expr) => {{
+            let mut l = nwg::Label::default();
+            let _ = nwg::Label::builder()
+                .text($action)
+                .font(Some(&font))
+                .position((30, $y))
+                .size((240, 20))
+                .parent(&window)
+                .build(&mut l);
+            labels.push(l);
+            let mut r = nwg::Label::default();
+            let _ = nwg::Label::builder()
+                .text($keys)
+                .font(Some(&font))
+                .position((280, $y))
+                .size((240, 20))
+                .parent(&window)
+                .build(&mut r);
+            labels.push(r);
+        }};
     }
 
-    // --- General ---
+    // --- General -----------------------------------------------------------
+    header!("General", 18);
+
     let mut cb_enabled = nwg::CheckBox::default();
     let _ = nwg::CheckBox::builder()
         .text("Enable RightType")
         .font(Some(&font))
-        .position((26, 30))
-        .size((260, 22))
+        .position((30, 52))
+        .size((300, 24))
         .parent(&window)
         .build(&mut cb_enabled);
 
@@ -77,36 +165,38 @@ pub fn open() {
     let _ = nwg::CheckBox::builder()
         .text("Start with Windows")
         .font(Some(&font))
-        .position((26, 54))
-        .size((260, 22))
+        .position((30, 82))
+        .size((300, 24))
         .parent(&window)
         .build(&mut cb_startup);
 
-    // --- Correction mode ---
+    // --- Correction mode ---------------------------------------------------
+    header!("Correction mode", 122);
+
     let mut rb_auto = nwg::RadioButton::default();
     let _ = nwg::RadioButton::builder()
-        .text("Auto — fix as you type")
+        .text("Auto — fix as you type (instant EN→TH, boundary TH→EN)")
         .font(Some(&font))
-        .position((26, 116))
-        .size((260, 22))
+        .position((30, 154))
+        .size((500, 24))
         .parent(&window)
         .build(&mut rb_auto);
 
     let mut rb_manual = nwg::RadioButton::default();
     let _ = nwg::RadioButton::builder()
-        .text("Manual — only with a hotkey")
+        .text("Manual — only when I press the hotkey")
         .font(Some(&font))
-        .position((26, 140))
-        .size((260, 22))
+        .position((30, 184))
+        .size((500, 24))
         .parent(&window)
         .build(&mut rb_manual);
 
     let mut rb_suggest = nwg::RadioButton::default();
     let _ = nwg::RadioButton::builder()
-        .text("Suggest — show a hint, accept manually")
+        .text("Suggest — show a hint, accept with Alt+CapsLock")
         .font(Some(&font))
-        .position((26, 164))
-        .size((330, 22))
+        .position((30, 214))
+        .size((500, 24))
         .parent(&window)
         .build(&mut rb_suggest);
 
@@ -114,55 +204,24 @@ pub fn open() {
     let _ = nwg::CheckBox::builder()
         .text("Learn new words automatically")
         .font(Some(&font))
-        .position((26, 192))
-        .size((300, 22))
+        .position((30, 246))
+        .size((400, 24))
         .parent(&window)
         .build(&mut cb_learn);
 
-    // --- Hotkeys (reference; not remappable) ---
-    let hotkeys = [
-        ("Fix last word", "Shift + Backspace"),
-        ("Convert selection", "Shift + CapsLock"),
-        ("Cycle Manual / Auto / Suggest", "Ctrl + CapsLock"),
-        ("Undo last correction", "Ctrl + Shift + CapsLock"),
-        ("Accept suggestion", "Alt + CapsLock"),
-        ("Turn on / off (panic)", "Ctrl + Alt + CapsLock"),
-    ];
-    for (i, (action, keys)) in hotkeys.iter().enumerate() {
-        let y = 250 + (i as i32) * 22;
-        let mut l = nwg::Label::default();
-        let _ = nwg::Label::builder()
-            .text(action)
-            .font(Some(&font))
-            .position((26, y))
-            .size((190, 20))
-            .parent(&window)
-            .build(&mut l);
-        let mut r = nwg::Label::default();
-        let _ = nwg::Label::builder()
-            .text(keys)
-            .font(Some(&font))
-            .position((220, y))
-            .size((240, 20))
-            .parent(&window)
-            .build(&mut r);
-        std::mem::forget(l);
-        std::mem::forget(r);
+    // --- Hotkeys -----------------------------------------------------------
+    header!("Hotkeys (fixed in v1)", 286);
+    for (i, (action, keys)) in onboard::HOTKEYS.iter().enumerate() {
+        hotrow!(*action, *keys, 318 + (i as i32) * 24);
     }
 
-    // --- Blocked apps ---
-    let mut info = nwg::Label::default();
-    let _ = nwg::Label::builder()
-        .text(
-            "Always blocked: terminals, password managers, wallets.\n\
-             Add more below — one .exe name per line.",
-        )
-        .font(Some(&font))
-        .position((26, 424))
-        .size((440, 36))
-        .parent(&window)
-        .build(&mut info);
-    std::mem::forget(info);
+    // --- Blocked apps ------------------------------------------------------
+    header!("Blocked apps", 470);
+    hint!(
+        "Always blocked: terminals, password managers, wallets.\n\
+         Add more below — one .exe name per line.",
+        500
+    );
 
     let mut editor = nwg::TextBox::default();
     let _ = nwg::TextBox::builder()
@@ -173,18 +232,40 @@ pub fn open() {
                 | nwg::TextBoxFlags::VSCROLL
                 | nwg::TextBoxFlags::AUTOVSCROLL,
         )
-        .position((26, 462))
-        .size((440, 96))
+        .position((28, 548))
+        .size((504, 76))
         .parent(&window)
         .build(&mut editor);
 
+<<<<<<< Updated upstream
     // --- Buttons ---
+=======
+    // --- Buttons -----------------------------------------------------------
+    let mut clear_learned = nwg::Button::default();
+    let _ = nwg::Button::builder()
+        .text("Clear learned words")
+        .font(Some(&font))
+        .position((28, 640))
+        .size((170, 30))
+        .parent(&window)
+        .build(&mut clear_learned);
+
+    let mut cancel = nwg::Button::default();
+    let _ = nwg::Button::builder()
+        .text("Cancel")
+        .font(Some(&font))
+        .position((322, 640))
+        .size((76, 30))
+        .parent(&window)
+        .build(&mut cancel);
+
+>>>>>>> Stashed changes
     let mut apply = nwg::Button::default();
     let _ = nwg::Button::builder()
         .text("Apply")
         .font(Some(&font))
-        .position((214, 576))
-        .size((80, 28))
+        .position((404, 640))
+        .size((76, 30))
         .parent(&window)
         .build(&mut apply);
 
@@ -192,32 +273,10 @@ pub fn open() {
     let _ = nwg::Button::builder()
         .text("OK")
         .font(Some(&font))
-        .position((300, 576))
-        .size((80, 28))
+        .position((486, 640))
+        .size((50, 30))
         .parent(&window)
         .build(&mut ok);
-
-    let mut cancel = nwg::Button::default();
-    let _ = nwg::Button::builder()
-        .text("Cancel")
-        .font(Some(&font))
-        .position((386, 576))
-        .size((80, 28))
-        .parent(&window)
-        .build(&mut cancel);
-
-    // Titled group frames, drawn behind the controls (raw Win32 — nwg has no
-    // GroupBox). They must use the same font or they'd render in the old font.
-    if let Some(h) = window.handle.hwnd() {
-        unsafe {
-            let parent = HWND(h as _);
-            let hfont = font.handle as usize;
-            group_box(parent, hfont, "General", 12, 8, 452, 78);
-            group_box(parent, hfont, "Correction mode", 12, 96, 452, 128);
-            group_box(parent, hfont, "Hotkeys", 12, 232, 452, 160);
-            group_box(parent, hfont, "Blocked apps", 12, 400, 452, 168);
-        }
-    }
 
     // Reflect current state.
     cb_enabled.set_check_state(bool_cb(hook::is_enabled()));
@@ -228,10 +287,16 @@ pub fn open() {
     rb_suggest.set_check_state(bool_rb(hook::mode() == hook::Mode::Suggest));
 
     window.set_visible(true);
+    OPEN.store(
+        window.handle.hwnd().map(|h| h as isize).unwrap_or(0),
+        std::sync::atomic::Ordering::Release,
+    );
 
     let ui = Rc::new(SettingsWindow {
         window,
         _font: font,
+        _head: head,
+        _labels: labels,
         cb_enabled,
         cb_startup,
         rb_auto,
@@ -239,9 +304,17 @@ pub fn open() {
         rb_suggest,
         cb_learn,
         editor,
+<<<<<<< Updated upstream
         apply,
         ok,
         cancel,
+=======
+        clear_learned,
+        cancel,
+        apply,
+        ok,
+        _theme: themed,
+>>>>>>> Stashed changes
         handler: RefCell::new(None),
     });
 
@@ -264,16 +337,32 @@ pub fn open() {
                     toast::show("Saved");
                 } else if handle == ui_h.ok.handle {
                     apply_settings(&ui_h);
-                    cleanup(&ui_h);
+                    finish(&ui_h);
                 } else if handle == ui_h.cancel.handle {
-                    cleanup(&ui_h);
+                    finish(&ui_h);
                 }
             }
-            E::OnWindowClose if handle == ui_h.window.handle => cleanup(&ui_h),
+            E::OnWindowClose if handle == ui_h.window.handle => finish(&ui_h),
             _ => {}
         }
     });
     *ui.handler.borrow_mut() = Some(handler);
+
+    fn finish(ui: &Rc<SettingsWindow>) {
+        let my = ui.window.handle.hwnd().map(|h| h as isize).unwrap_or(0);
+        // Only clear the registration if it is still OURS — a refresh may have
+        // already claimed the slot with the replacement window.
+        let _ = OPEN.compare_exchange(
+            my,
+            0,
+            std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Acquire,
+        );
+        if let Some(h) = ui.handler.borrow_mut().take() {
+            nwg::unbind_event_handler(&h);
+        }
+        ui.window.close();
+    }
 }
 
 /// Push the dialog's state into the running app + persist it.
@@ -302,6 +391,7 @@ fn apply_settings(ui: &Rc<SettingsWindow>) {
     config::persist();
 }
 
+<<<<<<< Updated upstream
 fn cleanup(ui: &Rc<SettingsWindow>) {
     if let Some(h) = ui.handler.borrow_mut().take() {
         nwg::unbind_event_handler(&h);
@@ -309,6 +399,8 @@ fn cleanup(ui: &Rc<SettingsWindow>) {
     ui.window.close();
 }
 
+=======
+>>>>>>> Stashed changes
 fn bool_cb(v: bool) -> Cbs {
     if v {
         Cbs::Checked
@@ -325,24 +417,6 @@ fn bool_rb(v: bool) -> Rbs {
     }
 }
 
-/// Create a titled BS_GROUPBOX frame as child of `parent`, using `hfont`.
-unsafe fn group_box(parent: HWND, hfont: usize, title: &str, x: i32, y: i32, w: i32, h: i32) {
-    let title_w: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
-    let hmod = GetModuleHandleW(None).unwrap_or_default();
-    if let Ok(hwnd) = CreateWindowExW(
-        WINDOW_EX_STYLE(0),
-        w!("BUTTON"),
-        PCWSTR(title_w.as_ptr()),
-        WS_CHILD | WS_VISIBLE | WINDOW_STYLE(BS_GROUPBOX),
-        x,
-        y,
-        w,
-        h,
-        parent,
-        None,
-        HINSTANCE(hmod.0),
-        None,
-    ) {
-        SendMessageW(hwnd, WM_SETFONT, WPARAM(hfont), LPARAM(1));
-    }
-}
+/// Create a titled BS_GROUPBOX frame — removed with the redesign; kept as a
+/// no-op hook point in case a future theme wants framed sections again.
+pub const H_HINT: i32 = 40;

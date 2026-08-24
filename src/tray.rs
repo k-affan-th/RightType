@@ -35,13 +35,17 @@ struct Tray {
 
 /// Build the tray UI, install the hook, and run the event loop until Quit.
 pub fn run() {
+    eprintln!("[rt-boot] init");
     nwg::init().expect("Failed to init Native Windows GUI");
+    eprintln!("[rt-boot] init ok");
 
     // The small status toast (shown on layout switch / mode change).
+    eprintln!("[rt-boot] toast");
     toast::init();
 
     // Load the learned-words dictionary, then restore saved settings (enabled +
     // mode + learn) before building the menu so its checkmarks reflect them.
+    eprintln!("[rt-boot] config");
     learn::load();
     config::apply(&config::load());
 
@@ -229,6 +233,7 @@ pub fn run() {
                 } else if handle == ui_h.m_settings.handle {
                     settings::open();
                 } else if handle == ui_h.m_stats.handle {
+<<<<<<< Updated upstream
                     let (auto, manual) = stats::snapshot();
                     nwg::modal_info_message(
                         &ui_h.window.handle,
@@ -242,6 +247,9 @@ pub fn run() {
                             auto + manual
                         ),
                     );
+=======
+                    stats::open();
+>>>>>>> Stashed changes
                 }
             }
             _ => {}
@@ -251,6 +259,23 @@ pub fn run() {
     // Session resilience: reinstall the hook across sleep/resume + lock/unlock by
     // watching raw power/session messages on this window (Bug 1).
     let hwnd = ui.window.handle.hwnd().map(|h| HWND(h as _));
+<<<<<<< Updated upstream
+=======
+    eprintln!("[rt-boot] sync");
+    sync_state(&ui);
+    eprintln!("[rt-boot] onboard-check");
+    if !config::onboarded() {
+        crate::onboard::show(true);
+    }
+    #[cfg(debug_assertions)]
+    if let Ok(what) = std::env::var("RIGHTTYPE_SHOW") {
+        match what.as_str() {
+            "settings" => settings::open(),
+            "stats" => stats::open(),
+            _ => {}
+        }
+    }
+>>>>>>> Stashed changes
     let raw = nwg::bind_raw_event_handler(&ui.window.handle, 0x5254_0001, move |_h, msg, w, _l| {
         unsafe { session::on_message(msg, w) };
         None
@@ -283,3 +308,26 @@ pub fn run() {
     }
     nwg::unbind_event_handler(&handler);
 }
+<<<<<<< Updated upstream
+=======
+
+/// Refresh every state-bearing surface: the disabled status header, the tray
+/// tooltip, and the mode/enable checkmarks. Called before the menu opens and
+/// after any mutating action.
+fn sync_state(ui: &Rc<Tray>) {
+    let enabled = hook::is_enabled();
+    let state = if enabled {
+        hook::mode().label().to_string()
+    } else {
+        "OFF".to_string()
+    };
+    ui._tray.set_tip(&format!("RightType — {state}"));
+    ui.m_enabled.set_checked(enabled);
+    ui.m_auto.set_checked(hook::mode() == hook::Mode::Auto);
+    ui.m_manual.set_checked(hook::mode() == hook::Mode::Manual);
+    ui.m_suggest
+        .set_checked(hook::mode() == hook::Mode::Suggest);
+}
+
+
+>>>>>>> Stashed changes
