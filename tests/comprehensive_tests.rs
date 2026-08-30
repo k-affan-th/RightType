@@ -2,7 +2,8 @@ use righttype::buffer::{Key, WordBuffer};
 use righttype::detect;
 use righttype::dict;
 use righttype::layout::{auto_convert, en_to_th, th_to_en};
-use righttype::policy::{self, InputLayout};
+use righttype::policy::{self, InputLayout, Reading};
+use righttype::render;
 use righttype::secret::{self, SeedTracker};
 use righttype::segment;
 
@@ -515,6 +516,120 @@ fn thai_typed_on_the_english_layout_still_arrives_intact() {
             auto_mode_screen(&th_to_en(phrase)),
             phrase,
             "Thai typed on the English layout must still be recovered"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// D-008 revisable rendering.
+//
+// A reading chosen from four characters of evidence stops being a verdict: the
+// screen is reconciled with the run's best reading on every keystroke, so an
+// early guess can be withdrawn. The tests below pin the commit horizon from
+// both sides, because it is the one number the design trades off against.
+// ---------------------------------------------------------------------------
+
+/// Replay a run through the same ownership loop as `hook::reconcile_run`, and
+/// return what ends up on screen. `horizon` is how long a Thai reading must
+/// hold before the run is anchored and the layout takes over.
+fn owned_run_screen(keys: &str, horizon: usize) -> String {
+    let en = dict::english();
+    let th = dict::thai();
+    let mut run = String::new();
+    let mut screen = String::new();
+    let mut holding = false;
+    let mut stable = 0usize;
+    let mut anchored = false;
+
+    for k in keys.chars() {
+        if anchored {
+            // Layout switched: the keystroke produces Thai natively.
+            screen.push_str(&en_to_th(&k.to_string()));
+            continue;
+        }
+        run.push(k);
+        let reading = policy::live_reading(&run, holding, en, th);
+        let target = match &reading {
+            Reading::AsTyped => run.clone(),
+            Reading::Thai(thai) => thai.clone(),
+        };
+        let delta = render::delta(&screen, &target);
+        for _ in 0..delta.backspaces {
+            screen.pop();
+        }
+        screen.push_str(&delta.insert);
+        match reading {
+            Reading::AsTyped => {
+                holding = false;
+                stable = 0;
+            }
+            Reading::Thai(_) => {
+                holding = true;
+                stable += 1;
+                if stable >= horizon {
+                    anchored = true;
+                    run.clear();
+                }
+            }
+        }
+    }
+    screen
+}
+
+#[test]
+fn a_mistyped_english_word_is_put_back_when_the_thai_reading_dies() {
+    // `adavnce` is a typo for `advance`: not a word, and not on its way to one,
+    // so D-007's live-continuation guard cannot see it. Its first four
+    // characters do convert to valid Thai.
+    for typo in ["adavnce", "addvance", "adition"] {
+        // Horizon 1 is the D-007 one-shot commit: cemented, unrecoverable.
+        assert_ne!(
+            owned_run_screen(typo, 1),
+            typo,
+            "{typo:?} should be mangled by a one-shot commit"
+        );
+        // With a revisable window the next keystroke kills the Thai reading and
+        // the run converges on what was actually typed.
+        assert_eq!(
+            owned_run_screen(typo, policy::COMMIT_HORIZON),
+            typo,
+            "{typo:?} must be restored once the Thai reading dies"
+        );
+    }
+}
+
+#[test]
+fn the_commit_horizon_is_short_enough_to_anchor_real_thai() {
+    // Both of these leave the dictionary partway through (a loanword, a name).
+    // Anchoring hands the rest to the Thai layout; never anchoring would
+    // withdraw the whole run when viability finally dies.
+    for phrase in ["เปิดแอปไลน์หน่อย", "ผมชื่ออัฟฟานครับ"] {
+        assert_eq!(
+            owned_run_screen(&th_to_en(phrase), policy::COMMIT_HORIZON),
+            phrase,
+            "{phrase:?} must survive with the production horizon"
+        );
+        assert_ne!(
+            owned_run_screen(&th_to_en(phrase), usize::MAX),
+            phrase,
+            "{phrase:?} is the reason the horizon exists; without it the run is lost"
+        );
+    }
+}
+
+#[test]
+fn revisable_rendering_keeps_both_directions_correct() {
+    for word in ["different", "computer", "write", "walking", "immediately"] {
+        assert_eq!(owned_run_screen(word, policy::COMMIT_HORIZON), word);
+    }
+    for phrase in [
+        "สวัสดีครับ",
+        "วันนี้วันจันทร์",
+        "ประชุมตอนบ่ายสองโมง",
+    ] {
+        assert_eq!(
+            owned_run_screen(&th_to_en(phrase), policy::COMMIT_HORIZON),
+            phrase
         );
     }
 }

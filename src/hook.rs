@@ -32,6 +32,7 @@ use zeroize::Zeroize;
 
 use righttype::buffer::{Key, WordBuffer};
 use righttype::layout::auto_convert;
+use righttype::render;
 use righttype::{dict, policy, secret};
 
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
@@ -104,6 +105,7 @@ pub fn set_enabled(on: bool) {
         STATE.with(|s| {
             let mut st = s.borrow_mut();
             st.buf.clear();
+            st.owned = None;
             st.undo = None;
             st.last_completed = None;
             st.suggestion = None;
@@ -153,6 +155,8 @@ struct HookState {
     undo: Option<UndoRecord>,
     /// The layout we requested to switch to, if we are waiting for the OS to complete it.
     pending_hkl: Option<isize>,
+    /// D-008: set while we own what is on screen for the current run.
+    owned: Option<OwnedRun>,
     /// The last completed word and the boundary key code that completed it.
     /// Used for manual Shift+Backspace correction immediately after a boundary.
     last_completed: Option<LastCompleted>,
@@ -170,9 +174,29 @@ impl HookState {
             sensitive_app: false,
             undo: None,
             pending_hkl: None,
+            owned: None,
             last_completed: None,
             suggestion: None,
         }
+    }
+}
+
+/// D-008: a run whose on-screen text RightType is currently responsible for.
+///
+/// While this exists every keystroke is swallowed and the screen is moved to the
+/// run's current best reading, so a reading chosen early can still be withdrawn.
+/// It lives exactly as long as the run in [`WordBuffer`] does and is wiped at the
+/// same moments, so revisability costs no extra retention of typed text.
+struct OwnedRun {
+    /// What we have put on screen for this run.
+    rendered: String,
+    /// Consecutive keystrokes the Thai reading has survived.
+    stable: usize,
+}
+
+impl Drop for OwnedRun {
+    fn drop(&mut self) {
+        self.rendered.zeroize();
     }
 }
 
@@ -468,6 +492,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             let mut st = s.borrow_mut();
             st.pending_hkl = None;
             st.buf.clear();
+            st.owned = None;
             st.last_completed = None;
         });
     }
@@ -529,6 +554,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // when there's nothing to convert — so the key's auto-repeat can't fall
     // through to a destructive Backspace and delete the result we just injected.
     if vk == VK_BACK.0 && is_down(VK_SHIFT) && !is_down(VK_CONTROL) && !is_down(VK_MENU) {
+        // While we own the run the screen does not match the buffer, so the
+        // manual path's backspace count would be wrong. Withdraw our rendering
+        // first; the typist asked for the raw keystrokes back.
+        if withdraw_owned_run() {
+            return true;
+        }
         convert_last_word();
         return true;
     }
@@ -540,52 +571,33 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // Drive the buffer; only a boundary can return a completed word.
     let completed = STATE.with(|s| s.borrow_mut().buf.observe(key));
     let Some(mut word) = completed else {
-        // D-006 instant EN→TH: the moment an in-flight token becomes a
-        // fully-known High-confidence Thai candidate (>= MIN_LIVE_COMMIT_CHARS),
-        // correct it and switch to Thai. The typist's remaining keystrokes then
-        // produce real Thai natively — no stutter, and no fabricated spaces.
-        if let Key::Char(_) = key {
-            let pending = STATE.with(|s| s.borrow().buf.current().to_string());
-            e2e_trace(format!("live-eval {pending:?}"));
-            if pending.chars().count() >= policy::MIN_LIVE_COMMIT_CHARS
-                && policy::supported_layout_id(layout_id(foreground_layout()))
-                    == Some(policy::InputLayout::UsQwerty)
-            {
-                let d = policy::detect_token(
-                    &pending,
-                    policy::InputLayout::UsQwerty,
-                    dict::english(),
-                    dict::thai(),
-                );
-                if let Some(d) = d {
-                    let tripped = STATE.with(|s| {
-                        s.borrow_mut()
-                            .seed
-                            .observe_candidate(&pending, Some(d.corrected.as_str()))
-                    });
-                    e2e_trace(format!(
-                        "live pending={pending:?} det={:?} seed={tripped}",
-                        d.corrected.clone()
-                    ));
-                    if !tripped
-                        && mode() == Mode::Auto
-                        && policy::live_decision(
-                            Some(policy::InputLayout::UsQwerty),
-                            &pending,
-                            &d,
-                            dict::english(),
-                        ) == policy::LiveDecision::Commit
-                        && maybe_correct(&pending, None, d)
-                    {
-                        STATE.with(|s| s.borrow_mut().buf.clear());
-                        return true;
-                    }
-                }
-            }
+        // D-008 revisable rendering: reconcile the screen with the run's current
+        // best reading. Only Char and Backspace change the run.
+        if matches!(key, Key::Char(_) | Key::Backspace)
+            && mode() == Mode::Auto
+            && policy::supported_layout_id(layout_id(foreground_layout()))
+                == Some(policy::InputLayout::UsQwerty)
+            && reconcile_run()
+        {
+            return true;
         }
-        // Backspace and friends simply pass through; the buffer already shrank.
+        // Navigation and focus events move the caret away from the run, so the
+        // text we rendered is no longer ours to edit. Let go without touching it.
+        if key == Key::Reset {
+            STATE.with(|s| s.borrow_mut().owned = None);
+        }
+        // Everything else passes through; the buffer already tracked it.
         return false;
     };
+
+    // A boundary ends a run we own. Its reading has already been applied to the
+    // screen, so the boundary path must not correct it a second time — its
+    // backspace count assumes the screen still holds the raw keystrokes.
+    if STATE.with(|s| s.borrow().owned.is_some()) {
+        anchor_owned_run(&word);
+        word.zeroize();
+        return false;
+    }
 
     let active_layout = policy::supported_layout_id(layout_id(foreground_layout()));
     let mut detection = active_layout
@@ -823,11 +835,141 @@ unsafe fn convert_last_word() {
     converted.zeroize();
 }
 
+/// Put the raw keystrokes back and stop owning the run. Returns `true` if we
+/// were owning anything (and therefore handled the key).
+unsafe fn withdraw_owned_run() -> bool {
+    let Some(owned) = STATE.with(|s| s.borrow_mut().owned.take()) else {
+        return false;
+    };
+    let run = STATE.with(|s| s.borrow().buf.current().to_string());
+    let delta = render::delta(&owned.rendered, &run);
+    if !delta.is_empty() && !inject::apply(delta.backspaces, &delta.insert, None) {
+        crate::toast::show("RightType: correction injection failed");
+    }
+    true
+}
+
+/// A run we own has reached a word boundary: keep what is on screen, record it
+/// for Undo, and let the Thai layout carry the rest of the sentence.
+unsafe fn anchor_owned_run(run: &str) {
+    let Some(owned) = STATE.with(|s| s.borrow_mut().owned.take()) else {
+        return;
+    };
+    set_undo(owned.rendered.chars().count(), run);
+    crate::stats::record_auto();
+    activate_layout(policy::InputLayout::ThaiKedmanee);
+}
+
+/// Move the screen to the current run's best reading, taking ownership of the
+/// run's characters if the reading is not simply "as typed".
+///
+/// Returns `true` when the triggering key was consumed (we rendered the run
+/// ourselves and the key must not also reach the app).
+unsafe fn reconcile_run() -> bool {
+    let (run, poisoned, holding) = STATE.with(|s| {
+        let st = s.borrow();
+        (
+            st.buf.current().to_string(),
+            st.buf.is_poisoned(),
+            st.owned.is_some(),
+        )
+    });
+
+    // An over-long token is dropped unanalysed; we cannot describe the screen
+    // any more, so let go of it rather than editing text we cannot account for.
+    if poisoned {
+        if holding {
+            STATE.with(|s| s.borrow_mut().owned = None);
+        }
+        return false;
+    }
+    if !holding && run.is_empty() {
+        return false;
+    }
+
+    let mut reading = policy::live_reading(&run, holding, dict::english(), dict::thai());
+
+    // The seed-phrase stream guard outranks any reading.
+    if let policy::Reading::Thai(thai) = &reading {
+        let tripped = STATE.with(|s| {
+            s.borrow_mut()
+                .seed
+                .observe_candidate(&run, Some(thai.as_str()))
+        });
+        if tripped {
+            reading = policy::Reading::AsTyped;
+        }
+    }
+    e2e_trace(format!("reconcile run={run:?} holding={holding} -> {reading:?}"));
+
+    let target = match &reading {
+        policy::Reading::AsTyped => run.clone(),
+        policy::Reading::Thai(thai) => thai.clone(),
+    };
+
+    // What the app is showing right now. Before we own the run the current key
+    // has not reached the app yet, so the screen holds the run minus that key.
+    let on_screen = if holding {
+        STATE.with(|s| {
+            s.borrow()
+                .owned
+                .as_ref()
+                .map(|o| o.rendered.clone())
+                .unwrap_or_default()
+        })
+    } else {
+        if matches!(reading, policy::Reading::AsTyped) {
+            // Nothing to do and nothing to own: let the key through untouched.
+            return false;
+        }
+        run.chars().take(run.chars().count().saturating_sub(1)).collect()
+    };
+
+    let delta = render::delta(&on_screen, &target);
+    if !delta.is_empty() && !inject::apply(delta.backspaces, &delta.insert, None) {
+        crate::toast::show("RightType: correction injection failed");
+        STATE.with(|s| s.borrow_mut().owned = None);
+        return false;
+    }
+
+    match reading {
+        policy::Reading::AsTyped => {
+            // The reading was withdrawn: the screen again equals the keystrokes,
+            // so the app owns the run once more.
+            STATE.with(|s| s.borrow_mut().owned = None);
+        }
+        policy::Reading::Thai(_) => {
+            let anchor = STATE.with(|s| {
+                let mut st = s.borrow_mut();
+                let stable = st.owned.as_ref().map(|o| o.stable).unwrap_or(0) + 1;
+                st.owned = Some(OwnedRun {
+                    rendered: target.clone(),
+                    stable,
+                });
+                stable >= policy::COMMIT_HORIZON
+            });
+            if anchor {
+                // Stable long enough to stop second-guessing: hand the rest of
+                // the sentence to the Thai layout and release the run.
+                set_undo(target.chars().count(), &run);
+                crate::stats::record_auto();
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    st.owned = None;
+                    st.buf.clear();
+                });
+                activate_layout(policy::InputLayout::ThaiKedmanee);
+            }
+        }
+    }
+    true
+}
+
 /// Inject a completed `word` after the caller's stream and detection guards pass.
-/// `boundary_vk` is the separator that completed the word (re-emitted after the
-/// correction), or `None` for D-006 live EN→TH commits where nothing was typed
-/// beyond the token itself. Returns `true` if a correction was injected (caller
-/// swallows the triggering key), `false` otherwise.
+/// `boundary_vk` is the separator that completed the word, re-emitted after the
+/// correction. Since D-008 the in-flight path renders through
+/// [`reconcile_run`] instead, so this is the boundary path only. Returns `true`
+/// if a correction was injected (caller swallows the triggering key).
 unsafe fn maybe_correct(
     word: &str,
     boundary_vk: Option<u16>,
@@ -847,11 +989,9 @@ unsafe fn maybe_correct_with<F>(
 where
     F: FnOnce(usize, &str, Option<u16>) -> bool,
 {
-    // Deletion count depends on the trigger:
-    // - Boundary path: every token char reached the app (the separator itself
-    //   was swallowed), so delete exactly `word.len()`.
-    // - D-006 live path: the *current* char was swallowed before reaching the
-    //   app, so only `word.len() - 1` characters exist to delete.
+    // Every token character reached the app (the separator itself was
+    // swallowed), so delete exactly `word.len()`. The `None` case is kept for
+    // callers that swallowed the triggering character before it landed.
     let backspaces = word.chars().count() - usize::from(boundary_vk.is_none());
     let mut corrected = d.corrected;
     if !apply(backspaces, &corrected, boundary_vk) {
@@ -978,6 +1118,7 @@ unsafe fn sync_context() {
                 st.undo = None;
             }
             st.buf.clear();
+            st.owned = None;
             st.seed.reset();
             st.last_completed = None;
             st.suggestion = None;
@@ -1019,6 +1160,7 @@ mod tests {
             let mut state = state.borrow_mut();
             state.undo = None;
             state.pending_hkl = None;
+            state.owned = None;
         });
         let stats_before = crate::stats::snapshot();
         let detection = Detection {

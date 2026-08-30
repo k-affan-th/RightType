@@ -6,11 +6,26 @@
 
 use crate::detect::{self, Detection};
 use crate::dict::Dictionary;
+use crate::layout::en_to_th;
+use crate::secret::{self, SecretKind};
+use crate::segment;
 
 /// Shortest in-flight token the live path will consider at all. Two-character
 /// candidates are excluded because valid short words (`สว`) are frequently true
 /// prefixes of longer intended words (`สวัสดี`).
 pub const MIN_LIVE_COMMIT_CHARS: usize = 3;
+
+/// D-008: keystrokes a Thai reading must survive before the run is anchored —
+/// the layout switched, the run released, and the reading no longer revisable.
+///
+/// Measured against the bundled dictionaries. At 4, every Thai sentence in the
+/// corpus still arrives intact — including ones containing loanwords and names
+/// that leave the dictionary — while mistyped English recovers 2.3x more often
+/// than under a one-shot commit (2.36% of out-of-vocabulary typos mangled,
+/// against 5.45%). At 5 and above the window is long enough that a Thai run
+/// containing an unknown word is withdrawn wholesale instead of anchored, which
+/// loses whole sentences; at 1 the behaviour degenerates back to D-007.
+pub const COMMIT_HORIZON: usize = 4;
 
 /// Exact keyboard layouts whose physical-key tables are bundled in v1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,6 +140,69 @@ pub fn live_decision(
     LiveDecision::Commit
 }
 
+/// How an in-flight run should currently read on screen (D-008).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reading {
+    /// Leave the run exactly as the keystrokes produced it.
+    AsTyped,
+    /// Show this Thai text in place of the run.
+    Thai(String),
+}
+
+/// The best reading of an un-anchored run typed on the US layout.
+///
+/// `holding_thai` is what RightType is currently showing for this run, and it
+/// deliberately changes the question being asked:
+///
+/// * **Not holding** — the bar is a full [`LiveDecision::Commit`]: decisive
+///   evidence and no live English continuation. Starting to rewrite text is a
+///   visible act and must not be done on a maybe.
+/// * **Holding** — the bar drops to "is the Thai reading still alive"
+///   ([`segment::is_viable_prefix`]). A Thai run is invalid at almost every
+///   intermediate keystroke, so demanding a complete parse here would make the
+///   text flicker on every character. The reading is withdrawn only when Thai
+///   genuinely dies, or when the raw keystrokes have become an English word.
+///
+/// The asymmetry is the point: entering the Thai reading is hard, staying in it
+/// is easy, and leaving it is cheap and automatic. That is what lets a run be
+/// re-decided instead of committed.
+pub fn live_reading(
+    run: &str,
+    holding_thai: bool,
+    en: &Dictionary,
+    th: &Dictionary,
+) -> Reading {
+    if run.is_empty() {
+        return Reading::AsTyped;
+    }
+    if !holding_thai {
+        let Some(d) = detect_token(run, InputLayout::UsQwerty, en, th) else {
+            return Reading::AsTyped;
+        };
+        return match live_decision(Some(InputLayout::UsQwerty), run, &d, en) {
+            LiveDecision::Commit => Reading::Thai(d.corrected),
+            LiveDecision::Ambiguous | LiveDecision::None => Reading::AsTyped,
+        };
+    }
+
+    // Already showing Thai. Withdraw only on real evidence against it.
+    if en.contains(run) {
+        return Reading::AsTyped;
+    }
+    if matches!(
+        secret::classify_token(run),
+        Some(SecretKind::Hex | SecretKind::Base58Wif | SecretKind::Bech32 | SecretKind::ExtendedKey)
+    ) {
+        return Reading::AsTyped;
+    }
+    let converted = en_to_th(run);
+    if segment::is_viable_prefix(&converted, th) {
+        Reading::Thai(converted)
+    } else {
+        Reading::AsTyped
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,6 +280,38 @@ mod tests {
             live_decision(Some(InputLayout::ThaiKedmanee), "แนพพำแะ", &to_en, &en),
             LiveDecision::None
         );
+    }
+
+    #[test]
+    fn a_fresh_run_needs_a_full_commit_to_start_reading_as_thai() {
+        let (en, th) = dicts();
+        assert_eq!(
+            live_reading("l;ylfu", false, &en, &th),
+            Reading::Thai("สวัสดี".to_string())
+        );
+        // `wri` is on its way to an English word: Ambiguous, so AsTyped.
+        let en_full = crate::dict::english();
+        let th_full = crate::dict::thai();
+        assert_eq!(live_reading("wri", false, en_full, th_full), Reading::AsTyped);
+    }
+
+    #[test]
+    fn a_held_thai_reading_survives_mid_word_keystrokes() {
+        let en = crate::dict::english();
+        let th = crate::dict::thai();
+        // `l;ylfud` is `สวัสดีก` — not a phrase, but still going somewhere.
+        assert!(matches!(
+            live_reading("l;ylfud", true, en, th),
+            Reading::Thai(_)
+        ));
+    }
+
+    #[test]
+    fn a_held_thai_reading_is_withdrawn_when_thai_dies() {
+        let en = Dictionary::from_words(["adavnce"]);
+        let th = Dictionary::from_words(["สวัสดี"]);
+        // Nothing in this Thai dictionary can continue the run.
+        assert_eq!(live_reading("zzqq", true, &en, &th), Reading::AsTyped);
     }
 
     #[test]

@@ -126,6 +126,13 @@ impl WordBuffer {
         }
     }
 
+    /// Did the current token exceed the cap (so [`current`](Self::current)
+    /// reports empty even though the typist is mid-token)? Callers that own
+    /// on-screen text must not mistake a poisoned token for an erased one.
+    pub fn is_poisoned(&self) -> bool {
+        self.poisoned
+    }
+
     /// Discard the current word and wipe its storage. Idempotent.
     pub fn clear(&mut self) {
         self.buf.zeroize();
@@ -267,6 +274,18 @@ mod tests {
         // And the buffer is clean and usable again afterwards.
         type_chars(&mut b, "ok");
         assert_eq!(b.observe(Key::Boundary), Some("ok".to_string()));
+    }
+
+    #[test]
+    fn poisoning_is_visible_to_callers() {
+        let mut b = WordBuffer::with_cap(4);
+        type_chars(&mut b, "abcd");
+        assert!(!b.is_poisoned());
+        type_chars(&mut b, "e");
+        assert!(b.is_poisoned());
+        assert_eq!(b.current(), "");
+        b.observe(Key::Boundary);
+        assert!(!b.is_poisoned());
     }
 
     #[test]
