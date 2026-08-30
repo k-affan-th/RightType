@@ -7,6 +7,11 @@
 use crate::detect::{self, Detection};
 use crate::dict::Dictionary;
 
+/// Shortest in-flight token the live path will consider at all. Two-character
+/// candidates are excluded because valid short words (`สว`) are frequently true
+/// prefixes of longer intended words (`สวัสดี`).
+pub const MIN_LIVE_COMMIT_CHARS: usize = 3;
+
 /// Exact keyboard layouts whose physical-key tables are bundled in v1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputLayout {
@@ -62,6 +67,24 @@ pub fn allows_learning(layout: Option<InputLayout>, correction_proposed: bool) -
     layout == Some(InputLayout::UsQwerty) && !correction_proposed
 }
 
+/// What the live (D-006) path may do with a token that is still being typed.
+///
+/// D-004 made destructive live-prefix conversion conditional on exactly this
+/// three-state machine existing; before it the live path had only "convert" and
+/// "do nothing", so a token that merely *looked* finished was converted as if
+/// it were finished.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiveDecision {
+    /// No candidate — leave the token alone.
+    None,
+    /// A candidate exists, but the token can still grow into a different valid
+    /// reading, so converting now would destroy text the typist is still in the
+    /// middle of producing. Hold non-destructively and re-decide on the next key.
+    Ambiguous,
+    /// Evidence is decisive and no live alternative remains: safe to convert.
+    Commit,
+}
+
 /// D-006: EN→TH commits without waiting for whitespace.
 ///
 /// Thai prose has no inter-word spaces, so a whitespace trigger would never
@@ -70,10 +93,36 @@ pub fn allows_learning(layout: Option<InputLayout>, correction_proposed: bool) -
 /// conversion is a fully-known High-confidence Thai candidate. TH→EN keeps the
 /// whitespace contract — English really is space-delimited — and Suggest/
 /// Manual paths are unchanged.
-pub fn allows_live_thai_commit(layout: Option<InputLayout>, d: &detect::Detection) -> bool {
-    layout == Some(InputLayout::UsQwerty)
-        && d.confidence == detect::Confidence::High
-        && !d.corrected.chars().any(|c| c.is_ascii_whitespace())
+///
+/// **The live path evaluates prefixes, so the completed-word guards in
+/// [`detect`] do not protect it.** `detect` refuses to convert a token that is
+/// already an English word, but `diffe` — on the way to `different` — is not a
+/// word, so that guard is silent exactly where it is needed. The invariant
+/// enforced here is therefore about the token's *future*, not its present:
+/// never convert destructively while the token can still grow into a valid
+/// reading in the language it is already written in.
+pub fn live_decision(
+    layout: Option<InputLayout>,
+    token: &str,
+    d: &Detection,
+    en: &Dictionary,
+) -> LiveDecision {
+    if layout != Some(InputLayout::UsQwerty)
+        || d.confidence != detect::Confidence::High
+        || token.chars().count() < MIN_LIVE_COMMIT_CHARS
+        || d.corrected.chars().any(|c| c.is_ascii_whitespace())
+    {
+        return LiveDecision::None;
+    }
+    // The token is still on its way to an English word, so the Thai reading is
+    // one of at least two live readings. Hold: the next keystroke either kills
+    // the English continuation (and this becomes a Commit) or completes an
+    // English word (which `detect` then refuses outright). Either way the
+    // typist's text survives, which a destructive commit here would not.
+    if en.has_extension(token) {
+        return LiveDecision::Ambiguous;
+    }
+    LiveDecision::Commit
 }
 
 #[cfg(test)]
@@ -138,17 +187,30 @@ mod tests {
     fn live_thai_commit_only_on_us_layout_high_confidence() {
         let (en, th) = dicts();
         let d = detect_token("l;ylfu", InputLayout::UsQwerty, &en, &th).unwrap();
-        assert!(allows_live_thai_commit(Some(InputLayout::UsQwerty), &d));
-        assert!(!allows_live_thai_commit(
-            Some(InputLayout::ThaiKedmanee),
-            &d
-        ));
-        assert!(!allows_live_thai_commit(None, &d));
+        assert_eq!(
+            live_decision(Some(InputLayout::UsQwerty), "l;ylfu", &d, &en),
+            LiveDecision::Commit
+        );
+        assert_eq!(
+            live_decision(Some(InputLayout::ThaiKedmanee), "l;ylfu", &d, &en),
+            LiveDecision::None
+        );
+        assert_eq!(live_decision(None, "l;ylfu", &d, &en), LiveDecision::None);
 
         let to_en = detect_token("แนพพำแะ", InputLayout::ThaiKedmanee, &en, &th).unwrap();
-        assert!(!allows_live_thai_commit(
-            Some(InputLayout::ThaiKedmanee),
-            &to_en
-        ));
+        assert_eq!(
+            live_decision(Some(InputLayout::ThaiKedmanee), "แนพพำแะ", &to_en, &en),
+            LiveDecision::None
+        );
+    }
+
+    #[test]
+    fn live_commit_needs_min_length() {
+        let (en, th) = dicts();
+        let d = detect_token("l;ylfu", InputLayout::UsQwerty, &en, &th).unwrap();
+        assert_eq!(
+            live_decision(Some(InputLayout::UsQwerty), "l;", &d, &en),
+            LiveDecision::None
+        );
     }
 }

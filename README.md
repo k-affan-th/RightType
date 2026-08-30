@@ -42,7 +42,9 @@ with a hotkey:
 - **EN → TH (instant)**: the moment your in-flight keystrokes form a known Thai
   word with high confidence, RightType fixes it **and switches to Thai** — your
   remaining keystrokes finish the word natively. No spaces required, none
-  inserted: Thai doesn't work that way.
+  inserted: Thai doesn't work that way. It **holds** while the same keystrokes
+  could still become an English word (`diffe` is on its way to `different`), so
+  ordinary English typing is never converted mid-word.
 - **TH → EN (at whitespace)**: English *is* space-delimited, so the token
   commits when you hit space.
 - Ambiguous prefixes (a short valid word that begins a longer one) resolve in
@@ -60,6 +62,13 @@ hotkeys, and per-app mode profiles are tracked for v1.x.
 
 Short, genuinely ambiguous words (e.g. `ok` vs Thai `นา`, which share keys) are left for
 you to fix manually — no tool can resolve those without guessing.
+
+The same limit applies to words RightType has never seen: a **typo or a name**
+that is not in the English dictionary cannot be recognised as an unfinished
+English word, so Auto mode can still convert one by mistake. `Shift`+`Backspace`
+and Undo cover it. Making that case impossible needs revisable rendering rather
+than a better gate — tracked as D-008 in
+[`docs/DYNAMIC_PLAN.md`](docs/DYNAMIC_PLAN.md).
 
 ## Privacy & security (built for sensitive typing)
 

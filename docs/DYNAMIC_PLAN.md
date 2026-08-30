@@ -139,6 +139,48 @@
 
 ---
 
+### [x] D-007 — Live commit ต้องผ่าน state machine ก่อน (`ACCEPTED`)
+
+**Conflict:** D-006 เปิด live EN→TH commit โดยยังไม่มีเงื่อนไข 2 ข้อที่ D-004 กำหนดไว้ คือ candidate/ambiguous/committed state machine และ false-positive budget ที่วัดจริง ผลคือ live path ประเมิน *prefix* แต่ด่านกันใน `detect` (`en.contains`) ป้องกันได้เฉพาะ *คำเต็ม* จึงเงียบพอดีตรงจุดที่ต้องใช้
+
+**Measured (2026-08-31, bundled dictionaries):**
+
+- คำอังกฤษใน dictionary ถูกแปลงทิ้งกลางคำ 5,861 / 85,191 (6.88%); ใน 3,000 คำที่ใช้บ่อยที่สุด 143 / 2,693 (5.31%)
+- 94% ของ false positive มาจาก `Evidence::FullSegmentation` ไม่ใช่ exact dictionary
+- ตัวอย่างที่ผู้ใช้เห็นจริง: `different` → `กรดดำrent`, `write` → `ไพรte`, `computer` → `แนทยีter`
+
+**Accepted contract:**
+
+- `policy::live_decision` คืน `None` / `Ambiguous` / `Commit` ตาม state machine ที่ D-004 เรียกร้อง
+- **Invariant:** ห้าม commit แบบทำลายข้อความ ขณะที่ token ยังโตต่อเป็นคำที่ถูกต้องในภาษาที่มันเขียนอยู่ได้ (`Dictionary::has_extension`)
+- TH→EN boundary contract จาก D-006 ไม่เปลี่ยน; Thai ignition วัดได้ 2,672/2,674 (99.9%) เท่าเดิม
+- Latency ของ live decision วัดได้ 2.2 µs/call (budget 1 ms); prefix index สร้างแบบ lazy จึงมีเฉพาะ English dictionary
+- **Known residual:** token นอก dictionary (คำพิมพ์ผิด/ชื่อเฉพาะ) ยังถูกแปลงผิดได้ 5.45% (ก่อนแก้ 8.81%) — ปิดด้วย gate ไม่ได้ ต้องใช้ revisable rendering ตาม D-008
+
+**Decision owner:** product owner, 2026-08-31
+
+**Downstream:** S1 work items, README Auto copy, D-008
+
+### [ ] D-008 — Revisable rendering แทน one-shot commit (`PROPOSED`)
+
+**Conflict:** D-007 ปิด false positive ของคำที่อยู่ใน dictionary ได้หมด แต่ token นอก dictionary ยังเหลือ 5.45% เพราะ gate ที่ดีแค่ไหนก็ตัดสินจากหลักฐานที่ยังไม่ครบ
+
+**Proposal:** เปลี่ยน invariant จากกฎการตัดสินใจ เป็น invariant ของการเรนเดอร์ — “ข้อความบนจอต้องเท่ากับ best_interpretation(keystrokes ตั้งแต่ anchor ล่าสุด) เสมอ” ทุกคีย์คำนวณใหม่ diff กับจอ แล้วแก้เฉพาะส่วนต่าง มี commit horizon ไว้ freeze; การสลับ layout ลดบทบาทเหลือแค่ optimization ตอน committed ไม่ใช่กลไกความถูกต้อง (ปิด race ของ `PostMessageW` ใน `activate_layout` ไปด้วย)
+
+**Open questions ที่ต้องปิดก่อน accept:**
+
+1. ขัดกับ privacy requirement — decoder ที่ revise ได้ต้องเก็บ keystroke history ยาวกว่า “current word, zeroize ทุก boundary” ต้อง re-derive threat model ไม่ใช่แค่ปรับตัวเลข
+2. ยังไม่มี corpus ความถี่ของคำไทย (`th_words.txt` เรียงตามตัวอักษร ไม่มีน้ำหนัก) ซึ่งจำเป็นสำหรับ likelihood ratio; `en_words.txt` เรียงตามความถี่อยู่แล้ว
+3. backspace ที่ถี่ขึ้นเสี่ยงกับ Word autocorrect / browser autofill — ต้องมี E2E budget ก่อน
+4. ต้องบังคับ converge ก่อน Enter / ก่อนส่งข้อความ
+5. `detect::Confidence` มี variant เดียว และ `dict` เป็น boolean membership — ต้องมีคะแนนแบบไล่ระดับก่อน ambiguous จึงจะมีความหมายจริง
+
+**Decision owner:** รอ product owner
+
+**Downstream:** S1 detection, S4 threat model, S5 E2E matrix
+
+---
+
 ## S0 — Lock the product contract
 
 **Status:** `[x] VERIFIED`
@@ -195,9 +237,9 @@ Auto conversion จะ commit เฉพาะ candidate ที่ผ่าน la
 ### Work items
 
 - [x] รวม production detection policy ให้มี entry point เดียว; sequence tests เรียก production policy โดยตรง
-- [x] D-006 instant EN→TH live commit + layout switch; TH→EN boundary-only; prefix trade-off documented (≥3 chars gate)
+- [x] D-006 instant EN→TH live commit + layout switch; TH→EN boundary-only (ถูกจำกัดเพิ่มโดย D-007)
 - [x] ระบุ evidence ที่ production ใช้จริงเป็น exact dictionary หรือ full segmentation; punctuation/mixed-script ถูก gate ก่อน commit
-- [x] ใช้ boundary-only policy ตาม D-004 ทั้งสองทิศทาง; ไม่มี destructive live-prefix conversion
+- [x] D-007 candidate/ambiguous/committed state machine ตามที่ D-004 กำหนด (`policy::live_decision`); live path ห้าม commit ขณะ token ยังโตต่อเป็นคำอังกฤษได้ — residual นอก dictionary เปิดเป็น D-008
 - [x] รักษา DP segmentation และเพิ่ม ambiguous/backtracking regression corpus
 - [x] รองรับ digits, shifted symbols, punctuation wrappers และ long Thai runs ตาม contract
 - [x] เพิ่ม false-positive corpus ครอบคลุม English prefixes/prose, URLs/emails, code, commands, paths, secrets และ mixed scripts
