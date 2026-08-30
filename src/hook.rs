@@ -379,14 +379,6 @@ pub(crate) fn e2e_trace(msg: String) {
 #[cfg(not(debug_assertions))]
 pub(crate) fn e2e_trace(_: String) {}
 
-/// D-006 instant EN→TH commit gate data: minimum token length before an
-/// in-flight commit may fire. Two-character candidates are excluded because
-/// valid short words (`สว`) are frequently true prefixes of longer intended
-/// words (`สวัสดี`); from three characters up, a fully-known High-confidence
-/// candidate plus the layout switch that follows lets the typist finish the
-/// word natively without stutter.
-pub const MIN_LIVE_COMMIT_CHARS: usize = 3;
-
 fn is_modifier(vk: u16) -> bool {
     matches!(
         vk,
@@ -555,7 +547,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         if let Key::Char(_) = key {
             let pending = STATE.with(|s| s.borrow().buf.current().to_string());
             e2e_trace(format!("live-eval {pending:?}"));
-            if pending.chars().count() >= MIN_LIVE_COMMIT_CHARS
+            if pending.chars().count() >= policy::MIN_LIVE_COMMIT_CHARS
                 && policy::supported_layout_id(layout_id(foreground_layout()))
                     == Some(policy::InputLayout::UsQwerty)
             {
@@ -577,7 +569,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                     ));
                     if !tripped
                         && mode() == Mode::Auto
-                        && policy::allows_live_thai_commit(Some(policy::InputLayout::UsQwerty), &d)
+                        && policy::live_decision(
+                            Some(policy::InputLayout::UsQwerty),
+                            &pending,
+                            &d,
+                            dict::english(),
+                        ) == policy::LiveDecision::Commit
                         && maybe_correct(&pending, None, d)
                     {
                         STATE.with(|s| s.borrow_mut().buf.clear());

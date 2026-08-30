@@ -400,3 +400,121 @@ fn test_thai_on_english_layout_with_symbols() {
         assert_eq!(det.corrected, expected);
     }
 }
+
+// ---------------------------------------------------------------------------
+// D-006 live path: the blind-typist contract.
+//
+// Auto mode exists so a typist never has to look at the screen or switch
+// language. That promise is symmetric, and both halves are asserted here:
+// Thai typed on the English layout must come out as the intended Thai, and
+// English typed on the English layout must come out completely untouched.
+// ---------------------------------------------------------------------------
+
+/// Replay the production D-006 live decision for one in-flight token, in the
+/// same order `hook.rs` does it: length gate, production detection policy,
+/// live decision.
+fn live_decision_for(pending: &str) -> policy::LiveDecision {
+    if pending.chars().count() < policy::MIN_LIVE_COMMIT_CHARS {
+        return policy::LiveDecision::None;
+    }
+    let en = dict::english();
+    let th = dict::thai();
+    match policy::detect_token(pending, InputLayout::UsQwerty, en, th) {
+        Some(d) => policy::live_decision(Some(InputLayout::UsQwerty), pending, &d, en),
+        None => policy::LiveDecision::None,
+    }
+}
+
+/// What ends up on screen when `keys` are typed in Auto mode while the US
+/// layout is active and nobody is watching. The first live commit replaces the
+/// in-flight token and switches the layout to Thai, so every keystroke after it
+/// produces Thai natively.
+fn auto_mode_screen(keys: &str) -> String {
+    let mut screen = String::new();
+    let mut buf = String::new();
+    let mut switched_to_thai = false;
+
+    for k in keys.chars() {
+        if switched_to_thai {
+            screen.push_str(&en_to_th(&k.to_string()));
+            continue;
+        }
+        screen.push(k);
+        buf.push(k);
+        if live_decision_for(&buf) == policy::LiveDecision::Commit {
+            let corrected = policy::detect_token(&buf, InputLayout::UsQwerty, dict::english(), dict::thai())
+                .expect("a Commit decision implies a detection")
+                .corrected;
+            for _ in 0..buf.chars().count() {
+                screen.pop();
+            }
+            screen.push_str(&corrected);
+            buf.clear();
+            switched_to_thai = true;
+        }
+    }
+    screen
+}
+
+#[test]
+fn english_typed_on_the_english_layout_is_never_eaten_mid_word() {
+    // Every one of these is an ordinary English word whose *prefix* converts to
+    // valid Thai. The completed-word guard in `detect` cannot see them, because
+    // a prefix is not a word.
+    for word in [
+        "different",
+        "order",
+        "women",
+        "computer",
+        "difficult",
+        "write",
+        "walking",
+        "immediately",
+        "mistake",
+        "during",
+        "middle",
+        "street",
+        "strong",
+        "decision",
+        "murder",
+        "giving",
+        "moving",
+        "suddenly",
+    ] {
+        assert_eq!(
+            auto_mode_screen(word),
+            word,
+            "typing {word:?} on the English layout must leave it untouched"
+        );
+    }
+}
+
+#[test]
+fn a_token_that_can_still_grow_into_english_is_held_not_committed() {
+    // `diffe` -> `different`, `wri` -> `write`: a live English continuation
+    // exists, so the only non-destructive answer is Ambiguous.
+    assert_eq!(live_decision_for("diffe"), policy::LiveDecision::Ambiguous);
+    assert_eq!(live_decision_for("wri"), policy::LiveDecision::Ambiguous);
+    assert_eq!(live_decision_for("orde"), policy::LiveDecision::Ambiguous);
+}
+
+#[test]
+fn thai_typed_on_the_english_layout_still_arrives_intact() {
+    // The other half of the contract: holding ambiguous tokens must not cost
+    // the Thai direction the thing D-006 was introduced for.
+    for phrase in [
+        "สวัสดีครับ",
+        "วันนี้วันจันทร์",
+        "ผมชอบกินข้าวผัด",
+        "ขอบคุณมากครับ",
+        "เดี๋ยวโทรกลับนะ",
+        "ส่งไฟล์มาให้หน่อย",
+        "กินข้าวยัง",
+    ] {
+        assert_eq!(
+            auto_mode_screen(&th_to_en(phrase)),
+            phrase,
+            "Thai typed on the English layout must still be recovered"
+        );
+    }
+}
