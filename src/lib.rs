@@ -14,11 +14,13 @@
 //! - [`detect`] — layout-mismatch detection over completed words.
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
 //! - [`segment`] — Thai word segmentation (maximal matching) for space-less Thai.
+//! - [`render`] — reconciling on-screen text with the run's current best reading.
 
 pub mod buffer;
 pub mod detect;
 pub mod dict;
 pub mod layout;
 pub mod policy;
+pub mod render;
 pub mod secret;
 pub mod segment;

@@ -99,6 +99,54 @@ pub fn is_fully_known(text: &str, dict: &Dictionary) -> bool {
     reachable[chars.len()]
 }
 
+/// Could `text` still become a complete run of Thai words if more characters
+/// arrive?
+///
+/// [`is_fully_known`] answers "is this run finished and valid", which is the
+/// right question at a word boundary and the wrong one mid-word: Thai is written
+/// without spaces, so a run that is genuinely Thai is *invalid* at almost every
+/// intermediate keystroke. Asking only `is_fully_known` while a Thai run grows
+/// would make the reading flicker in and out on every character.
+///
+/// This asks the weaker question the live path actually needs: is some split of
+/// `text` into known words still alive, either because it already partitions
+/// completely, or because the leftover tail is itself the beginning of a real
+/// word. `สวัสดีก` is not a Thai phrase, but `ก` starts thousands of Thai
+/// words, so the Thai reading is still viable and must be held.
+pub fn is_viable_prefix(text: &str, dict: &Dictionary) -> bool {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.is_empty() {
+        return false;
+    }
+
+    let mut reachable = vec![false; chars.len() + 1];
+    reachable[0] = true;
+    for start in 0..chars.len() {
+        if !reachable[start] {
+            continue;
+        }
+        let end = (start + MAX_WORD_CHARS).min(chars.len());
+        for next in (start + MIN_WORD_CHARS)..=end {
+            let candidate: String = chars[start..next].iter().collect();
+            if dict.contains(&candidate) {
+                reachable[next] = true;
+            }
+        }
+    }
+    if reachable[chars.len()] {
+        return true;
+    }
+
+    // No complete split, but an unfinished one may still be on its way.
+    (0..chars.len()).any(|start| {
+        if !reachable[start] {
+            return false;
+        }
+        let tail: String = chars[start..].iter().collect();
+        tail.chars().count() <= MAX_WORD_CHARS && dict.has_extension(&tail)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,6 +206,28 @@ mod tests {
         // "มี" + "เทนนิส" is a complete valid split.
         assert!(!segment("มีเทนนิส", &d).iter().all(|s| s.known));
         assert!(is_fully_known("มีเทนนิส", &d));
+    }
+
+    #[test]
+    fn viable_prefix_holds_a_thai_run_together_mid_word() {
+        let d = crate::dict::thai();
+        // Finished and valid.
+        assert!(is_viable_prefix("สวัสดี", d));
+        // Mid-word: not a complete phrase, but `ค` begins real words.
+        assert!(is_viable_prefix("สวัสดีค", d));
+        assert!(is_viable_prefix("สวัสดีคร", d));
+        assert!(is_viable_prefix("สวัสดีครับ", d));
+        // Even the first characters of a word are viable.
+        assert!(is_viable_prefix("สวั", d));
+        assert!(!is_viable_prefix("", d));
+    }
+
+    #[test]
+    fn viable_prefix_dies_on_a_run_that_cannot_continue() {
+        let d = Dictionary::from_words(["สวัสดี", "ครับ"]);
+        // Nothing in this dictionary starts with `ข`, and no split reaches it.
+        assert!(!is_viable_prefix("สวัสดีข", &d));
+        assert!(!is_viable_prefix("ขขข", &d));
     }
 
     #[test]

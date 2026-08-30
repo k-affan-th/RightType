@@ -44,7 +44,9 @@ with a hotkey:
   remaining keystrokes finish the word natively. No spaces required, none
   inserted: Thai doesn't work that way. It **holds** while the same keystrokes
   could still become an English word (`diffe` is on its way to `different`), so
-  ordinary English typing is never converted mid-word.
+  ordinary English typing is never converted mid-word — and for a few keystrokes
+  after a conversion it keeps watching, putting the letters back by itself if the
+  run turns out not to be Thai after all.
 - **TH → EN (at whitespace)**: English *is* space-delimited, so the token
   commits when you hit space.
 - Ambiguous prefixes (a short valid word that begins a longer one) resolve in
@@ -63,12 +65,13 @@ hotkeys, and per-app mode profiles are tracked for v1.x.
 Short, genuinely ambiguous words (e.g. `ok` vs Thai `นา`, which share keys) are left for
 you to fix manually — no tool can resolve those without guessing.
 
-The same limit applies to words RightType has never seen: a **typo or a name**
+The same limit applies to words RightType has never seen. A **typo or a name**
 that is not in the English dictionary cannot be recognised as an unfinished
-English word, so Auto mode can still convert one by mistake. `Shift`+`Backspace`
-and Undo cover it. Making that case impossible needs revisable rendering rather
-than a better gate — tracked as D-008 in
-[`docs/DYNAMIC_PLAN.md`](docs/DYNAMIC_PLAN.md).
+English word, so Auto mode may start converting one — but that decision stays
+under review for the next few keystrokes and undoes itself as soon as the Thai
+reading stops making sense. What survives is the narrow case where a mistyped
+word's *entire* conversion keeps reading as valid Thai; `Shift`+`Backspace` and
+Undo cover it.
 
 ## Privacy & security (built for sensitive typing)
 

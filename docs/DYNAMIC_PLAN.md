@@ -161,21 +161,37 @@
 
 **Downstream:** S1 work items, README Auto copy, D-008
 
-### [ ] D-008 — Revisable rendering แทน one-shot commit (`PROPOSED`)
+### [x] D-008 — Revisable rendering แทน one-shot commit (`ACCEPTED`)
 
 **Conflict:** D-007 ปิด false positive ของคำที่อยู่ใน dictionary ได้หมด แต่ token นอก dictionary ยังเหลือ 5.45% เพราะ gate ที่ดีแค่ไหนก็ตัดสินจากหลักฐานที่ยังไม่ครบ
 
-**Proposal:** เปลี่ยน invariant จากกฎการตัดสินใจ เป็น invariant ของการเรนเดอร์ — “ข้อความบนจอต้องเท่ากับ best_interpretation(keystrokes ตั้งแต่ anchor ล่าสุด) เสมอ” ทุกคีย์คำนวณใหม่ diff กับจอ แล้วแก้เฉพาะส่วนต่าง มี commit horizon ไว้ freeze; การสลับ layout ลดบทบาทเหลือแค่ optimization ตอน committed ไม่ใช่กลไกความถูกต้อง (ปิด race ของ `PostMessageW` ใน `activate_layout` ไปด้วย)
+**Accepted contract:**
 
-**Open questions ที่ต้องปิดก่อน accept:**
+- Invariant เปลี่ยนจากกฎการตัดสินใจ เป็น invariant ของการเรนเดอร์: ขณะที่ run ยังไม่ anchor ข้อความบนจอต้องเท่ากับ `policy::live_reading` ของ run นั้นเสมอ (`hook::reconcile_run` + `render::delta`)
+- **Hysteresis แบบไม่สมมาตร:** การเข้าสู่การอ่านแบบไทยต้องผ่าน `LiveDecision::Commit` เต็ม แต่การ *อยู่ต่อ* ใช้แค่ `segment::is_viable_prefix` — ไทยไม่มีช่องว่าง run จึง invalid เกือบทุกคีย์ ถ้าเรียกร้อง full parse ทุกคีย์ข้อความจะกระพริบ
+- Anchor ที่ `policy::COMMIT_HORIZON` = 4 คีย์ แล้วสลับ layout ปล่อย run
+- **Privacy:** หน้าต่างที่ revise ได้คือ run ใน `WordBuffer` ที่มีอยู่แล้ว (≤ 64 ตัว, zeroize ทุก boundary); `OwnedRun.rendered` zeroize ตอน drop — ไม่มีการเก็บ typed content เพิ่มจากเดิม (ปิด open question ข้อ 1)
+- Ownership ถูกปล่อยที่: whitespace boundary, `Key::Reset` (ลูกศร/คลิก/Ctrl chord), focus หรือ layout เปลี่ยน, Shift+Backspace, buffer poison และ master disable
 
-1. ขัดกับ privacy requirement — decoder ที่ revise ได้ต้องเก็บ keystroke history ยาวกว่า “current word, zeroize ทุก boundary” ต้อง re-derive threat model ไม่ใช่แค่ปรับตัวเลข
-2. ยังไม่มี corpus ความถี่ของคำไทย (`th_words.txt` เรียงตามตัวอักษร ไม่มีน้ำหนัก) ซึ่งจำเป็นสำหรับ likelihood ratio; `en_words.txt` เรียงตามความถี่อยู่แล้ว
-3. backspace ที่ถี่ขึ้นเสี่ยงกับ Word autocorrect / browser autofill — ต้องมี E2E budget ก่อน
-4. ต้องบังคับ converge ก่อน Enter / ก่อนส่งข้อความ
-5. `detect::Confidence` มี variant เดียว และ `dict` เป็น boolean membership — ต้องมีคะแนนแบบไล่ระดับก่อน ambiguous จึงจะมีความหมายจริง
+**Measured (2026-08-31, bundled dictionaries):**
 
-**Decision owner:** รอ product owner
+| | pre-D-007 | D-007 | D-008 |
+| --- | --- | --- | --- |
+| typo นอก dictionary ถูกแปลงผิด | 8.81% | 5.45% | **2.36%** |
+| คำอังกฤษใน dictionary ถูกแปลงผิด | 6.88% | 0 | **0** |
+| ประโยคไทย corpus | 10/10 | 10/10 | **10/10** |
+
+- backspace ต่อประโยคไทยหนึ่งประโยค: 2–5 ตัว, reversal 0
+- 14.5 µs ต่อคีย์ (budget 1 ms)
+- Horizon sweep: H=1 → typo 5.45% (เท่า D-007); H=4 → 2.36% ไทย 10/10; H≥5 → ไทย 8/10 เพราะ run ที่มีคำนอก dictionary ถูกถอนทั้งก้อนแทนที่จะ anchor
+
+**ยังเปิดอยู่ (blocker ก่อน release):**
+
+1. **Windows E2E** — ownership seams (boundary, Reset, Shift+Backspace, poison, injection ล้มเหลว) พิสูจน์ด้วย unit test ไม่ได้ ต้องมีหลักฐานจริงบน Notepad/Word/Chrome
+2. **Residual 2.36%** — ต้องใช้คะแนนแบบไล่ระดับ (`detect::Confidence` มี variant เดียว, `dict` เป็น boolean membership, `th_words.txt` ไม่มีน้ำหนักความถี่) — เสนอเป็น D-009
+3. **Layout-switch race** — `activate_layout` ยังใช้ `PostMessageW` ตอน anchor หน้าต่างนั้นยังเล็กลงแต่ไม่หาย
+
+**Decision owner:** product owner, 2026-08-31
 
 **Downstream:** S1 detection, S4 threat model, S5 E2E matrix
 
@@ -239,6 +255,7 @@ Auto conversion จะ commit เฉพาะ candidate ที่ผ่าน la
 - [x] รวม production detection policy ให้มี entry point เดียว; sequence tests เรียก production policy โดยตรง
 - [x] D-006 instant EN→TH live commit + layout switch; TH→EN boundary-only (ถูกจำกัดเพิ่มโดย D-007)
 - [x] ระบุ evidence ที่ production ใช้จริงเป็น exact dictionary หรือ full segmentation; punctuation/mixed-script ถูก gate ก่อน commit
+- [x] D-008 revisable rendering: จอต้องตรงกับ `live_reading` ของ run เสมอ (`reconcile_run` + `render::delta`), anchor ที่ `COMMIT_HORIZON`; Windows E2E ของ ownership seams ยังเปิด
 - [x] D-007 candidate/ambiguous/committed state machine ตามที่ D-004 กำหนด (`policy::live_decision`); live path ห้าม commit ขณะ token ยังโตต่อเป็นคำอังกฤษได้ — residual นอก dictionary เปิดเป็น D-008
 - [x] รักษา DP segmentation และเพิ่ม ambiguous/backtracking regression corpus
 - [x] รองรับ digits, shifted symbols, punctuation wrappers และ long Thai runs ตาม contract
