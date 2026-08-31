@@ -561,6 +561,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         }
         if shift {
             // Shift+CapsLock: convert the current selection. Swallow.
+            e2e_trace("convert-selection-hotkey received".to_string());
             manual::request_convert_selection(
                 GetForegroundWindow().0 as isize,
                 crate::focus::generation(),
