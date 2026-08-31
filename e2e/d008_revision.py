@@ -291,6 +291,15 @@ CASES = [
     ("typo-revised-back", "adavnce", "adavnce", True),
     ("thai-rendered-live", "l;ylfu", "สวัสดี", True),
     ("boundary-while-owned", "l;ylfu ", "สวัสดี ", True),
+    # Combining marks are the one place a character-wise diff could reorder
+    # text: `render::delta` compares chars, and Thai stacks a vowel and a tone
+    # on the same consonant. Both of these carry a shifted key mid-run too.
+    ("thai-combining-marks", "gfuJp;", "เดี๋ยว", True),
+    # `muj` alone is held, not converted: five English words start with it,
+    # so D-007 refuses to destroy a token that could still become one. The
+    # longer run leaves that prefix behind and commits.
+    ("english-prefix-holds-thai", "muj", "muj", True),
+    ("thai-stacked-tone", "mujouj", "ที่นี่", True),
 ]
 
 
