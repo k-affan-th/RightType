@@ -136,7 +136,9 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     }
 
     let Some(original) = clipboard::snapshot_plain_text() else {
-        crate::hook::e2e_trace("selection: selection conversion needs a plain-text clipboard".to_string());
+        crate::hook::e2e_trace(
+            "selection: selection conversion needs a plain-text clipboard".to_string(),
+        );
         toast::show("RightType: selection conversion needs a plain-text clipboard");
         return;
     };
