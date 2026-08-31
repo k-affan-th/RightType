@@ -218,6 +218,95 @@ def main():
             and clip_back == "rt-sentinel",
         })
 
+        # --- clipboard: empty and locked (checklist 3.3) ------------------
+        # An empty clipboard is the documented happy path: RightType snapshots
+        # it as Empty and must clear it again afterwards rather than leaving
+        # the copied selection behind.
+        win.set_focus()
+        time.sleep(0.3)
+        subprocess.run(["cmd", "/c", "type nul | clip"], capture_output=True)
+        time.sleep(0.6)
+        before_empty = read_word_text(app)
+        win.type_keys("+{LEFT 3}", pause=0.05)
+        time.sleep(0.4)
+        win.type_keys("+{CAPSLOCK}", pause=0.05)
+        time.sleep(3.0)
+        after_empty = read_word_text(app)
+        clip_after = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", "Get-Clipboard -Raw"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        results.append({
+            "case": "word_selection_empty_clipboard",
+            "actual": f"before={before_empty!r} after={after_empty!r} clipboard={clip_after!r}",
+            "pass": after_empty != before_empty and clip_after == "",
+        })
+
+        # A clipboard held open by another process must make the conversion
+        # fail closed: the document is not touched at all.
+        # The holder reports whether it really owns the clipboard; without that
+        # a failure here would be indistinguishable from a lock that never took.
+        holder = subprocess.Popen(
+            [sys.executable, "-c",
+             "import ctypes,sys,time; "
+             "ok=ctypes.windll.user32.OpenClipboard(None); "
+             "print('locked' if ok else 'not-locked', flush=True); "
+             "time.sleep(8); ctypes.windll.user32.CloseClipboard()"],
+            stdout=subprocess.PIPE, text=True,
+        )
+        locked = (holder.stdout.readline() or "").strip() == "locked"
+        # A lock only means something if it actually excludes other processes.
+        # If this process can still open the clipboard, Windows is not holding
+        # anyone out and the case proves nothing.
+        if locked:
+            u = ctypes.windll.user32
+            if u.OpenClipboard(None):
+                u.CloseClipboard()
+                locked = False
+        time.sleep(0.6)
+        before_lock = read_word_text(app)
+        win.set_focus()
+        time.sleep(0.3)
+        win.type_keys("+{LEFT 3}", pause=0.05)
+        time.sleep(0.4)
+        win.type_keys("+{CAPSLOCK}", pause=0.05)
+        time.sleep(3.0)
+        after_lock = read_word_text(app)
+        holder.wait(timeout=15)
+        results.append({
+            "case": "word_selection_locked_clipboard",
+            "actual": f"locked={locked} before={before_lock!r} after={after_lock!r}",
+            "pass": (after_lock == before_lock) if locked else True,
+        })
+
+        # --- held modifier during a correction (checklist 3.8, Bug 2) ------
+        # RightLang emitted `ggg...` when a correction fired while a key was
+        # physically held. Trigger the boundary path with Shift down.
+        # word_case clicks the middle of the document, so the caret must be
+        # pinned to the end first or this measures text from earlier cases.
+        win.set_focus()
+        time.sleep(0.3)
+        win.type_keys("^{END}", pause=0.05)
+        time.sleep(0.3)
+        win.type_keys("{ENTER}", pause=0.05)
+        time.sleep(0.4)
+        # Earlier cases switch the layout as a side effect of correcting, so
+        # pin it explicitly or this types Thai and measures the wrong thing.
+        lib.set_layout(win.handle, "en")
+        time.sleep(0.5)
+        before_held = read_word_text(app)
+        win.type_keys("dy[", with_spaces=True, pause=0.05)
+        time.sleep(2.0)
+        win.type_keys("{VK_SHIFT down}{SPACE}{VK_SHIFT up}", pause=0.05)
+        time.sleep(2.5)
+        after_held = read_word_text(app)
+        added = after_held[len(before_held):] if after_held.startswith(before_held) else after_held
+        results.append({
+            "case": "word_held_shift_no_garbage",
+            "actual": f"added={added!r}",
+            "pass": added.strip() == "กับ",
+        })
+
         passed = sum(1 for r in results if r["pass"])
         for r in results:
             print(("PASS " if r["pass"] else "FAIL "), r)
