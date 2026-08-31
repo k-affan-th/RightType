@@ -221,7 +221,7 @@ dependencies = [
 
 [[package]]
 name = "righttype"
-version = "1.0.0-rc4"
+version = "1.0.0"
 dependencies = [
  "crossbeam-channel",
  "native-windows-derive",
