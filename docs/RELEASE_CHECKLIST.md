@@ -32,16 +32,16 @@ git diff --check
 
 ## 3. Windows E2E gates
 
-- [ ] Auto boundary correction in both directions with exact supported HKLs.
+- [x] Auto boundary correction in both directions with exact supported HKLs. (matrix 9/9: then_basic_boundary, enth_live_full)
 - [ ] Manual current/last word, selection conversion and one-shot Undo.
 - [ ] Manual clipboard: empty, Unicode-only, locked and rejected rich/app-specific formats.
 - [ ] Manual focus race and stale command; no cross-control injection.
-- [ ] Manual/Auto/Suggest mode cycle, Suggest reject/accept/context invalidation.
-- [ ] Notepad, Microsoft Word and Chrome/contenteditable.
-- [ ] Native, browser and Electron password fields; fixed blacklist applications.
-- [ ] Fast typing, held modifiers, key repeat, Thai combining marks and partial-failure seams.
-- [ ] Sleep/resume, lock/unlock and UAC secure-desktop transitions without process restart.
-- [ ] Confirm process runs at Medium Integrity and WER/VirtualLock controls are active.
+- [x] Manual/Auto/Suggest mode cycle, Suggest reject/accept/context invalidation. (matrix: suggest_no_touch, suggest_accept)
+- [~] Word 3/3 and Chrome 5/5 and Edge 5/5 on 2026-08-31 (`word_roundtrip.py`, `d008_revision.py <browser>`). Notepad is WinUI and stays manual-only per the harness note.
+- [~] Native and browser password fields plus a blacklisted terminal pass (matrix: guard_password_field, guard_blacklisted_terminal). Electron untested.
+- [~] Fast typing passes (matrix: fast_typing_live). Held modifiers, key repeat, Thai combining marks and partial-failure seams still untested.
+- [x] Sleep/resume, lock/unlock and UAC secure-desktop transitions without process restart. (recorded in DYNAMIC_PLAN, verified interactively)
+- [~] Process runs at Medium Integrity: launched from a Medium shell with no manifest and no elevation prompt, confirmed 2026-08-31. WER/VirtualLock are called at startup but have no runtime probe yet.
 
 ## 4. Artifact, checksum and signature
 
