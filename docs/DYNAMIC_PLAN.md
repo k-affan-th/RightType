@@ -187,7 +187,8 @@
 
 **ยังเปิดอยู่ (blocker ก่อน release):**
 
-1. **Windows E2E** — ownership seams (boundary, Reset, Shift+Backspace, poison, injection ล้มเหลว) พิสูจน์ด้วย unit test ไม่ได้ ต้องมีหลักฐานจริงบน Notepad/Word/Chrome
+1. ~~**Windows E2E**~~ — **ปิดแล้ว 2026-08-31** ด้วย `e2e/d008_revision.py` บน Edge จริง: **5/5** ทุกเคสยืนยันจาก trace ด้วยว่าข้อความเดินผ่าน `reconcile_run` จริง (english-untouched, ambiguous-held, typo-revised-back, thai-rendered-live, boundary-while-owned); matrix เดิม 9/9 ไม่ regress การรันนี้พบ seam จริง 2 จุดที่ unit test เอื้อมไม่ถึง (Undo และ layout-switch chord ขณะถือ run) แก้แล้วใน `b6e2753`
+   ยังเหลือ: Word และ Notepad ยังไม่ได้รัน D-008 (Notepad WinUI เป็น manual-only ตาม harness), และ seam ของ buffer poison ยังไม่มีเคส
 2. **Residual 2.36%** — ต้องใช้คะแนนแบบไล่ระดับ (`detect::Confidence` มี variant เดียว, `dict` เป็น boolean membership, `th_words.txt` ไม่มีน้ำหนักความถี่) — เสนอเป็น D-009
 3. **Layout-switch race** — `activate_layout` ยังใช้ `PostMessageW` ตอน anchor หน้าต่างนั้นยังเล็กลงแต่ไม่หาย
 
@@ -255,7 +256,7 @@ Auto conversion จะ commit เฉพาะ candidate ที่ผ่าน la
 - [x] รวม production detection policy ให้มี entry point เดียว; sequence tests เรียก production policy โดยตรง
 - [x] D-006 instant EN→TH live commit + layout switch; TH→EN boundary-only (ถูกจำกัดเพิ่มโดย D-007)
 - [x] ระบุ evidence ที่ production ใช้จริงเป็น exact dictionary หรือ full segmentation; punctuation/mixed-script ถูก gate ก่อน commit
-- [x] D-008 revisable rendering: จอต้องตรงกับ `live_reading` ของ run เสมอ (`reconcile_run` + `render::delta`), anchor ที่ `COMMIT_HORIZON`; Windows E2E ของ ownership seams ยังเปิด
+- [x] D-008 revisable rendering: จอต้องตรงกับ `live_reading` ของ run เสมอ (`reconcile_run` + `render::delta`), anchor ที่ `COMMIT_HORIZON`; Edge E2E 5/5 + matrix 9/9 (`e2e/d008_revision.py`), Word/Notepad ยังไม่ได้รัน
 - [x] D-007 candidate/ambiguous/committed state machine ตามที่ D-004 กำหนด (`policy::live_decision`); live path ห้าม commit ขณะ token ยังโตต่อเป็นคำอังกฤษได้ — residual นอก dictionary เปิดเป็น D-008
 - [x] รักษา DP segmentation และเพิ่ม ambiguous/backtracking regression corpus
 - [x] รองรับ digits, shifted symbols, punctuation wrappers และ long Thai runs ตาม contract
