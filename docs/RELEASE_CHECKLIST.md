@@ -53,7 +53,7 @@ signtool verify /pa /all $artifact
 Get-AuthenticodeSignature -LiteralPath $artifact
 ```
 
-- [ ] Sign the exact clean-checkout artifact; signing changes its checksum, so compute the published SHA-256 **after** signing.
+- [ ] Sign the exact clean-checkout artifact; signing changes its checksum, so compute the published SHA-256 **after** signing. **This is the only remaining step and it needs the product owner's certificate.** Everything else in this section is done: `packaging/build_release.ps1` produces `RightType-1.0.0-setup.exe`, `RightType-1.0.0-x64.zip` and a `SHA256.txt` covering both, and the installer was verified end to end on 2026-08-31 (silent install to a scratch directory, installed binary launched and stayed running, uninstaller removed the directory, an existing install elsewhere untouched). Re-run `build_release.ps1` after signing to regenerate the checksums.
 - [ ] Publish binary, checksum, license files, changelog and known limitations together.
 - [ ] Re-download the published files and verify signature/checksum independently.
 

@@ -1,13 +1,13 @@
 ; RightType — Inno Setup script (optional richer installer).
 ; Build:  ISCC packaging\RightType.iss   (requires Inno Setup 6+)
-; Produces dist\RightType-1.0.0-rc1-setup.exe
+; Produces dist\RightType-1.0.0-setup.exe
 
 #define MyAppName "RightType"
-#define MyAppVersion "1.0.0-rc1"
+#define MyAppVersion "1.0.0"
 #define MyAppExe "righttype.exe"
 
 [Setup]
-AppId={{8C6B9A2E-52C1-4E63-9B7A-RIGHTTYPE000}
+AppId={{8C6B9A2E-52C1-4E63-9B7A-7C1F4A2B9D33}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\RightType

@@ -101,17 +101,27 @@ rather than a blanket ban on every individual BIP39 word.
 
 ## For end users
 
-**Install (per-user, no admin):**
+**Installer (recommended, per-user, no admin):** run
+`RightType-1.0.0-setup.exe` from the release. It installs RightType, offers a
+desktop shortcut and start-at-login, and registers a normal Windows uninstaller
+(Settings -> Apps -> RightType).
+
+**Portable zip:** extract `RightType-1.0.0-x64.zip` and either run
+`righttype.exe` where it sits, or install it per-user:
 
 ```powershell
-# after extracting the release zip:
-pwsh -File packaging\install.ps1 -Autostart
+pwsh -File install.ps1 -Autostart
 ```
 
 - Installs to `%LOCALAPPDATA%\RightType`, adds a **Start Menu shortcut**, and
   (with `-Autostart`) launches at login.
-- Uninstall anytime: `pwsh -File packaging\uninstall.ps1` (add `-KeepSettings`
+- Uninstall anytime: `pwsh -File uninstall.ps1` (add `-KeepSettings`
   to preserve your config/learned words).
+- Verify what you downloaded against `SHA256.txt` before running it:
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\RightType-1.0.0-setup.exe
+```
 - Unsigned builds show a SmartScreen prompt — "More info → Run anyway".
   Signed releases will ship under Azure Trusted Signing in v1.x.
 
