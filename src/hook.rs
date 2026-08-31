@@ -887,6 +887,15 @@ unsafe fn anchor_owned_run(run: &str) {
 /// Returns `true` when the triggering key was consumed (we rendered the run
 /// ourselves and the key must not also reach the app).
 unsafe fn reconcile_run() -> bool {
+    reconcile_run_with(|backspaces, text, trailing_vk| inject::apply(backspaces, text, trailing_vk))
+}
+
+/// [`reconcile_run`] with the injector supplied, so the partial-failure seam
+/// can be exercised without Win32.
+unsafe fn reconcile_run_with<F>(apply: F) -> bool
+where
+    F: FnOnce(usize, &str, Option<u16>) -> bool,
+{
     let (run, poisoned, holding) = STATE.with(|s| {
         let st = s.borrow();
         (
@@ -951,7 +960,7 @@ unsafe fn reconcile_run() -> bool {
     };
 
     let delta = render::delta(&on_screen, &target);
-    if !delta.is_empty() && !inject::apply(delta.backspaces, &delta.insert, None) {
+    if !delta.is_empty() && !apply(delta.backspaces, &delta.insert, None) {
         crate::toast::show("RightType: correction injection failed");
         STATE.with(|s| s.borrow_mut().owned = None);
         return false;
@@ -1169,7 +1178,7 @@ unsafe fn foreground_layout() -> HKL {
 
 #[cfg(test)]
 mod tests {
-    use super::{Mode, STATE};
+    use super::{Mode, OwnedRun, STATE};
     use righttype::detect::{Confidence, Detection, Evidence};
 
     #[test]
@@ -1177,6 +1186,42 @@ mod tests {
         assert_eq!(Mode::Manual.next(), Mode::Auto);
         assert_eq!(Mode::Auto.next(), Mode::Suggest);
         assert_eq!(Mode::Suggest.next(), Mode::Manual);
+    }
+
+    /// A failed injection while we own a run must let go of it. Keeping
+    /// ownership would leave the next keystroke diffing against text we were
+    /// never able to put on screen, and every edit after that would be
+    /// computed from a screen state that does not exist.
+    #[test]
+    fn failed_reconcile_injection_releases_ownership() {
+        use righttype::buffer::Key;
+
+        STATE.with(|state| {
+            let mut st = state.borrow_mut();
+            st.buf.clear();
+            for c in "l;ylfu".chars() {
+                st.buf.observe(Key::Char(c));
+            }
+            // Own the run, but with nothing yet rendered, so the reconciler has
+            // a non-empty delta and must call the injector.
+            st.owned = Some(OwnedRun {
+                rendered: String::new(),
+                stable: 1,
+            });
+        });
+        let stats_before = crate::stats::snapshot();
+
+        let consumed = unsafe { super::reconcile_run_with(|_backspaces, _text, _vk| false) };
+
+        assert!(!consumed, "a failed injection must not swallow the key");
+        STATE.with(|state| {
+            assert!(
+                state.borrow().owned.is_none(),
+                "ownership must be released when the screen could not be updated"
+            );
+        });
+        assert_eq!(crate::stats::snapshot(), stats_before);
+        STATE.with(|state| state.borrow_mut().buf.clear());
     }
 
     #[test]
