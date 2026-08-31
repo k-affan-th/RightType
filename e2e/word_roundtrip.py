@@ -184,6 +184,40 @@ def main():
             "pass": ok,
         })
 
+        # Selection conversion (checklist 3.2/3.3). Word accepts synthetic Ctrl
+        # chords, which Chromium textareas do not, so this is the only target
+        # where the selection path can actually be driven.
+        #
+        # The undo case above leaves the document ending in the raw keystrokes
+        # `dy[`, which is exactly what a selection conversion should turn into
+        # `กับ`. Reusing that state avoids a clear-and-retype step that Reusing that state avoids a clear-and-retype step that
+        # Word does not perform reliably from a synthetic ^a{DEL}.
+        before_sel = read_word_text(app)
+        win = word_window(app)
+        win.set_focus()
+        time.sleep(0.3)
+        # Plain-text clipboard: D-003 refuses to snapshot anything richer, and
+        # PowerShell's Set-Clipboard registers private .NET formats.
+        subprocess.run(["cmd", "/c", "echo rt-sentinel| clip"], capture_output=True)
+        time.sleep(0.6)
+        # Shift+Left three times, not Ctrl+Shift+Left: Word treats `[` as its
+        # own word, so the word-wise chord selects a single bracket.
+        win.type_keys("+{LEFT 3}", pause=0.05)
+        time.sleep(0.5)
+        win.type_keys("+{CAPSLOCK}", pause=0.05)
+        time.sleep(3.0)
+        after_sel = read_word_text(app)
+        clip_back = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", "Get-Clipboard -Raw"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        results.append({
+            "case": "word_selection_convert",
+            "actual": f"before={before_sel!r} after={after_sel!r} clipboard={clip_back!r}",
+            "pass": after_sel.strip().endswith("กับ")
+            and clip_back == "rt-sentinel",
+        })
+
         passed = sum(1 for r in results if r["pass"])
         for r in results:
             print(("PASS " if r["pass"] else "FAIL "), r)

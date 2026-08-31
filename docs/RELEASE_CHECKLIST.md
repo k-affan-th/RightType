@@ -33,9 +33,9 @@ git diff --check
 ## 3. Windows E2E gates
 
 - [x] Auto boundary correction in both directions with exact supported HKLs. (matrix 9/9: then_basic_boundary, enth_live_full)
-- [ ] Manual current/last word, selection conversion and one-shot Undo.
-- [ ] Manual clipboard: empty, Unicode-only, locked and rejected rich/app-specific formats.
-- [ ] Manual focus race and stale command; no cross-control injection.
+- [x] Manual current/last word, selection conversion and one-shot Undo. (`word_roundtrip.py` 4/4: `dy[` selected and converted to the Thai word in place; Undo covered there and in the matrix)
+- [~] Unicode-only clipboard is snapshotted and restored byte for byte, and a clipboard carrying private .NET formats is refused with the documented message rather than touched (traced under the E2E flag). Empty and locked clipboards are still untested.
+- [x] Manual focus race and stale command; no cross-control injection. (`manual_selection.py`: a focus change mid-conversion aborts it and the page's password field stays empty)
 - [x] Manual/Auto/Suggest mode cycle, Suggest reject/accept/context invalidation. (matrix: suggest_no_touch, suggest_accept)
 - [~] Word 3/3 and Chrome 5/5 and Edge 5/5 on 2026-08-31 (`word_roundtrip.py`, `d008_revision.py <browser>`). Notepad is WinUI and stays manual-only per the harness note.
 - [~] Native and browser password fields plus a blacklisted terminal pass (matrix: guard_password_field, guard_blacklisted_terminal). Electron untested.
