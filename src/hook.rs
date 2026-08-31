@@ -487,12 +487,19 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // A user-initiated layout switch invalidates buffered caret context. Windows
     // performs the switch itself; we only discard state here.
+    //
+    // This fires on the *modifier* key-down, before we can tell a layout switch
+    // from the Ctrl+Shift prefix of RightType's own Undo hotkey. A run we own
+    // must therefore be withdrawn rather than abandoned: dropping it would leave
+    // rendered Thai on screen with nothing tracking it, and abandoning it while
+    // clearing the buffer would make the next reconcile delete text it no longer
+    // has a run for. Withdrawing is right under either reading of the chord.
     if is_layout_switch_trigger(vk) {
+        withdraw_owned_run();
         STATE.with(|s| {
             let mut st = s.borrow_mut();
             st.pending_hkl = None;
             st.buf.clear();
-            st.owned = None;
             st.last_completed = None;
         });
     }
@@ -518,7 +525,20 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         if ctrl && shift {
             // Ctrl+Shift+CapsLock: undo the last correction (one-shot). Swallow.
             e2e_trace("undo-hotkey received".to_string());
-            if !manual::request_undo_selection(
+            // A run we still own is the most recent correction there is, and it
+            // has no Undo record yet (that is written when the run anchors), so
+            // withdrawing our rendering *is* the undo.
+            if withdraw_owned_run() {
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    // Restart the run: without this the very next keystroke
+                    // re-evaluates the same text and can immediately re-apply
+                    // the reading the typist just rejected.
+                    st.buf.clear();
+                    st.undo = None;
+                });
+                crate::toast::show("Undo");
+            } else if !manual::request_undo_selection(
                 GetForegroundWindow().0 as isize,
                 crate::focus::generation(),
             ) {

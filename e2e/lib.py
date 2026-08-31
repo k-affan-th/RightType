@@ -12,6 +12,12 @@ Hard-won constraints for anyone extending this harness:
   Use --app edge for automated runs; treat Notepad results as manual-only.
 - Each run targets a dedicated temp document so Notepad session-restore cannot
   leak previous-run content into assertions.
+- Browsers are launched additively, never force-killed: these scripts run on
+  a real desktop and must not destroy the operator's session.
+- `cargo test`/`cargo clippy` without `--features winos` silently replace
+  `target/debug/righttype.exe` with the core-only stub. Always rebuild with
+  `cargo build --features winos` immediately before a run; start_righttype
+  refuses to continue if it started the stub.
 """
 
 import os
@@ -47,7 +53,17 @@ def start_righttype(stderr_log=None):
     kw = {"cwd": str(REPO), "env": E2E_ENV}
     if stderr_log:
         kw["stderr"] = open(stderr_log, "w", encoding="utf-8")
-    return subprocess.Popen([str(EXE)], **kw)
+    proc = subprocess.Popen([str(EXE)], **kw)
+    # `cargo test` and `cargo clippy` (no --features winos) overwrite this same
+    # path with the core-only build, which prints a banner and exits. Every case
+    # then "passes" for text that was never touched, so refuse to run at all.
+    time.sleep(1.5)
+    if proc.poll() is not None:
+        raise SystemExit(
+            f"{EXE.name} exited immediately — target/debug holds the core-only "
+            "build. Rebuild with: cargo build --features winos"
+        )
+    return proc
 
 
 def start_notepad(doc=None):
@@ -166,8 +182,9 @@ def start_edge(html: Path, exe: Path = EDGE_EXE):
     import socketserver
     import threading
 
-    subprocess.run(["taskkill", "/IM", "msedge.exe", "/F"], capture_output=True)
-    time.sleep(1)
+    # Deliberately additive: an E2E run must not take the operator's open
+    # tabs with it. The throwaway --user-data-dir plus the before/after
+    # window diff below identify our window without killing anything.
 
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(HERE))
     httpd = socketserver.TCPServer(("127.0.0.1", 0), handler)
