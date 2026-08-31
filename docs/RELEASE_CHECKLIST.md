@@ -34,12 +34,12 @@ git diff --check
 
 - [x] Auto boundary correction in both directions with exact supported HKLs. (matrix 9/9: then_basic_boundary, enth_live_full)
 - [x] Manual current/last word, selection conversion and one-shot Undo. (`word_roundtrip.py` 4/4: `dy[` selected and converted to the Thai word in place; Undo covered there and in the matrix)
-- [~] Unicode-only clipboard is snapshotted and restored byte for byte, and a clipboard carrying private .NET formats is refused with the documented message rather than touched (traced under the E2E flag). Empty and locked clipboards are still untested.
+- [~] Empty and Unicode-only clipboards are both snapshotted and restored exactly (word_roundtrip.py 7/7), and one carrying private .NET formats is refused with the documented message rather than touched. A LOCKED clipboard is still untested: a holder process reports OpenClipboard success but does not actually exclude this process, so the case passes vacuously and is not evidence.
 - [x] Manual focus race and stale command; no cross-control injection. (`manual_selection.py`: a focus change mid-conversion aborts it and the page's password field stays empty)
 - [x] Manual/Auto/Suggest mode cycle, Suggest reject/accept/context invalidation. (matrix: suggest_no_touch, suggest_accept)
 - [~] Word 3/3 and Chrome 5/5 and Edge 5/5 on 2026-08-31 (`word_roundtrip.py`, `d008_revision.py <browser>`). Notepad is WinUI and stays manual-only per the harness note.
 - [~] Native and browser password fields plus a blacklisted terminal pass (matrix: guard_password_field, guard_blacklisted_terminal). Electron untested.
-- [~] Fast typing passes (matrix: fast_typing_live) and Thai combining marks are exact through the reconciler: thai-combining-marks and thai-stacked-tone in d008_revision.py, 8/8 on Edge and Chrome. Held modifiers, key repeat and partial-failure seams are still untested; true key repeat comes from the keyboard driver and SendInput cannot reproduce it.
+- [~] Fast typing (matrix: fast_typing_live), Thai combining marks (d008_revision.py 8/8 on Edge and Chrome) and a held modifier during a correction (word_held_shift_no_garbage: exactly one conversion, no repeat) all pass. Partial-failure seams are still untested; true key repeat comes from the keyboard driver and SendInput cannot reproduce it.
 - [x] Sleep/resume, lock/unlock and UAC secure-desktop transitions without process restart. (recorded in DYNAMIC_PLAN, verified interactively)
 - [~] Process runs at Medium Integrity: launched from a Medium shell with no manifest and no elevation prompt, confirmed 2026-08-31. WER/VirtualLock are called at startup but have no runtime probe yet.
 
