@@ -19,7 +19,7 @@ WINWORD = Path("C:/Program Files/Microsoft Office/root/Office16/WINWORD.EXE")
 
 
 def read_word_text(app) -> str:
-    for d in app.top_window().descendants():
+    for d in word_window(app).descendants():
         try:
             if d.element_info.control_type != "Document":
                 continue
@@ -27,7 +27,7 @@ def read_word_text(app) -> str:
         except Exception:
             continue
     best = ""
-    for d in app.top_window().descendants():
+    for d in word_window(app).descendants():
         try:
             if d.element_info.control_type not in ("Document", "Edit"):
                 continue
@@ -40,7 +40,7 @@ def read_word_text(app) -> str:
 
 
 def word_case(app, token, lang, pause=0.03):
-    win = app.top_window()
+    win = word_window(app)
     win.set_focus()
     time.sleep(0.3)
     lib.set_layout(win.handle, lang)
@@ -54,6 +54,35 @@ def word_case(app, token, lang, pause=0.03):
         win.type_keys("{SPACE}", pause=0.02)
     time.sleep(2.5)
     return read_word_text(app)
+
+
+def word_window(app):
+    """The visible Word document window, found by class rather than by process.
+
+    `word_window(app)` fails against Word: a launch is handed off to whichever
+    Word process already owns the session, so the process we started often owns
+    no window at all. Every Word document frame is an `OpusApp`, so enumerate
+    those instead.
+    """
+    u = ctypes.windll.user32
+    hits = []
+
+    @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    def cb(h, _):
+        cn = ctypes.create_unicode_buffer(32)
+        u.GetClassNameW(h, cn, 32)
+        if cn.value == "OpusApp" and u.IsWindowVisible(h):
+            hits.append(h)
+        return True
+
+    deadline = time.time() + 25
+    while time.time() < deadline:
+        hits.clear()
+        u.EnumWindows(cb, None)
+        if hits:
+            return app.window(handle=hits[0])
+        time.sleep(0.5)
+    raise SystemExit("no visible Word document window")
 
 
 def main():
@@ -101,7 +130,7 @@ def main():
                 time.sleep(1)
         if app is None:
             raise SystemExit("Word OpusApp window not found")
-        win = app.top_window()
+        win = word_window(app)
         win.set_focus()
         time.sleep(0.5)
         if "Document" not in win.window_text():
@@ -109,7 +138,7 @@ def main():
             deadline = time.time() + 25
             while time.time() < deadline:
                 try:
-                    win = app.top_window()
+                    win = word_window(app)
                     if "Document" in win.window_text():
                         break
                 except Exception:
@@ -138,7 +167,7 @@ def main():
         mid_full = read_word_text(app)
         got = word_case(app, "dy[", "en")
         mid = read_word_text(app)
-        win = app.top_window()
+        win = word_window(app)
         win.set_focus()
         time.sleep(0.3)
         win.type_keys("^+{CAPSLOCK}")
@@ -163,12 +192,12 @@ def main():
     finally:
         if app:
             try:
-                app.top_window().set_focus()
-                app.top_window().type_keys("^a{DEL}", pause=0.02)
+                word_window(app).set_focus()
+                word_window(app).type_keys("^a{DEL}", pause=0.02)
             except Exception:
                 pass
             try:
-                app.top_window().close()
+                word_window(app).close()
             except Exception:
                 pass
             try:

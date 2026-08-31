@@ -188,7 +188,8 @@
 **ยังเปิดอยู่ (blocker ก่อน release):**
 
 1. ~~**Windows E2E**~~ — **ปิดแล้ว 2026-08-31** ด้วย `e2e/d008_revision.py` บน Edge จริง: **5/5** ทุกเคสยืนยันจาก trace ด้วยว่าข้อความเดินผ่าน `reconcile_run` จริง (english-untouched, ambiguous-held, typo-revised-back, thai-rendered-live, boundary-while-owned); matrix เดิม 9/9 ไม่ regress การรันนี้พบ seam จริง 2 จุดที่ unit test เอื้อมไม่ถึง (Undo และ layout-switch chord ขณะถือ run) แก้แล้วใน `b6e2753`
-   ยังเหลือ: Word และ Notepad ยังไม่ได้รัน D-008 (Notepad WinUI เป็น manual-only ตาม harness), และ seam ของ buffer poison ยังไม่มีเคส
+   ขยายผล 2026-08-31: **Word 3/3** (`word_roundtrip.py`, boundary + live EN→TH + Undo), **Chrome 5/5** และ **Edge 5/5** ในการรันเดียวกัน (`d008_revision.py <browser>`)
+   ยังเหลือ: Notepad (WinUI — manual-only ตาม harness) และ seam ของ buffer poison ยังไม่มีเคส
 2. **Residual 2.36%** — ต้องใช้คะแนนแบบไล่ระดับ (`detect::Confidence` มี variant เดียว, `dict` เป็น boolean membership, `th_words.txt` ไม่มีน้ำหนักความถี่) — เสนอเป็น D-009
 3. **Layout-switch race** — `activate_layout` ยังใช้ `PostMessageW` ตอน anchor หน้าต่างนั้นยังเล็กลงแต่ไม่หาย
 

@@ -79,7 +79,7 @@ def find_target_window():
     return None
 
 
-def start_edge_additive(html: Path):
+def start_edge_additive(html: Path, exe: Path = None):
     """`lib.start_edge` minus the taskkill: leaves existing browsers alone."""
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(HERE))
     httpd = socketserver.TCPServer(("127.0.0.1", 0), handler)
@@ -89,7 +89,7 @@ def start_edge_additive(html: Path):
 
     proc = subprocess.Popen(
         [
-            str(lib.EDGE_EXE),
+            str(exe or lib.EDGE_EXE),
             "--new-window",
             url,
             f"--user-data-dir={tempfile.gettempdir()}/rt_d008_{int(time.time())}",
@@ -154,20 +154,44 @@ def read_textarea(win) -> str:
 
 
 def clear_field(win, app) -> bool:
-    """Empty the textarea and prove it is empty.
+    """Start the next case from a genuinely empty textarea.
 
-    `lib.type_text` clears with ^a{DEL} and trusts it. On a busy desktop that
-    silently no-ops often enough to turn a run into nonsense (each case then
-    appends to the previous one), so evidence from this script is only worth
-    anything if the clear is verified.
+    Clearing with the keyboard cannot be trusted here, and not because the
+    desktop is busy: `^a{BACKSPACE}` ends in a Backspace, and a Backspace is one
+    of the two keys `reconcile_run` consumes while RightType owns a run. The
+    harness was asking the feature under test to please not react to the keys
+    being used to reset the feature under test. Every case that followed an
+    owned run then reported "could not clear the field".
+
+    A reload sidesteps the hook completely: Ctrl+F5 discards form state, so the
+    textarea comes back empty no matter what the previous case left in it, and
+    no key involved is one RightType acts on. The keyboard idioms remain as a
+    fallback for the case where a reload is refused.
     """
-    for _ in range(4):
-        win.set_focus()
-        time.sleep(0.25)
-        win.type_keys("^a{DEL}", pause=0.05)
-        time.sleep(0.35)
+    for _ in range(3):
+        try:
+            win.set_focus()
+        except Exception:
+            pass
+        time.sleep(0.2)
+        win.type_keys("^{F5}", pause=0.05)
+        time.sleep(1.6)
+        try:
+            r = win.rectangle()
+            mouse.click(
+                button="left", coords=((r.left + r.right) // 2, (r.top + r.bottom) // 2)
+            )
+        except Exception:
+            pass
+        time.sleep(0.4)
         if read_textarea(win) == "":
             return True
+
+        for keys in ("^a{DEL}", "^a{BACKSPACE}"):
+            win.type_keys(keys, pause=0.05)
+            time.sleep(0.3)
+            if read_textarea(win) == "":
+                return True
     return False
 
 
@@ -234,11 +258,13 @@ def wait_until_round_trip(win, app, timeout: float = 25.0) -> bool:
     while time.time() < deadline:
         try:
             win.type_keys("^a{DEL}", pause=0.05)
+            win.type_keys("^a{BACKSPACE}", pause=0.05)
             win.type_keys("x", pause=0.05)
             time.sleep(0.4)
             last = read_textarea(win)
             if last == "x":
                 win.type_keys("^a{DEL}", pause=0.05)
+                win.type_keys("^a{BACKSPACE}", pause=0.05)
                 time.sleep(0.3)
                 last = read_textarea(win)
                 if last == "":
@@ -268,6 +294,10 @@ CASES = [
 ]
 
 
+BROWSERS = {"edge": lib.EDGE_EXE, "chrome": lib.CHROME_EXE}
+BROWSER = sys.argv[1] if len(sys.argv) > 1 else "edge"
+
+
 def main():
     original_config = force_auto_mode()
     rt = lib.start_righttype(stderr_log=LOG)
@@ -276,7 +306,7 @@ def main():
             f"a window titled {TITLE_MARK!r} is already open — close it first so "
             "this run cannot read a stale document"
         )
-    app, httpd, edge = start_edge_additive(HERE / "target.html")
+    app, httpd, edge = start_edge_additive(HERE / "target.html", BROWSERS[BROWSER])
     win = app.top_window()
     lib.set_layout(win.handle, "en")
 
@@ -319,7 +349,7 @@ def main():
         restore_config(original_config)
 
     passed = sum(1 for _, ok in results if ok)
-    print(f"\nD-008 revision matrix: {passed}/{len(results)}")
+    print(f"\nD-008 revision matrix [{BROWSER}]: {passed}/{len(results)}")
     return 0 if passed == len(results) else 1
 
 
