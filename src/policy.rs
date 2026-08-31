@@ -166,12 +166,7 @@ pub enum Reading {
 /// The asymmetry is the point: entering the Thai reading is hard, staying in it
 /// is easy, and leaving it is cheap and automatic. That is what lets a run be
 /// re-decided instead of committed.
-pub fn live_reading(
-    run: &str,
-    holding_thai: bool,
-    en: &Dictionary,
-    th: &Dictionary,
-) -> Reading {
+pub fn live_reading(run: &str, holding_thai: bool, en: &Dictionary, th: &Dictionary) -> Reading {
     if run.is_empty() {
         return Reading::AsTyped;
     }
@@ -191,7 +186,9 @@ pub fn live_reading(
     }
     if matches!(
         secret::classify_token(run),
-        Some(SecretKind::Hex | SecretKind::Base58Wif | SecretKind::Bech32 | SecretKind::ExtendedKey)
+        Some(
+            SecretKind::Hex | SecretKind::Base58Wif | SecretKind::Bech32 | SecretKind::ExtendedKey
+        )
     ) {
         return Reading::AsTyped;
     }
@@ -292,7 +289,10 @@ mod tests {
         // `wri` is on its way to an English word: Ambiguous, so AsTyped.
         let en_full = crate::dict::english();
         let th_full = crate::dict::thai();
-        assert_eq!(live_reading("wri", false, en_full, th_full), Reading::AsTyped);
+        assert_eq!(
+            live_reading("wri", false, en_full, th_full),
+            Reading::AsTyped
+        );
     }
 
     #[test]

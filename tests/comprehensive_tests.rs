@@ -443,9 +443,10 @@ fn auto_mode_screen(keys: &str) -> String {
         screen.push(k);
         buf.push(k);
         if live_decision_for(&buf) == policy::LiveDecision::Commit {
-            let corrected = policy::detect_token(&buf, InputLayout::UsQwerty, dict::english(), dict::thai())
-                .expect("a Commit decision implies a detection")
-                .corrected;
+            let corrected =
+                policy::detect_token(&buf, InputLayout::UsQwerty, dict::english(), dict::thai())
+                    .expect("a Commit decision implies a detection")
+                    .corrected;
             for _ in 0..buf.chars().count() {
                 screen.pop();
             }
@@ -603,7 +604,8 @@ fn the_commit_horizon_is_short_enough_to_anchor_real_thai() {
     // Both of these leave the dictionary partway through (a loanword, a name).
     // Anchoring hands the rest to the Thai layout; never anchoring would
     // withdraw the whole run when viability finally dies.
-    for phrase in ["เปิดแอปไลน์หน่อย", "ผมชื่ออัฟฟานครับ"] {
+    for phrase in ["เปิดแอปไลน์หน่อย", "ผมชื่ออัฟฟานครับ"]
+    {
         assert_eq!(
             owned_run_screen(&th_to_en(phrase), policy::COMMIT_HORIZON),
             phrase,
@@ -622,11 +624,8 @@ fn revisable_rendering_keeps_both_directions_correct() {
     for word in ["different", "computer", "write", "walking", "immediately"] {
         assert_eq!(owned_run_screen(word, policy::COMMIT_HORIZON), word);
     }
-    for phrase in [
-        "สวัสดีครับ",
-        "วันนี้วันจันทร์",
-        "ประชุมตอนบ่ายสองโมง",
-    ] {
+    for phrase in ["สวัสดีครับ", "วันนี้วันจันทร์", "ประชุมตอนบ่ายสองโมง"]
+    {
         assert_eq!(
             owned_run_screen(&th_to_en(phrase), policy::COMMIT_HORIZON),
             phrase

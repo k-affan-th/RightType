@@ -920,7 +920,9 @@ unsafe fn reconcile_run() -> bool {
             reading = policy::Reading::AsTyped;
         }
     }
-    e2e_trace(format!("reconcile run={run:?} holding={holding} -> {reading:?}"));
+    e2e_trace(format!(
+        "reconcile run={run:?} holding={holding} -> {reading:?}"
+    ));
 
     let target = match &reading {
         policy::Reading::AsTyped => run.clone(),
@@ -942,7 +944,9 @@ unsafe fn reconcile_run() -> bool {
             // Nothing to do and nothing to own: let the key through untouched.
             return false;
         }
-        run.chars().take(run.chars().count().saturating_sub(1)).collect()
+        run.chars()
+            .take(run.chars().count().saturating_sub(1))
+            .collect()
     };
 
     let delta = render::delta(&on_screen, &target);
