@@ -41,7 +41,7 @@ git diff --check
 - [~] Native and browser password fields plus a blacklisted terminal pass (matrix: guard_password_field, guard_blacklisted_terminal). Electron untested.
 - [~] Fast typing (matrix: fast_typing_live), Thai combining marks (d008_revision.py 8/8 on Edge and Chrome) and a held modifier during a correction (word_held_shift_no_garbage: exactly one conversion, no repeat) all pass. Partial-failure seams are still untested; true key repeat comes from the keyboard driver and SendInput cannot reproduce it.
 - [x] Sleep/resume, lock/unlock and UAC secure-desktop transitions without process restart. (recorded in DYNAMIC_PLAN, verified interactively)
-- [~] Process runs at Medium Integrity: launched from a Medium shell with no manifest and no elevation prompt, confirmed 2026-08-31. WER/VirtualLock are called at startup but have no runtime probe yet.
+- [x] Process runs at Medium Integrity (launched from a Medium shell, no manifest, no elevation prompt) and the WER/VirtualLock controls are active in a running process, not merely called in source: ram_probe.py reads back SetErrorMode applied, WerSetFlags(NOHEAP) -> true and VirtualLock(260 bytes) -> true, 260 being exactly the WordBuffer stable region.
 
 ## 4. Artifact, checksum and signature
 

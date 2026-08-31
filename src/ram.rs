@@ -29,10 +29,12 @@ pub unsafe fn harden_process() {
     // Don't show the "Windows has stopped working" dialog for this process —
     // one less path that keeps the process alive (and its memory intact) after
     // a fault, waiting on user interaction or a debugger to attach.
-    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    let previous = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    crate::hook::e2e_trace(format!("ram: SetErrorMode applied (was {:#x})", previous.0));
     // If Windows Error Reporting does generate a report anyway, exclude heap
     // memory from it — that's exactly where our word buffer lives.
-    let _ = WerSetFlags(WER_FAULT_REPORTING_FLAG_NOHEAP);
+    let wer = WerSetFlags(WER_FAULT_REPORTING_FLAG_NOHEAP);
+    crate::hook::e2e_trace(format!("ram: WerSetFlags(NOHEAP) -> {:?}", wer.is_ok()));
 }
 
 /// Lock `len` bytes at `ptr` into physical RAM so they can never be paged to
@@ -50,6 +52,7 @@ pub unsafe fn lock_region(ptr: *const u8, len: usize) -> bool {
         return true;
     }
     let locked = VirtualLock(ptr as *const _, len).is_ok();
+    crate::hook::e2e_trace(format!("ram: VirtualLock({len} bytes) -> {locked}"));
     // No matching unlock: this buffer lives for the whole process, and Windows
     // automatically unlocks (and reclaims) all VirtualLock'd pages when the
     // process exits — an explicit VirtualUnlock has nothing left to protect.

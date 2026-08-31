@@ -1,0 +1,3 @@
+[rt-e2e] ram: SetErrorMode applied (was 0x8003)
+[rt-e2e] ram: WerSetFlags(NOHEAP) -> true
+[rt-e2e] ram: VirtualLock(260 bytes) -> true
