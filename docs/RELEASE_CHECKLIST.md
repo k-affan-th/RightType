@@ -39,7 +39,7 @@ git diff --check
 - [x] Manual/Auto/Suggest mode cycle, Suggest reject/accept/context invalidation. (matrix: suggest_no_touch, suggest_accept)
 - [~] Word 3/3 and Chrome 5/5 and Edge 5/5 on 2026-08-31 (`word_roundtrip.py`, `d008_revision.py <browser>`). Notepad is WinUI and stays manual-only per the harness note.
 - [~] Native and browser password fields plus a blacklisted terminal pass (matrix: guard_password_field, guard_blacklisted_terminal). Electron untested.
-- [~] Fast typing passes (matrix: fast_typing_live). Held modifiers, key repeat, Thai combining marks and partial-failure seams still untested.
+- [~] Fast typing passes (matrix: fast_typing_live) and Thai combining marks are exact through the reconciler: thai-combining-marks and thai-stacked-tone in d008_revision.py, 8/8 on Edge and Chrome. Held modifiers, key repeat and partial-failure seams are still untested; true key repeat comes from the keyboard driver and SendInput cannot reproduce it.
 - [x] Sleep/resume, lock/unlock and UAC secure-desktop transitions without process restart. (recorded in DYNAMIC_PLAN, verified interactively)
 - [~] Process runs at Medium Integrity: launched from a Medium shell with no manifest and no elevation prompt, confirmed 2026-08-31. WER/VirtualLock are called at startup but have no runtime probe yet.
 
