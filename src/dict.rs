@@ -4,7 +4,7 @@
 //! set later to shrink resident memory. The public API stays the same either way.
 
 use std::collections::HashSet;
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 
 /// A set of known words for one language, normalized for case-insensitive lookup.
 ///
@@ -18,6 +18,11 @@ pub struct Dictionary {
     /// pays for an index nobody reads — which matters against the resident-memory
     /// target in `docs/PLAN.md`.
     sorted: OnceLock<Vec<Box<str>>>,
+    /// Words the user taught at runtime (auto-learn). Kept apart from the
+    /// bundled list so they can be forgotten wholesale and so the sorted
+    /// prefix index never has to be rebuilt; the overlay stays small enough
+    /// that scanning it for continuations is cheaper than any index.
+    overlay: RwLock<HashSet<String>>,
 }
 
 impl Dictionary {
@@ -34,12 +39,45 @@ impl Dictionary {
                 .filter(|s| !s.is_empty())
                 .collect(),
             sorted: OnceLock::new(),
+            overlay: RwLock::new(HashSet::new()),
         }
     }
 
-    /// Is `word` a known word (case-insensitive)?
+    /// Is `word` a known word (case-insensitive)? Learned words count.
     pub fn contains(&self, word: &str) -> bool {
-        self.words.contains(&normalize(word))
+        let key = normalize(word);
+        self.words.contains(&key) || self.overlay_contains(&key)
+    }
+
+    /// Teach this dictionary a word at runtime. Returns `true` if it was new.
+    pub fn learn(&self, word: &str) -> bool {
+        let key = normalize(word);
+        if key.is_empty() || self.words.contains(&key) {
+            return false;
+        }
+        self.overlay
+            .write()
+            .map(|mut o| o.insert(key))
+            .unwrap_or(false)
+    }
+
+    /// Forget every runtime-learned word; the bundled list is untouched.
+    pub fn forget_learned(&self) {
+        if let Ok(mut o) = self.overlay.write() {
+            o.clear();
+        }
+    }
+
+    /// Was this word learned at runtime (rather than bundled)?
+    pub fn is_learned(&self, word: &str) -> bool {
+        self.overlay_contains(&normalize(word))
+    }
+
+    fn overlay_contains(&self, key: &str) -> bool {
+        self.overlay
+            .read()
+            .map(|o| o.contains(key))
+            .unwrap_or(false)
     }
 
     /// Is there a known word that **starts with** `prefix` but is longer than it?
@@ -64,6 +102,10 @@ impl Dictionary {
             .iter()
             .take_while(|w| w.starts_with(prefix.as_str()))
             .any(|w| w.as_ref() != prefix.as_str())
+            || self.overlay.read().is_ok_and(|o| {
+                o.iter()
+                    .any(|w| w.len() > prefix.len() && w.starts_with(prefix.as_str()))
+            })
     }
 
     pub fn len(&self) -> usize {
@@ -131,6 +173,22 @@ mod tests {
         assert!(en.has_extension("compu"));
         assert!(en.has_extension("wri"));
         assert!(!en.has_extension("qqqq"));
+    }
+
+    #[test]
+    fn learned_words_join_membership_and_continuations() {
+        let d = Dictionary::from_words(["hello"]);
+        assert!(!d.contains("kubernetes"));
+        assert!(d.learn("Kubernetes"));
+        assert!(!d.learn("kubernetes"), "learning twice is a no-op");
+        assert!(!d.learn("hello"), "bundled words are never re-learned");
+        assert!(d.contains("kubernetes"));
+        assert!(d.is_learned("kubernetes"));
+        assert!(d.has_extension("kuber"));
+        d.forget_learned();
+        assert!(!d.contains("kubernetes"));
+        assert!(!d.has_extension("kuber"));
+        assert!(d.contains("hello"));
     }
 
     #[test]

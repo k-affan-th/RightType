@@ -11,7 +11,7 @@
 | Active section | `S4/S5 — Windows platform matrix` |
 | Next action | เปิด exact US QWERTY และช่วง hands-off สำหรับ Word/browser E2E; จากนั้นอนุมัติ sleep/lock/UAC transition tests |
 | Current release target | `v1: Windows, Thai Kedmanee ↔ US English QWERTY` |
-| Last updated | `2026-08-24` |
+| Last updated | `2026-09-21` |
 | Last verified baseline | 77 tests, clippy `-D warnings`, fmt check, E2E matrix 9/9 บน Edge (E-025) — working tree ปัจจุบัน |
 | Worktree note | implementation changes ทั้งหมดถูก commit แล้ว (`HEAD` = baseline); งานที่เปิดคือ external unblock checklist เท่านั้น |
 
@@ -196,6 +196,46 @@
 **Decision owner:** product owner, 2026-08-31
 
 **Downstream:** S1 detection, S4 threat model, S5 E2E matrix
+
+### [x] D-009 — ตัดสินทั้ง token ไม่ใช่แค่ run + English นอก dictionary (`ACCEPTED`)
+
+**รายงานจากการใช้งานจริง (2026-09-21):** คำยาว ๆ ถูกแปลงเป็นไทยช่วงต้นคำ พิมพ์ต่อแล้วส่วนท้ายถูก detect เป็น EN ซ้ำ และสลับกลับทั้งคำ/ประโยคไม่ได้; คำใหม่ไม่ถูกเรียนรู้; สลับโหมดไม่ได้ในหลายแอป (เช่น Claude)
+
+**Root causes (ตรวจจากโค้ด ไม่ใช่ threshold):**
+
+1. Anchor ที่ `COMMIT_HORIZON` **ล้าง buffer** — token ที่เหลือพิมพ์บน Thai layout กลายเป็น token ใหม่ boundary จึงตัดสินแค่ส่วนท้าย (`กรดดำrent`) และ Shift+Backspace เห็นแค่ส่วนท้าย
+2. `sync_context` ล้าง `pending_hkl` ทุกคีย์โดยไม่เทียบ จึงไม่มีอะไรกัน race ของ layout switch; คีย์ถัดจาก anchor ถูก translate ด้วย layout เก่า
+3. "English" = dictionary membership เท่านั้น — `middleware`/`workflow` ไม่อยู่ในลิสต์ จึงถูกแปลงเป็นไทยทั้งคำ
+4. `learned.txt` ถูกเขียนแต่**ไม่เคยถูกอ่านไปใช้ตัดสินใจ** (`learn::contains` ไม่มี caller นอกโมดูล)
+5. Ctrl+CapsLock ถูกเช็ก**หลัง** sensitive-context guard — Electron app ที่ UIA ตอบ focus ไม่ได้ถูก fail-closed เป็น password field ทำให้ chord ตกไป toggle CapsLock แทน
+6. Undo record นับจากท้ายข้อความ แต่ไม่ถูกล้างเมื่อพิมพ์ต่อ — undo หลังพิมพ์ต่อจะลบตัวที่เพิ่งพิมพ์; anchor ที่ boundary ไม่นับ space ที่ผ่านไปแล้ว
+
+**Accepted contract:**
+
+- Anchor ปล่อย *run* แต่ไม่ปล่อย *token*: buffer ถูกเขียนทับด้วยข้อความบนจอ (`WordBuffer::replace`) และ token ถูกทำเครื่องหมาย `Converted`; ที่ boundary `policy::revise_converted` ดูทั้ง token — ถ้าคีย์ทั้งหมดสะกดเป็น English (dictionary / learned / compound) ย้อนทั้งคำเป็น English และสลับกลับ US
+- Layout switch ที่เราขอเอง: ระหว่างยังไม่ยืนยัน (≤ 500 ms) translate และ context ใช้ layout ที่ขอ (`effective_layout`); ยืนยันแล้วไม่ถือเป็น context change; app เพิกเฉยเกิน grace → กลับไปใช้ค่าจริงและล้างแบบ conservative
+- English นอก dictionary: compound ของคำจาก 30,000 คำแรก (ส่วนละ ≥ 3 ตัว, casing แบบ word/Word/WORD) + learned words ใช้ทั้ง live gate, holding withdraw และ boundary ทั้งสองทิศ (`english.rs`)
+- Learned words เข้า overlay ของ `Dictionary` (`learn`/`forget_learned`) จึงมีผลทันทีทุก decision; การย้อน conversion อัตโนมัติ (Undo, Shift+Backspace) = เรียนรู้ทันทีทั้งไทยและอังกฤษ (ถ้าเปิด learning) — กลางคำเรียนเมื่อจบ token ไม่ใช่ prefix
+- Token ที่ผู้ใช้ตัดสินเอง (`Decided`) Auto ไม่ตีความซ้ำจนจบ token
+- Ctrl+CapsLock ทำงานก่อน context guard (ไม่แตะข้อความ)
+- Undo ถูกล้างเมื่อมี text key ผ่านไปถึงแอป; หลัง undo สลับ layout ตามข้อความที่คืน
+
+**Measured (bundled dictionaries, OS-free pipeline replay):**
+
+| | main | D-009 |
+| --- | --- | --- |
+| คำอังกฤษใน dictionary ถูกแปลงผิด (88,360) | 0 | **0** |
+| compound ทั่วไป (`middleware`, `workflow`, `workflows`) | กลายเป็นไทย | **คงเดิม** |
+| คำไทยใน dictionary พิมพ์ผิด layout แล้วไม่กลับเป็นไทย (60,964) | 519 | **526** (+7 คำหายาก เช่น หนักอก → `soydvd` ซึ่งเป็น compound อังกฤษ) |
+| live decision latency (warm) | ~14.5 µs | avg ~72 µs, worst ~0.31 ms (budget 1 ms) |
+
+- Dictionary/compound tables ถูก warm ตอน startup — ก่อนหน้านี้ index ของ Thai dictionary ถูกสร้าง lazily บนคีย์แรกใน hook (~30 ms)
+
+**ยังเปิดอยู่:** Windows E2E ของ anchor→revise, pending-layout ใน Word/Chrome/Electron และ Ctrl+CapsLock ใน Claude desktop (เครื่องถูก lock ระหว่างทำงานนี้ — ยังไม่ได้รัน)
+
+**Decision owner:** product owner (bug report 2026-09-21); implementation assessment delegated
+
+**Downstream:** S1 detection, S3 learning/UX, S5 E2E matrix, README
 
 ---
 
@@ -422,6 +462,8 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 
 **Status:** `[~] IN_PROGRESS — first pass shipped in rc1`
 
+> **2026-09-21 audit:** สามรายการด้านล่าง (tray "Hotkeys / Help…", Suggest preview toast, tray tooltip ตาม state) **ไม่มีอยู่ใน binary** ณ 1.0.0 — ละเมิด invariant ข้อ 5 (Honest UX); ทำจริงแล้วใน D-009 change set พร้อม left-click เปิดเมนู
+
 Shipped in rc1:
 
 - [x] First-run onboarding window (hotkeys + privacy line, `Get started`), reopenable via tray "Hotkeys / Help…" (`onboard.rs`, config `onboarded`)
@@ -481,6 +523,7 @@ Deferred (tracked, not forgotten):
 | E-034 | 2026-08-24 | S7 | Theme pass + visual verification (screenshot): dark titlebar/round/dark client, onboarding window render | Welcome window renders modern dark correctly; settings ใช้ helper เดียวกัน; Mica ถูกถอดเพราะ stripe label brushes | ผู้ใช้เป็นคนตัดสิน "modern พอ" สุดท้าย; light-theme users จะเห็น dark เสมอ |
 | E-035 | 2026-08-24 | S6 | Release packaging: `packaging/` (install/uninstall/Inno iss/build_release.ps1) → zip + local install | `RightType-1.0.0-rc1-x64.zip` (933 KB) + SHA256; ติดตั้งจริง: LOCALAPPDATA + Start Menu lnk + HKCU Run autostart ยืนยันครบ | unsigned (SmartScreen prompt); Inno setup.exe skipped (ไม่มี ISCC ในเครื่อง) |
 | E-036 | 2026-08-24 | S5 | Word fast-typing burst case — attempt | BLOCKED ชั่วคราว: fullscreen game ของผู้ใช้บล็อก synthetic mouse (RuntimeError) — แถว optional polish, core Word cases ผ่านแล้ว (E-033) | ยังไม่พิสูจน์ burst บน Word โดยเฉพาะ |
+| E-038 | 2026-09-21 | S1/S3 | `cargo test` (lib 69 + integration 29), winos tests, clippy `-D warnings`, fmt, `policy_latency` | PASS; D-009 pipeline replay: EN dict 0/88,360 mangled, compounds intact, Thai 526/60,964 not recovered (main 519) | ไม่ได้รัน Windows E2E (เครื่อง lock); pipeline replay เป็น OS-free mirror ของ hook |
 | E-037 | 2026-08-24 | S4/S7 | Startup crash ใต้เกม fullscreen (0xC000041D fatal user callback): bisect ด้วย boot markers + env guard | **ROOT CAUSE: toast::init สร้าง layered+region window ตอน startup ใต้ exclusive fullscreen** → fix = lazy creation (สร้างเมื่อ show ครั้งแรก; สร้างไม่ได้ = รัน toast-less ทั้ง session); verify STARTUP alive=True ใต้เกม | toast จะไม่แสดงระหว่าง fullscreen game (by design); ต้อง re-run matrix เมื่อ desktop ปกติ |
 
 ## Risk register
@@ -505,4 +548,5 @@ Deferred (tracked, not forgotten):
 - `2026-08-24` — Native ES_PASSWORD guard PASS (E-029); UAC secure-desktop isolation มีหลักฐานบางส่วน (E-030); transition seam probe สรุป synthetic channel ใช้ไม่ได้ → row sleep/unlock ย้ายเป็น BLOCKED-interactive อย่างซื่อสัตย์ (E-028)
 - `2026-08-24` — UAC full cycle PASS หลังผู้ใช้กด consent (E-030); lock/unlock interactive PASS = Bug-1 proof จริง (E-031); **ผู้ใช้แจ้ง space ถูกกิน → พบ off-by-one ใน live commit** แก้แล้ว (E-032); **Word 3/3** (E-033) — S5 matrix เหลือ sleep/resume + polish เท่านั้น
 - `2026-08-24` — **S7 UX first pass**: onboarding + help window, Suggest preview toast (dynamic width), tray tooltip state, settings singleton + clear-learned, stats learned-count, dark theme pass (E-034); **Release rc1**: packaging/installer scripts, zip artifact, local install + autostart (E-035); Word fast-case BLOCKED ชั่วคราวโดย fullscreen game (E-036)
+- `2026-09-21` — **D-009** จาก bug report การใช้งานจริง: whole-token revision หลัง anchor, pending-layout translation, compound/learned English, learned words ถูกใช้จริง + learn-on-revert, Ctrl+CapsLock ก่อน guards, undo invalidation, tray left-click/help/tooltip, Suggest preview (E-038)
 - `2026-08-24` — Settings/Stats redesign บนธีมเข้ม + refresh-on-reopen semantics (toast แจ้งทุกครั้ง) + toast modernization (fade, dynamic region, border, duration); **พบ+แก้ startup crash ใต้เกม fullscreen** ด้วย lazy toast creation (E-037); re-install rc1 ให้ผู้ใช้

@@ -1,16 +1,29 @@
 //! Auto-learn user dictionary — Windows only. **Off by default.**
 //!
 //! The bundled English list is conversational (OpenSubtitles) and misses domain
-//! vocabulary — a developer's `frontend`, `backend`, `kubernetes`, … don't ignite.
-//! When enabled, this learns English words the user actually types and remembers
-//! them in `%APPDATA%\RightType\learned.txt`, so they ignite next time.
+//! vocabulary — a developer's `kubernetes`, `tokenizer`, product names. When
+//! enabled, this learns words the user actually types and remembers them in
+//! `%APPDATA%\RightType\learned.txt`.
 //!
-//! Guards (privacy first): only **pure-ASCII English** words (so wrong-layout Thai
-//! gibberish is never learned), length 3–20, not already known, never
-//! secret-shaped, and only after being seen [`REPEATS`] times (so one-off typos
-//! and gibberish don't stick). It runs only after the per-context guards in
-//! `safety`/`focus` have already excluded password fields, wallets, and terminals,
-//! so secrets typed there never even reach here.
+//! Learned words join the live dictionaries ([`Dictionary::learn`]), so every
+//! decision sees them immediately: an English word is held instead of turned
+//! into Thai, a Thai word is left alone instead of turned into English. (Before
+//! D-009 they were written to disk and then never consulted.)
+//!
+//! Two ways in:
+//!
+//! - [`observe`] — ordinary English typed on the English layout, after
+//!   [`REPEATS`] sightings, so one-off typos and gibberish don't stick.
+//! - [`learn_now`] — the typist reversed one of RightType's own automatic
+//!   conversions (Undo, or Shift+Backspace on it). That is an explicit "this was
+//!   a real word", so it is learned at once, in either script.
+//!
+//! Guards (privacy first): letters of one script only, bounded length, not
+//! already known, never secret-shaped. It runs only after the per-context
+//! guards in `safety`/`focus` have excluded password fields, wallets and
+//! terminals, so secrets typed there never reach here.
+//!
+//! [`Dictionary::learn`]: righttype::dict::Dictionary::learn
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
@@ -23,6 +36,9 @@ use zeroize::Zeroize;
 
 const MIN_LEN: usize = 3;
 const MAX_LEN: usize = 20;
+/// Thai words are written without spaces and run longer; still bounded.
+const MIN_THAI_LEN: usize = 2;
+const MAX_THAI_LEN: usize = 30;
 const REPEATS: u8 = 3;
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
@@ -50,7 +66,8 @@ fn learned_path() -> Option<PathBuf> {
     Some(p)
 }
 
-/// Load the persisted learned words. Call once at startup.
+/// Load the persisted learned words into the live dictionaries. Call once at
+/// startup. Lines that no longer pass the shape guards are ignored.
 pub fn load() {
     let set: HashSet<String> = learned_path()
         .and_then(|p| std::fs::read_to_string(p).ok())
@@ -58,6 +75,7 @@ pub fn load() {
             s.lines()
                 .map(str::trim)
                 .filter(|l| !l.is_empty())
+                .filter(|l| teach(l))
                 .map(str::to_string)
                 .collect()
         })
@@ -65,14 +83,17 @@ pub fn load() {
     *LEARNED.lock().unwrap() = Some(set);
 }
 
-/// Has this English word been learned? (Cheap; called on the hot path.)
-pub fn contains(word: &str) -> bool {
-    let key = word.to_ascii_lowercase();
-    LEARNED
-        .lock()
-        .unwrap()
-        .as_ref()
-        .is_some_and(|s| s.contains(&key))
+/// Add a word to whichever live dictionary its script belongs to.
+fn teach(word: &str) -> bool {
+    if eligible_shape(word) {
+        dict::english().learn(word);
+        true
+    } else if eligible_thai_shape(word) {
+        dict::thai().learn(word);
+        true
+    } else {
+        false
+    }
 }
 
 /// Number of learned words (for the stats dialog).
@@ -93,6 +114,38 @@ pub fn clear() {
     if let Some(s) = LEARNED.lock().unwrap().as_mut() {
         s.clear();
     }
+    dict::english().forget_learned();
+    dict::thai().forget_learned();
+}
+
+/// The typist reversed one of RightType's automatic conversions and this is
+/// the word they kept. Learn it immediately — English or Thai. No-op unless
+/// learning is enabled.
+pub fn learn_now(word: &str) {
+    if !is_enabled() {
+        return;
+    }
+    // Edge punctuation travels with a token (it may be a Thai letter on the
+    // other layout) but is not part of the word.
+    let word = word
+        .trim()
+        .trim_matches(|c: char| c.is_ascii_punctuation() || c.is_whitespace());
+    let mut key = if eligible_shape(word) {
+        if dict::english().contains(word) {
+            return;
+        }
+        word.to_ascii_lowercase()
+    } else if eligible_thai_shape(word) {
+        if dict::thai().contains(word) {
+            return;
+        }
+        word.to_string()
+    } else {
+        return;
+    };
+    PENDING.lock().unwrap().remove(&key);
+    commit(&key);
+    key.zeroize();
 }
 
 /// Observe a completed word. After [`REPEATS`] sightings of a qualifying English
@@ -105,8 +158,8 @@ pub fn observe(word: &str) {
         return;
     }
     let mut key = word.to_ascii_lowercase();
-    if dict::english().contains(&key) || contains(&key) {
-        return; // already known
+    if dict::english().contains(&key) {
+        return; // already known (bundled or learned)
     }
 
     let ready = {
@@ -133,12 +186,19 @@ fn eligible_shape(word: &str) -> bool {
         && !secret::is_secret_token(word)
 }
 
+fn eligible_thai_shape(word: &str) -> bool {
+    let len = word.chars().count();
+    (MIN_THAI_LEN..=MAX_THAI_LEN).contains(&len)
+        && word.chars().all(|c| ('\u{0E01}'..='\u{0E5B}').contains(&c))
+}
+
 fn commit(word: &str) {
     if let Some(set) = LEARNED.lock().unwrap().as_mut() {
         if !set.insert(word.to_string()) {
             return;
         }
     }
+    teach(word);
     queue_persist(word.to_string());
 }
 
@@ -183,7 +243,16 @@ fn persist_word(word: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::eligible_shape;
+    use super::{eligible_shape, eligible_thai_shape};
+
+    #[test]
+    fn thai_learning_shape_is_thai_letters_only() {
+        assert!(eligible_thai_shape("ไลน์"));
+        assert!(eligible_thai_shape("อัฟฟาน"));
+        for denied in ["ก", "abc", "ไลน์x", "ไลน์ 1", "ไลน์123"] {
+            assert!(!eligible_thai_shape(denied), "{denied}");
+        }
+    }
 
     #[test]
     fn learning_shape_rejects_secrets_non_ascii_and_non_words() {

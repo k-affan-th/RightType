@@ -11,6 +11,7 @@
 //! - [`layout`] — N-layout-generic conversion engine (Kedmanee ↔ QWERTY in v1).
 //! - [`secret`] — hard-deny key/address shapes plus password/BIP39 stream guards.
 //! - [`dict`] — word dictionaries for membership checks.
+//! - [`english`] — English beyond the dictionary: compounds and continuations.
 //! - [`detect`] — layout-mismatch detection over completed words.
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
 //! - [`segment`] — Thai word segmentation (maximal matching) for space-less Thai.
@@ -19,6 +20,7 @@
 pub mod buffer;
 pub mod detect;
 pub mod dict;
+pub mod english;
 pub mod layout;
 pub mod policy;
 pub mod render;

@@ -579,10 +579,11 @@ fn owned_run_screen(keys: &str, horizon: usize) -> String {
 
 #[test]
 fn a_mistyped_english_word_is_put_back_when_the_thai_reading_dies() {
-    // `adavnce` is a typo for `advance`: not a word, and not on its way to one,
-    // so D-007's live-continuation guard cannot see it. Its first four
-    // characters do convert to valid Thai.
-    for typo in ["adavnce", "addvance", "adition"] {
+    // `lsiten` is a typo for `listen`: not a word, and not on its way to one,
+    // so D-007's live-continuation guard cannot see it. Its first characters
+    // do convert to valid Thai. (`adavnce`, the original example, is now held
+    // earlier still: `ada` + `v…` reads as a compound in progress, D-009.)
+    for typo in ["lsiten", "wroking", "dfiferent", "soemone"] {
         // Horizon 1 is the D-007 one-shot commit: cemented, unrecoverable.
         assert_ne!(
             owned_run_screen(typo, 1),
@@ -631,4 +632,205 @@ fn revisable_rendering_keeps_both_directions_correct() {
             phrase
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// D-009 whole-token revision.
+//
+// Anchoring releases the *run* but not the *token*: the rest of the word
+// arrives natively on the Thai layout and the boundary judges the whole thing.
+// `auto_pipeline_screen` replays the hook's Auto path end to end — live
+// rendering, anchoring, the layout switch, and the boundary decision — so the
+// assertions below are about what the typist actually ends up with.
+// ---------------------------------------------------------------------------
+
+fn is_thai(s: &str) -> bool {
+    s.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c))
+}
+
+/// What ends up on screen when `keys` (physical keys, named by their US
+/// character, space = boundary) are typed in Auto mode starting on the US
+/// layout. Mirrors `hook::process` / `hook::reconcile_run`.
+fn auto_pipeline_screen(keys: &str) -> String {
+    let en = dict::english();
+    let th = dict::thai();
+    let mut screen = String::new();
+    let mut buf = String::new();
+    let mut owned: Option<(String, usize)> = None;
+    let mut converted = false;
+    let mut layout = InputLayout::UsQwerty;
+
+    for k in keys.chars() {
+        if k == ' ' {
+            let word = std::mem::take(&mut buf);
+            let was_converted = std::mem::replace(&mut converted, false);
+            if owned.take().is_some() {
+                // Anchored at the boundary: the rendered Thai stays.
+                layout = InputLayout::ThaiKedmanee;
+                screen.push(' ');
+                continue;
+            }
+            if !word.is_empty() {
+                let detection = if was_converted {
+                    policy::revise_converted(&word, en)
+                } else {
+                    policy::detect_token(&word, layout, en, th)
+                };
+                if let Some(d) = detection {
+                    for _ in 0..word.chars().count() {
+                        screen.pop();
+                    }
+                    screen.push_str(&d.corrected);
+                    layout = if is_thai(&d.corrected) {
+                        InputLayout::ThaiKedmanee
+                    } else {
+                        InputLayout::UsQwerty
+                    };
+                }
+            }
+            screen.push(' ');
+            continue;
+        }
+
+        let produced = match layout {
+            InputLayout::UsQwerty => k,
+            InputLayout::ThaiKedmanee => en_to_th(&k.to_string()).chars().next().unwrap(),
+        };
+        buf.push(produced);
+        if layout == InputLayout::UsQwerty && !converted {
+            let holding = owned.is_some();
+            let reading = policy::live_reading(&buf, holding, en, th);
+            if holding || matches!(reading, Reading::Thai(_)) {
+                let target = match &reading {
+                    Reading::AsTyped => buf.clone(),
+                    Reading::Thai(t) => t.clone(),
+                };
+                let on_screen = match &owned {
+                    Some((rendered, _)) => rendered.clone(),
+                    None => buf.chars().take(buf.chars().count() - 1).collect(),
+                };
+                let delta = render::delta(&on_screen, &target);
+                for _ in 0..delta.backspaces {
+                    screen.pop();
+                }
+                screen.push_str(&delta.insert);
+                match reading {
+                    Reading::AsTyped => owned = None,
+                    Reading::Thai(_) => {
+                        let stable = owned.as_ref().map_or(0, |o| o.1) + 1;
+                        owned = Some((target.clone(), stable));
+                        if stable >= policy::COMMIT_HORIZON {
+                            // Release the run, keep the token.
+                            owned = None;
+                            buf = target;
+                            converted = true;
+                            layout = InputLayout::ThaiKedmanee;
+                        }
+                    }
+                }
+                continue;
+            }
+        }
+        screen.push(produced);
+    }
+    screen
+}
+
+#[test]
+fn everyday_technical_compounds_are_never_turned_into_thai() {
+    // Each of these used to end up as Thai: `middleware` → `ทรกกสำไฟพำ`.
+    for word in [
+        "middleware",
+        "workflow",
+        "workflows",
+        "codebase",
+        "frontend",
+        "backend",
+        "localhost",
+        "hotkey",
+        "websocket",
+    ] {
+        let typed = format!("{word} ");
+        assert_eq!(auto_pipeline_screen(&typed), typed, "{word}");
+    }
+}
+
+#[test]
+fn thai_sentences_still_arrive_through_the_whole_pipeline() {
+    for phrase in [
+        "สวัสดีครับ",
+        "วันนี้วันจันทร์",
+        "ผมชอบกินข้าวผัด",
+        "ขอบคุณมากครับ",
+        "เดี๋ยวโทรกลับนะ",
+        "ส่งไฟล์มาให้หน่อย",
+        "กินข้าวยัง",
+        "เปิดแอปไลน์หน่อย",
+        "ผมชื่ออัฟฟานครับ",
+        "ประชุมตอนบ่ายสองโมง",
+        "บาทหลวง",
+        "ลูกธนู",
+    ] {
+        let typed = format!("{} ", th_to_en(phrase));
+        assert_eq!(
+            auto_pipeline_screen(&typed),
+            format!("{phrase} "),
+            "{phrase}"
+        );
+    }
+}
+
+#[test]
+fn an_anchored_token_that_turns_out_english_is_revised_whole() {
+    // The boundary sees the token as it is on screen: Thai all the way
+    // through, because the anchor switched the layout mid-word. Its keys spell
+    // English, so the whole token comes back — not just the tail typed after
+    // the anchor, which is what used to produce `กรดดำrent`.
+    assert_eq!(
+        policy::revise_converted("ทรกกสำไฟพำ", dict::english())
+            .unwrap()
+            .corrected,
+        "middleware"
+    );
+    assert_eq!(
+        policy::revise_converted("ไนพาดสนไม", dict::english())
+            .unwrap()
+            .corrected,
+        "workflow,"
+    );
+    // Thai that is simply Thai stays.
+    for thai in ["สวัสดีครับ", "บาทหลวง", "ลูกธนู"] {
+        assert!(
+            policy::revise_converted(thai, dict::english()).is_none(),
+            "{thai}"
+        );
+    }
+}
+
+#[test]
+fn a_learned_word_is_held_like_a_dictionary_word() {
+    // Not an English word, and its keys spell valid Thai (`น้าสะ`), so Auto
+    // rewrites it. Once the typist has taught it, every decision treats it as
+    // English. (It is unique to this test: the learned overlay is global.)
+    let word = "ohklt";
+    let typed = format!("{word} ");
+    assert_ne!(auto_pipeline_screen(&typed), typed);
+    assert!(dict::english().learn(word));
+    assert_eq!(auto_pipeline_screen(&typed), typed);
+    assert!(
+        policy::detect_token(word, InputLayout::UsQwerty, dict::english(), dict::thai()).is_none()
+    );
+}
+
+#[test]
+fn a_compound_typed_on_the_thai_layout_comes_back_as_english() {
+    let typed = en_to_th("workflow");
+    let d = policy::detect_token(
+        &typed,
+        InputLayout::ThaiKedmanee,
+        dict::english(),
+        dict::thai(),
+    )
+    .expect("compound English typed on the Thai layout is a layout slip");
+    assert_eq!(d.corrected, "workflow");
 }

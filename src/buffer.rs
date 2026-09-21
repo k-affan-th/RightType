@@ -140,6 +140,19 @@ impl WordBuffer {
         self.poisoned = false;
     }
 
+    /// Replace the word in progress with `text` — what is now on screen for it.
+    ///
+    /// Used when RightType rewrites an in-flight token and the typist carries
+    /// on typing it: the buffer must keep describing the whole token, not
+    /// restart mid-word, or the token's boundary decision would only ever see
+    /// the part typed after the rewrite. The allocation is reused, never grown.
+    pub fn replace(&mut self, text: &str) {
+        self.clear();
+        for c in text.chars() {
+            self.push(c);
+        }
+    }
+
     fn push(&mut self, c: char) {
         if self.poisoned {
             return;
@@ -314,6 +327,17 @@ mod tests {
             let (_, cap_now) = b.stable_region();
             assert_eq!(cap_now, cap0, "capacity must never grow");
         }
+    }
+
+    #[test]
+    fn replace_keeps_the_token_open_and_capacity_fixed() {
+        let mut b = WordBuffer::new();
+        let (_, cap0) = b.stable_region();
+        type_chars(&mut b, "l;yl");
+        b.replace("สวัส");
+        type_chars(&mut b, "ดี");
+        assert_eq!(b.stable_region().1, cap0);
+        assert_eq!(b.observe(Key::Boundary), Some("สวัสดี".to_string()));
     }
 
     #[test]

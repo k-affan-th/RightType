@@ -13,7 +13,7 @@ use native_windows_gui as nwg;
 use crate::{config, theme};
 
 pub const HOTKEYS: &[(&str, &str)] = &[
-    ("Fix last word", "Shift + Backspace"),
+    ("Flip or revert last word", "Shift + Backspace"),
     ("Convert selection", "Shift + CapsLock"),
     ("Cycle Manual / Auto / Suggest", "Ctrl + CapsLock"),
     ("Undo last correction", "Ctrl + Shift + CapsLock"),

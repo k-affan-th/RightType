@@ -106,6 +106,7 @@ pub fn set_enabled(on: bool) {
             let mut st = s.borrow_mut();
             st.buf.clear();
             st.owned = None;
+            st.mark = TokenMark::Plain;
             st.undo = None;
             st.last_completed = None;
             st.suggestion = None;
@@ -153,10 +154,16 @@ struct HookState {
     /// Cleared after use and whenever focus/layout changes (an undo that retypes
     /// into a different window/context than the one it corrected would be wrong).
     undo: Option<UndoRecord>,
-    /// The layout we requested to switch to, if we are waiting for the OS to complete it.
-    pending_hkl: Option<isize>,
+    /// The layout we requested to switch to, while the target app has not yet
+    /// reported it. Keystrokes in that window are translated with *this* layout:
+    /// the app processes our posted switch before the next key's input message,
+    /// so it already types in the new layout even though `GetKeyboardLayout`
+    /// still reports the old one.
+    pending_hkl: Option<PendingLayout>,
     /// D-008: set while we own what is on screen for the current run.
     owned: Option<OwnedRun>,
+    /// D-009: who has decided what the current token is.
+    mark: TokenMark,
     /// The last completed word and the boundary key code that completed it.
     /// Used for manual Shift+Backspace correction immediately after a boundary.
     last_completed: Option<LastCompleted>,
@@ -175,10 +182,37 @@ impl HookState {
             undo: None,
             pending_hkl: None,
             owned: None,
+            mark: TokenMark::Plain,
             last_completed: None,
             suggestion: None,
         }
     }
+}
+
+/// D-009: who has decided what the token in progress is. Reset at every
+/// boundary and every time the buffer is dropped.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TokenMark {
+    /// Nobody yet: Auto may render and revise it.
+    Plain,
+    /// RightType converted part of it on its own (an anchored run) and the rest
+    /// is arriving natively in the new layout. The buffer holds the whole token
+    /// as it is on screen, so its boundary can still revise all of it.
+    Converted,
+    /// The typist settled it by hand (withdrew our reading, undid an anchor, or
+    /// flipped it). Auto leaves it alone; `learn` when what they rejected was
+    /// RightType's own conversion, so the finished word is remembered.
+    Decided { learn: bool },
+}
+
+/// How long a requested layout switch may stay unconfirmed before we assume
+/// the app ignored it and fall back to what Windows reports.
+const PENDING_LAYOUT_GRACE: Duration = Duration::from_millis(500);
+
+#[derive(Clone, Copy)]
+struct PendingLayout {
+    hkl: isize,
+    since: Instant,
 }
 
 /// D-008: a run whose on-screen text RightType is currently responsible for.
@@ -209,6 +243,8 @@ struct SuggestionRecord {
 struct LastCompleted {
     word: String,
     boundary_vk: u16,
+    /// RightType converted this word itself (see [`TokenMark::Converted`]).
+    converted: bool,
 }
 
 impl Drop for LastCompleted {
@@ -231,7 +267,21 @@ struct UndoRecord {
     injected_len: usize,
     /// Text to retype to restore what was there before.
     restore_text: String,
+    kind: UndoKind,
     created_at: Instant,
+}
+
+/// Who made a correction, which decides what undoing it teaches us.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum UndoKind {
+    /// The typist asked for it (hotkey, suggestion): undo just reverts.
+    Manual,
+    /// RightType corrected a complete word on its own. Undoing it says "that
+    /// was a real word", so the restored word is learned.
+    AutoWord,
+    /// RightType anchored a run mid-word. Undoing it hands the token back to
+    /// the typist; it is learned once they finish it.
+    AutoMidToken,
 }
 
 impl Drop for UndoRecord {
@@ -244,10 +294,11 @@ impl Drop for UndoRecord {
 /// correction that just replaced it with `injected_len` characters. Refuses
 /// secret-shaped text — `detect::detect` already guards the automatic paths, but
 /// the manual convert-word hotkey doesn't, so this is the one place that matters.
-fn set_undo(injected_len: usize, restore_text: &str) {
+fn set_undo(injected_len: usize, restore_text: &str, kind: UndoKind) {
     let record = (!secret::is_secret_token(restore_text)).then(|| UndoRecord {
         injected_len,
         restore_text: restore_text.to_string(),
+        kind,
         created_at: Instant::now(),
     });
     STATE.with(|s| s.borrow_mut().undo = record);
@@ -267,6 +318,18 @@ unsafe fn undo_last_correction() {
     let ok = inject::apply(rec.injected_len, &rec.restore_text, None);
     e2e_trace(format!("undo apply len={} -> {ok}", rec.injected_len));
     if ok {
+        let restored = rec.restore_text.trim_end_matches(['\r', '\t', ' ']);
+        match rec.kind {
+            UndoKind::Manual => {}
+            UndoKind::AutoWord => crate::learn::learn_now(restored),
+            UndoKind::AutoMidToken => STATE.with(|s| {
+                let mut st = s.borrow_mut();
+                st.buf.replace(restored);
+                st.mark = TokenMark::Decided { learn: true };
+            }),
+        }
+        // The typist meant what they typed: keep typing it in its own layout.
+        activate_layout(layout_of(restored));
         crate::toast::show("Undo");
     } else {
         crate::toast::show("RightType: undo injection failed");
@@ -485,6 +548,20 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return false;
     }
 
+    // Ctrl+CapsLock: cycle Manual → Auto → Suggest. Swallow so Caps never
+    // flips. Handled ahead of the context guards: it never touches text, and
+    // Electron apps (Claude, VS Code, Slack, Discord) frequently report a UIA
+    // focus we cannot classify, which the guards below must treat as a
+    // password field — so the chord used to fall through there and silently
+    // toggle CapsLock instead of switching mode.
+    if vk == VK_CAPITAL.0 && is_down(VK_CONTROL) && !is_down(VK_SHIFT) && !is_down(VK_MENU) {
+        let next = mode().next();
+        set_mode(next);
+        crate::toast::show(next.label());
+        crate::config::persist_async();
+        return true;
+    }
+
     // A user-initiated layout switch invalidates buffered caret context. Windows
     // performs the switch itself; we only discard state here.
     //
@@ -500,6 +577,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             let mut st = s.borrow_mut();
             st.pending_hkl = None;
             st.buf.clear();
+            st.mark = TokenMark::Plain;
             st.last_completed = None;
         });
     }
@@ -531,10 +609,10 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             if withdraw_owned_run() {
                 STATE.with(|s| {
                     let mut st = s.borrow_mut();
-                    // Restart the run: without this the very next keystroke
-                    // re-evaluates the same text and can immediately re-apply
-                    // the reading the typist just rejected.
-                    st.buf.clear();
+                    // Keep the token but mark it decided: without this the very
+                    // next keystroke re-evaluates the same text and can
+                    // immediately re-apply the reading the typist just rejected.
+                    st.mark = TokenMark::Decided { learn: true };
                     st.undo = None;
                 });
                 crate::toast::show("Undo");
@@ -544,15 +622,6 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             ) {
                 undo_last_correction();
             }
-            return true;
-        }
-        if ctrl {
-            // Ctrl+CapsLock: cycle Manual → Auto → Suggest. Swallow so Caps
-            // never flips.
-            let next = mode().next();
-            set_mode(next);
-            crate::toast::show(next.label());
-            crate::config::persist_async();
             return true;
         }
         if alt {
@@ -579,6 +648,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // manual path's backspace count would be wrong. Withdraw our rendering
         // first; the typist asked for the raw keystrokes back.
         if withdraw_owned_run() {
+            // The typist rejected our reading mid-word. Leave the rest of this
+            // token alone, and learn it once it is complete.
+            STATE.with(|s| s.borrow_mut().mark = TokenMark::Decided { learn: true });
             return true;
         }
         convert_last_word();
@@ -589,14 +661,23 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return false;
     };
 
+    // Any text reaching the app moves the caret past a correction's Undo
+    // window: the record counts characters from the end, so replaying it now
+    // would delete what was just typed instead of what we changed.
+    if matches!(key, Key::Char(_) | Key::Backspace | Key::Boundary) {
+        STATE.with(|s| s.borrow_mut().undo = None);
+    }
+
     // Drive the buffer; only a boundary can return a completed word.
     let completed = STATE.with(|s| s.borrow_mut().buf.observe(key));
     let Some(mut word) = completed else {
         // D-008 revisable rendering: reconcile the screen with the run's current
-        // best reading. Only Char and Backspace change the run.
+        // best reading. Only Char and Backspace change the run, and only a
+        // token nobody has decided yet is RightType's to reinterpret.
         if matches!(key, Key::Char(_) | Key::Backspace)
             && mode() == Mode::Auto
-            && policy::supported_layout_id(layout_id(foreground_layout()))
+            && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
+            && policy::supported_layout_id(layout_id(effective_layout()))
                 == Some(policy::InputLayout::UsQwerty)
             && reconcile_run()
         {
@@ -605,26 +686,61 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // Navigation and focus events move the caret away from the run, so the
         // text we rendered is no longer ours to edit. Let go without touching it.
         if key == Key::Reset {
-            STATE.with(|s| s.borrow_mut().owned = None);
+            STATE.with(|s| {
+                let mut st = s.borrow_mut();
+                st.owned = None;
+                st.mark = TokenMark::Plain;
+            });
+        } else {
+            STATE.with(|s| {
+                let mut st = s.borrow_mut();
+                // Too long to describe any more, or erased back to nothing:
+                // either way nothing about the token is ours any more.
+                if st.buf.is_poisoned() || st.buf.current().is_empty() {
+                    st.mark = TokenMark::Plain;
+                }
+            });
         }
         // Everything else passes through; the buffer already tracked it.
         return false;
     };
+    let mark = STATE.with(|s| std::mem::replace(&mut s.borrow_mut().mark, TokenMark::Plain));
 
     // A boundary ends a run we own. Its reading has already been applied to the
     // screen, so the boundary path must not correct it a second time — its
     // backspace count assumes the screen still holds the raw keystrokes.
-    if STATE.with(|s| s.borrow().owned.is_some()) {
-        anchor_owned_run(&word);
+    if let Some(mut rendered) = anchor_owned_run(&word, vk) {
+        remember_completed(&rendered, vk, true);
+        rendered.zeroize();
         word.zeroize();
         return false;
     }
 
-    let active_layout = policy::supported_layout_id(layout_id(foreground_layout()));
-    let mut detection = active_layout
-        .and_then(|layout| policy::detect_token(&word, layout, dict::english(), dict::thai()));
+    // The typist settled this token by hand; honour that, and learn the word
+    // when what they rejected was RightType's own conversion.
+    if let TokenMark::Decided { learn } = mark {
+        // Still part of the typed stream: the seed-phrase guard must see it.
+        let seed_run = STATE.with(|s| s.borrow_mut().seed.observe_candidate(&word, None));
+        if learn && !seed_run {
+            crate::learn::learn_now(&word);
+        }
+        remember_completed(&word, vk, false);
+        word.zeroize();
+        return false;
+    }
+
+    let active_layout = policy::supported_layout_id(layout_id(effective_layout()));
+    let converted = mark == TokenMark::Converted;
+    let mut detection = if converted {
+        // D-009: the whole token, including the part converted before the
+        // anchor, gets its first complete look now.
+        policy::revise_converted(&word, dict::english())
+    } else {
+        active_layout
+            .and_then(|layout| policy::detect_token(&word, layout, dict::english(), dict::thai()))
+    };
     e2e_trace(format!(
-        "layout={active_layout:?} det={:?} mode={:?}",
+        "layout={active_layout:?} converted={converted} det={:?} mode={:?}",
         detection.as_ref().map(|d| d.corrected.clone()),
         mode()
     ));
@@ -652,8 +768,21 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // Auto mode commits only at this boundary; Manual mode retains the token for
     // Shift+Backspace.
     let swallow = match (mode(), detection) {
-        (Mode::Auto, Some(d)) => maybe_correct(&word, Some(vk), d),
+        (Mode::Auto, Some(d)) => {
+            let mut corrected = d.corrected.clone();
+            let done = maybe_correct(&word, Some(vk), d);
+            if done {
+                // Shift+Backspace right after an automatic correction flips it
+                // back — the undo gesture people reach for first.
+                remember_completed(&corrected, vk, true);
+            }
+            corrected.zeroize();
+            done
+        }
         (Mode::Suggest, Some(d)) => {
+            // Show *what* would be written, not just that something would:
+            // a hint you cannot read is a hint you cannot judge.
+            let mut hint = format!("{}  ·  Alt+CapsLock", d.corrected);
             STATE.with(|s| {
                 s.borrow_mut().suggestion = Some(SuggestionRecord {
                     original: word.clone(),
@@ -661,23 +790,28 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                     boundary_vk: vk,
                 });
             });
-            crate::toast::show("Suggestion: Alt+CapsLock");
+            crate::toast::show(&hint);
+            hint.zeroize();
             false
         }
         _ => false,
     };
-    if swallow {
-        STATE.with(|s| s.borrow_mut().last_completed = None);
-    } else {
-        STATE.with(|s| {
-            s.borrow_mut().last_completed = Some(LastCompleted {
-                word: word.clone(),
-                boundary_vk: vk,
-            });
-        });
+    if !swallow {
+        remember_completed(&word, vk, converted);
     }
     word.zeroize();
     swallow
+}
+
+/// Keep the word a boundary just completed, for Shift+Backspace right after it.
+fn remember_completed(word: &str, boundary_vk: u16, converted: bool) {
+    STATE.with(|s| {
+        s.borrow_mut().last_completed = Some(LastCompleted {
+            word: word.to_string(),
+            boundary_vk,
+            converted,
+        });
+    });
 }
 
 /// Exact 32-bit keyboard layout identifiers supported by the v1 mapping tables.
@@ -690,8 +824,8 @@ fn layout_id(hkl: HKL) -> u32 {
 /// Switch the foreground window to one exact layout supported by the v1 mapping
 /// tables. No-op if that layout is not installed.
 unsafe fn activate_layout(target: policy::InputLayout) {
-    if policy::supported_layout_id(layout_id(foreground_layout())) == Some(target) {
-        STATE.with(|s| s.borrow_mut().pending_hkl = None);
+    // Already there, or already on its way there.
+    if policy::supported_layout_id(layout_id(effective_layout())) == Some(target) {
         return;
     }
     let count = GetKeyboardLayoutList(None);
@@ -731,9 +865,16 @@ unsafe fn activate_layout(target: policy::InputLayout) {
                     LPARAM(hkl.0 as isize),
                 );
             }
-            // Record that we are waiting for this HKL to activate
+            // Record that we are waiting for this HKL to activate, and adopt it
+            // as the context's layout now: this switch is ours, so it must not
+            // read as the context change that drops the token in progress.
             STATE.with(|s| {
-                s.borrow_mut().pending_hkl = Some(hkl.0 as isize);
+                let mut st = s.borrow_mut();
+                st.pending_hkl = Some(PendingLayout {
+                    hkl: hkl.0 as isize,
+                    since: Instant::now(),
+                });
+                st.last_hkl = hkl.0 as isize;
             });
             // No toast here: a layout switch happens on every ignition, which is
             // too frequent — and Windows' own language indicator already reflects
@@ -765,7 +906,11 @@ unsafe fn accept_suggestion() {
         suggestion.original,
         boundary_literal(suggestion.boundary_vk)
     );
-    set_undo(suggestion.corrected.chars().count() + 1, &restore);
+    set_undo(
+        suggestion.corrected.chars().count() + 1,
+        &restore,
+        UndoKind::Manual,
+    );
     restore.zeroize();
     crate::stats::record_manual();
 
@@ -806,8 +951,14 @@ unsafe fn convert_last_word() {
                 set_undo(
                     converted.chars().count() + 1,
                     &format!("{}{}", last_word, boundary_literal(boundary_vk)),
+                    UndoKind::Manual,
                 );
                 crate::stats::record_manual();
+                // Flipping back a word RightType converted by itself is the
+                // clearest "that was a real word" there is.
+                if last.converted {
+                    crate::learn::learn_now(&converted);
+                }
 
                 // Switch language layout to the one of the converted word
                 let to_thai = converted
@@ -824,10 +975,7 @@ unsafe fn convert_last_word() {
         }
         return;
     }
-    STATE.with(|s| {
-        s.borrow_mut().buf.clear();
-        s.borrow_mut().last_completed = None;
-    });
+    STATE.with(|s| s.borrow_mut().last_completed = None);
 
     let backspaces = word.chars().count();
     let mut converted = auto_convert(&word);
@@ -839,7 +987,16 @@ unsafe fn convert_last_word() {
             converted.zeroize();
             return;
         }
-        set_undo(converted.chars().count(), &word);
+        // The token stays open: the buffer now describes the flipped text, so
+        // the typist can carry on and the boundary still sees the whole word.
+        // It is theirs now — Auto will not reinterpret it.
+        STATE.with(|s| {
+            let mut st = s.borrow_mut();
+            let learn = st.mark == TokenMark::Converted;
+            st.buf.replace(&converted);
+            st.mark = TokenMark::Decided { learn };
+        });
+        set_undo(converted.chars().count(), &word, UndoKind::Manual);
         crate::stats::record_manual();
 
         // Switch language layout to the one of the converted word
@@ -871,14 +1028,33 @@ unsafe fn withdraw_owned_run() -> bool {
 }
 
 /// A run we own has reached a word boundary: keep what is on screen, record it
-/// for Undo, and let the Thai layout carry the rest of the sentence.
-unsafe fn anchor_owned_run(run: &str) {
-    let Some(owned) = STATE.with(|s| s.borrow_mut().owned.take()) else {
-        return;
-    };
-    set_undo(owned.rendered.chars().count(), run);
+/// for Undo, and let the Thai layout carry the rest of the sentence. Returns
+/// the text now on screen for the run.
+///
+/// The boundary key itself passes through to the app after this, so the Undo
+/// record covers it too — otherwise Undo would delete the boundary plus the
+/// last rendered character and leave the first one behind.
+unsafe fn anchor_owned_run(run: &str, boundary_vk: u16) -> Option<String> {
+    let owned = STATE.with(|s| s.borrow_mut().owned.take())?;
+    let mut restore = format!("{run}{}", boundary_literal(boundary_vk));
+    set_undo(
+        owned.rendered.chars().count() + 1,
+        &restore,
+        UndoKind::AutoWord,
+    );
+    restore.zeroize();
     crate::stats::record_auto();
     activate_layout(policy::InputLayout::ThaiKedmanee);
+    Some(owned.rendered.clone())
+}
+
+/// The layout a piece of text is written in, for switching to after a flip.
+fn layout_of(text: &str) -> policy::InputLayout {
+    if text.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c)) {
+        policy::InputLayout::ThaiKedmanee
+    } else {
+        policy::InputLayout::UsQwerty
+    }
 }
 
 /// Move the screen to the current run's best reading, taking ownership of the
@@ -985,12 +1161,19 @@ where
             if anchor {
                 // Stable long enough to stop second-guessing: hand the rest of
                 // the sentence to the Thai layout and release the run.
-                set_undo(target.chars().count(), &run);
+                //
+                // D-009: release the *run*, not the *token*. The buffer is
+                // rewritten to what is now on screen, and the native Thai
+                // keystrokes that follow extend it, so the boundary still sees
+                // the whole word. Clearing it here is what used to leave
+                // `กรดดำrent`: the boundary judged only the tail.
+                set_undo(target.chars().count(), &run, UndoKind::AutoMidToken);
                 crate::stats::record_auto();
                 STATE.with(|s| {
                     let mut st = s.borrow_mut();
                     st.owned = None;
-                    st.buf.clear();
+                    st.buf.replace(&target);
+                    st.mark = TokenMark::Converted;
                 });
                 activate_layout(policy::InputLayout::ThaiKedmanee);
             }
@@ -1043,6 +1226,7 @@ where
     set_undo(
         corrected.chars().count() + usize::from(boundary_vk.is_some()),
         &restore,
+        UndoKind::AutoWord,
     );
     crate::stats::record_auto();
     restore.zeroize();
@@ -1109,7 +1293,7 @@ unsafe fn translate(vk: u16, scan: u16) -> Option<char> {
         state[VK_CAPITAL.0 as usize] = 0x01;
     }
 
-    let hkl = foreground_layout();
+    let hkl = effective_layout();
     let mut out = [0u16; 8];
     let n = ToUnicodeEx(vk as u32, scan as u32, &state, &mut out, 0, hkl);
     if n == 1 {
@@ -1129,12 +1313,22 @@ unsafe fn sync_context() {
 
     // A layout-switch request is asynchronous. Never wait for it inside the
     // global low-level hook: a slow target window used to add up to 50 ms of
-    // latency to the next physical key. If the layout has not changed yet, the
-    // normal context comparison below keeps the buffer conservative.
-    let hkl_i = GetKeyboardLayout(tid).0 as isize;
-    if STATE.with(|s| s.borrow().pending_hkl).is_some() {
-        STATE.with(|s| s.borrow_mut().pending_hkl = None);
-    }
+    // latency to the next physical key. While our own request is in flight the
+    // context is already on the requested layout (see `effective_layout`);
+    // once it lands it is confirmed, and if the app ignores it past the grace
+    // period the real layout wins and reads as the context change it then is.
+    let actual = GetKeyboardLayout(tid).0 as isize;
+    let hkl_i = STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        match st.pending_hkl {
+            Some(p) if p.hkl != actual && p.since.elapsed() < PENDING_LAYOUT_GRACE => p.hkl,
+            Some(_) => {
+                st.pending_hkl = None;
+                actual
+            }
+            None => actual,
+        }
+    });
 
     let focus_generation = crate::focus::generation();
     let window_changed = STATE.with(|s| {
@@ -1153,6 +1347,7 @@ unsafe fn sync_context() {
             }
             st.buf.clear();
             st.owned = None;
+            st.mark = TokenMark::Plain;
             st.seed.reset();
             st.last_completed = None;
             st.suggestion = None;
@@ -1166,6 +1361,24 @@ unsafe fn sync_context() {
     if window_changed {
         let blacklisted = safety::is_blacklisted_app(hwnd);
         STATE.with(|s| s.borrow_mut().sensitive_app = blacklisted);
+    }
+}
+
+/// The layout the focused app is typing in *now*: our own switch request while
+/// it is in flight, otherwise what Windows reports.
+///
+/// The target app handles the posted `WM_INPUTLANGCHANGEREQUEST` before the
+/// next keystroke's input message (posted messages are retrieved first), so a
+/// key pressed right after an anchor already produces Thai there, while
+/// `GetKeyboardLayout` can still say English for a moment. Translating with
+/// the stale answer put Latin letters in a buffer describing Thai text.
+unsafe fn effective_layout() -> HKL {
+    let actual = foreground_layout();
+    match STATE.with(|s| s.borrow().pending_hkl) {
+        Some(p) if p.hkl != actual.0 as isize && p.since.elapsed() < PENDING_LAYOUT_GRACE => {
+            HKL(p.hkl as _)
+        }
+        _ => actual,
     }
 }
 

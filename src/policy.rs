@@ -4,9 +4,10 @@
 //! completed by whitespace. This module is the single production decision point
 //! for whether that token is eligible for automatic correction.
 
-use crate::detect::{self, Detection};
+use crate::detect::{self, Confidence, Detection, Evidence};
 use crate::dict::Dictionary;
-use crate::layout::en_to_th;
+use crate::english;
+use crate::layout::{en_to_th, th_to_en};
 use crate::secret::{self, SecretKind};
 use crate::segment;
 
@@ -56,6 +57,11 @@ pub fn supported_layout_id(hkl: u32) -> Option<InputLayout> {
 }
 
 /// Evaluate one token completed by a whitespace boundary.
+///
+/// "English" here is wider than dictionary membership: compounds of frequent
+/// words and user-learned words count too (see [`english`]), in both
+/// directions. On the US layout that keeps `middleware` from being rewritten
+/// as Thai; on the Thai layout it lets `workflow` typed by mistake come back.
 pub fn detect_token(
     token: &str,
     layout: InputLayout,
@@ -66,13 +72,67 @@ pub fn detect_token(
         .chars()
         .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
     let has_latin = token.chars().any(|c| c.is_ascii_alphabetic());
-    let direction_matches = match layout {
-        InputLayout::UsQwerty => has_latin && !has_thai,
-        InputLayout::ThaiKedmanee => has_thai && !has_latin,
-    };
-    direction_matches
-        .then(|| detect::detect(token, en, th))
-        .flatten()
+    match layout {
+        InputLayout::UsQwerty => {
+            if !has_latin || has_thai || english::is_compound(token.trim()) {
+                return None;
+            }
+            detect::detect(token, en, th)
+        }
+        InputLayout::ThaiKedmanee => {
+            if !has_thai || has_latin {
+                return None;
+            }
+            detect::detect(token, en, th).or_else(|| thai_layout_compound(token, th))
+        }
+    }
+}
+
+/// A compound English word typed on the Thai layout. Held to a stricter bar
+/// than a dictionary word: genuine Thai that merely segments cleanly wins.
+fn thai_layout_compound(token: &str, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    if th.contains(token) || segment::is_fully_known(token, th) {
+        return None;
+    }
+    let converted = th_to_en(token);
+    if !english::is_compound(&converted) {
+        return None;
+    }
+    Some(Detection {
+        corrected: converted,
+        confidence: Confidence::High,
+        evidence: Evidence::ExactDictionary,
+    })
+}
+
+/// The boundary decision for a token RightType itself converted to Thai while
+/// it was being typed (D-009).
+///
+/// Once a run is anchored the layout is switched and the rest of the word
+/// arrives as native Thai, so the finished token on screen is entirely Thai.
+/// The typist started it on the English layout, though, and only now is the
+/// whole token visible. If its keystrokes spell English — a dictionary word, a
+/// learned word or a compound — the early reading was wrong and the *whole*
+/// token goes back, not just the part typed after the anchor.
+pub fn revise_converted(token: &str, en: &Dictionary) -> Option<Detection> {
+    let raw = th_to_en(token.trim());
+    // Trailing sentence punctuation may follow a word (`middleware,`), but on
+    // this layout most ASCII punctuation is a Thai letter (`[` is บ, `;` is น),
+    // so only a short trailing run is set aside and the rest must be letters.
+    let core = raw.trim_end_matches(|c: char| c.is_ascii_punctuation());
+    if raw.len() - core.len() > 2
+        || core.chars().count() < 3
+        || !core.chars().all(|c| c.is_ascii_alphabetic())
+        || !english::is_word(core, en)
+    {
+        return None;
+    }
+    Some(Detection {
+        corrected: raw,
+        confidence: Confidence::High,
+        evidence: Evidence::ExactDictionary,
+    })
 }
 
 /// Learning is allowed only for ordinary text produced under exact US QWERTY
@@ -134,7 +194,7 @@ pub fn live_decision(
     // the English continuation (and this becomes a Commit) or completes an
     // English word (which `detect` then refuses outright). Either way the
     // typist's text survives, which a destructive commit here would not.
-    if en.has_extension(token) {
+    if english::has_continuation(token, en) || english::is_compound(token) {
         return LiveDecision::Ambiguous;
     }
     LiveDecision::Commit
@@ -181,7 +241,7 @@ pub fn live_reading(run: &str, holding_thai: bool, en: &Dictionary, th: &Diction
     }
 
     // Already showing Thai. Withdraw only on real evidence against it.
-    if en.contains(run) {
+    if english::is_word(run, en) {
         return Reading::AsTyped;
     }
     if matches!(

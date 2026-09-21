@@ -22,17 +22,18 @@ RightLang is excellent but unmaintained, and its design causes real bugs:
 ## How it works
 
 RightType lives in the **system tray** (no window, no console). Right-click the tray
-icon for: **Enable**, **Manual/Auto/Suggest** mode, **Learn new words**, **Start with Windows**,
-and **Quit**.
+icon (left- or right-click) for: **Enable**, **Manual/Auto/Suggest** mode, **Learn new
+words**, **Start with Windows**, **Hotkeys & help**, and **Quit**. The tooltip shows the
+current mode.
 
 **Manual mode (default)** — type freely; when you notice a wrong-layout word, fix it
 with a hotkey:
 
 | Hotkey | Action |
 | --- | --- |
-| `Shift`+`Backspace` | Convert the last word in place |
+| `Shift`+`Backspace` | Convert the last word in place — or, right after Auto changed a word, flip it back |
 | `Shift`+`CapsLock` | Convert the current **selection** (v1 temporarily reads it with Copy, restores an empty/plain-Unicode clipboard, then injects Unicode; any non-text/app-specific clipboard format is refused) |
-| `Ctrl`+`CapsLock` | Cycle **Manual** → **Auto** → **Suggest** |
+| `Ctrl`+`CapsLock` | Cycle **Manual** → **Auto** → **Suggest** (works in every app, including ones RightType otherwise stays out of) |
 | `Alt`+`CapsLock` | Accept the current Suggest hint |
 | `Ctrl`+`Shift`+`CapsLock` | Undo the last correction (selection undo requires the same focused context) |
 | `Ctrl`+`Alt`+`CapsLock` | Enable/disable RightType immediately |
@@ -49,14 +50,28 @@ with a hotkey:
   run turns out not to be Thai after all.
 - **TH → EN (at whitespace)**: English *is* space-delimited, so the token
   commits when you hit space.
+- **The whole word gets the last say.** A conversion made mid-word is not final:
+  when you reach the space, RightType looks at the *entire* word — including the
+  part typed after it switched to Thai — and if your keystrokes spell English it
+  puts the whole word back and returns to English. (Before 1.1 only the part after
+  the switch was judged, which could leave half-Thai, half-English words.)
+- English is more than the dictionary: compounds of everyday words
+  (`middleware`, `workflow`, `frontend`, `codebase`) and words you have taught it
+  are treated as English everywhere.
 - Ambiguous prefixes (a short valid word that begins a longer one) resolve in
-  your favour as you keep typing; `Shift`+`Backspace` and 30-second Undo cover
-  the rare miss. It deliberately does not destructively convert mid-word runs
-  that aren't fully-known Thai — those stay available to Manual and Suggest.
+  your favour as you keep typing; `Shift`+`Backspace` and Undo cover the rare
+  miss. It deliberately does not destructively convert mid-word runs that aren't
+  fully-known Thai — those stay available to Manual and Suggest.
 
 **Suggest mode** uses the same completed-token policy as Auto's boundary path,
-but only displays a hint. It changes text only after `Alt`+`CapsLock`, and
-discards the hint when focus, layout, mode, or typing context changes.
+but only displays a hint showing the suggested text. It changes text only after
+`Alt`+`CapsLock`, and discards the hint when focus, layout, mode, or typing
+context changes.
+
+**Learning** (opt-in, "Learn new words") — an English word you type three times is
+remembered, and so is any word you *flip back* after RightType changed it
+(`Shift`+`Backspace` or Undo), immediately and in either language. Learned words
+take effect at once for every decision.
 
 Version 1 intentionally supports only the exact Thai Kedmanee ↔ US English QWERTY
 pair and the fixed hotkeys above. Pattachote/Dvorak/UK-AU-CA layouts, remappable
@@ -70,8 +85,9 @@ that is not in the English dictionary cannot be recognised as an unfinished
 English word, so Auto mode may start converting one — but that decision stays
 under review for the next few keystrokes and undoes itself as soon as the Thai
 reading stops making sense. What survives is the narrow case where a mistyped
-word's *entire* conversion keeps reading as valid Thai; `Shift`+`Backspace` and
-Undo cover it.
+word's *entire* conversion keeps reading as valid Thai; `Shift`+`Backspace` flips
+the whole word back — and, with learning on, remembers it so it does not happen
+again.
 
 ## Privacy & security (built for sensitive typing)
 
