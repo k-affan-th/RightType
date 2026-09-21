@@ -284,11 +284,22 @@ unsafe fn send_chord(vk: u16) -> bool {
     sent as usize == inputs.len()
 }
 
+/// Make sure no modifier is down before this worker injects a chord.
+///
+/// The hotkey that asked for this work (Ctrl+Shift+CapsLock, Shift+CapsLock)
+/// is usually still being released as the worker starts. Injecting a fake
+/// key-up and then our own Ctrl+Z races the typist's real key-ups: a physical
+/// Ctrl-up landing between our Ctrl-down and Z turned Undo into a typed `z`,
+/// and a still-held Shift turns Ctrl+Z into Ctrl+Shift+Z (redo). So first wait
+/// — this is the worker thread, not the hook — for the hands to come off, and
+/// only then release whatever is still held.
 unsafe fn release_modifiers() -> bool {
-    let ups: Vec<INPUT> = held_modifiers()
-        .into_iter()
-        .map(|vk| key(vk, true))
-        .collect();
+    let deadline = Instant::now() + Duration::from_millis(1500);
+    while !held_modifiers().is_empty() && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(10));
+    }
+    let mut ups: Vec<INPUT> = Vec::new();
+    crate::inject::release_held(&mut ups);
     if !ups.is_empty() {
         return SendInput(&ups, size_of::<INPUT>() as i32) as usize == ups.len();
     }

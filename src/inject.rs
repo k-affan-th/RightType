@@ -39,9 +39,7 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     let mut inputs: Vec<INPUT> = Vec::with_capacity(backspaces * 2 + text.len() * 2 + 4);
 
     // 1. Release any modifier still physically held, so it can't taint the batch.
-    for vk in held_modifiers() {
-        inputs.push(key(vk, true));
-    }
+    release_held(&mut inputs);
     // 2. Delete the mistyped word (and the boundary key that triggered us).
     for _ in 0..backspaces {
         inputs.push(key(VK_BACK.0, false));
@@ -70,6 +68,29 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     let sent = SendInput(&inputs, size_of::<INPUT>() as i32);
     INJECTING.store(false, Ordering::SeqCst);
     sent as usize == inputs.len()
+}
+
+/// An unassigned virtual key, pressed to "mask" an Alt release (the same trick
+/// AutoHotkey uses, vk E8).
+const VK_MENU_MASK: u16 = 0xE8;
+
+/// Append key-ups for every modifier still physically held.
+///
+/// A bare Alt press-and-release with nothing in between is an *Alt tap*, which
+/// Windows, Chromium and Electron treat as "activate the menu bar" — after that
+/// every injected key goes to the menu, not the text. Alt+CapsLock (accept a
+/// suggestion) is exactly such a sequence from the app's point of view, since
+/// the CapsLock is swallowed. So an unassigned key is tapped first, making the
+/// release an ordinary chord release instead of a tap.
+pub fn release_held(inputs: &mut Vec<INPUT>) {
+    let held = held_modifiers();
+    if held.contains(&0x12) {
+        inputs.push(key(VK_MENU_MASK, false));
+        inputs.push(key(VK_MENU_MASK, true));
+    }
+    for vk in held {
+        inputs.push(key(vk, true));
+    }
 }
 
 /// A virtual-key press or release.

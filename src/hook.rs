@@ -740,7 +740,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             .and_then(|layout| policy::detect_token(&word, layout, dict::english(), dict::thai()))
     };
     e2e_trace(format!(
-        "layout={active_layout:?} converted={converted} det={:?} mode={:?}",
+        "word={word:?} layout={active_layout:?} converted={converted} det={:?} mode={:?}",
         detection.as_ref().map(|d| d.corrected.clone()),
         mode()
     ));
