@@ -20,10 +20,11 @@
 | Undo text | One record, max 30 seconds or until context change/use | None | `Drop` zeroize; secret-shaped originals are not recorded | context/focus race E2E open |
 | Suggest original/candidate | One boundary, until next non-modifier/context/mode change or accept | None | `Drop` zeroize | accept/reject E2E open |
 | Manual selection | Worker-local strings during one command | Clipboard read only; no network | clipboard restored before Unicode injection; local strings/snapshot zeroized on drop | locked clipboard, slow copy and focus-ABA E2E open |
-| Learning pending word | In-memory repeat counter while learning is enabled | Only qualifying word after third sighting is appended to `learned.txt`; no network | opt-in; disable drains/zeroizes pending map; bounded persistence queue | whitelist is structural, not per-app; adversarial persistence audit open |
+| Learning pending word | In-memory repeat counter while learning is enabled | Only qualifying word after third sighting is appended to `learned.txt`; a word the user restores by reverting an automatic conversion (Undo / Shift+Backspace) is appended at once, English or Thai; no network | opt-in; letters-of-one-script shape guard, secret guard, length bounds; disable drains/zeroizes pending map; bounded persistence queue | whitelist is structural, not per-app; adversarial persistence audit open |
+| Learned words | Loaded from `learned.txt` into the in-memory dictionary overlay for the process lifetime | Already on disk by the user's opt-in | "Clear learned words" empties file and overlay | overlay strings are not zeroized (they are the user's persisted vocabulary, not transient input) |
 | Settings | Runtime state and custom blacklist | `config.toml`; no typed content/network | bounded async writes from hook-triggered changes | file permissions/atomic-write behavior not audited |
 | Stats | Two process-local counters | None | reset on process exit | none content-related |
-| Toast/UI copy | Fixed status/error strings | None | UI-thread owned | Windows UI evidence open |
+| Toast/UI copy | Fixed status/error strings; the Suggest hint shows the candidate text | None | UI-thread owned; the displayed text is zeroized when the toast hides | Windows UI evidence open |
 
 ## Deny policy
 

@@ -27,6 +27,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     ShowWindow, SystemParametersInfoW, HWND_TOPMOST, LWA_ALPHA, SPI_GETWORKAREA, SWP_NOACTIVATE,
     SWP_SHOWWINDOW, SW_HIDE, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
 };
+use zeroize::Zeroize;
 
 const TIMER_ID: usize = 7;
 const FADE_TIMER_ID: usize = 8;
@@ -127,8 +128,9 @@ fn ensure_created() -> bool {
                 Some(0)
             }
             WM_SHOW_TOAST => {
-                if let Some(text) = PENDING_TEXT.lock().unwrap().take() {
+                if let Some(mut text) = PENDING_TEXT.lock().unwrap().take() {
                     unsafe { show_on_ui(hwnd, &text) };
+                    text.zeroize();
                 }
                 Some(0)
             }
@@ -254,6 +256,7 @@ unsafe fn paint(hwnd: HWND) {
         &mut rc,
         DT_CENTER | DT_VCENTER | DT_SINGLELINE,
     );
+    text.zeroize();
     SelectObject(hdc, old);
     let _ = DeleteObject(HGDIOBJ(font.0));
 
@@ -263,4 +266,6 @@ unsafe fn paint(hwnd: HWND) {
 unsafe fn hide(hwnd: HWND) {
     let _ = KillTimer(hwnd, TIMER_ID);
     let _ = ShowWindow(hwnd, SW_HIDE);
+    // A suggestion preview is typed content: do not keep it past its display.
+    TEXT.with(|t| t.borrow_mut().zeroize());
 }

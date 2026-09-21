@@ -13,6 +13,12 @@ use windows::Win32::Foundation::HWND;
 
 use crate::{config, focus, hook, learn, session, settings, startup, stats, toast};
 
+thread_local! {
+    /// Last tooltip pushed to the shell, so the timer refresh is a no-op
+    /// unless something actually changed.
+    static TIP: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
 /// The tray icon, embedded so the binary stays portable (no external file).
 static ICON_BYTES: &[u8] = include_bytes!("../assets/icon.ico");
 
@@ -29,6 +35,7 @@ struct Tray {
     m_startup: nwg::MenuItem,
     m_settings: nwg::MenuItem,
     m_stats: nwg::MenuItem,
+    m_help: nwg::MenuItem,
     _sep: nwg::MenuSeparator,
     m_quit: nwg::MenuItem,
 }
@@ -43,6 +50,9 @@ pub fn run() {
     // mode + learn) before building the menu so its checkmarks reflect them.
     learn::load();
     config::apply(&config::load());
+    // Build the dictionaries and compound tables now: built lazily they cost
+    // tens of milliseconds on the first keystroke, inside the keyboard hook.
+    righttype::english::warm();
 
     let mut window = nwg::MessageWindow::default();
     nwg::MessageWindow::builder()
@@ -126,6 +136,13 @@ pub fn run() {
         .build(&mut m_stats)
         .expect("stats item");
 
+    let mut m_help = nwg::MenuItem::default();
+    nwg::MenuItem::builder()
+        .text("Hotkeys && help...")
+        .parent(&menu)
+        .build(&mut m_help)
+        .expect("help item");
+
     let mut sep = nwg::MenuSeparator::default();
     nwg::MenuSeparator::builder()
         .parent(&menu)
@@ -160,6 +177,7 @@ pub fn run() {
         m_startup,
         m_settings,
         m_stats,
+        m_help,
         _sep: sep,
         m_quit,
     });
@@ -168,16 +186,13 @@ pub fn run() {
     let handler = nwg::full_bind_event_handler(&ui.window.handle, move |evt, _data, handle| {
         use nwg::Event as E;
         match evt {
-            // Right-click on the tray icon opens the menu at the cursor. Refresh
-            // every checkmark first — hotkeys (mode toggle, panic switch) change
-            // this state without going through the menu, so it can be stale.
-            E::OnContextMenu => {
-                ui_h.m_enabled.set_checked(hook::is_enabled());
-                ui_h.m_auto.set_checked(hook::mode() == hook::Mode::Auto);
-                ui_h.m_manual
-                    .set_checked(hook::mode() == hook::Mode::Manual);
-                ui_h.m_suggest
-                    .set_checked(hook::mode() == hook::Mode::Suggest);
+            // Either click on the tray icon opens the menu at the cursor — a
+            // left click used to do nothing, which read as "the app is not
+            // responding". Refresh every checkmark first: hotkeys (mode
+            // toggle, panic switch) change state without going through the
+            // menu, so it can be stale.
+            E::OnContextMenu | E::OnMousePress(nwg::MousePressEvent::MousePressLeftUp) => {
+                sync_state(&ui_h);
                 let (x, y) = nwg::GlobalCursor::position();
                 ui_h.menu.popup(x, y);
             }
@@ -229,7 +244,10 @@ pub fn run() {
                     settings::open();
                 } else if handle == ui_h.m_stats.handle {
                     stats::open();
+                } else if handle == ui_h.m_help.handle {
+                    crate::onboard::show(false);
                 }
+                sync_state(&ui_h);
             }
             _ => {}
         }
@@ -250,8 +268,14 @@ pub fn run() {
             _ => {}
         }
     }
+    let ui_t = ui.clone();
     let raw = nwg::bind_raw_event_handler(&ui.window.handle, 0x5254_0001, move |_h, msg, w, _l| {
         unsafe { session::on_message(msg, w) };
+        // The session retry timer doubles as a cheap refresh, so the tooltip
+        // follows hotkey and Settings changes without waiting for the menu.
+        if msg == WM_TIMER {
+            sync_state(&ui_t);
+        }
         None
     })
     .ok();
@@ -283,9 +307,11 @@ pub fn run() {
     nwg::unbind_event_handler(&handler);
 }
 
-/// Refresh every state-bearing surface: the disabled status header, the tray
-/// tooltip, and the mode/enable checkmarks. Called before the menu opens and
-/// after any mutating action.
+const WM_TIMER: u32 = 0x0113;
+
+/// Refresh every state-bearing surface: the tray tooltip and the mode/enable/
+/// learn checkmarks. Called before the menu opens, after any menu action, and
+/// on the session timer.
 fn sync_state(ui: &Rc<Tray>) {
     let enabled = hook::is_enabled();
     let state = if enabled {
@@ -293,7 +319,11 @@ fn sync_state(ui: &Rc<Tray>) {
     } else {
         "OFF".to_string()
     };
-    ui._tray.set_tip(&format!("RightType — {state}"));
+    let tip = format!("RightType — {state}");
+    if TIP.with(|t| t.replace(tip.clone())) != tip {
+        ui._tray.set_tip(&tip);
+    }
+    ui.m_learn.set_checked(learn::is_enabled());
     ui.m_enabled.set_checked(enabled);
     ui.m_auto.set_checked(hook::mode() == hook::Mode::Auto);
     ui.m_manual.set_checked(hook::mode() == hook::Mode::Manual);
