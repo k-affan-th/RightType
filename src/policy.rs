@@ -88,11 +88,17 @@ pub fn detect_token(
     }
 }
 
-/// A compound English word typed on the Thai layout. Held to a stricter bar
-/// than a dictionary word: genuine Thai that merely segments cleanly wins.
+/// A compound English word typed on the Thai layout.
+///
+/// Deliberately *not* guarded by "the Thai segments cleanly": with 2-letter
+/// Thai words in the dictionary almost anything segments (`middleware` typed
+/// on the Thai layout reads as valid Thai), so that guard blocked the very
+/// case this exists for — English typed right after a Thai word, while the
+/// layout is still Thai. The compound itself is the strong signal: across
+/// 200,000 synthetic 2–3-word Thai phrases none had keys spelling a compound.
 fn thai_layout_compound(token: &str, th: &Dictionary) -> Option<Detection> {
     let token = token.trim();
-    if th.contains(token) || segment::is_fully_known(token, th) {
+    if th.contains(token) {
         return None;
     }
     let converted = th_to_en(token);

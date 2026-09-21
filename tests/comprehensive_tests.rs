@@ -823,6 +823,14 @@ fn a_learned_word_is_held_like_a_dictionary_word() {
 }
 
 #[test]
+fn english_typed_right_after_a_thai_word_comes_back() {
+    // Found in the Claude desktop E2E: after a Thai word the layout is Thai,
+    // so the next English word arrives as Thai letters. It must come back.
+    let typed = format!("{} middleware ", th_to_en("สวัสดีครับ"));
+    assert_eq!(auto_pipeline_screen(&typed), "สวัสดีครับ middleware ");
+}
+
+#[test]
 fn a_compound_typed_on_the_thai_layout_comes_back_as_english() {
     let typed = en_to_th("workflow");
     let d = policy::detect_token(

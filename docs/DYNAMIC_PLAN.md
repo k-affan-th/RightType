@@ -231,7 +231,9 @@
 
 - Dictionary/compound tables ถูก warm ตอน startup — ก่อนหน้านี้ index ของ Thai dictionary ถูกสร้าง lazily บนคีย์แรกใน hook (~30 ms)
 
-**ยังเปิดอยู่:** Windows E2E ของ anchor→revise, pending-layout ใน Word/Chrome/Electron และ Ctrl+CapsLock ใน Claude desktop (เครื่องถูก lock ระหว่างทำงานนี้ — ยังไม่ได้รัน)
+**Windows E2E (2026-09-22, Claude desktop composer, real VK keystrokes ผ่าน `e2e/claude_composer.py`):** **11/11 PASS** — compounds, ประโยคอังกฤษ, ไทย 3 ประโยคผ่าน anchor → native Thai → whole-token check, ไทยตามด้วยอังกฤษในบรรทัดเดียว, learn-on-revert (Shift+Backspace → `learned.txt` → ครั้งถัดไปไม่แปลง), Ctrl+CapsLock สลับครบ 3 โหมดโดย CapsLock ไม่เปลี่ยน. รอบแรกพบบั๊กจริง 1 จุด: อังกฤษที่พิมพ์ต่อจากคำไทย (layout ยังเป็นไทย) ไม่กลับ เพราะ guard "ไทย segment ได้ครบ" บล็อก compound — ถอด guard (0/200,000 วลีไทยสังเคราะห์ที่คีย์สะกดเป็น compound) + regression test
+
+**ยังเปิดอยู่:** Word/Chrome สำหรับ pending-layout; Undo hotkey หลัง anchor กลางคำ
 
 **Decision owner:** product owner (bug report 2026-09-21); implementation assessment delegated
 
@@ -524,6 +526,7 @@ Deferred (tracked, not forgotten):
 | E-035 | 2026-08-24 | S6 | Release packaging: `packaging/` (install/uninstall/Inno iss/build_release.ps1) → zip + local install | `RightType-1.0.0-rc1-x64.zip` (933 KB) + SHA256; ติดตั้งจริง: LOCALAPPDATA + Start Menu lnk + HKCU Run autostart ยืนยันครบ | unsigned (SmartScreen prompt); Inno setup.exe skipped (ไม่มี ISCC ในเครื่อง) |
 | E-036 | 2026-08-24 | S5 | Word fast-typing burst case — attempt | BLOCKED ชั่วคราว: fullscreen game ของผู้ใช้บล็อก synthetic mouse (RuntimeError) — แถว optional polish, core Word cases ผ่านแล้ว (E-033) | ยังไม่พิสูจน์ burst บน Word โดยเฉพาะ |
 | E-038 | 2026-09-21 | S1/S3 | `cargo test` (lib 69 + integration 29), winos tests, clippy `-D warnings`, fmt, `policy_latency` | PASS; D-009 pipeline replay: EN dict 0/88,360 mangled, compounds intact, Thai 526/60,964 not recovered (main 519) | ไม่ได้รัน Windows E2E (เครื่อง lock); pipeline replay เป็น OS-free mirror ของ hook |
+| E-039 | 2026-09-22 | S5 | `e2e/claude_composer.py` บน Claude desktop (Electron) ด้วย debug build + physical VK SendInput | **11/11 PASS** หลังแก้ Thai-layout compound guard (รอบแรก 10/11) | ไม่ครอบ Word/Chrome, release binary (ignore injected by design), ความเร็วพิมพ์มนุษย์จริง |
 | E-037 | 2026-08-24 | S4/S7 | Startup crash ใต้เกม fullscreen (0xC000041D fatal user callback): bisect ด้วย boot markers + env guard | **ROOT CAUSE: toast::init สร้าง layered+region window ตอน startup ใต้ exclusive fullscreen** → fix = lazy creation (สร้างเมื่อ show ครั้งแรก; สร้างไม่ได้ = รัน toast-less ทั้ง session); verify STARTUP alive=True ใต้เกม | toast จะไม่แสดงระหว่าง fullscreen game (by design); ต้อง re-run matrix เมื่อ desktop ปกติ |
 
 ## Risk register
