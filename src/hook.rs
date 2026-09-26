@@ -22,7 +22,7 @@
 //! correction can never feed back into itself.
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::Mutex;
 #[cfg(debug_assertions)]
 use std::sync::OnceLock;
@@ -355,6 +355,16 @@ struct HookHandle(HHOOK);
 unsafe impl Send for HookHandle {}
 static HOOK: Mutex<Option<HookHandle>> = Mutex::new(None);
 
+/// `GetTickCount` time of the last event the hook received (or of its
+/// installation). The session watchdog compares it with the system's last-input
+/// time to notice a hook Windows removed without any power/session event.
+static LAST_HOOK_TICK: AtomicU32 = AtomicU32::new(0);
+
+/// See [`LAST_HOOK_TICK`].
+pub fn last_hook_tick() -> u32 {
+    LAST_HOOK_TICK.load(Ordering::Relaxed)
+}
+
 /// Is `vk` physically held right now? Read from the real async key state so it
 /// can never go stale (the reason we don't track modifiers from the event stream).
 unsafe fn is_down(vk: VIRTUAL_KEY) -> bool {
@@ -393,6 +403,10 @@ pub unsafe fn install() -> windows::core::Result<()> {
     let hmod = GetModuleHandleW(None)?;
     let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(ll_proc), HINSTANCE(hmod.0), 0)?;
     *HOOK.lock().unwrap() = Some(HookHandle(hook));
+    LAST_HOOK_TICK.store(
+        windows::Win32::System::SystemInformation::GetTickCount(),
+        Ordering::Relaxed,
+    );
     // RAM hardening: pin the word buffer's (already-stable) allocation in
     // physical RAM so a typed secret can never be paged to disk. Locking it
     // here, once, is safe precisely because `WordBuffer` pre-reserves its
@@ -427,6 +441,7 @@ pub unsafe fn reinstall() -> windows::core::Result<()> {
 unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
+        LAST_HOOK_TICK.store(kb.time, Ordering::Relaxed);
         // Skip anything we generated: our tag is authoritative and timing-free.
         let externally_injected = (kb.flags.0 & LLKHF_INJECTED.0) != 0;
         let ours = kb.dwExtraInfo == INJECT_TAG

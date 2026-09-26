@@ -455,4 +455,5 @@ def main():
             print(f"  FAIL {r[0]}: {r[1]} — got {r[3].strip()!r} expected {r[4].strip()!r}")
 
 
-main()
+if __name__ == "__main__":
+    main()

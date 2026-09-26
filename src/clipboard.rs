@@ -6,9 +6,11 @@
 //! or persist the text.
 
 use std::slice;
+use std::thread;
+use std::time::Duration;
 use zeroize::{Zeroize, Zeroizing};
 
-use windows::Win32::Foundation::{HANDLE, HGLOBAL, HWND};
+use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL, HWND};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData,
     GetClipboardSequenceNumber, OpenClipboard, SetClipboardData,
@@ -20,6 +22,34 @@ const CF_UNICODETEXT: u32 = 13;
 const CF_TEXT: u32 = 1;
 const CF_OEMTEXT: u32 = 7;
 const CF_LOCALE: u32 = 16;
+
+/// Another program can hold the clipboard open for a moment (clipboard managers,
+/// remote-desktop sync, an app mid-copy). Retry briefly instead of failing on the
+/// first refusal; a clipboard still held after this is reported as busy.
+const OPEN_ATTEMPTS: u32 = 10;
+const OPEN_RETRY: Duration = Duration::from_millis(10);
+
+/// Open the clipboard for this thread, retrying while another process holds it.
+unsafe fn open() -> bool {
+    for attempt in 0..OPEN_ATTEMPTS {
+        if OpenClipboard(HWND::default()).is_ok() {
+            return true;
+        }
+        if attempt + 1 < OPEN_ATTEMPTS {
+            thread::sleep(OPEN_RETRY);
+        }
+    }
+    false
+}
+
+/// Why the clipboard could not be snapshotted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapshotError {
+    /// Another program kept the clipboard open.
+    Busy,
+    /// It holds something besides plain text, which restoring would destroy.
+    NotPlainText,
+}
 
 fn is_plain_text_format(format: u32) -> bool {
     matches!(format, CF_TEXT | CF_OEMTEXT | CF_UNICODETEXT | CF_LOCALE)
@@ -49,7 +79,7 @@ pub unsafe fn sequence() -> u32 {
 
 /// Read the clipboard as text, or `None` if it holds no Unicode text.
 pub unsafe fn get_text() -> Option<String> {
-    if OpenClipboard(HWND::default()).is_err() {
+    if !open() {
         return None;
     }
     let result = read_unicode();
@@ -63,9 +93,9 @@ pub unsafe fn get_text() -> Option<String> {
 /// `String` after overwriting rich clipboard data is destructive, so callers must
 /// fail closed for every additional clipboard format until a full-format snapshot
 /// implementation exists.
-pub unsafe fn snapshot_plain_text() -> Option<PlainTextSnapshot> {
-    if OpenClipboard(HWND::default()).is_err() {
-        return None;
+pub unsafe fn snapshot_plain_text() -> Result<PlainTextSnapshot, SnapshotError> {
+    if !open() {
+        return Err(SnapshotError::Busy);
     }
 
     let mut format = 0;
@@ -86,11 +116,13 @@ pub unsafe fn snapshot_plain_text() -> Option<PlainTextSnapshot> {
     }
 
     let result = if !plain_only {
-        None
+        Err(SnapshotError::NotPlainText)
     } else if !saw_format {
-        Some(PlainTextSnapshot::Empty)
+        Ok(PlainTextSnapshot::Empty)
     } else {
-        read_unicode().map(PlainTextSnapshot::UnicodeText)
+        read_unicode()
+            .map(PlainTextSnapshot::UnicodeText)
+            .ok_or(SnapshotError::NotPlainText)
     };
     let _ = CloseClipboard();
     result
@@ -139,18 +171,23 @@ pub unsafe fn set_text(text: &str) -> bool {
     std::ptr::copy_nonoverlapping(utf16.as_ptr(), dst, utf16.len());
     let _ = GlobalUnlock(hmem);
 
-    if OpenClipboard(HWND::default()).is_err() {
+    if !open() {
+        // Never handed to the system, so it is still ours to free.
+        let _ = GlobalFree(hmem);
         return false;
     }
     let _ = EmptyClipboard();
     // On success the system takes ownership of `hmem`, so we must not free it.
     let ok = SetClipboardData(CF_UNICODETEXT, HANDLE(hmem.0)).is_ok();
     let _ = CloseClipboard();
+    if !ok {
+        let _ = GlobalFree(hmem);
+    }
     ok
 }
 
 unsafe fn clear() -> bool {
-    if OpenClipboard(HWND::default()).is_err() {
+    if !open() {
         return false;
     }
     let ok = EmptyClipboard().is_ok();

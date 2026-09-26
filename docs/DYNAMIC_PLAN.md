@@ -28,10 +28,10 @@
 
 งาน implementation/automated ที่ทำได้โดยไม่เปลี่ยน environment ปิดแล้ว เหลือ:
 
-1. เปิดใช้งาน **US English QWERTY (`00000409`)** คู่กับ Thai Kedmanee ใน Windows test session; environment ปัจจุบันคืนเฉพาะ supported Thai handle จึงทดสอบ Auto/Suggest สองทิศทางไม่ได้
-2. ให้ช่วง hands-off กับ blank Word document และ Chrome/contenteditable target; รอบล่าสุด Word automation หยุดเพราะตรวจพบ user input และไม่มี Chrome target
-3. อนุมัติการทดสอบที่รบกวน session: sleep/resume, lock/unlock และ UAC secure desktop (ผู้ใช้ต้อง unlock/รับช่วง UAC เอง)
-4. ระบุ release version/commit และ certificate เมื่อ platform matrix ผ่าน; agent จะไม่ commit/tag/sign จาก working tree ที่มี user changes โดยเดาเอง
+1. ~~US English QWERTY + Thai Kedmanee~~ — ปิด 2026-08-24 (`0x04090409` + `0x041E041E`)
+2. รัน `e2e/release_gaps.py` (chrome, word, clipboard; electron ถ้ามี Node.js) แบบ hands-off บน Windows — ครอบ seed guard, pending layout บน Word/Chrome, Undo หลัง anchor, locked clipboard, Electron password field
+3. Sleep/resume: รัน `e2e/transition_probe.py` แล้ว sleep เครื่องระหว่างหน้าต่างเวลา (lock/unlock และ UAC ผ่านแล้ว E-030/E-031)
+4. Build 1.1.0 จาก tagged commit, sign ด้วย certificate ของ product owner, re-run `build_release.ps1` แล้ว publish เป็น GitHub Release
 
 ## How this plan stays dynamic
 
@@ -342,7 +342,7 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 - [~] ใช้ bounded command queue, อายุคำสั่ง 1 วินาที และ focus generation; focus ABA ภายใน control เดิมยังต้องมี Windows test
 - [x] ตรวจผล modifier release และ Unicode injection; delayed clipboard rendering มี bounded retry และผ่าน Notepad E2E
 - [x] ส่ง failure toast กลับ UI thread โดยไม่ใส่ typed content
-- [~] Notepad พบและแก้ delayed `CF_UNICODETEXT` rendering; locked clipboard, focus race และ partial `SendInput` seams ยังเปิด
+- [~] Notepad พบและแก้ delayed `CF_UNICODETEXT` rendering; focus race ผ่าน (`manual_selection.py`), partial-failure seam ผ่าน (`failed_reconcile_injection_releases_ownership`); locked clipboard: โค้ด retry ~100 ms + ข้อความ "busy" แยก (2026-09-26) รอรัน `release_gaps.py clipboard` บน Windows
 
 ### Exit criteria
 
@@ -390,7 +390,7 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 - [x] เพิ่ม timeout/zeroization ให้ undo, suggestion และ queued manual state ตาม contract
 - [~] Tri-state UIA failure และ fixed/custom blacklist precedence ผ่าน pure tests; native/browser/Electron password-field E2E ยังเปิด
 - [x] BIP39 raw/candidate stream, WIF, xpub, bech32, hex, high-entropy และ long-token corpus ผ่านตาม D-001/TM-001
-- [ ] ทดสอบ hook reinstall หลัง sleep/resume, lock/unlock, UAC และ session change
+- [~] ทดสอบ hook reinstall: lock/unlock (E-031) และ UAC (E-030) ผ่าน; sleep/resume ยังไม่มีผลรัน; เพิ่ม liveness check อิสระ (hook เงียบ ≥ 30 s ขณะมี input → reinstall, `session::hook_looks_evicted`) ปิด TM-005 ในโค้ด
 - [~] `VirtualLock`/`VirtualUnlock` และ WER `NOHEAP` flag ผ่าน runtime tests; non-elevated process-token evidence ยังเปิด
 - [x] ตรวจ dependency/network surface และ learning persistence: normal dependency tree ไม่มี network crate และ RustSec audit ผ่าน 70 dependencies
 
@@ -426,7 +426,7 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 - [x] Browser password field + blacklisted terminal — hard-deny ยืนยันด้วย trace assertion (E-025)
 - [x] Native password field — ES_PASSWORD ผ่าน WinForms: deny ยืนยัน (E-029)
 - [x] Lock/unlock transition — **interactive PASS**: unlock reinstall trace + post-corrections สองทิศ (E-031)
-- [!] Sleep/resume — BLOCKED-interactive เช่นเดียวกัน (ทำตามขั้นตอน probe ได้เมื่อผู้ใช้ว่าง)
+- [!] Sleep/resume — BLOCKED-interactive: ต้องให้ผู้ใช้รัน `transition_probe.py` แล้วสั่ง sleep ระหว่างหน้าต่างเวลา (RELEASE_CHECKLIST เคยติ๊กข้อนี้โดยไม่มี evidence — แก้เป็น [~] แล้ว 2026-09-26)
 - [x] UAC full cycle — consent → post-correction PASS (E-030)
 
 ### Exit criteria
@@ -536,9 +536,9 @@ Deferred (tracked, not forgotten):
 | ID | Risk | Severity | Mitigation | Status |
 | --- | --- | --- | --- | --- |
 | R-001 | Live EN→Thai แก้ prefix อังกฤษผิด | High | D-004 boundary-only + production-policy corpus | MITIGATED IN CODE, E2E OPEN |
-| R-002 | Secret exception ทำให้ privacy claim เกินจริง | Critical | D-001 + hard-deny contexts/patterns + strict full-segmentation exception | MITIGATED IN CODE 2026-09-26: every BIP39 word counts on either layout (key reading fallback), live path held from 3 words, recent copies wiped on trip; words 1–3 non-retrospective by design (TM-001); Windows run `e2e/seed_guard.py` OPEN |
+| R-002 | Secret exception ทำให้ privacy claim เกินจริง | Critical | D-001 + hard-deny contexts/patterns + strict full-segmentation exception | MITIGATED IN CODE 2026-09-26: every BIP39 word counts on either layout (key reading fallback), live path held from 3 words, recent copies wiped on trip; words 1–3 non-retrospective by design (TM-001); Windows run `e2e/release_gaps.py` OPEN |
 | R-003 | Manual selection ทำ rich/app-specific clipboard สูญหายหรือใช้งานไม่ได้ | High | D-003 fail-closed + restore-before-inject; full preservation v1.x | MITIGATED FOR PLAIN CLIPBOARD; metadata limitation DOCUMENTED |
-| R-004 | Async manual action inject ผิด control | Critical | target identity/focus generation + bounded command + race tests | SAME-CONTEXT NOTEPAD PASS; FOCUS-RACE OPEN |
+| R-004 | Async manual action inject ผิด control | Critical | target identity/focus generation + bounded command + race tests | MITIGATED: same-context Notepad PASS + focus-race PASS (`manual_selection.py`: focus change aborts, password field stays empty) |
 | R-005 | README/PLAN อ้าง feature ที่ยังไม่มี | Medium | S0 contract normalization + D-005 | MITIGATED; final UI/docs review OPEN |
 | R-006 | Passing pure tests hides Windows integration failures | High | S5 Windows E2E matrix | NOTEPAD MANUAL COVERED; REMAINING MATRIX OPEN |
 

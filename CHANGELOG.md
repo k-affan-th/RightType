@@ -23,6 +23,16 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 - Undo is discarded once more text has been typed, so it can no longer delete
   what you typed after the correction; after Undo the layout follows the
   restored text.
+- **Seed-phrase guard:** every BIP39 word now counts toward the guard on either
+  layout (words like `cat`/`ski`, which are real Thai words on the Thai layout,
+  used to reset it); mid-word conversion is held once three seed words are in a
+  row; and when the guard trips, the Undo record, last word and any Suggest hint
+  are wiped from memory.
+- Converting a selection while another program holds the clipboard retries
+  briefly and then says the clipboard is busy, instead of wrongly saying it
+  needs plain text.
+- If Windows silently drops the keyboard hook (no sleep/lock event involved),
+  RightType notices the silence while you type and reinstalls it within ~30 s.
 
 ### Changed
 

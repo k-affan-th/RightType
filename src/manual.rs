@@ -135,12 +135,20 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
         return;
     }
 
-    let Some(original) = clipboard::snapshot_plain_text() else {
-        crate::hook::e2e_trace(
-            "selection: selection conversion needs a plain-text clipboard".to_string(),
-        );
-        toast::show("RightType: selection conversion needs a plain-text clipboard");
-        return;
+    let original = match clipboard::snapshot_plain_text() {
+        Ok(snapshot) => snapshot,
+        Err(clipboard::SnapshotError::Busy) => {
+            crate::hook::e2e_trace("selection: clipboard is busy".to_string());
+            toast::show("RightType: the clipboard is busy — try again");
+            return;
+        }
+        Err(clipboard::SnapshotError::NotPlainText) => {
+            crate::hook::e2e_trace(
+                "selection: selection conversion needs a plain-text clipboard".to_string(),
+            );
+            toast::show("RightType: selection conversion needs a plain-text clipboard");
+            return;
+        }
     };
 
     // The hotkey chord (Shift+CapsLock) may still be physically held; release any
