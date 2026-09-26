@@ -336,7 +336,10 @@ const WM_TIMER: u32 = 0x0113;
 /// on the session timer.
 fn sync_state(ui: &Rc<Tray>) {
     let enabled = hook::is_enabled();
-    let state = if enabled {
+    let healthy = session::is_healthy();
+    let state = if !healthy {
+        tr(T::StateHookLost)
+    } else if enabled {
         tr(match hook::mode() {
             hook::Mode::Auto => T::ModeAuto,
             hook::Mode::Suggest => T::ModeSuggest,
@@ -349,9 +352,10 @@ fn sync_state(ui: &Rc<Tray>) {
     if TIP.with(|t| t.replace(tip.clone())) != tip {
         ui._tray.set_tip(&tip);
     }
-    if SHOWING_OFF.with(|c| c.replace(Some(!enabled))) != Some(!enabled) {
+    let working = enabled && healthy;
+    if SHOWING_OFF.with(|c| c.replace(Some(!working))) != Some(!working) {
         ui._tray
-            .set_icon(if enabled { &ui.icon } else { &ui.icon_off });
+            .set_icon(if working { &ui.icon } else { &ui.icon_off });
     }
     let lang = righttype::i18n::lang();
     if MENU_LANG.with(|c| c.replace(Some(lang))) != Some(lang) {

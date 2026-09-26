@@ -55,7 +55,7 @@
 | TM-002 | UIA/process identity can be temporarily unavailable. | Tri-state/failure paths deny by default. | Native/browser/Electron and process-query E2E. |
 | TM-003 | `VirtualLock` and WER hardening are best effort. | Buffer zeroization remains primary; process runs non-elevated. | Record runtime return values or diagnostic evidence without logging content. |
 | TM-004 | Clipboard owners can be slow or locked and focus can change during manual copy. | Bounded worker, one-second command expiry, sequence/context checks, clipboard restore before injection; opening the clipboard retries ~100 ms and a still-held clipboard is refused as "busy" before anything is copied. | Focus race passed (`manual_selection.py`); locked clipboard: `release_gaps.py clipboard` on Windows. |
-| TM-005 | A hook can be evicted without a resume/unlock event. | Resume/unlock reinstall plus delayed retry, and an independent liveness check: when the system reports input within 3 s but the hook has heard nothing for 30 s, it is reinstalled (rate-limited to once per 30 s). | Sleep/resume run (`transition_probe.py`); lock/unlock and UAC passed (E-030/E-031). |
+| TM-005 | A hook can be evicted without a resume/unlock event. | Resume/unlock reinstall plus delayed retry, and an independent liveness check: when the system reports input within 3 s but the hook has heard nothing for 30 s, it is reinstalled (rate-limited to once per 30 s). If a reinstall fails, the tray turns grey and says so, a toast tells the user, and it is retried every 1.5 s until it succeeds. | Sleep/resume run (`transition_probe.py`); lock/unlock and UAC passed (E-030/E-031). |
 
 ## No-network/dependency claim
 
