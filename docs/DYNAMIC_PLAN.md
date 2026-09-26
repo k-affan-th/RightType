@@ -536,7 +536,7 @@ Deferred (tracked, not forgotten):
 | ID | Risk | Severity | Mitigation | Status |
 | --- | --- | --- | --- | --- |
 | R-001 | Live EN→Thai แก้ prefix อังกฤษผิด | High | D-004 boundary-only + production-policy corpus | MITIGATED IN CODE, E2E OPEN |
-| R-002 | Secret exception ทำให้ privacy claim เกินจริง | Critical | D-001 + hard-deny contexts/patterns + strict full-segmentation exception | PARTIAL: raw wrong-layout BIP39 stream OPEN |
+| R-002 | Secret exception ทำให้ privacy claim เกินจริง | Critical | D-001 + hard-deny contexts/patterns + strict full-segmentation exception | MITIGATED IN CODE 2026-09-26: every BIP39 word counts on either layout (key reading fallback), live path held from 3 words, recent copies wiped on trip; words 1–3 non-retrospective by design (TM-001); Windows run `e2e/seed_guard.py` OPEN |
 | R-003 | Manual selection ทำ rich/app-specific clipboard สูญหายหรือใช้งานไม่ได้ | High | D-003 fail-closed + restore-before-inject; full preservation v1.x | MITIGATED FOR PLAIN CLIPBOARD; metadata limitation DOCUMENTED |
 | R-004 | Async manual action inject ผิด control | Critical | target identity/focus generation + bounded command + race tests | SAME-CONTEXT NOTEPAD PASS; FOCUS-RACE OPEN |
 | R-005 | README/PLAN อ้าง feature ที่ยังไม่มี | Medium | S0 contract normalization + D-005 | MITIGATED; final UI/docs review OPEN |

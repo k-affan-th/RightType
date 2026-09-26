@@ -40,6 +40,7 @@ const WM_PAINT: u32 = 0x000F;
 const WM_ERASEBKGND: u32 = 0x0014;
 const WM_TIMER: u32 = 0x0113;
 const WM_SHOW_TOAST: u32 = 0x8000 + 0x525;
+const WM_HIDE_TOAST: u32 = 0x8000 + 0x526;
 
 static TOAST_HWND: AtomicIsize = AtomicIsize::new(0);
 static UI_THREAD_ID: AtomicU32 = AtomicU32::new(0);
@@ -127,6 +128,10 @@ fn ensure_created() -> bool {
                 }
                 Some(0)
             }
+            WM_HIDE_TOAST => {
+                unsafe { dismiss_on_ui(hwnd) };
+                Some(0)
+            }
             WM_SHOW_TOAST => {
                 if let Some(mut text) = PENDING_TEXT.lock().unwrap().take() {
                     unsafe { show_on_ui(hwnd, &text) };
@@ -174,8 +179,39 @@ pub fn show(text: &str) {
     }
 }
 
+/// Hide the toast now and wipe its text — used when what it shows may be
+/// sensitive (a Suggest hint made just before a seed phrase was recognised).
+pub fn dismiss() {
+    if let Some(mut text) = PENDING_TEXT.lock().unwrap().take() {
+        text.zeroize();
+    }
+    let raw = TOAST_HWND.load(Ordering::Acquire);
+    if raw == 0 {
+        return;
+    }
+    let hwnd = HWND(raw as *mut c_void);
+    unsafe {
+        if GetCurrentThreadId() == UI_THREAD_ID.load(Ordering::Acquire) {
+            dismiss_on_ui(hwnd);
+        } else {
+            let _ = PostMessageW(hwnd, WM_HIDE_TOAST, WPARAM(0), LPARAM(0));
+        }
+    }
+}
+
+unsafe fn dismiss_on_ui(hwnd: HWND) {
+    let _ = KillTimer(hwnd, FADE_TIMER_ID);
+    hide(hwnd);
+    ALPHA.store(255, Ordering::Relaxed);
+    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
+}
+
 unsafe fn show_on_ui(hwnd: HWND, text: &str) {
-    TEXT.with(|t| *t.borrow_mut() = text.to_string());
+    TEXT.with(|t| {
+        let mut t = t.borrow_mut();
+        t.zeroize();
+        *t = text.to_string();
+    });
     // Width grows with the message (suggestion previews are longer than the
     // original mode labels) but stays a compact pill.
     let units: Vec<u16> = text.encode_utf16().collect();

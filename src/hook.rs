@@ -756,6 +756,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     });
     if seed_run {
         detection = None;
+        forget_recent_text();
     }
 
     // Learning sees only ordinary US-QWERTY input for which the production
@@ -801,6 +802,19 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
     word.zeroize();
     swallow
+}
+
+/// A seed phrase was just recognised: drop every copy of recently typed text
+/// we still hold (Undo record, last word, pending Suggest hint), so the words
+/// that came before the threshold do not outlive it in this process.
+fn forget_recent_text() {
+    STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        st.undo = None;
+        st.last_completed = None;
+        st.suggestion = None;
+    });
+    crate::toast::dismiss();
 }
 
 /// Keep the word a boundary just completed, for Shift+Backspace right after it.
@@ -1095,16 +1109,11 @@ where
 
     let mut reading = policy::live_reading(&run, holding, dict::english(), dict::thai());
 
-    // The seed-phrase stream guard outranks any reading.
-    if let policy::Reading::Thai(thai) = &reading {
-        let tripped = STATE.with(|s| {
-            s.borrow_mut()
-                .seed
-                .observe_candidate(&run, Some(thai.as_str()))
-        });
-        if tripped {
-            reading = policy::Reading::AsTyped;
-        }
+    // The seed-phrase stream guard outranks any reading. Mid-word this only
+    // asks whether a seed phrase could be in progress; the completed token is
+    // counted once, at its boundary.
+    if matches!(reading, policy::Reading::Thai(_)) && STATE.with(|s| s.borrow().seed.guarding()) {
+        reading = policy::Reading::AsTyped;
     }
     e2e_trace(format!(
         "reconcile run={run:?} holding={holding} -> {reading:?}"
