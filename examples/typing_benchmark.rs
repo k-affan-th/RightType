@@ -396,7 +396,7 @@ fn main() {
     if error_table.is_empty() {
         push("None.".into());
     } else {
-        error_table.sort_by(|a, b| b.3.cmp(&a.3));
+        error_table.sort_by_key(|row| std::cmp::Reverse(row.3));
         push("| Intended | On screen after Space | Typed on | Times |".into());
         push("|---|---|---|---|".into());
         for (want, got, wrong_layout, n) in &error_table {
