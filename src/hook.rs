@@ -691,7 +691,18 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // D-008 revisable rendering: reconcile the screen with the run's current
         // best reading. Only Char and Backspace change the run, and only a
         // token nobody has decided yet is RightType's to reinterpret.
-        if matches!(key, Key::Char(_) | Key::Backspace)
+        // A Backspace re-renders only a run we already own. Before we own
+        // one, the screen still holds the character being deleted, so the
+        // "run minus the new key" model below would be off by two and leave
+        // raw keys mixed into the Thai (`mujouj1⌫` → `muที่นี่`); letting the
+        // Backspace through keeps the screen and the buffer in step, and the
+        // next key (or the boundary) reads the word again.
+        let may_reconcile = match key {
+            Key::Char(_) => true,
+            Key::Backspace => STATE.with(|s| s.borrow().owned.is_some()),
+            _ => false,
+        };
+        if may_reconcile
             && mode() == Mode::Auto
             && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
             && policy::supported_layout_id(layout_id(effective_layout()))

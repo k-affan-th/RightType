@@ -77,15 +77,130 @@ pub fn detect_token(
             if !has_latin || has_thai || english::is_compound(token.trim()) {
                 return None;
             }
-            detect::detect(token, en, th)
+            detect::detect(token, en, th).or_else(|| us_layout_thai_with_punctuation(token, en, th))
         }
         InputLayout::ThaiKedmanee => {
             if !has_thai || has_latin {
                 return None;
             }
-            detect::detect(token, en, th).or_else(|| thai_layout_compound(token, th))
+            detect::detect(token, en, th)
+                .or_else(|| thai_layout_compound(token, th))
+                .or_else(|| thai_layout_technical(token, en, th))
         }
     }
+}
+
+/// Punctuation the typist meant as ASCII even when it is typed next to a
+/// wrong-layout Thai word. Each of these keys gives a character that almost
+/// never ends (or starts) a Thai word — `:` gives ซ, `?` gives ฦ — unlike `,`
+/// and `.`, which give the common ม and ใ and are left to the Thai reading.
+const TRAILING_ASCII: &[char] = &[':', '?', '!', '"', ')'];
+const LEADING_ASCII: &[char] = &['"', '('];
+
+/// A Thai word typed on the English layout next to punctuation typed where
+/// it belongs: `grnjvdkixit,;]z]4kKkwmp:` is `เพื่อการประมวลผลภาษาไทย:`. The
+/// whole token does not read as Thai (`:` would be ซ), so the word is read
+/// without its edges and the edges are kept as typed.
+fn us_layout_thai_with_punctuation(
+    token: &str,
+    en: &Dictionary,
+    th: &Dictionary,
+) -> Option<Detection> {
+    let token = token.trim();
+    // An English word in quotes or brackets is just that.
+    let ascii_core = token.trim_matches(|c: char| c.is_ascii_punctuation());
+    if ascii_core.is_empty() || english::is_word(ascii_core, en) {
+        return None;
+    }
+    // Punctuation typed with the Thai key for it (`W` is `"` on Kedmanee):
+    // judge the Thai reading without its edge punctuation.
+    let converted = en_to_th(token);
+    let thai_core =
+        converted.trim_matches(|c: char| c.is_ascii_punctuation() && c != '-' && c != '/');
+    if thai_core.len() != converted.len()
+        && thai_core.chars().count() >= 2
+        && (th.contains(thai_core) || segment::is_fully_known(thai_core, th))
+    {
+        return Some(Detection {
+            corrected: converted,
+            confidence: Confidence::High,
+            evidence: Evidence::FullSegmentation,
+        });
+    }
+    let core = token.trim_start_matches(LEADING_ASCII);
+    let lead = &token[..token.len() - core.len()];
+    let inner = core.trim_end_matches(TRAILING_ASCII);
+    let trail = &core[inner.len()..];
+    if (lead.is_empty() && trail.is_empty()) || lead.len() > 2 || trail.len() > 2 {
+        return None;
+    }
+    let d = detect::detect(inner, en, th)?;
+    // Only a Thai reading: an English core would have been left alone anyway.
+    if !d
+        .corrected
+        .chars()
+        .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c))
+    {
+        return None;
+    }
+    Some(Detection {
+        corrected: format!("{lead}{}{trail}", d.corrected),
+        ..d
+    })
+}
+
+/// Technical English typed on the Thai layout: numbers (`ๅ/มภคจ` is
+/// `12,480`), acronyms, product names, derived and hyphenated terms — see
+/// [`english::is_technical`] — optionally wrapped in quotes or brackets.
+///
+/// The Thai text must not itself be Thai: not a dictionary word and not a
+/// complete segmentation, so a real Thai word whose keys happen to spell such
+/// a shape (`จุ` is `06`) is left alone.
+fn thai_layout_technical(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    // Judge the Thai without punctuation around it: `จึง:` is a Thai word
+    // and a colon, not the number `07`.
+    // (`/` and `-` are number-row keys on Kedmanee, so `/จ` is `20`: the
+    // length check is on the whole token.)
+    let thai_core = token.trim_matches(|c: char| c.is_ascii_punctuation());
+    if token.chars().count() < 2
+        || th.contains(thai_core)
+        || (thai_core.chars().count() >= 2 && segment::is_fully_known(thai_core, th))
+    {
+        return None;
+    }
+    let raw = th_to_en(token);
+    // Edge punctuation only where its key is not also a Thai letter: `,` is
+    // ม, `;` is ว and `'` is ง, so those stay part of the word.
+    let core = raw.trim_start_matches(['"', '(']);
+    let lead = raw.len() - core.len();
+    let core = core.trim_end_matches(['"', ')', ':', '?', '!', '.']);
+    let trail = raw.len() - lead - core.len();
+    if lead > 2 || trail > 2 {
+        return None;
+    }
+    // A trailing `.` can belong to a number (`3.`).
+    let core_ok = english::is_technical(core, en)
+        || (trail > 0 && english::is_technical(&raw[lead..lead + core.len() + 1], en));
+    if !core_ok {
+        return None;
+    }
+    // A lone acronym typed on the Thai layout never contains a Thai leading
+    // vowel (เ แ โ ใ ไ): none of those is on a Shift+letter key except โ
+    // (Shift+F), and a Thai syllable built on one (`โฮ๋` reads `FVJ`) is far
+    // likelier than an acronym starting with F.
+    if english::is_acronym(core)
+        && thai_core
+            .chars()
+            .any(|c| matches!(c, 'เ' | 'แ' | 'โ' | 'ใ' | 'ไ'))
+    {
+        return None;
+    }
+    Some(Detection {
+        corrected: raw,
+        confidence: Confidence::High,
+        evidence: Evidence::ExactDictionary,
+    })
 }
 
 /// A compound English word typed on the Thai layout.
@@ -388,5 +503,81 @@ mod tests {
             live_decision(Some(InputLayout::UsQwerty), "l;", &d, &en),
             LiveDecision::None
         );
+    }
+
+    fn on_thai(token: &str) -> Option<String> {
+        detect_token(
+            token,
+            InputLayout::ThaiKedmanee,
+            crate::dict::english(),
+            crate::dict::thai(),
+        )
+        .map(|d| d.corrected)
+    }
+
+    fn on_us(token: &str) -> Option<String> {
+        detect_token(
+            token,
+            InputLayout::UsQwerty,
+            crate::dict::english(),
+            crate::dict::thai(),
+        )
+        .map(|d| d.corrected)
+    }
+
+    #[test]
+    fn technical_english_typed_on_the_thai_layout_comes_back() {
+        for english in [
+            "40",
+            "12,480",
+            "0.912",
+            "64%",
+            "2e-5",
+            "GPU",
+            "NVIDIA",
+            "A100",
+            "fine-tuning",
+            "code-switching",
+            "F1-score",
+            "TF-IDF",
+            "bag-of-words",
+            "retrieval-augmented",
+            "parameter-efficient",
+            "tokenization",
+            "(LLM)",
+            "\"so-so\"",
+        ] {
+            let typed = crate::layout::en_to_th(english);
+            assert_eq!(on_thai(&typed).as_deref(), Some(english), "{typed}");
+        }
+    }
+
+    #[test]
+    fn thai_that_only_looks_technical_stays_thai() {
+        // Real words, a word with a colon after it, a Thai syllable whose
+        // Shift keys read as capitals, and number-row Thai words.
+        for thai in ["จุ", "ถึง:", "คำสำคัญ", "โฮ๋", "ภูมิ", "กรวว", "แบบ", "ก๊าซ"]
+        {
+            assert_eq!(on_thai(thai), None, "{thai}");
+        }
+    }
+
+    #[test]
+    fn english_with_punctuation_on_the_english_layout_stays_english() {
+        for english in ["\"it\"", "adc:", "(me)", "hello?", "\"so\""] {
+            assert_eq!(on_us(english), None, "{english}");
+        }
+    }
+
+    #[test]
+    fn thai_on_the_english_layout_keeps_punctuation_typed_in_english() {
+        // `:` typed where it belongs after a Thai word typed on the wrong
+        // layout, and Kedmanee's own `"` (the W key).
+        let typed = format!("{}:", crate::layout::th_to_en("ภาษาไทย"));
+        assert_eq!(on_us(&typed).as_deref(), Some("ภาษาไทย:"));
+        let typed = crate::layout::th_to_en("ดีมาก\"");
+        assert_eq!(on_us(&typed).as_deref(), Some("ดีมาก\""));
+        // Thai typed on the English layout whose keys are punctuation.
+        assert_eq!(on_us("c[[").as_deref(), Some("แบบ"));
     }
 }

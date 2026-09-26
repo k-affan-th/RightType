@@ -17,6 +17,7 @@
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
 //! - [`segment`] — Thai word segmentation (maximal matching) for space-less Thai.
 //! - [`render`] — reconciling on-screen text with the run's current best reading.
+//! - [`sim`] — the hook's Auto pipeline replayed on a string, for benchmarks and tests.
 
 pub mod buffer;
 pub mod detect;
@@ -28,3 +29,4 @@ pub mod policy;
 pub mod render;
 pub mod secret;
 pub mod segment;
+pub mod sim;

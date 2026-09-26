@@ -34,7 +34,25 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 - If Windows silently drops the keyboard hook (no sleep/lock event involved),
   RightType notices the silence while you type and reinstalls it within ~30 s.
 
+- **Backspace inside a word** could leave raw keys mixed into the Thai
+  (`mujouj1` then Backspace showed `muที่นี่`). Found by the new typing
+  simulation; a Backspace now re-renders only a run RightType already owns.
+- **Fewer wrong conversions of Thai typed on the Thai layout.** Punctuation
+  keys that are Thai letters on Kedmanee (`;` ว, `[` บ, `'` ง, `,` ม) are no
+  longer stripped before checking for English, and English read from Thai
+  keys must look like English. Across the bundled dictionaries: Thai words and
+  phrases wrongly converted 1,994 → 0, English words with punctuation 146 → 0,
+  random unknown Thai 2.6 % → 0.18 % (see `docs/TYPING_BENCHMARK.md`).
+
 ### Changed
+
+- **Technical English typed on the Thai layout comes back**: numbers
+  (`12,480`, `0.912`, `64%`, `2e-5`), acronyms (`GPU`, `A100`), derived words
+  (`tokenization`) and hyphenated terms (`fine-tuning`, `F1-score`, `TF-IDF`),
+  also inside quotes or brackets. Thai typed on the English layout keeps a
+  `:`/`?`/`"` typed after it. In a simulated academic article typed without
+  ever switching layout, RightType now fixes 90 % of wrong-layout words
+  (was 70 %), with no correctly typed word changed.
 
 - **New look.** Settings, Welcome and Statistics were rebuilt: a Settings
   sidebar with General / Hotkeys / Blocked apps / Privacy & about pages, cards,

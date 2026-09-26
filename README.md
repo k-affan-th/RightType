@@ -165,7 +165,12 @@ cargo build --release --features winos
 pwsh -File packaging\build_release.ps1
 ```
 
-Changes per version are in [`CHANGELOG.md`](CHANGELOG.md).
+Changes per version are in [`CHANGELOG.md`](CHANGELOG.md). How accurately and how
+fast RightType handles a real mixed Thai/English text — and how often it touches
+text that was typed correctly — is measured in
+[`docs/TYPING_BENCHMARK.md`](docs/TYPING_BENCHMARK.md)
+(`cargo run --release --example typing_benchmark`,
+`cargo run --release --example false_positive_audit`).
 
 The windows are drawn by `src/ui.rs` (real Win32 controls with custom painting, so
 keyboard navigation and screen readers keep working). A debug build opens one
