@@ -1,5 +1,5 @@
 # RightType installer — portable per-user install.
-# Usage:  pwsh -File install.ps1 [-Autostart] [-Exe path\to\righttype.exe]
+# Usage:  powershell -ExecutionPolicy Bypass -File install.ps1 [-Autostart] [-Exe path\to\righttype.exe]
 
 param(
     [switch]$Autostart,

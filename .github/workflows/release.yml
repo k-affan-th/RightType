@@ -1,0 +1,76 @@
+name: Release
+
+# Builds righttype.exe, the installer and the portable zip on Windows and
+# publishes them as a GitHub Release, so nobody has to build RightType to use it.
+#
+# Two ways to start it:
+# - push a tag `v<version>` matching Cargo.toml (`git tag v1.1.0 && git push origin v1.1.0`);
+# - Actions → Release → "Run workflow" on main: it tags the commit itself.
+
+on:
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Read version
+      id: version
+      shell: pwsh
+      run: |
+        $line = Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+        $ver = $line.Matches[0].Groups[1].Value
+        "version=$ver" >> $env:GITHUB_OUTPUT
+        if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne "v$ver") {
+          throw "tag $env:GITHUB_REF_NAME does not match Cargo.toml version $ver"
+        }
+
+    - name: Refuse to overwrite an existing release
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release view "v${{ steps.version.outputs.version }}" *> $null
+        if ($LASTEXITCODE -eq 0) { throw "release v${{ steps.version.outputs.version }} already exists — bump the version in Cargo.toml first" }
+        exit 0
+
+    - name: Test
+      run: cargo test --features winos --all-targets
+
+    - name: Install Inno Setup
+      run: choco install innosetup --no-progress -y
+
+    - name: Build installer, zip and checksums
+      shell: pwsh
+      run: ./packaging/build_release.ps1
+
+    - name: Release notes
+      shell: pwsh
+      run: ./packaging/release_notes.ps1 -Version "${{ steps.version.outputs.version }}" -Out release-notes.md
+
+    - name: Publish
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $ver = "${{ steps.version.outputs.version }}"
+        $files = @(
+          "dist/RightType-$ver-setup.exe",
+          "dist/RightType-$ver-x64.zip",
+          "dist/SHA256.txt"
+        )
+        foreach ($f in $files) { if (-not (Test-Path $f)) { throw "missing $f" } }
+        gh release create "v$ver" @files `
+          --title "RightType $ver" `
+          --notes-file release-notes.md `
+          --target "$env:GITHUB_SHA"

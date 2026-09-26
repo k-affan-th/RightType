@@ -124,23 +124,36 @@ rather than a blanket ban on every individual BIP39 word.
 
 ## For end users
 
+### ติดตั้ง (ไม่ต้อง build เอง)
+
+1. ไปที่หน้า **[Releases ล่าสุด](https://github.com/k-affan-th/RightType/releases/latest)**
+   แล้วดาวน์โหลด `RightType-<เวอร์ชัน>-setup.exe`
+2. ดับเบิลคลิกไฟล์ ถ้า Windows ขึ้น "Windows protected your PC" ให้กด
+   **More info → Run anyway** (ไฟล์ยังไม่ได้ลงลายเซ็นดิจิทัล)
+3. เลือกได้ว่าจะสร้าง shortcut และเปิดพร้อม Windows ไหม — ไม่ต้องใช้สิทธิ์ admin
+4. RightType อยู่ที่มุมขวาล่างของจอ (ไอคอน **Aก**) คลิกเพื่อเปิดเมนูและหน้าตั้งค่า
+
+ถอนการติดตั้ง: Settings → Apps → RightType
+
+### Install (no building needed)
+
 **Installer (recommended, per-user, no admin):** download
 `RightType-1.1.0-setup.exe` from the
-[Releases page](https://github.com/k-affan-th/RightType/releases) and run it. It installs RightType, offers a
-desktop shortcut and start-at-login, and registers a normal Windows uninstaller
-(Settings -> Apps -> RightType).
+[latest release](https://github.com/k-affan-th/RightType/releases/latest) and run it.
+It installs RightType, offers a desktop shortcut and start-at-login, and registers
+a normal Windows uninstaller (Settings -> Apps -> RightType).
 
-**Portable zip:** extract `RightType-1.1.0-x64.zip` and either run
-`righttype.exe` where it sits, or install it per-user:
+**Portable zip:** extract `RightType-1.1.0-x64.zip` and run `righttype.exe` where it
+sits — or install it per-user from the extracted folder:
 
 ```powershell
-pwsh -File install.ps1 -Autostart
+powershell -ExecutionPolicy Bypass -File install.ps1 -Autostart
 ```
 
 - Installs to `%LOCALAPPDATA%\RightType`, adds a **Start Menu shortcut**, and
   (with `-Autostart`) launches at login.
-- Uninstall anytime: `pwsh -File uninstall.ps1` (add `-KeepSettings`
-  to preserve your config/learned words).
+- Uninstall anytime: `powershell -ExecutionPolicy Bypass -File uninstall.ps1`
+  (add `-KeepSettings` to preserve your config/learned words).
 - Verify what you downloaded against `SHA256.txt` before running it:
 
 ```powershell
@@ -165,7 +178,13 @@ cargo build --release --features winos
 pwsh -File packaging\build_release.ps1
 ```
 
-Changes per version are in [`CHANGELOG.md`](CHANGELOG.md). How accurately and how
+Changes per version are in [`CHANGELOG.md`](CHANGELOG.md).
+
+**Releasing** needs no Windows machine: bump `version` in `Cargo.toml`, add its
+`CHANGELOG.md` section, merge to `main`, then run **Actions → Release → Run
+workflow** (or push a tag `v<version>`). The workflow tests, builds the installer,
+zip and `SHA256.txt` on Windows and publishes them as a GitHub Release with
+install instructions. How accurately and how
 fast RightType handles a real mixed Thai/English text — and how often it touches
 text that was typed correctly — is measured in
 [`docs/TYPING_BENCHMARK.md`](docs/TYPING_BENCHMARK.md)
