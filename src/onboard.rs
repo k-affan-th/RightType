@@ -1,164 +1,208 @@
-//! First-run onboarding + anytime hotkeys help — Windows only.
+//! First-run welcome + anytime hotkeys help — Windows only.
 //!
-//! One small, always-on-top, focus-stealing-by-design window (it is the one
-//! place we *want* attention): what RightType does, the fixed v1 hotkeys, the
-//! privacy stance, and a single "Get started" button. Shown automatically on
-//! first launch (config `onboarded`) and reopenable from the tray menu.
+//! One small window, and the one place RightType asks for attention: what it
+//! does (with a live example), the hotkeys, the current mode, and a single
+//! button. Shown automatically on first launch (config `onboarded`) and
+//! reopenable from the tray menu, where it lists every hotkey.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use native_windows_gui as nwg;
+use righttype::i18n::{tr, trf, T};
+use windows::Win32::Foundation::RECT;
+use windows::Win32::Graphics::Gdi::HDC;
 
-use crate::{config, theme};
+use crate::settings::HOTKEYS;
+use crate::ui::{self, card, divider, pal, rect, Gfx, Surface, TextStyle};
+use crate::{config, hook};
 
-pub const HOTKEYS: &[(&str, &str)] = &[
-    ("Flip or revert last word", "Shift + Backspace"),
-    ("Convert selection", "Shift + CapsLock"),
-    ("Cycle Manual / Auto / Suggest", "Ctrl + CapsLock"),
-    ("Undo last correction", "Ctrl + Shift + CapsLock"),
-    ("Accept suggestion", "Alt + CapsLock"),
-    ("Panic on/off", "Ctrl + Alt + CapsLock"),
-];
+const W: i32 = 560;
+const X: i32 = 32;
+const CW: i32 = W - 2 * X;
+const ROW: i32 = 46;
 
 struct Welcome {
     window: nwg::Window,
-    _font: nwg::Font,
-    _labels: Vec<nwg::Label>,
-    start: nwg::Button,
+    surface: Rc<Surface>,
     handler: RefCell<Option<nwg::EventHandler>>,
-    _theme: Option<nwg::RawEventHandler>,
 }
 
-/// Show the welcome/help window. `first_run` toggles the headline copy; when
-/// true, dismissing marks config onboarding complete.
-pub fn show(first_run: bool) {
-    let mut font = nwg::Font::default();
-    let _ = nwg::Font::builder()
-        .family("Segoe UI")
-        .size(15)
-        .build(&mut font);
-    let mut big = nwg::Font::default();
-    let _ = nwg::Font::builder()
-        .family("Segoe UI")
-        .size(20)
-        .build(&mut big);
+/// Vertical layout shared by the controls and the background painter.
+struct Layout {
+    example_y: Option<i32>,
+    keys_y: i32,
+    rows: usize,
+    height: i32,
+}
 
+fn layout(first_run: bool) -> Layout {
+    if first_run {
+        let example_y = 150;
+        let keys_y = example_y + 72 + 44;
+        let rows = 4;
+        Layout {
+            example_y: Some(example_y),
+            keys_y,
+            rows,
+            height: keys_y + rows as i32 * ROW + 8 + 112,
+        }
+    } else {
+        let keys_y = 84;
+        let rows = HOTKEYS.len();
+        Layout {
+            example_y: None,
+            keys_y,
+            rows,
+            height: keys_y + rows as i32 * ROW + 8 + 112,
+        }
+    }
+}
+
+/// Show the welcome/help window. `first_run` picks the introduction; closing
+/// it then records that onboarding is done.
+pub fn show(first_run: bool) {
+    ui::refresh();
+    let lay = layout(first_run);
     let mut window = nwg::Window::default();
     let _ = nwg::Window::builder()
         .flags(nwg::WindowFlags::WINDOW)
-        .size((460, 470))
-        .position((200, 140))
-        .title(if first_run {
-            "Welcome to RightType"
+        .size((W, lay.height))
+        .title(tr(if first_run {
+            T::WelcomeTitle
         } else {
-            "RightType — Hotkeys"
-        })
+            T::HelpTitle
+        }))
         .topmost(true)
         .build(&mut window);
 
-    let mut labels: Vec<nwg::Label> = Vec::new();
-    macro_rules! label {
-        ($text:expr, $x:expr, $y:expr, $w:expr, $h:expr, $font:expr) => {{
-            let mut l = nwg::Label::default();
-            let _ = nwg::Label::builder()
-                .text($text)
-                .font(Some(&$font))
-                .position(($x, $y))
-                .size(($w, $h))
-                .parent(&window)
-                .build(&mut l);
-            labels.push(l);
-        }};
-    }
+    let paint_layout = layout(first_run);
+    let surface = Surface::attach(
+        &window,
+        0x5254_0011,
+        Box::new(move |g, hdc, rc, _| paint(g, hdc, rc, &paint_layout)),
+    );
+    let s = &surface;
+    let p = pal();
 
-    if first_run {
-        label!("พิมพ์ผิด layout? แก้ให้ทันที ไม่ต้องพิมพ์ใหม่", 24, 18, 410, 34, big);
-        label!(
-            "Thai Kedmanee ↔ US QWERTY · Auto / Manual / Suggest modes.\n\
-             Password fields, wallets and terminals are always ignored.",
-            24,
-            56,
-            410,
-            44,
-            font
+    if let Some(example_y) = lay.example_y {
+        s.label(
+            tr(T::WelcomeHeadline),
+            TextStyle::Title,
+            (X, 26, CW, 44),
+            p.bg,
+            0,
+        );
+        s.label(tr(T::WelcomeSub), TextStyle::Dim, (X, 80, CW, 60), p.bg, 0);
+        s.label(
+            tr(T::WelcomeExample),
+            TextStyle::Subtitle,
+            (X + 24, example_y + 20, CW - 48, 32),
+            p.surface,
+            0,
+        );
+        s.label(
+            tr(T::HeadHotkeys),
+            TextStyle::BodyStrong,
+            (X, lay.keys_y - 30, CW, 20),
+            p.bg,
+            0,
         );
     } else {
-        label!("RightType — fixed hotkeys (v1)", 24, 18, 410, 30, big);
+        s.label(
+            tr(T::HelpHeadline),
+            TextStyle::Title,
+            (X, 26, CW, 40),
+            p.bg,
+            0,
+        );
     }
-
-    label!("Hotkeys", 24, 108, 200, 24, big);
-    for (i, (action, keys)) in HOTKEYS.iter().enumerate() {
-        let y = 138 + (i as i32) * 26;
-        label!(*action, 28, y, 220, 22, font);
-        label!(*keys, 252, y, 180, 22, font);
+    for (i, hk) in HOTKEYS.iter().take(lay.rows).enumerate() {
+        let y = lay.keys_y + 4 + i as i32 * ROW;
+        s.label(
+            tr(hk.action),
+            TextStyle::Body,
+            (X + 20, y + 12, 230, 22),
+            p.surface,
+            0,
+        );
+        s.label(
+            hk.keys,
+            TextStyle::Keys,
+            (X + CW - 20 - 240, y + 8, 240, 30),
+            p.surface,
+            0,
+        );
     }
-
-    let tip_y = 138 + (HOTKEYS.len() as i32) * 26 + 8;
-    label!(
-        "Nothing you type is ever written to disk.",
-        24,
-        tip_y,
-        410,
-        22,
-        font
+    let foot_y = lay.keys_y + lay.rows as i32 * ROW + 8 + 20;
+    let mode = tr(match hook::mode() {
+        hook::Mode::Auto => T::ModeAuto,
+        hook::Mode::Suggest => T::ModeSuggest,
+        hook::Mode::Manual => T::ModeManual,
+    });
+    s.label(
+        &trf(T::WelcomeMode, &[("mode", mode)]),
+        TextStyle::Dim,
+        (X, foot_y, CW - 170, 50),
+        p.bg,
+        0,
+    );
+    let start = s.button(
+        tr(if first_run {
+            T::BtnGetStarted
+        } else {
+            T::BtnClose
+        }),
+        true,
+        (X + CW - 150, foot_y + 4, 150, 36),
+        p.bg,
+        0,
     );
 
-    let mut start = nwg::Button::default();
-    let _ = nwg::Button::builder()
-        .text(if first_run { "Get started" } else { "Close" })
-        .font(Some(&big))
-        .position((330, 415))
-        .size((110, 32))
-        .parent(&window)
-        .build(&mut start);
-
-    let themed = theme::subclass_colors(
-        window
-            .handle
-            .hwnd()
-            .map(|h| windows::Win32::Foundation::HWND(h as _))
-            .unwrap_or_default(),
-        0x5254_0011,
-    );
-    theme::apply_frame(
-        window
-            .handle
-            .hwnd()
-            .map(|h| windows::Win32::Foundation::HWND(h as _))
-            .unwrap_or_default(),
-    );
-    window.set_visible(true);
-
-    let ui = Rc::new(Welcome {
+    ui::size_and_center(surface.hwnd, W, lay.height);
+    let win = Rc::new(Welcome {
         window,
-        _font: font,
-        _labels: labels,
-        start,
+        surface,
         handler: RefCell::new(None),
-        _theme: themed,
     });
+    win.window.set_visible(true);
 
-    let ui_h = ui.clone();
-    let handler = nwg::full_bind_event_handler(&ui.window.handle, move |evt, _data, handle| {
-        use nwg::Event as E;
-        match evt {
-            E::OnButtonClick if handle == ui_h.start.handle => {
-                if first_run {
-                    config::mark_onboarded();
-                }
-                finish(&ui_h);
+    let weak = Rc::downgrade(&win);
+    win.surface.on_click(move |id| {
+        if id == start {
+            if let Some(win) = weak.upgrade() {
+                finish(&win, first_run);
             }
-            E::OnWindowClose if handle == ui_h.window.handle => finish(&ui_h),
-            _ => {}
         }
     });
-    *ui.handler.borrow_mut() = Some(handler);
-
-    fn finish(ui: &Rc<Welcome>) {
-        if let Some(h) = ui.handler.borrow_mut().take() {
-            nwg::unbind_event_handler(&h);
+    let win_h = win.clone();
+    let handler = nwg::full_bind_event_handler(&win.window.handle, move |evt, _data, handle| {
+        if matches!(evt, nwg::Event::OnWindowClose) && handle == win_h.window.handle {
+            finish(&win_h, first_run);
         }
-        ui.window.close();
+    });
+    *win.handler.borrow_mut() = Some(handler);
+}
+
+fn finish(win: &Rc<Welcome>, first_run: bool) {
+    if first_run {
+        config::mark_onboarded();
+    }
+    win.surface.detach();
+    if let Some(h) = win.handler.borrow_mut().take() {
+        nwg::unbind_event_handler(&h);
+    }
+    win.window.close();
+}
+
+fn paint(g: &Gfx, hdc: HDC, _rc: RECT, lay: &Layout) {
+    if let Some(example_y) = lay.example_y {
+        card(g, rect(X, example_y, CW, 72));
+        // Accent edge: this card is the product in one line.
+        g.fill_round(rect(X, example_y, 4, 72), ui::px(2) as f32, pal().accent);
+    }
+    card(g, rect(X, lay.keys_y, CW, lay.rows as i32 * ROW + 8));
+    for i in 1..lay.rows as i32 {
+        divider(hdc, X + 16, lay.keys_y + 4 + i * ROW - 1, CW - 32);
     }
 }

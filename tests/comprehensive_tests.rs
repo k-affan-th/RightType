@@ -175,7 +175,7 @@ fn test_bip39_seed_tracker_straight_ascii() {
     // 2. Resets on non-BIP39 word
     tracker.reset();
     assert!(!tracker.observe("abandon")); // run = 1
-    assert!(!tracker.observe("hello")); // run = 0 -> resets!
+    assert!(!tracker.observe("keyboard")); // run = 0 -> resets!
     assert!(!tracker.observe("ability")); // run = 1
 }
 

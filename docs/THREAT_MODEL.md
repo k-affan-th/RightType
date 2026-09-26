@@ -36,19 +36,29 @@
   corrected only when the whole converted token is known Thai; it is never learned.
 - A single BIP39 word cannot be a hard deny because ordinary words overlap the BIP39
   list (for example, `correct`). The stream tracker denies once a run reaches four.
+  A token counts as a seed word by any of its readings: the wrong-layout candidate,
+  the raw text, or the English its keys spell on the Thai layout (so `cat`/`ski`,
+  which are real Thai words there, no longer break the run). Every one of the 2,048
+  words extends the run on either layout (`secret::tests`).
+- Mid-word (live) conversion is held as soon as three seed words are in a row, so a
+  fourth cannot be converted before its boundary; the tracker itself counts each
+  completed token exactly once.
+- When the run trips, the Undo record, the last completed word and any pending
+  Suggest hint (including the toast text) are dropped and zeroized, so the words
+  before the threshold do not outlive it in the process.
 
 ## Known residual risks
 
 | ID | Risk | v1 handling | Release requirement |
 | --- | --- | --- | --- |
-| TM-001 | A seed phrase typed on the wrong layout is not recognizable from its raw first words; an online boundary converter cannot know future words. | Sensitive apps/password fields hard deny; candidate learning is denied. The four-word stream guard is not retrospective. | README/spec must not claim every wrong-layout BIP39 phrase is untouched; add Windows adversarial test. |
+| TM-001 | A seed phrase's first three words cannot be told apart from ordinary English (`about`, `able`, `correct` are BIP39 words); an online converter cannot know future words. | Sensitive apps/password fields hard deny; learning never stores BIP39 words (all are in the bundled English dictionary); from the threshold on, correction/Suggest/learning are denied and recent copies are wiped. Words 1–3 may still be converted on the wrong layout, which writes only what the typist meant to type into the focused app. | README must not claim every wrong-layout BIP39 phrase is untouched (it does not); Windows adversarial run: `e2e/release_gaps.py`. |
 | TM-002 | UIA/process identity can be temporarily unavailable. | Tri-state/failure paths deny by default. | Native/browser/Electron and process-query E2E. |
 | TM-003 | `VirtualLock` and WER hardening are best effort. | Buffer zeroization remains primary; process runs non-elevated. | Record runtime return values or diagnostic evidence without logging content. |
-| TM-004 | Clipboard owners can be slow or locked and focus can change during manual copy. | Bounded worker, one-second command expiry, sequence/context checks, clipboard restore before injection. | Notepad/Word/Chrome, locked clipboard and focus-race E2E. |
-| TM-005 | A hook can be evicted without a resume/unlock event. | Resume/unlock reinstall plus delayed retry currently exists. | Add independent liveness signal or document event-driven limitation; transition E2E. |
+| TM-004 | Clipboard owners can be slow or locked and focus can change during manual copy. | Bounded worker, one-second command expiry, sequence/context checks, clipboard restore before injection; opening the clipboard retries ~100 ms and a still-held clipboard is refused as "busy" before anything is copied. | Focus race passed (`manual_selection.py`); locked clipboard: `release_gaps.py clipboard` on Windows. |
+| TM-005 | A hook can be evicted without a resume/unlock event. | Resume/unlock reinstall plus delayed retry, and an independent liveness check: when the system reports input within 3 s but the hook has heard nothing for 30 s, it is reinstalled (rate-limited to once per 30 s). | Sleep/resume run (`transition_probe.py`); lock/unlock and UAC passed (E-030/E-031). |
 
 ## No-network/dependency claim
 
 The crate manifest has no HTTP, telemetry, updater or analytics dependency. This is a
-source-level observation only until `cargo audit` and dependency-tree inspection are
-recorded in `DYNAMIC_PLAN.md`.
+source-level observation backed by CI: every push runs `cargo audit` and fails the
+Windows job if `cargo tree --features winos` contains an HTTP/TLS/telemetry crate.

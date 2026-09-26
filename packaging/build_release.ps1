@@ -2,10 +2,14 @@
 # Usage: pwsh -File packaging\build_release.ps1
 
 $ErrorActionPreference = "Stop"
-# Keep in step with Cargo.toml and packaging/RightType.iss.
-$ver = "1.0.0"
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location $root
+
+# Cargo.toml is the single source of the version; the installer receives it
+# on the ISCC command line.
+$verLine = Select-String -Path "$root\Cargo.toml" -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+if (-not $verLine) { throw "version not found in Cargo.toml" }
+$ver = $verLine.Matches[0].Groups[1].Value
 
 cargo build --release --features winos
 if ($LASTEXITCODE -ne 0) { throw "build failed" }
@@ -20,6 +24,10 @@ Copy-Item "$root\target\release\righttype.exe" $stage -Force
 Copy-Item "$root\packaging\install.ps1" $stage -Force
 Copy-Item "$root\packaging\uninstall.ps1" $stage -Force
 Copy-Item "$root\README.md" $stage -Force
+Copy-Item "$root\CHANGELOG.md" $stage -Force
+Copy-Item "$root\LICENSE-MIT" $stage -Force
+Copy-Item "$root\LICENSE-APACHE" $stage -Force
+Copy-Item "$root\assets\fonts\OFL.txt" "$stage\FONT-LICENSE-OFL.txt" -Force
 Compress-Archive -Path "$stage\*" -DestinationPath "$dist\RightType-$ver-x64.zip" -Force
 Remove-Item $stage -Recurse -Force
 
@@ -35,7 +43,8 @@ $isccCandidates = @(
 )
 $iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($iscc) {
-    & $iscc "$root\packaging\RightType.iss"
+    & $iscc "/DMyAppVersion=$ver" "$root\packaging\RightType.iss"
+    if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
 } else {
     Write-Host "Inno Setup not found — skipped setup.exe (zip + scripts are ready)."
 }
@@ -48,7 +57,9 @@ $lines = @(
     "UNSIGNED: regenerate this file after signing - the hashes will change.",
     ""
 )
-$published = Get-ChildItem $dist -File | Where-Object { $_.Name -ne "SHA256.txt" } | Sort-Object Name
+# Only this version's files: artifacts left in dist\ by an earlier build must
+# not be listed as part of this release.
+$published = Get-ChildItem $dist -File | Where-Object { $_.Name -like "RightType-$ver-*" } | Sort-Object Name
 foreach ($f in $published) {
     $lines += "{0}  {1}  ({2} bytes)" -f (Get-FileHash $f.FullName -Algorithm SHA256).Hash, $f.Name, $f.Length
 }

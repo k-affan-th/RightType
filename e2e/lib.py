@@ -255,4 +255,3 @@ def close_app(app):
 
 def list_windows():
     return [w.window_text() for w in Desktop(backend="uia").windows()]
-

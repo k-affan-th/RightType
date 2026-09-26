@@ -140,23 +140,36 @@ impl SeedTracker {
     /// Observe the next completed word. Returns `true` once a seed-phrase run is
     /// detected, signalling the caller to bail and wipe recent context.
     pub fn observe(&mut self, word: &str) -> bool {
-        if is_bip39_word(word) {
-            self.run += 1;
-        } else {
-            self.run = 0;
-        }
+        self.observe_hit(is_bip39_word(word))
+    }
+
+    /// Observe a completed token by every reading it has. A token counts as a
+    /// seed word when its wrong-layout candidate, its raw text, or — for text
+    /// typed on the Thai layout — the English its *keys* spell is a BIP39 word.
+    ///
+    /// The key reading matters when detection declines: `cat` and `ski` typed
+    /// on the Thai layout are the real Thai words `แฟะ` and `หาร`, so no
+    /// candidate is offered, and without it the run used to reset in the
+    /// middle of a phrase.
+    pub fn observe_candidate(&mut self, raw: &str, candidate: Option<&str>) -> bool {
+        let hit = candidate.is_some_and(is_bip39_word)
+            || is_bip39_word(raw)
+            || (!raw.is_ascii() && is_bip39_word(&crate::layout::th_to_en(raw)));
+        self.observe_hit(hit)
+    }
+
+    fn observe_hit(&mut self, hit: bool) -> bool {
+        self.run = if hit { self.run + 1 } else { 0 };
         self.run >= SEED_MIN_RUN
     }
 
-    /// Observe the English-bearing side of a wrong-layout decision. When the
-    /// candidate is ASCII it represents what the raw token means; otherwise the
-    /// raw token is the only useful BIP39 signal. Keeping this selection here
-    /// makes the production hook's phrase policy directly regression-testable.
-    pub fn observe_candidate(&mut self, raw: &str, candidate: Option<&str>) -> bool {
-        let word = candidate
-            .filter(|candidate| candidate.is_ascii())
-            .unwrap_or(raw);
-        self.observe(word)
+    /// True while the next word could complete (or continue) a seed phrase:
+    /// the run is one word short of the threshold or past it. Mid-word callers
+    /// use this instead of [`observe`](Self::observe), which must see each
+    /// completed token exactly once — a partial word is not a word, and
+    /// observing prefixes would reset or inflate the run.
+    pub fn guarding(&self) -> bool {
+        self.run + 1 >= SEED_MIN_RUN
     }
 
     pub fn reset(&mut self) {
@@ -285,6 +298,49 @@ mod tests {
         for (index, candidate) in ["abandon", "ability", "able", "about"].iter().enumerate() {
             let raw = crate::layout::en_to_th(candidate);
             assert_eq!(tracker.observe_candidate(&raw, Some(candidate)), index == 3);
+        }
+    }
+
+    #[test]
+    fn a_thai_layout_seed_word_without_a_candidate_still_counts() {
+        // `cat` and `ski` typed on the Thai layout are real Thai words, so
+        // detection offers no candidate; their keys still spell seed words.
+        let mut tracker = SeedTracker::new();
+        let phrase = ["abandon", "cat", "ski", "about"];
+        for (index, word) in phrase.iter().enumerate() {
+            let raw = crate::layout::en_to_th(word);
+            let candidate = (*word != "cat" && *word != "ski").then_some(*word);
+            assert_eq!(tracker.observe_candidate(&raw, candidate), index == 3);
+        }
+    }
+
+    #[test]
+    fn guarding_starts_one_word_before_the_threshold() {
+        let mut tracker = SeedTracker::new();
+        for word in ["abandon", "ability"] {
+            tracker.observe(word);
+            assert!(!tracker.guarding());
+        }
+        tracker.observe("able");
+        assert!(tracker.guarding(), "a fourth seed word may be in progress");
+        tracker.observe("keyboard");
+        assert!(!tracker.guarding());
+    }
+
+    #[test]
+    fn every_seed_word_counts_on_either_layout() {
+        // Whatever detection decides, each BIP39 word must extend the run
+        // whether it was typed on the US or the Thai layout.
+        for word in bip39_set() {
+            let mut us = SeedTracker::new();
+            let mut th = SeedTracker::new();
+            for _ in 0..SEED_MIN_RUN - 1 {
+                us.observe("abandon");
+                th.observe("abandon");
+            }
+            assert!(us.observe_candidate(word, None), "{word} on US");
+            let raw = crate::layout::en_to_th(word);
+            assert!(th.observe_candidate(&raw, None), "{word} on Thai");
         }
     }
 }

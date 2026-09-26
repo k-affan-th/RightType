@@ -15,7 +15,7 @@ from pathlib import Path
 
 from pywinauto import Desktop
 
-REPO = Path(r"C:\Users\kaffa\Documents\GitHub\RightType")
+REPO = Path(__file__).resolve().parents[1]
 EXE = REPO / "target" / "debug" / "righttype.exe"
 SCRATCH = Path(tempfile.mkdtemp(prefix="rt_claude_"))
 DATA = SCRATCH / "rtdata"

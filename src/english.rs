@@ -50,6 +50,11 @@ pub fn warm() {
     let _ = dict::thai().has_extension("warm");
 }
 
+/// One of the frequent English words (or a learned one) — lower case.
+pub fn is_common(word: &str) -> bool {
+    is_part(word)
+}
+
 fn is_part(s: &str) -> bool {
     core().contains(s) || dict::english().is_learned(s)
 }
@@ -114,6 +119,119 @@ pub fn is_word(token: &str, en: &Dictionary) -> bool {
     en.contains(token) || is_compound(token)
 }
 
+/// A number as written in running text: `40`, `12,480`, `0.912`, `64%`,
+/// `2e-5`, `3.` (a numbered heading), `2567`.
+pub fn is_number(token: &str) -> bool {
+    let t = token.strip_suffix('%').unwrap_or(token);
+    let t = t.strip_suffix('.').unwrap_or(t);
+    if t.is_empty() || !t.starts_with(|c: char| c.is_ascii_digit()) {
+        return false;
+    }
+    // Scientific notation: mantissa `e` optional sign, exponent.
+    if let Some((mantissa, exponent)) = t.split_once(['e', 'E']) {
+        let exponent = exponent.strip_prefix(['-', '+']).unwrap_or(exponent);
+        return plain_number(mantissa)
+            && !exponent.is_empty()
+            && exponent.bytes().all(|b| b.is_ascii_digit());
+    }
+    plain_number(t)
+}
+
+/// Digits, with single `,` or `.` separators between digit groups.
+fn plain_number(t: &str) -> bool {
+    !t.is_empty()
+        && t.split([',', '.'])
+            .all(|group| !group.is_empty() && group.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// An acronym or model name: `GPU`, `NLP`, `TF`, `A100` — capitals and
+/// digits, starting with a capital, at most 8 long, with two capitals or one
+/// capital and at least three digits (`T09` is too easily a Thai slip).
+pub fn is_acronym(token: &str) -> bool {
+    let len = token.len();
+    let upper = token.bytes().filter(u8::is_ascii_uppercase).count();
+    let digits = token.bytes().filter(u8::is_ascii_digit).count();
+    (2..=8).contains(&len)
+        && token.starts_with(|c: char| c.is_ascii_uppercase())
+        && upper + digits == len
+        && (upper >= 2 || digits >= 3)
+}
+
+/// Two-letter words that may stand as a part of a hyphenated term
+/// (`bag-of-words`, `up-to-date`, `so-so`).
+const SHORT_PARTS: &[&str] = &[
+    "of", "to", "in", "on", "by", "up", "so", "go", "no", "do", "at", "as", "is", "it", "be", "or",
+    "an", "we", "me", "my", "re", "co", "ex",
+];
+
+/// Derivational endings, longest first.
+const SUFFIXES: &[&str] = &[
+    "izations", "ization", "isations", "isation", "ations", "ation", "izing", "ized", "izer",
+    "ability", "ments", "ment", "ness", "able", "ings", "ing", "ers", "er", "ed", "ly",
+];
+
+/// A dictionary word plus a derivational ending: `tokenization`,
+/// `embeddings`, `retrained`. Lower case (or capitalised), at least 7 letters,
+/// stem of at least 4 letters that is itself English.
+pub fn is_derived(token: &str, en: &Dictionary) -> bool {
+    let Some(word) = compound_shape(token) else {
+        return false;
+    };
+    if word.len() < 7 {
+        return false;
+    }
+    SUFFIXES.iter().any(|suffix| {
+        word.strip_suffix(suffix).is_some_and(|stem| {
+            stem.len() >= 4
+                && (en.contains(stem) || en.contains(&format!("{stem}e")) || is_compound(stem))
+        })
+    })
+}
+
+/// English as it appears in technical and academic writing, beyond single
+/// dictionary words: numbers, acronyms, derived words and hyphenated terms
+/// whose every part is one of those (`fine-tuning`, `F1-score`, `TF-IDF`,
+/// `retrieval-augmented`).
+///
+/// Mixed-case product names (`PyThaiNLP`, `RoBERTa`) are deliberately not
+/// recognised by shape: Thai typed on the Thai layout uses Shift for some
+/// letters, so its key readings are full of interior capitals (`doyIRd`). They
+/// become English the usual way — flip one back and it is learned.
+///
+/// Used only for text typed on the *Thai* layout, where a positive answer
+/// means "these keys were meant as English" — see `policy::detect_token`.
+pub fn is_technical(token: &str, en: &Dictionary) -> bool {
+    // Parts of a hyphenated term must be solid on their own: a frequent
+    // word (not merely something in the long dictionary tail, which holds
+    // `d`, `pk` and `fd`), a short function word, an acronym such as `F1`, a
+    // number, or a derived word.
+    let part_ok = |p: &str| {
+        let lower = p.to_ascii_lowercase();
+        (p.len() >= MIN_PART_CHARS
+            && compound_shape(p).is_some()
+            && (is_part(&lower) || is_compound(p)))
+            || SHORT_PARTS.contains(&lower.as_str()) && compound_shape(p).is_some()
+            || is_acronym(p)
+            || (p.len() == 2
+                && p.as_bytes()[0].is_ascii_uppercase()
+                && p.as_bytes()[1].is_ascii_digit())
+            || is_number(p)
+            || is_derived(p, en)
+    };
+    if is_number(token) {
+        return true;
+    }
+    if token.contains('-') && !token.starts_with('-') && !token.ends_with('-') {
+        let parts: Vec<&str> = token.split('-').collect();
+        return parts.len() >= 2
+            && parts.iter().all(|p| !p.is_empty() && part_ok(p))
+            // At least one part must carry letters: `3-4` is a range, and a
+            // range is `is_number`'s business, not a hyphenated term.
+            && parts.iter().any(|p| p.bytes().filter(u8::is_ascii_alphabetic).count() >= 2);
+    }
+    is_number(token) || is_acronym(token) || is_derived(token, en)
+}
+
 /// Can `token` still grow into English — a longer dictionary word, or a
 /// compound whose last part is still being typed (`middlew` → `middleware`)?
 pub fn has_continuation(token: &str, en: &Dictionary) -> bool {
@@ -172,6 +290,59 @@ mod tests {
         assert!(has_continuation("workfl", en));
         assert!(has_continuation("diffe", en));
         assert!(!has_continuation("l;yl", en));
+    }
+
+    #[test]
+    fn technical_english_is_recognised() {
+        let en = dict::english();
+        for w in [
+            "40",
+            "12,480",
+            "0.912",
+            "64%",
+            "2e-5",
+            "3.",
+            "2567",
+            "GPU",
+            "NVIDIA",
+            "A100",
+            "tokenization",
+            "fine-tuning",
+            "code-switching",
+            "F1-score",
+            "TF-IDF",
+            "bag-of-words",
+            "retrieval-augmented",
+            "parameter-efficient",
+            "so-so",
+        ] {
+            assert!(is_technical(w, en), "{w} should be technical English");
+        }
+    }
+
+    #[test]
+    fn technical_shapes_reject_near_misses() {
+        let en = dict::english();
+        for w in [
+            "",
+            "-",
+            "3-4",
+            ",5",
+            "1,,2",
+            "e5",
+            "Gp",
+            "abcDef1",
+            "ditCud",
+            "doyIRd",
+            "PyThaiNLP",
+            "WORKFLOWING1",
+            "x-",
+            "-x",
+            "zzzzqqqqing",
+            "l;ylfu",
+        ] {
+            assert!(!is_technical(w, en), "{w} should not be technical English");
+        }
     }
 
     #[test]

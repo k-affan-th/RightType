@@ -53,23 +53,43 @@ fn has_latin(word: &str) -> bool {
 /// character when the wrong layout is active.  Once Thai has been converted back
 /// to English, however, a trailing comma or period should not make an otherwise
 /// unambiguous word invisible to detection.
+///
+/// Only punctuation whose key is *not* a Thai letter on Kedmanee is set aside
+/// freely (`"` `(` `)` `:` `?` `!` `.`). `;` `[` `]` `=` `'` are ว บ ล ช ง —
+/// common Thai finals — so stripping them turned unknown Thai words into
+/// "English" cores like `di` (`กรวว` → `di;;`). A trailing `,` (ม) is allowed
+/// only before a solid English word of three letters or more (`hello,`).
 fn is_english_word_with_edge_punctuation(word: &str, en: &Dictionary) -> bool {
     if en.contains(word) {
         return true;
     }
+    let core = word.trim_start_matches(['"', '(']);
+    let lead = word.len() - core.len();
+    let inner = core.trim_end_matches(['"', ')', ':', '?', '!', '.', ',']);
+    let trail = &core[inner.len()..];
+    if (lead == 0 && trail.is_empty()) || inner.is_empty() || !en.contains(inner) {
+        return false;
+    }
+    let solid = inner.len() >= 3 && inner.bytes().all(|b| b.is_ascii_alphabetic());
+    !trail.contains(',') || solid
+}
 
-    let chars: Vec<char> = word.chars().collect();
-    let mut start = 0;
-    let mut end = chars.len();
-    while start < end && chars[start].is_ascii_punctuation() {
-        start += 1;
+/// Does the English read from Thai-layout keys look like English someone
+/// typed? The long tail of the dictionary holds fragments and names (`tio`,
+/// `dao`, `Kiyo`), and Thai typed on the Thai layout uses Shift for some
+/// letters, so its key readings have arbitrary capitals (`diK`). Require real
+/// English casing — `word`, `Word`, `WORD` — and, for three letters or fewer,
+/// one of the frequent words.
+fn plausible_english(converted: &str) -> bool {
+    let letters = converted
+        .trim_start_matches(['"', '('])
+        .trim_end_matches(['"', ')', ':', '?', '!', '.', ',']);
+    let b = letters.as_bytes();
+    if b.is_empty() || !b.iter().all(u8::is_ascii_alphabetic) {
+        return false;
     }
-    while start < end && chars[end - 1].is_ascii_punctuation() {
-        end -= 1;
-    }
-    start < end
-        && (start != 0 || end != chars.len())
-        && en.contains(&chars[start..end].iter().collect::<String>())
+    let cased = b[1..].iter().all(u8::is_ascii_lowercase) || b.iter().all(u8::is_ascii_uppercase);
+    cased && (b.len() > 3 || crate::english::is_common(&letters.to_ascii_lowercase()))
 }
 
 /// Inspect a completed `word`, returning a correction if it looks mistyped.
@@ -94,8 +114,13 @@ pub fn detect(word: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection>
         if th.contains(word) {
             return None;
         }
+        // A Thai word with punctuation after it is still that Thai word.
+        let thai_core = word.trim_matches(|c: char| c.is_ascii_punctuation());
+        if thai_core.len() < word.len() && th.contains(thai_core) {
+            return None;
+        }
         let converted = th_to_en(word);
-        if is_english_word_with_edge_punctuation(&converted, en) {
+        if is_english_word_with_edge_punctuation(&converted, en) && plausible_english(&converted) {
             return Some(Detection {
                 corrected: converted,
                 confidence: Confidence::High,
@@ -116,6 +141,15 @@ pub fn detect(word: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection>
     // slip, not a secret.
     if latin && !thai {
         if en.contains(word) {
+            return None;
+        }
+        // An English word next to punctuation (`adc:`, `"it"`) is English.
+        // Only punctuation that is not a Thai letter on Kedmanee counts here:
+        // `c[[` is แบบ typed on the wrong layout, not the word `c`.
+        let letters = word
+            .trim_start_matches(['"', '('])
+            .trim_end_matches(['"', ')', ':', '?', '!']);
+        if !letters.is_empty() && letters.len() < word.len() && en.contains(letters) {
             return None;
         }
         // Identifiable keys and addresses are hard-denied even when an

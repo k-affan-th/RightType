@@ -10,13 +10,47 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  # The OS-free core: layout, detection, policy and the pipeline replays.
+  core:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+    - name: Format
+      run: cargo fmt --all -- --check
+    - name: Whitespace
+      run: git diff --check $(git hash-object -t tree /dev/null) HEAD
+    - name: Clippy
+      run: cargo clippy --all-targets -- -D warnings
+    - name: Test
+      run: cargo test --all-targets
+    - name: Latency gate
+      run: cargo run --release --example policy_latency
+
+  # The Windows integration layer (hook, inject, tray, ...). It only compiles
+  # on Windows, so the Linux job above never sees it.
+  windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Clippy
+      run: cargo clippy --features winos --all-targets -- -D warnings
+    - name: Test
+      run: cargo test --features winos --all-targets
+    - name: Release build
+      run: cargo build --release --features winos
+    - name: No network or telemetry crates
+      shell: pwsh
+      run: |
+        $tree = cargo tree --features winos --edges normal --prefix none
+        $bad = $tree | Select-String -Pattern '^(reqwest|hyper|ureq|curl|isahc|surf|attohttpc|tokio|native-tls|rustls|openssl|sentry|opentelemetry)\b'
+        if ($bad) { $bad; throw "network/telemetry crate in the dependency tree" }
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-audit
+    - name: Audit
+      run: cargo audit

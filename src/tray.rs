@@ -12,19 +12,27 @@ use native_windows_gui as nwg;
 use windows::Win32::Foundation::HWND;
 
 use crate::{config, focus, hook, learn, session, settings, startup, stats, toast};
+use righttype::i18n::{tr, T};
 
 thread_local! {
     /// Last tooltip pushed to the shell, so the timer refresh is a no-op
     /// unless something actually changed.
     static TIP: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+    /// Whether the tray shows the "off" icon, for the same reason.
+    static SHOWING_OFF: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+    /// Language the menu was last labelled in.
+    static MENU_LANG: std::cell::Cell<Option<righttype::i18n::Lang>> = const { std::cell::Cell::new(None) };
 }
 
-/// The tray icon, embedded so the binary stays portable (no external file).
+/// The tray icons, embedded so the binary stays portable (no external file):
+/// blue while RightType is on, grey while it is off.
 static ICON_BYTES: &[u8] = include_bytes!("../assets/icon.ico");
+static ICON_OFF_BYTES: &[u8] = include_bytes!("../assets/icon_off.ico");
 
 struct Tray {
     window: nwg::MessageWindow,
-    _icon: nwg::Icon,
+    icon: nwg::Icon,
+    icon_off: nwg::Icon,
     _tray: nwg::TrayNotification,
     menu: nwg::Menu,
     m_enabled: nwg::MenuItem,
@@ -43,6 +51,8 @@ struct Tray {
 /// Build the tray UI, install the hook, and run the event loop until Quit.
 pub fn run() {
     nwg::init().expect("Failed to init Native Windows GUI");
+    crate::ui::load_fonts();
+    crate::ui::refresh();
 
     // The small status toast (shown on layout switch / mode change).
 
@@ -64,6 +74,11 @@ pub fn run() {
         .source_bin(Some(ICON_BYTES))
         .build(&mut icon)
         .expect("icon");
+    let mut icon_off = nwg::Icon::default();
+    nwg::Icon::builder()
+        .source_bin(Some(ICON_OFF_BYTES))
+        .build(&mut icon_off)
+        .expect("icon");
 
     let mut tray = nwg::TrayNotification::default();
     nwg::TrayNotification::builder()
@@ -82,63 +97,63 @@ pub fn run() {
 
     let mut m_enabled = nwg::MenuItem::default();
     nwg::MenuItem::builder()
-        .text("Enabled")
+        .text(tr(T::TrayEnabled))
         .parent(&menu)
         .build(&mut m_enabled)
         .expect("enabled item");
 
     let mut m_auto = nwg::MenuItem::default();
     nwg::MenuItem::builder()
-        .text("Auto mode")
+        .text(tr(T::TrayAuto))
         .parent(&menu)
         .build(&mut m_auto)
         .expect("auto item");
 
     let mut m_manual = nwg::MenuItem::default();
     nwg::MenuItem::builder()
-        .text("Manual mode")
+        .text(tr(T::TrayManual))
         .parent(&menu)
         .build(&mut m_manual)
         .expect("manual item");
 
     let mut m_suggest = nwg::MenuItem::default();
     nwg::MenuItem::builder()
-        .text("Suggest mode")
+        .text(tr(T::TraySuggest))
         .parent(&menu)
         .build(&mut m_suggest)
         .expect("suggest item");
 
     let mut m_learn = nwg::MenuItem::default();
     nwg::MenuItem::builder()
-        .text("Learn new words")
+        .text(tr(T::TrayLearn))
         .parent(&menu)
         .build(&mut m_learn)
         .expect("learn item");
 
     let mut m_startup = nwg::MenuItem::default();
     nwg::MenuItem::builder()
-        .text("Start with Windows")
+        .text(tr(T::TrayStartup))
         .parent(&menu)
         .build(&mut m_startup)
         .expect("startup item");
 
     let mut m_settings = nwg::MenuItem::default();
     nwg::MenuItem::builder()
-        .text("Settings...")
+        .text(tr(T::TraySettings))
         .parent(&menu)
         .build(&mut m_settings)
         .expect("settings item");
 
     let mut m_stats = nwg::MenuItem::default();
     nwg::MenuItem::builder()
-        .text("Stats...")
+        .text(tr(T::TrayStats))
         .parent(&menu)
         .build(&mut m_stats)
         .expect("stats item");
 
     let mut m_help = nwg::MenuItem::default();
     nwg::MenuItem::builder()
-        .text("Hotkeys && help...")
+        .text(tr(T::TrayHelp))
         .parent(&menu)
         .build(&mut m_help)
         .expect("help item");
@@ -151,7 +166,7 @@ pub fn run() {
 
     let mut m_quit = nwg::MenuItem::default();
     nwg::MenuItem::builder()
-        .text("Quit")
+        .text(tr(T::TrayQuit))
         .parent(&menu)
         .build(&mut m_quit)
         .expect("quit item");
@@ -166,7 +181,8 @@ pub fn run() {
 
     let ui = Rc::new(Tray {
         window,
-        _icon: icon,
+        icon,
+        icon_off,
         _tray: tray,
         menu,
         m_enabled,
@@ -203,38 +219,38 @@ pub fn run() {
                     let on = !hook::is_enabled();
                     hook::set_enabled(on);
                     ui_h.m_enabled.set_checked(on);
-                    toast::show(if on {
-                        "RightType: ON"
-                    } else {
-                        "RightType: OFF"
-                    });
+                    toast::show(tr(if on { T::ToastOn } else { T::ToastOff }));
                     config::persist();
                 } else if handle == ui_h.m_auto.handle {
                     hook::set_mode(hook::Mode::Auto);
                     ui_h.m_auto.set_checked(true);
                     ui_h.m_manual.set_checked(false);
                     ui_h.m_suggest.set_checked(false);
-                    toast::show("Auto mode");
+                    toast::show(tr(T::ToastModeAuto));
                     config::persist();
                 } else if handle == ui_h.m_manual.handle {
                     hook::set_mode(hook::Mode::Manual);
                     ui_h.m_auto.set_checked(false);
                     ui_h.m_manual.set_checked(true);
                     ui_h.m_suggest.set_checked(false);
-                    toast::show("Manual mode");
+                    toast::show(tr(T::ToastModeManual));
                     config::persist();
                 } else if handle == ui_h.m_suggest.handle {
                     hook::set_mode(hook::Mode::Suggest);
                     ui_h.m_auto.set_checked(false);
                     ui_h.m_manual.set_checked(false);
                     ui_h.m_suggest.set_checked(true);
-                    toast::show("Suggest mode");
+                    toast::show(tr(T::ToastModeSuggest));
                     config::persist();
                 } else if handle == ui_h.m_learn.handle {
                     let on = !learn::is_enabled();
                     learn::set_enabled(on);
                     ui_h.m_learn.set_checked(on);
-                    toast::show(if on { "Learning: ON" } else { "Learning: OFF" });
+                    toast::show(tr(if on {
+                        T::ToastLearnOn
+                    } else {
+                        T::ToastLearnOff
+                    }));
                     config::persist();
                 } else if handle == ui_h.m_startup.handle {
                     let on = !startup::is_enabled();
@@ -264,7 +280,13 @@ pub fn run() {
     if let Ok(what) = std::env::var("RIGHTTYPE_SHOW") {
         match what.as_str() {
             "settings" => settings::open(),
+            "settings-hotkeys" => settings::open_page(2),
+            "settings-learned" => settings::open_page(3),
+            "settings-blocked" => settings::open_page(4),
+            "settings-about" => settings::open_page(5),
             "stats" => stats::open(),
+            "welcome" => crate::onboard::show(true),
+            "help" => crate::onboard::show(false),
             _ => {}
         }
     }
@@ -315,13 +337,38 @@ const WM_TIMER: u32 = 0x0113;
 fn sync_state(ui: &Rc<Tray>) {
     let enabled = hook::is_enabled();
     let state = if enabled {
-        hook::mode().label().to_string()
+        tr(match hook::mode() {
+            hook::Mode::Auto => T::ModeAuto,
+            hook::Mode::Suggest => T::ModeSuggest,
+            hook::Mode::Manual => T::ModeManual,
+        })
     } else {
-        "OFF".to_string()
+        tr(T::StateOff)
     };
     let tip = format!("RightType — {state}");
     if TIP.with(|t| t.replace(tip.clone())) != tip {
         ui._tray.set_tip(&tip);
+    }
+    if SHOWING_OFF.with(|c| c.replace(Some(!enabled))) != Some(!enabled) {
+        ui._tray
+            .set_icon(if enabled { &ui.icon } else { &ui.icon_off });
+    }
+    let lang = righttype::i18n::lang();
+    if MENU_LANG.with(|c| c.replace(Some(lang))) != Some(lang) {
+        for (item, key) in [
+            (&ui.m_enabled, T::TrayEnabled),
+            (&ui.m_auto, T::TrayAuto),
+            (&ui.m_manual, T::TrayManual),
+            (&ui.m_suggest, T::TraySuggest),
+            (&ui.m_learn, T::TrayLearn),
+            (&ui.m_startup, T::TrayStartup),
+            (&ui.m_settings, T::TraySettings),
+            (&ui.m_stats, T::TrayStats),
+            (&ui.m_help, T::TrayHelp),
+            (&ui.m_quit, T::TrayQuit),
+        ] {
+            set_menu_text(item, tr(key));
+        }
     }
     ui.m_learn.set_checked(learn::is_enabled());
     ui.m_enabled.set_checked(enabled);
@@ -329,4 +376,24 @@ fn sync_state(ui: &Rc<Tray>) {
     ui.m_manual.set_checked(hook::mode() == hook::Mode::Manual);
     ui.m_suggest
         .set_checked(hook::mode() == hook::Mode::Suggest);
+}
+
+/// Relabel a menu item (nwg has no setter): used when the language changes.
+fn set_menu_text(item: &nwg::MenuItem, text: &str) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetMenuItemInfoW, HMENU, MENUITEMINFOW, MIIM_STRING,
+    };
+    let Some((hmenu, id)) = item.handle.hmenu_item() else {
+        return;
+    };
+    let mut wide: Vec<u16> = format!("{text}\0").encode_utf16().collect();
+    let info = MENUITEMINFOW {
+        cbSize: std::mem::size_of::<MENUITEMINFOW>() as u32,
+        fMask: MIIM_STRING,
+        dwTypeData: windows::core::PWSTR(wide.as_mut_ptr()),
+        ..Default::default()
+    };
+    unsafe {
+        let _ = SetMenuItemInfoW(HMENU(hmenu as _), id, false, &info);
+    }
 }

@@ -21,10 +21,17 @@ RightLang is excellent but unmaintained, and its design causes real bugs:
 
 ## How it works
 
-RightType lives in the **system tray** (no window, no console). Right-click the tray
-icon (left- or right-click) for: **Enable**, **Manual/Auto/Suggest** mode, **Learn new
-words**, **Start with Windows**, **Hotkeys & help**, and **Quit**. The tooltip shows the
-current mode.
+RightType lives in the **system tray** (no window, no console). Click the tray icon
+(left or right) for: **Enable**, **Manual/Auto/Suggest** mode, **Learn new words**,
+**Start with Windows**, **Settings**, **Statistics**, **Hotkeys & help**, and **Quit**.
+The tooltip shows the current mode, and the icon turns grey while RightType is off.
+
+**Settings** has five pages — General (mode, on/off, start with Windows, learning),
+Hotkeys, Learned words (see, add, remove or clear what RightType has learned),
+Blocked apps and Privacy & about. Changes take effect the moment you make
+them. The interface is in **English or Thai** (it follows the Windows display
+language; switch it at the bottom of the Settings sidebar), follows the Windows
+**light/dark** app theme, and stays sharp at any display scaling.
 
 **Manual mode (default)** — type freely; when you notice a wrong-layout word, fix it
 with a hotkey:
@@ -53,7 +60,7 @@ with a hotkey:
 - **The whole word gets the last say.** A conversion made mid-word is not final:
   when you reach the space, RightType looks at the *entire* word — including the
   part typed after it switched to Thai — and if your keystrokes spell English it
-  puts the whole word back and returns to English. (Before 1.1 only the part after
+  puts the whole word back and returns to English. (Before 1.1.0 only the part after
   the switch was judged, which could leave half-Thai, half-English words.)
 - English is more than the dictionary: compounds of everyday words
   (`middleware`, `workflow`, `frontend`, `codebase`) and words you have taught it
@@ -117,12 +124,13 @@ rather than a blanket ban on every individual BIP39 word.
 
 ## For end users
 
-**Installer (recommended, per-user, no admin):** run
-`RightType-1.0.0-setup.exe` from the release. It installs RightType, offers a
+**Installer (recommended, per-user, no admin):** download
+`RightType-1.1.0-setup.exe` from the
+[Releases page](https://github.com/k-affan-th/RightType/releases) and run it. It installs RightType, offers a
 desktop shortcut and start-at-login, and registers a normal Windows uninstaller
 (Settings -> Apps -> RightType).
 
-**Portable zip:** extract `RightType-1.0.0-x64.zip` and either run
+**Portable zip:** extract `RightType-1.1.0-x64.zip` and either run
 `righttype.exe` where it sits, or install it per-user:
 
 ```powershell
@@ -136,7 +144,7 @@ pwsh -File install.ps1 -Autostart
 - Verify what you downloaded against `SHA256.txt` before running it:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\RightType-1.0.0-setup.exe
+Get-FileHash -Algorithm SHA256 .\RightType-1.1.0-setup.exe
 ```
 - Unsigned builds show a SmartScreen prompt — "More info → Run anyway".
   Signed releases will ship under Azure Trusted Signing in v1.x.
@@ -152,7 +160,24 @@ cargo test
 # Full Windows app:
 cargo run --features winos
 cargo build --release --features winos
+
+# Installer + portable zip + SHA256.txt into dist\ (version from Cargo.toml):
+pwsh -File packaging\build_release.ps1
 ```
+
+Changes per version are in [`CHANGELOG.md`](CHANGELOG.md). How accurately and how
+fast RightType handles a real mixed Thai/English text — and how often it touches
+text that was typed correctly — is measured in
+[`docs/TYPING_BENCHMARK.md`](docs/TYPING_BENCHMARK.md)
+(`cargo run --release --example typing_benchmark`,
+`cargo run --release --example false_positive_audit`).
+
+The windows are drawn by `src/ui.rs` (real Win32 controls with custom painting, so
+keyboard navigation and screen readers keep working). A debug build opens one
+directly for a quick look: `RIGHTTYPE_SHOW=settings` (or `settings-hotkeys`, `settings-learned`,
+`settings-blocked`, `settings-about`, `welcome`, `help`, `stats`). The interface
+typeface is IBM Plex Sans Thai, embedded from `assets/fonts` under the SIL Open
+Font License (`assets/fonts/OFL.txt`).
 
 The crate is split into an OS-free **core** (`layout`, `secret`, `dict`, `detect`,
 `segment`, `buffer` — exhaustively unit-tested) and a Windows **integration layer**

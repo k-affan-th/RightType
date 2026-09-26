@@ -18,7 +18,7 @@ from lib import (
     close_app,
     read_text_value,
     set_layout,
-    
+
     start_edge,
     start_notepad,
     start_righttype,
@@ -83,4 +83,3 @@ finally:
 
 print(json.dumps(result, ensure_ascii=False))
 raise SystemExit(0 if result["pass"] else 1)
-

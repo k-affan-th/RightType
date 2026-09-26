@@ -192,6 +192,72 @@ fn eligible_thai_shape(word: &str) -> bool {
         && word.chars().all(|c| ('\u{0E01}'..='\u{0E5B}').contains(&c))
 }
 
+/// Every learned word, sorted, for the Settings editor.
+pub fn list() -> Vec<String> {
+    let mut words: Vec<String> = LEARNED
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|s| s.iter().cloned().collect())
+        .unwrap_or_default();
+    words.sort();
+    words
+}
+
+/// What [`replace`] did with the lines it was given.
+pub struct Replaced {
+    pub kept: usize,
+    /// Lines that are not a single English or Thai word (or look like a
+    /// secret) and were left out.
+    pub skipped: usize,
+}
+
+/// Make `lines` the complete learned list (the Settings editor's Save): words
+/// removed from it are forgotten at once, new ones take effect at once, and
+/// `learned.txt` is rewritten. Each line must pass the same guards as a word
+/// RightType learns by itself.
+pub fn replace(lines: &[String]) -> Replaced {
+    let mut kept: Vec<String> = Vec::new();
+    let mut skipped = 0;
+    for line in lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty()) {
+        let word = if eligible_shape(line) {
+            line.to_ascii_lowercase()
+        } else if eligible_thai_shape(line) {
+            line.to_string()
+        } else {
+            skipped += 1;
+            continue;
+        };
+        if !kept.contains(&word) {
+            kept.push(word);
+        }
+    }
+    kept.sort();
+
+    dict::english().forget_learned();
+    dict::thai().forget_learned();
+    for word in &kept {
+        teach(word);
+    }
+    if let Some(p) = learned_path() {
+        if let Some(dir) = p.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let mut text = kept.join("\n");
+        if !text.is_empty() {
+            text.push('\n');
+        }
+        let _ = std::fs::write(p, &text);
+        text.zeroize();
+    }
+    let count = kept.len();
+    *LEARNED.lock().unwrap() = Some(kept.into_iter().collect());
+    Replaced {
+        kept: count,
+        skipped,
+    }
+}
+
 fn commit(word: &str) {
     if let Some(set) = LEARNED.lock().unwrap().as_mut() {
         if !set.insert(word.to_string()) {

@@ -8,3 +8,7 @@ __pycache__/
 e2e/rt_stderr.log
 e2e/probe_out.txt
 e2e/probe_err.txt
+# Release artifacts are published as GitHub Release assets, not committed.
+/dist/
+# Local E2E run output
+e2e/*.log

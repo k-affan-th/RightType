@@ -1,0 +1,96 @@
+# Changelog
+
+All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
+
+## [1.1.0] — unreleased
+
+### Fixed
+
+- **Whole-word decisions.** A word converted to Thai mid-word is re-judged as a
+  whole at the space: if all of its keystrokes spell English, the entire word
+  goes back to English and the layout returns to US. Previously only the part
+  typed after the switch was judged, leaving half-Thai, half-English words that
+  `Shift`+`Backspace` could not flip back whole.
+- Keystrokes typed right after RightType switches the layout are read with the
+  new layout, and RightType's own switch no longer drops the word in progress.
+- English typed right after a Thai word (layout still Thai) is brought back.
+- `Ctrl`+`CapsLock` (mode cycle) works in every app, including Electron apps
+  such as the Claude desktop app, where it used to toggle CapsLock instead.
+- `Alt`+`CapsLock` (accept suggestion) no longer triggers the app's menu bar in
+  Chrome/Electron, which swallowed the correction.
+- Selection Undo waits for the hotkey's modifiers to be released, so it can no
+  longer type a literal `z`.
+- Undo is discarded once more text has been typed, so it can no longer delete
+  what you typed after the correction; after Undo the layout follows the
+  restored text.
+- **Seed-phrase guard:** every BIP39 word now counts toward the guard on either
+  layout (words like `cat`/`ski`, which are real Thai words on the Thai layout,
+  used to reset it); mid-word conversion is held once three seed words are in a
+  row; and when the guard trips, the Undo record, last word and any Suggest hint
+  are wiped from memory.
+- Converting a selection while another program holds the clipboard retries
+  briefly and then says the clipboard is busy, instead of wrongly saying it
+  needs plain text.
+- If Windows silently drops the keyboard hook (no sleep/lock event involved),
+  RightType notices the silence while you type and reinstalls it within ~30 s.
+
+- **Backspace inside a word** could leave raw keys mixed into the Thai
+  (`mujouj1` then Backspace showed `muที่นี่`). Found by the new typing
+  simulation; a Backspace now re-renders only a run RightType already owns.
+- **Fewer wrong conversions of Thai typed on the Thai layout.** Punctuation
+  keys that are Thai letters on Kedmanee (`;` ว, `[` บ, `'` ง, `,` ม) are no
+  longer stripped before checking for English, and English read from Thai
+  keys must look like English. Across the bundled dictionaries: Thai words and
+  phrases wrongly converted 1,994 → 0, English words with punctuation 146 → 0,
+  random unknown Thai 2.6 % → 0.18 % (see `docs/TYPING_BENCHMARK.md`).
+
+### Changed
+
+- **Technical English typed on the Thai layout comes back**: numbers
+  (`12,480`, `0.912`, `64%`, `2e-5`), acronyms (`GPU`, `A100`), derived words
+  (`tokenization`) and hyphenated terms (`fine-tuning`, `F1-score`, `TF-IDF`),
+  also inside quotes or brackets. Thai typed on the English layout keeps a
+  `:`/`?`/`"` typed after it. In a simulated academic article typed without
+  ever switching layout, RightType now fixes 90 % of wrong-layout words
+  (was 70 %), with no correctly typed word changed.
+
+- **New look.** Settings, Welcome and Statistics were rebuilt: a Settings
+  sidebar with General / Hotkeys / Blocked apps / Privacy & about pages, cards,
+  toggle switches, a segmented mode picker, key caps for hotkeys, and an accent
+  colour. Changes in Settings apply immediately (no Apply/OK).
+- **Learned words are editable.** Settings → Learned words lists every word
+  RightType has learned; add, remove or clear them and Save — changes take
+  effect at once.
+- **Typeface:** IBM Plex Sans Thai is embedded and used for every window and
+  the toast, so Thai and English share one modern design.
+- **Thai interface.** Every window, the tray menu and all messages are available
+  in Thai; the language follows Windows and can be switched in Settings.
+- **Light and dark** — the windows follow the Windows app theme (previously
+  always dark).
+- **Sharp at any display scaling** — RightType is DPI-aware; at 125–200 %
+  Windows used to stretch its windows and toast into a blur.
+- **New icon**, with a grey tray icon while RightType is off; the `.exe` now
+  carries the icon and version information.
+- Compounds of everyday English words (`middleware`, `workflow`, `frontend`,
+  `codebase`) are treated as English.
+- Learned words take effect immediately in every decision (they were stored
+  but never used). Flipping back an automatic conversion (`Shift`+`Backspace`
+  or Undo) with learning on remembers that word at once, in either language.
+- Tray: left-click opens the menu, new **Hotkeys & help** item, and the tooltip
+  shows the current mode. The Suggest hint shows the suggested text.
+- Dictionaries are loaded at startup instead of on the first keystroke.
+
+### Build and release
+
+- Cargo.toml is the single source of the version; `build_release.ps1` passes it
+  to the installer, and the portable zip now carries the licenses and this
+  changelog.
+- Release artifacts are no longer committed to the repository; they are
+  published as GitHub Release assets.
+- CI now builds, lints and tests the Windows integration layer and runs
+  `cargo audit`.
+
+## [1.0.0] — 2026-08-31
+
+First release: Thai Kedmanee ↔ US English QWERTY, Manual/Auto/Suggest modes,
+sensitive-context guards, per-user installer and portable zip (unsigned).

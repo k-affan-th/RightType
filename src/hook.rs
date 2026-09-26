@@ -22,7 +22,7 @@
 //! correction can never feed back into itself.
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::Mutex;
 #[cfg(debug_assertions)]
 use std::sync::OnceLock;
@@ -78,12 +78,14 @@ impl Mode {
         }
     }
 
+    /// Toast text announcing this mode, in the interface language.
     pub fn label(self) -> &'static str {
-        match self {
-            Self::Manual => "Manual mode",
-            Self::Auto => "Auto mode",
-            Self::Suggest => "Suggest mode",
-        }
+        use righttype::i18n::{tr, T};
+        tr(match self {
+            Self::Manual => T::ToastModeManual,
+            Self::Auto => T::ToastModeAuto,
+            Self::Suggest => T::ToastModeSuggest,
+        })
     }
 }
 
@@ -330,9 +332,9 @@ unsafe fn undo_last_correction() {
         }
         // The typist meant what they typed: keep typing it in its own layout.
         activate_layout(layout_of(restored));
-        crate::toast::show("Undo");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
     } else {
-        crate::toast::show("RightType: undo injection failed");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrUndoInject));
     }
 }
 
@@ -354,6 +356,16 @@ fn boundary_literal(vk: u16) -> char {
 struct HookHandle(HHOOK);
 unsafe impl Send for HookHandle {}
 static HOOK: Mutex<Option<HookHandle>> = Mutex::new(None);
+
+/// `GetTickCount` time of the last event the hook received (or of its
+/// installation). The session watchdog compares it with the system's last-input
+/// time to notice a hook Windows removed without any power/session event.
+static LAST_HOOK_TICK: AtomicU32 = AtomicU32::new(0);
+
+/// See [`LAST_HOOK_TICK`].
+pub fn last_hook_tick() -> u32 {
+    LAST_HOOK_TICK.load(Ordering::Relaxed)
+}
 
 /// Is `vk` physically held right now? Read from the real async key state so it
 /// can never go stale (the reason we don't track modifiers from the event stream).
@@ -393,6 +405,10 @@ pub unsafe fn install() -> windows::core::Result<()> {
     let hmod = GetModuleHandleW(None)?;
     let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(ll_proc), HINSTANCE(hmod.0), 0)?;
     *HOOK.lock().unwrap() = Some(HookHandle(hook));
+    LAST_HOOK_TICK.store(
+        windows::Win32::System::SystemInformation::GetTickCount(),
+        Ordering::Relaxed,
+    );
     // RAM hardening: pin the word buffer's (already-stable) allocation in
     // physical RAM so a typed secret can never be paged to disk. Locking it
     // here, once, is safe precisely because `WordBuffer` pre-reserves its
@@ -427,6 +443,7 @@ pub unsafe fn reinstall() -> windows::core::Result<()> {
 unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
+        LAST_HOOK_TICK.store(kb.time, Ordering::Relaxed);
         // Skip anything we generated: our tag is authoritative and timing-free.
         let externally_injected = (kb.flags.0 & LLKHF_INJECTED.0) != 0;
         let ours = kb.dwExtraInfo == INJECT_TAG
@@ -534,11 +551,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // password field or blacklisted app.
     if vk == VK_CAPITAL.0 && is_down(VK_CONTROL) && is_down(VK_MENU) {
         let now_on = !ENABLED.fetch_xor(true, Ordering::Relaxed);
-        crate::toast::show(if now_on {
-            "RightType: ON"
+        crate::toast::show(righttype::i18n::tr(if now_on {
+            righttype::i18n::T::ToastOn
         } else {
-            "RightType: OFF"
-        });
+            righttype::i18n::T::ToastOff
+        }));
         crate::config::persist_async();
         return true;
     }
@@ -615,7 +632,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                     st.mark = TokenMark::Decided { learn: true };
                     st.undo = None;
                 });
-                crate::toast::show("Undo");
+                crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
             } else if !manual::request_undo_selection(
                 GetForegroundWindow().0 as isize,
                 crate::focus::generation(),
@@ -674,7 +691,18 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // D-008 revisable rendering: reconcile the screen with the run's current
         // best reading. Only Char and Backspace change the run, and only a
         // token nobody has decided yet is RightType's to reinterpret.
-        if matches!(key, Key::Char(_) | Key::Backspace)
+        // A Backspace re-renders only a run we already own. Before we own
+        // one, the screen still holds the character being deleted, so the
+        // "run minus the new key" model below would be off by two and leave
+        // raw keys mixed into the Thai (`mujouj1⌫` → `muที่นี่`); letting the
+        // Backspace through keeps the screen and the buffer in step, and the
+        // next key (or the boundary) reads the word again.
+        let may_reconcile = match key {
+            Key::Char(_) => true,
+            Key::Backspace => STATE.with(|s| s.borrow().owned.is_some()),
+            _ => false,
+        };
+        if may_reconcile
             && mode() == Mode::Auto
             && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
             && policy::supported_layout_id(layout_id(effective_layout()))
@@ -756,6 +784,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     });
     if seed_run {
         detection = None;
+        forget_recent_text();
     }
 
     // Learning sees only ordinary US-QWERTY input for which the production
@@ -801,6 +830,19 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
     word.zeroize();
     swallow
+}
+
+/// A seed phrase was just recognised: drop every copy of recently typed text
+/// we still hold (Undo record, last word, pending Suggest hint), so the words
+/// that came before the threshold do not outlive it in this process.
+fn forget_recent_text() {
+    STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        st.undo = None;
+        st.last_completed = None;
+        st.suggestion = None;
+    });
+    crate::toast::dismiss();
 }
 
 /// Keep the word a boundary just completed, for Shift+Backspace right after it.
@@ -897,7 +939,7 @@ unsafe fn accept_suggestion() {
         &suggestion.corrected,
         Some(suggestion.boundary_vk),
     ) {
-        crate::toast::show("RightType: suggestion injection failed");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrSuggestInject));
         return;
     }
 
@@ -943,7 +985,9 @@ unsafe fn convert_last_word() {
             let changed = converted != last_word;
             if changed {
                 if !inject::apply(backspaces, &converted, Some(boundary_vk)) {
-                    crate::toast::show("RightType: correction injection failed");
+                    crate::toast::show(righttype::i18n::tr(
+                        righttype::i18n::T::ErrCorrectionInject,
+                    ));
                     converted.zeroize();
                     last_word.zeroize();
                     return;
@@ -982,7 +1026,7 @@ unsafe fn convert_last_word() {
     let changed = converted != word;
     if changed {
         if !inject::apply(backspaces, &converted, None) {
-            crate::toast::show("RightType: correction injection failed");
+            crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
             word.zeroize();
             converted.zeroize();
             return;
@@ -1022,7 +1066,7 @@ unsafe fn withdraw_owned_run() -> bool {
     let run = STATE.with(|s| s.borrow().buf.current().to_string());
     let delta = render::delta(&owned.rendered, &run);
     if !delta.is_empty() && !inject::apply(delta.backspaces, &delta.insert, None) {
-        crate::toast::show("RightType: correction injection failed");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
     }
     true
 }
@@ -1095,16 +1139,11 @@ where
 
     let mut reading = policy::live_reading(&run, holding, dict::english(), dict::thai());
 
-    // The seed-phrase stream guard outranks any reading.
-    if let policy::Reading::Thai(thai) = &reading {
-        let tripped = STATE.with(|s| {
-            s.borrow_mut()
-                .seed
-                .observe_candidate(&run, Some(thai.as_str()))
-        });
-        if tripped {
-            reading = policy::Reading::AsTyped;
-        }
+    // The seed-phrase stream guard outranks any reading. Mid-word this only
+    // asks whether a seed phrase could be in progress; the completed token is
+    // counted once, at its boundary.
+    if matches!(reading, policy::Reading::Thai(_)) && STATE.with(|s| s.borrow().seed.guarding()) {
+        reading = policy::Reading::AsTyped;
     }
     e2e_trace(format!(
         "reconcile run={run:?} holding={holding} -> {reading:?}"
@@ -1137,7 +1176,7 @@ where
 
     let delta = render::delta(&on_screen, &target);
     if !delta.is_empty() && !apply(delta.backspaces, &delta.insert, None) {
-        crate::toast::show("RightType: correction injection failed");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
         STATE.with(|s| s.borrow_mut().owned = None);
         return false;
     }
@@ -1212,7 +1251,7 @@ where
     let backspaces = word.chars().count() - usize::from(boundary_vk.is_none());
     let mut corrected = d.corrected;
     if !apply(backspaces, &corrected, boundary_vk) {
-        crate::toast::show("RightType: correction injection failed");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
         corrected.zeroize();
         return false;
     }
