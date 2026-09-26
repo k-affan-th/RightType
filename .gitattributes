@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Vendored unmodified from Inno Setup; its comments carry trailing spaces.
+packaging/windows/Thai.isl -whitespace

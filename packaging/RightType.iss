@@ -1,5 +1,5 @@
 ; RightType — Inno Setup script (optional richer installer).
-; Build:  ISCC packaging\RightType.iss   (requires Inno Setup 6+)
+; Build:  ISCC packaging\RightType.iss   (requires Inno Setup 6.5+ for Thai.isl)
 ; Produces dist\RightType-<version>-setup.exe. build_release.ps1 passes the
 ; version from Cargo.toml as /DMyAppVersion=...; the fallback below is only
 ; for a manual ISCC run and must match Cargo.toml.
@@ -23,6 +23,27 @@ SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExe}
 SetupIconFile=..\assets\icon.ico
+; Thai on Thai Windows, English elsewhere; ask only when neither matches.
+ShowLanguageDialog=auto
+
+[Languages]
+Name: "en"; MessagesFile: "compiler:Default.isl"
+; Official Inno Setup Thai translation (by Satakun Utama), vendored unmodified
+; from jrsoftware/issrc Files/Languages/Thai.isl so the build does not depend
+; on which Inno Setup version the runner installs. Inno Setup licence.
+Name: "th"; MessagesFile: "windows\Thai.isl"
+
+[CustomMessages]
+en.Shortcuts=Shortcuts:
+th.Shortcuts=ทางลัด:
+en.DesktopIcon=Create a &desktop shortcut
+th.DesktopIcon=สร้างทางลัดบนเดสก์ท็อป
+en.Startup=Startup:
+th.Startup=เมื่อเข้าสู่ระบบ:
+en.AutoStart=Start RightType when I sign in
+th.AutoStart=เปิด RightType ทุกครั้งที่เข้าสู่ระบบ
+en.Launch=Launch RightType
+th.Launch=เปิด RightType เลย
 
 [Files]
 Source: "..\target\release\{#MyAppExe}"; DestDir: "{app}"; Flags: ignoreversion
@@ -34,15 +55,15 @@ Name: "{autoprograms}\RightType"; Filename: "{app}\{#MyAppExe}"
 Name: "{autodesktop}\RightType"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Shortcuts:"
-Name: "autostart"; Description: "Start RightType when I log in"; GroupDescription: "Startup:"
+Name: "desktopicon"; Description: "{cm:DesktopIcon}"; GroupDescription: "{cm:Shortcuts}"
+Name: "autostart"; Description: "{cm:AutoStart}"; GroupDescription: "{cm:Startup}"
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; \
     ValueName: "RightType"; ValueData: "{app}\{#MyAppExe}"; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{app}\{#MyAppExe}"; Description: "Launch RightType"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExe}"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /IM righttype.exe /F"; Flags: runhidden; RunOnceId: "KillApp"
