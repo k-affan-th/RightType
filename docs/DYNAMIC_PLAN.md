@@ -8,8 +8,8 @@
 | Field | Value |
 | --- | --- |
 | Overall status | `IN_PROGRESS — 1.1.0 ready to build; signing + remaining E2E need the product owner` |
-| Active section | `S8 — RightType 2.0 (M0)` |
-| Next action | 1.1.0 ออกแล้ว (GitHub Release v1.1.0, 2026-09-26) — เริ่ม S8 M0: ประตูคุณภาพใน CI, overlay, per-monitor DPI, ศัพท์เทคนิค, แจ้งเตือน hook, ตัวติดตั้งไทย |
+| Active section | `S8 — RightType 2.0 (M1)` |
+| Next action | S8 M0 เสร็จ — เริ่ม M1: ป้ายภาษาข้างเคอร์เซอร์, Suggest ข้างเคอร์เซอร์ + Tab, หน้าต่างซ่อมข้อความ |
 | Current release target | `v2.0.0` — แผนใน S8, ไอเดียทั้งหมดใน `IDEAS.md` (1.1.0 = 2026-09-26, 1.0.0 = 2026-08-31) |
 | Last updated | `2026-09-26` |
 | Last verified baseline | Linux: 102 tests (69 lib + 30 comprehensive + 3 release-metadata), clippy `-D warnings`, fmt, latency gate ~1.5 µs worst batch; `--features winos` cross-checked clean ด้วย clippy `-D warnings` บน target `x86_64-pc-windows-msvc` (ยังไม่ได้รัน test บน Windows ใน session นี้ — CI job `windows` ทำแทน) |
@@ -490,7 +490,7 @@ Deferred (tracked, not forgotten):
 
 ## S8 — RightType 2.0
 
-**Status:** `[~] IN_PROGRESS — M0` (แผนอนุมัติ 2026-09-26; เจ้าของเพิ่มความแม่นยำ M5 และแป้นอื่น M6, เลื่อน Store/code signing ออก)
+**Status:** `[~] IN_PROGRESS — M1` (M0 เสร็จ) (แผนอนุมัติ 2026-09-26; เจ้าของเพิ่มความแม่นยำ M5 และแป้นอื่น M6, เลื่อน Store/code signing ออก)
 **Depends on:** 1.1.0 (released 2026-09-26)
 **ไอเดียทั้งหมดรวมที่ไม่เข้า 2.0:** [IDEAS.md](IDEAS.md)
 
@@ -508,12 +508,12 @@ Deferred (tracked, not forgotten):
 **วิธีทำงาน:** หนึ่ง milestone ต่อหนึ่ง PR, merge เมื่อ CI เขียว และบันทึกหลักฐานใน Evidence ledger
 
 ### M0 — ฐานก่อนสร้างของใหม่
-- [ ] **ประตูคุณภาพใน CI:** `false_positive_audit` และ `typing_benchmark` ได้โหมด `--check` แล้วรันใน job `core`
-- [ ] **แยก toast เป็นระบบ overlay** (`toast.rs` → `overlay.rs`) วางได้ทั้งมุมจอและข้างเคอร์เซอร์
-- [ ] **Per-monitor DPI v2:** manifest เป็น PMv2 และ `ui::Surface` จัด layout ใหม่เมื่อได้ `WM_DPICHANGED`
-- [ ] **ศัพท์เทคนิคติดแอป** (`assets/tech_terms.txt`) เข้า overlay เดียวกับ learned words แก้ `WangchanBERTa`, `LoRA`, `PyThaiNLP` ที่ benchmark ยังพลาด
-- [ ] **แจ้งเตือนเมื่อ hook หลุดแล้วติดตั้งใหม่ไม่สำเร็จ** + ไอคอน tray สถานะเตือน
-- [ ] **ตัวติดตั้งภาษาไทย** (`RightType.iss`)
+- [x] **ประตูคุณภาพใน CI:** `false_positive_audit` และ `typing_benchmark` ได้โหมด `--check` แล้วรันใน job `core`
+- [x] **แยก toast เป็นระบบ overlay** (`toast.rs` → `overlay.rs`) วางได้ทั้งมุมจอและข้างเคอร์เซอร์ (`show_at(Anchor::Near)`) ขึ้นบนจอที่ใช้งานอยู่ตาม DPI ของจอนั้น — และแก้บั๊ก 1.1.0 ที่ toast ไม่เคยขึ้นเลย (ไม่ได้บันทึก UI thread ก่อนสร้างหน้าต่าง)
+- [x] **Per-monitor DPI v2:** manifest เป็น PMv2 และ `ui::Surface` จัด layout ใหม่เมื่อได้ `WM_DPICHANGED`
+- [x] **ศัพท์เทคนิคติดแอป** (`assets/tech_terms.txt`) เข้า overlay เดียวกับ learned words แก้ `WangchanBERTa`, `LoRA`, `PyThaiNLP` ที่ benchmark ยังพลาด
+- [x] **แจ้งเตือนเมื่อ hook หลุดแล้วติดตั้งใหม่ไม่สำเร็จ** + ไอคอน tray สถานะเตือน
+- [x] **ตัวติดตั้งภาษาไทย** (`RightType.iss`)
 
 ### M1 — มองเห็นได้
 - [ ] **ป้ายภาษาข้างเคอร์เซอร์** (`caret.rs`)
@@ -639,4 +639,5 @@ Deferred (tracked, not forgotten):
 - `2026-09-21` — **D-009** จาก bug report การใช้งานจริง: whole-token revision หลัง anchor, pending-layout translation, compound/learned English, learned words ถูกใช้จริง + learn-on-revert, Ctrl+CapsLock ก่อน guards, undo invalidation, tray left-click/help/tooltip, Suggest preview (E-038)
 - `2026-09-26` — เตรียม **1.1.0**: bump version (single source = `Cargo.toml`), `CHANGELOG.md`, เลิก commit `dist/` และ `e2e/*.log`, CI ครอบ `winos` + clippy/fmt/audit/latency, อัปเดต control panel และ S6 (E-041)
 - `2026-09-26` — ออก 1.1.0 ผ่าน Release workflow; อนุมัติแผน **2.0** (S8 M0–M5) และสร้าง `IDEAS.md` เป็นคลังไอเดีย
+- `2026-09-26` — **S8 M0 ครบ**: CI quality gate (`--check`), ศัพท์เทคนิค (benchmark 118 → 127/131, แปลงผิด 0), ตัวติดตั้งไทย + สร้าง installer ใน CI, แจ้งเตือน hook หลุด, overlay (มุมจอ/ข้างเคอร์เซอร์, ตรวจด้วย Wine ที่ 144 DPI), per-monitor DPI v2; พบบั๊ก toast ไม่ขึ้นตั้งแต่ lazy creation (E-037) แก้แล้ว
 - `2026-08-24` — Settings/Stats redesign บนธีมเข้ม + refresh-on-reopen semantics (toast แจ้งทุกครั้ง) + toast modernization (fade, dynamic region, border, duration); **พบ+แก้ startup crash ใต้เกม fullscreen** ด้วย lazy toast creation (E-037); re-install rc1 ให้ผู้ใช้

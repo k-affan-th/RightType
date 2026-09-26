@@ -11,7 +11,7 @@ use std::rc::Rc;
 use native_windows_gui as nwg;
 use windows::Win32::Foundation::HWND;
 
-use crate::{config, focus, hook, learn, session, settings, startup, stats, toast};
+use crate::{config, focus, hook, learn, overlay, session, settings, startup, stats};
 use righttype::i18n::{tr, T};
 
 thread_local! {
@@ -54,7 +54,9 @@ pub fn run() {
     crate::ui::load_fonts();
     crate::ui::refresh();
 
-    // The small status toast (shown on layout switch / mode change).
+    // The overlay (status pill) lives on this thread; its window is created on
+    // first use (see overlay.rs for why not now).
+    overlay::register_ui_thread();
 
     // Load the learned-words dictionary, then restore saved settings (enabled +
     // mode + learn) before building the menu so its checkmarks reflect them.
@@ -219,34 +221,34 @@ pub fn run() {
                     let on = !hook::is_enabled();
                     hook::set_enabled(on);
                     ui_h.m_enabled.set_checked(on);
-                    toast::show(tr(if on { T::ToastOn } else { T::ToastOff }));
+                    overlay::show(tr(if on { T::ToastOn } else { T::ToastOff }));
                     config::persist();
                 } else if handle == ui_h.m_auto.handle {
                     hook::set_mode(hook::Mode::Auto);
                     ui_h.m_auto.set_checked(true);
                     ui_h.m_manual.set_checked(false);
                     ui_h.m_suggest.set_checked(false);
-                    toast::show(tr(T::ToastModeAuto));
+                    overlay::show(tr(T::ToastModeAuto));
                     config::persist();
                 } else if handle == ui_h.m_manual.handle {
                     hook::set_mode(hook::Mode::Manual);
                     ui_h.m_auto.set_checked(false);
                     ui_h.m_manual.set_checked(true);
                     ui_h.m_suggest.set_checked(false);
-                    toast::show(tr(T::ToastModeManual));
+                    overlay::show(tr(T::ToastModeManual));
                     config::persist();
                 } else if handle == ui_h.m_suggest.handle {
                     hook::set_mode(hook::Mode::Suggest);
                     ui_h.m_auto.set_checked(false);
                     ui_h.m_manual.set_checked(false);
                     ui_h.m_suggest.set_checked(true);
-                    toast::show(tr(T::ToastModeSuggest));
+                    overlay::show(tr(T::ToastModeSuggest));
                     config::persist();
                 } else if handle == ui_h.m_learn.handle {
                     let on = !learn::is_enabled();
                     learn::set_enabled(on);
                     ui_h.m_learn.set_checked(on);
-                    toast::show(tr(if on {
+                    overlay::show(tr(if on {
                         T::ToastLearnOn
                     } else {
                         T::ToastLearnOff
@@ -287,6 +289,16 @@ pub fn run() {
             "stats" => stats::open(),
             "welcome" => crate::onboard::show(true),
             "help" => crate::onboard::show(false),
+            "overlay" => overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastModeAuto)),
+            "overlay-near" => overlay::show_at(
+                "สวัสดี hello",
+                overlay::Anchor::Near(windows::Win32::Foundation::RECT {
+                    left: 300,
+                    top: 200,
+                    right: 302,
+                    bottom: 220,
+                }),
+            ),
             _ => {}
         }
     }

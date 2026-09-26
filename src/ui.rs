@@ -3,9 +3,11 @@
 //! A small retained UI kit shared by the Settings, Welcome and Statistics
 //! windows:
 //!
-//! - **DPI**: the process is system-DPI-aware (see `main`), and every length
-//!   here is written in 96-DPI units and scaled with [`px`], so text and shapes
-//!   are crisp at 125–200 % instead of bitmap-stretched.
+//! - **DPI**: the process is per-monitor-DPI-aware (v2, see `main`), and every
+//!   length here is written in 96-DPI units and scaled with [`px`], so text and
+//!   shapes are crisp at 125–200 %. A window opens at the DPI of the monitor
+//!   under the mouse; dragged to a monitor with another scale it re-lays itself
+//!   out (`WM_DPICHANGED`) instead of being bitmap-stretched.
 //! - **Theme**: a light and a dark palette; [`refresh`] follows the Windows
 //!   "app mode" setting each time a window opens.
 //! - **Controls** are real Win32 `BUTTON`/`STATIC`/`EDIT` children — toggles are
@@ -35,6 +37,9 @@ use windows::Win32::Graphics::Gdi::{
     DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE,
     DT_VCENTER, DT_WORDBREAK, HBRUSH, HDC, HFONT, HGDIOBJ, OUT_DEFAULT_PRECIS, TRANSPARENT,
 };
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromPoint, HMONITOR, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+};
 use windows::Win32::Graphics::GdiPlus::{
     FillModeAlternate, GdipAddPathArc, GdipClosePathFigure, GdipCreateFromHDC, GdipCreatePath,
     GdipCreatePen1, GdipCreateSolidFill, GdipDeleteBrush, GdipDeleteGraphics, GdipDeletePath,
@@ -45,9 +50,11 @@ use windows::Win32::Graphics::GdiPlus::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
 use windows::Win32::UI::Controls::SetWindowTheme;
-use windows::Win32::UI::HiDpi::GetDpiForSystem;
+use windows::Win32::UI::HiDpi::{
+    AdjustWindowRectExForDpi, GetDpiForMonitor, GetDpiForSystem, MDT_EFFECTIVE_DPI,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
-    AdjustWindowRectEx, CreateWindowExW, GetClientRect, GetWindowLongPtrW, GetWindowTextLengthW,
+    CreateWindowExW, GetClientRect, GetCursorPos, GetWindowLongPtrW, GetWindowTextLengthW,
     GetWindowTextW, SendMessageW, SetWindowPos, SetWindowTextW, ShowWindow, SystemParametersInfoW,
     GWL_EXSTYLE, GWL_STYLE, HMENU, SPI_GETWORKAREA, SWP_NOACTIVATE, SWP_NOZORDER, SW_HIDE, SW_SHOW,
     SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, WINDOW_EX_STYLE, WINDOW_STYLE,
@@ -132,11 +139,59 @@ const LIGHT: Palette = Palette {
 static DARK_MODE: AtomicBool = AtomicBool::new(true);
 static DPI: AtomicU32 = AtomicU32::new(96);
 
-/// Re-read the Windows theme and DPI. Call when a window opens.
+/// Re-read the Windows theme and DPI. Call when a window opens: it will open
+/// on the monitor under the mouse (see [`size_and_center`]), at that monitor's
+/// DPI.
 pub fn refresh() {
     DARK_MODE.store(windows_prefers_dark(), Ordering::Relaxed);
-    let dpi = unsafe { GetDpiForSystem() };
-    DPI.store(if dpi == 0 { 96 } else { dpi }, Ordering::Relaxed);
+    DPI.store(monitor_dpi(cursor_monitor()), Ordering::Relaxed);
+}
+
+/// The monitor under the mouse pointer.
+pub fn cursor_monitor() -> HMONITOR {
+    unsafe {
+        let mut pt = windows::Win32::Foundation::POINT::default();
+        let _ = GetCursorPos(&mut pt);
+        MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)
+    }
+}
+
+/// The effective DPI of `monitor` (the system DPI if Windows cannot say).
+pub fn monitor_dpi(monitor: HMONITOR) -> u32 {
+    let (mut x, mut y) = (0u32, 0u32);
+    let ok = unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut x, &mut y) }.is_ok();
+    let dpi = if ok && x != 0 {
+        x
+    } else {
+        unsafe { GetDpiForSystem() }
+    };
+    if dpi == 0 {
+        96
+    } else {
+        dpi
+    }
+}
+
+/// The work area (the screen minus the taskbar) of `monitor`, in physical
+/// pixels.
+pub fn work_area(monitor: HMONITOR) -> RECT {
+    let mut info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    if unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool() {
+        return info.rcWork;
+    }
+    let mut wa = RECT::default();
+    unsafe {
+        let _ = SystemParametersInfoW(
+            SPI_GETWORKAREA,
+            0,
+            Some(&mut wa as *mut RECT as *mut c_void),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        );
+    }
+    wa
 }
 
 /// The palette for the current theme.
@@ -177,8 +232,12 @@ fn windows_prefers_dark() -> bool {
 
 /// Scale a 96-DPI length to the display.
 pub fn px(v: i32) -> i32 {
-    let dpi = DPI.load(Ordering::Relaxed) as i32;
-    (v * dpi + 48) / 96
+    px_at(v, DPI.load(Ordering::Relaxed))
+}
+
+/// Scale a 96-DPI length to a display of `dpi`.
+pub fn px_at(v: i32, dpi: u32) -> i32 {
+    (v * dpi as i32 + 48) / 96
 }
 
 fn pxf(v: f32) -> f32 {
@@ -272,6 +331,11 @@ pub fn load_fonts() {
 /// A font of the interface typeface at `size` 96-DPI pixels of character
 /// height; `weight` ≥ 600 selects the semibold cut.
 pub fn make_font(size: i32, weight: i32) -> HFONT {
+    make_font_at(size, weight, DPI.load(Ordering::Relaxed))
+}
+
+/// [`make_font`] for a display of `dpi`.
+pub fn make_font_at(size: i32, weight: i32, dpi: u32) -> HFONT {
     let (face, weight) = if !FONTS_LOADED.load(Ordering::Relaxed) {
         (FACE_FALLBACK, weight)
     } else if weight >= 600 {
@@ -282,7 +346,7 @@ pub fn make_font(size: i32, weight: i32) -> HFONT {
     let face: Vec<u16> = format!("{face}\0").encode_utf16().collect();
     unsafe {
         CreateFontW(
-            -px(size),
+            -px_at(size, dpi),
             0,
             0,
             0,
@@ -332,7 +396,8 @@ pub fn apply_frame(hwnd: HWND) {
 }
 
 /// Resize `hwnd` so its client area is `w`×`h` (96-DPI units) and centre it in
-/// the primary work area.
+/// the work area of the monitor under the mouse — the monitor whose DPI
+/// [`refresh`] picked.
 pub fn size_and_center(hwnd: HWND, w: i32, h: i32) {
     unsafe {
         let style = WINDOW_STYLE(GetWindowLongPtrW(hwnd, GWL_STYLE) as u32);
@@ -343,15 +408,9 @@ pub fn size_and_center(hwnd: HWND, w: i32, h: i32) {
             right: px(w),
             bottom: px(h),
         };
-        let _ = AdjustWindowRectEx(&mut rc, style, false, ex);
+        let _ = AdjustWindowRectExForDpi(&mut rc, style, false, ex, DPI.load(Ordering::Relaxed));
         let (ww, wh) = (rc.right - rc.left, rc.bottom - rc.top);
-        let mut wa = RECT::default();
-        let _ = SystemParametersInfoW(
-            SPI_GETWORKAREA,
-            0,
-            Some(&mut wa as *mut RECT as *mut c_void),
-            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
-        );
+        let wa = work_area(cursor_monitor());
         let x = wa.left + ((wa.right - wa.left) - ww).max(0) / 2;
         let y = wa.top + ((wa.bottom - wa.top) - wh).max(0) / 2;
         let _ = SetWindowPos(hwnd, None, x, y, ww, wh, SWP_NOZORDER | SWP_NOACTIVATE);
@@ -528,10 +587,11 @@ pub fn glyph(hdc: HDC, s: &str, rc: RECT, color: Rgb) {
     }
 }
 
-/// Width in device pixels of `s` on one line in the interface typeface.
-pub fn text_width(s: &str, size: i32, weight: i32) -> i32 {
+/// Width in device pixels of `s` on one line in the interface typeface, on a
+/// display of `dpi`.
+pub fn text_width_at(s: &str, size: i32, weight: i32, dpi: u32) -> i32 {
     let mut wide: Vec<u16> = s.encode_utf16().collect();
-    let font = make_font(size, weight);
+    let font = make_font_at(size, weight, dpi);
     let mut rc = RECT::default();
     unsafe {
         let hdc = windows::Win32::Graphics::Gdi::GetDC(None);
@@ -624,6 +684,8 @@ pub struct Control {
     bg: Rgb,
     /// 0 = shown on every page.
     page: u8,
+    /// Where it sits, in 96-DPI units (re-scaled on a DPI change).
+    rc96: (i32, i32, i32, i32),
 }
 
 /// Background painter: draws cards and other decoration for the given page
@@ -636,7 +698,9 @@ type ClickHandler = Rc<dyn Fn(u16)>;
 /// One themed window's controls and fonts.
 pub struct Surface {
     pub hwnd: HWND,
-    pub fonts: Fonts,
+    fonts: RefCell<Fonts>,
+    /// The DPI this window is laid out for.
+    dpi: std::cell::Cell<u32>,
     pub controls: RefCell<Vec<Control>>,
     page: std::cell::Cell<u8>,
     painter: Painter,
@@ -654,6 +718,7 @@ const WM_CTLCOLOREDIT: u32 = 0x0133;
 const WM_CTLCOLORSTATIC: u32 = 0x0138;
 const WM_CTLCOLORBTN: u32 = 0x0135;
 const WM_SETFONT: u32 = 0x0030;
+const WM_DPICHANGED: u32 = 0x02E0;
 const BM_GETCHECK: u32 = 0x00F0;
 const BM_SETCHECK: u32 = 0x00F1;
 const CDDS_PREPAINT: u32 = 1;
@@ -730,7 +795,8 @@ impl Surface {
         apply_frame(hwnd);
         let surface = Rc::new(Surface {
             hwnd,
-            fonts: Fonts::new(),
+            fonts: RefCell::new(Fonts::new()),
+            dpi: std::cell::Cell::new(DPI.load(Ordering::Relaxed)),
             controls: RefCell::new(Vec::new()),
             page: std::cell::Cell::new(1),
             painter,
@@ -779,7 +845,18 @@ impl Surface {
     }
 
     unsafe fn on_message(&self, msg: u32, w: usize, l: isize) -> Option<LRESULT> {
+        // `px` and `make_font` read the shared DPI; make it this window's
+        // while it handles a message (another window may be on another
+        // monitor).
+        DPI.store(self.dpi.get(), Ordering::Relaxed);
         match msg {
+            WM_DPICHANGED => {
+                let dpi = (w & 0xFFFF) as u32;
+                if dpi != 0 && dpi != self.dpi.get() {
+                    self.rescale(dpi, &*(l as *const RECT));
+                }
+                Some(LRESULT(0))
+            }
             WM_COMMAND if (w >> 16) & 0xFFFF == BN_CLICKED && l != 0 => {
                 let id = (w & 0xFFFF) as u16;
                 // Clone out of the cell: the callback may rebuild this window.
@@ -838,10 +915,57 @@ impl Surface {
         }
     }
 
+    /// Re-lay the window out for a new DPI: fonts, every control, and the
+    /// window itself at the size Windows suggests.
+    unsafe fn rescale(&self, dpi: u32, suggested: &RECT) {
+        self.dpi.set(dpi);
+        DPI.store(dpi, Ordering::Relaxed);
+        *self.fonts.borrow_mut() = Fonts::new();
+        for c in self.controls.borrow().iter() {
+            let (x, y, w, h) = c.rc96;
+            let _ = SetWindowPos(
+                c.hwnd,
+                None,
+                px(x),
+                px(y),
+                px(w),
+                px(h),
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+            let font = self.font_for(&c.kind);
+            SendMessageW(c.hwnd, WM_SETFONT, WPARAM(font.0 as usize), LPARAM(0));
+        }
+        let _ = SetWindowPos(
+            self.hwnd,
+            None,
+            suggested.left,
+            suggested.top,
+            suggested.right - suggested.left,
+            suggested.bottom - suggested.top,
+            SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+        let _ = windows::Win32::Graphics::Gdi::RedrawWindow(
+            self.hwnd,
+            None,
+            None,
+            windows::Win32::Graphics::Gdi::RDW_ERASE
+                | windows::Win32::Graphics::Gdi::RDW_INVALIDATE
+                | windows::Win32::Graphics::Gdi::RDW_ALLCHILDREN,
+        );
+    }
+
+    fn font_for(&self, kind: &Kind) -> HFONT {
+        let f = self.fonts.borrow();
+        match kind {
+            Kind::Edit | Kind::Secondary | Kind::Toggle { .. } => f.body,
+            _ => f.body_strong,
+        }
+    }
+
     unsafe fn paint_text(&self, hdc: HDC, hwnd: HWND, rc: RECT, style: TextStyle, bg: Rgb) {
         fill(hdc, rc, bg);
         let s = window_text(hwnd);
-        let f = &self.fonts;
+        let f = self.fonts.borrow();
         let p = pal();
         let wrap = DT_WORDBREAK | DT_LEFT;
         match style {
@@ -863,7 +987,7 @@ impl Surface {
     unsafe fn paint_keys(&self, hdc: HDC, s: &str, rc: RECT) {
         let Some(g) = Gfx::new(hdc) else { return };
         let p = pal();
-        let font = self.fonts.small;
+        let font = self.fonts.borrow().small;
         let keys: Vec<&str> = s.split(" + ").collect();
         let cap_h = px(24);
         let pad = px(8);
@@ -874,7 +998,7 @@ impl Surface {
             .map(|k| {
                 let mut wide: Vec<u16> = k.encode_utf16().collect();
                 let mut m = RECT::default();
-                let old = SelectObject(hdc, HGDIOBJ(self.fonts.body_strong.0));
+                let old = SelectObject(hdc, HGDIOBJ(self.fonts.borrow().body_strong.0));
                 DrawTextW(
                     hdc,
                     &mut wide,
@@ -925,7 +1049,7 @@ impl Surface {
                 hdc,
                 k,
                 inner,
-                self.fonts.body_strong,
+                self.fonts.borrow().body_strong,
                 p.text,
                 DT_CENTER | DT_VCENTER | DT_SINGLELINE,
             );
@@ -944,7 +1068,7 @@ impl Surface {
         let checked = SendMessageW(nm.hdr.hwnd_from, BM_GETCHECK, WPARAM(0), LPARAM(0)).0 == 1;
         let label = window_text(nm.hdr.hwnd_from);
         let p = pal();
-        let f = &self.fonts;
+        let f = self.fonts.borrow();
         fill(hdc, rc, bg);
         let Some(g) = Gfx::new(hdc) else { return };
         let radius = pxf(4.0);
@@ -1124,10 +1248,7 @@ impl Surface {
             )
         }
         .unwrap_or_default();
-        let font = match &kind {
-            Kind::Edit | Kind::Secondary | Kind::Toggle { .. } => self.fonts.body,
-            _ => self.fonts.body_strong,
-        };
+        let font = self.font_for(&kind);
         unsafe {
             SendMessageW(hwnd, WM_SETFONT, WPARAM(font.0 as usize), LPARAM(1));
         }
@@ -1137,6 +1258,7 @@ impl Surface {
             kind,
             bg,
             page,
+            rc96: rc,
         });
         id
     }

@@ -27,7 +27,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 
 use crate::hook::{held_modifiers, INJECTING, INJECT_TAG};
-use crate::{clipboard, focus, toast};
+use crate::{clipboard, focus, overlay};
 use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
 /// A one-shot manual action requested by the hook.
@@ -140,14 +140,14 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
         Ok(snapshot) => snapshot,
         Err(clipboard::SnapshotError::Busy) => {
             crate::hook::e2e_trace("selection: clipboard is busy".to_string());
-            toast::show(tr(T::ErrClipboardBusy));
+            overlay::show(tr(T::ErrClipboardBusy));
             return;
         }
         Err(clipboard::SnapshotError::NotPlainText) => {
             crate::hook::e2e_trace(
                 "selection: selection conversion needs a plain-text clipboard".to_string(),
             );
-            toast::show(tr(T::ErrClipboardNotPlain));
+            overlay::show(tr(T::ErrClipboardNotPlain));
             return;
         }
     };
@@ -156,7 +156,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     // modifiers so the injected Ctrl+C/V isn't polluted by them.
     if !release_modifiers() {
         crate::hook::e2e_trace("selection: could not release held modifiers".to_string());
-        toast::show(tr(T::ErrModifiers));
+        overlay::show(tr(T::ErrModifiers));
         return;
     }
     if !same_context(hwnd, focus_generation) {
@@ -167,7 +167,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     if !send_chord(VK_C.0) {
         let _ = clipboard::restore_snapshot(&original);
         crate::hook::e2e_trace("selection: could not copy the selection".to_string());
-        toast::show(tr(T::ErrCopy));
+        overlay::show(tr(T::ErrCopy));
         return;
     }
     // Wait for the focused app to answer the copy.
@@ -179,7 +179,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     if clipboard::sequence() == before {
         let _ = clipboard::restore_snapshot(&original);
         crate::hook::e2e_trace("selection: no text selection was copied".to_string());
-        toast::show(tr(T::ErrNothingCopied));
+        overlay::show(tr(T::ErrNothingCopied));
         return;
     }
 
@@ -198,7 +198,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     let Some(mut selection) = copied_text else {
         let _ = clipboard::restore_snapshot(&original);
         crate::hook::e2e_trace("selection: selection is not Unicode text".to_string());
-        toast::show(tr(T::ErrNotUnicode));
+        overlay::show(tr(T::ErrNotUnicode));
         return;
     };
     if selection.is_empty() {
@@ -227,7 +227,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     // racing a fixed-delay clipboard restore (notably in Word and browsers).
     if !clipboard::restore_snapshot(&original) {
         crate::hook::e2e_trace("selection: could not restore the clipboard".to_string());
-        toast::show(tr(T::ErrRestoreClipboard));
+        overlay::show(tr(T::ErrRestoreClipboard));
         selection.zeroize();
         converted.zeroize();
         return;
@@ -238,7 +238,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
         return;
     }
     if !crate::inject::apply(0, &converted, None) {
-        toast::show(tr(T::ErrInjectConversion));
+        overlay::show(tr(T::ErrInjectConversion));
         selection.zeroize();
         converted.zeroize();
         return;
@@ -261,9 +261,9 @@ unsafe fn undo_selection(hwnd: isize, focus_generation: u64) {
         return;
     }
     if send_chord(VK_Z.0) {
-        toast::show(tr(T::ToastUndo));
+        overlay::show(tr(T::ToastUndo));
     } else {
-        toast::show(tr(T::ErrSelectionUndo));
+        overlay::show(tr(T::ErrSelectionUndo));
     }
 }
 

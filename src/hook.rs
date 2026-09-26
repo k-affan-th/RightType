@@ -332,9 +332,9 @@ unsafe fn undo_last_correction() {
         }
         // The typist meant what they typed: keep typing it in its own layout.
         activate_layout(layout_of(restored));
-        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
     } else {
-        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrUndoInject));
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrUndoInject));
     }
 }
 
@@ -551,7 +551,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // password field or blacklisted app.
     if vk == VK_CAPITAL.0 && is_down(VK_CONTROL) && is_down(VK_MENU) {
         let now_on = !ENABLED.fetch_xor(true, Ordering::Relaxed);
-        crate::toast::show(righttype::i18n::tr(if now_on {
+        crate::overlay::show(righttype::i18n::tr(if now_on {
             righttype::i18n::T::ToastOn
         } else {
             righttype::i18n::T::ToastOff
@@ -574,7 +574,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     if vk == VK_CAPITAL.0 && is_down(VK_CONTROL) && !is_down(VK_SHIFT) && !is_down(VK_MENU) {
         let next = mode().next();
         set_mode(next);
-        crate::toast::show(next.label());
+        crate::overlay::show(next.label());
         crate::config::persist_async();
         return true;
     }
@@ -632,7 +632,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                     st.mark = TokenMark::Decided { learn: true };
                     st.undo = None;
                 });
-                crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
+                crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
             } else if !manual::request_undo_selection(
                 GetForegroundWindow().0 as isize,
                 crate::focus::generation(),
@@ -819,7 +819,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                     boundary_vk: vk,
                 });
             });
-            crate::toast::show(&hint);
+            crate::overlay::show(&hint);
             hint.zeroize();
             false
         }
@@ -842,7 +842,7 @@ fn forget_recent_text() {
         st.last_completed = None;
         st.suggestion = None;
     });
-    crate::toast::dismiss();
+    crate::overlay::dismiss();
 }
 
 /// Keep the word a boundary just completed, for Shift+Backspace right after it.
@@ -939,7 +939,7 @@ unsafe fn accept_suggestion() {
         &suggestion.corrected,
         Some(suggestion.boundary_vk),
     ) {
-        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrSuggestInject));
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrSuggestInject));
         return;
     }
 
@@ -985,7 +985,7 @@ unsafe fn convert_last_word() {
             let changed = converted != last_word;
             if changed {
                 if !inject::apply(backspaces, &converted, Some(boundary_vk)) {
-                    crate::toast::show(righttype::i18n::tr(
+                    crate::overlay::show(righttype::i18n::tr(
                         righttype::i18n::T::ErrCorrectionInject,
                     ));
                     converted.zeroize();
@@ -1026,7 +1026,7 @@ unsafe fn convert_last_word() {
     let changed = converted != word;
     if changed {
         if !inject::apply(backspaces, &converted, None) {
-            crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+            crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
             word.zeroize();
             converted.zeroize();
             return;
@@ -1066,7 +1066,7 @@ unsafe fn withdraw_owned_run() -> bool {
     let run = STATE.with(|s| s.borrow().buf.current().to_string());
     let delta = render::delta(&owned.rendered, &run);
     if !delta.is_empty() && !inject::apply(delta.backspaces, &delta.insert, None) {
-        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
     }
     true
 }
@@ -1176,7 +1176,7 @@ where
 
     let delta = render::delta(&on_screen, &target);
     if !delta.is_empty() && !apply(delta.backspaces, &delta.insert, None) {
-        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
         STATE.with(|s| s.borrow_mut().owned = None);
         return false;
     }
@@ -1251,7 +1251,7 @@ where
     let backspaces = word.chars().count() - usize::from(boundary_vk.is_none());
     let mut corrected = d.corrected;
     if !apply(backspaces, &corrected, boundary_vk) {
-        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
         corrected.zeroize();
         return false;
     }

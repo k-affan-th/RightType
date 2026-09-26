@@ -62,12 +62,12 @@ unsafe fn reinstall() {
     match hook::reinstall() {
         Ok(()) => {
             if !HEALTHY.swap(true, Ordering::Relaxed) {
-                crate::toast::show(tr(T::ToastHookBack));
+                crate::overlay::show(tr(T::ToastHookBack));
             }
         }
         Err(_) => {
             if HEALTHY.swap(false, Ordering::Relaxed) {
-                crate::toast::show(tr(T::ToastHookLost));
+                crate::overlay::show(tr(T::ToastHookLost));
             }
             NEEDS_REINSTALL.store(true, Ordering::Relaxed);
         }

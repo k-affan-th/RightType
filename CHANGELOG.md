@@ -2,6 +2,42 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — 2.0 in progress
+
+### Fixed
+
+- **The status pill (mode, on/off, errors, Suggest hint) never appeared** in
+  1.1.0: since it became lazily created, it was only ever allowed to be created
+  on a thread it had not yet recorded. It shows again.
+- Settings, Welcome and Statistics stay sharp on a second monitor with a
+  different scale: RightType is now per-monitor DPI aware (v2), opens windows on
+  the monitor under the mouse, and re-lays a window out when it is dragged to a
+  monitor with another scale.
+
+### Changed
+
+- The status pill appears on the monitor you are working on (the one holding
+  the active window) instead of always the primary one, sized for that
+  monitor. It can also be placed next to the text cursor (used by the 2.0 caret
+  badge).
+- **Technical terms and product names** in their usual casing (`PyThaiNLP`,
+  `WangchanBERTa`, `RoBERTa`, `LoRA`, `JavaScript`, `GitHub`, … ~300 in
+  `assets/tech_terms.txt`) come back when typed on the Thai layout. In the
+  typing benchmark RightType now fixes 127 of 131 wrong-layout words (was 118),
+  still with no correctly typed word changed.
+- If the keyboard hook is lost and cannot be reinstalled, RightType says so
+  (message and grey tray icon with a warning tooltip) and keeps retrying, then
+  tells you when it is back.
+- The installer is available in Thai (chosen from the Windows language).
+
+### Build and release
+
+- CI quality gate: the false-positive audit and the typing benchmark run on
+  every PR and fail if any correctly typed dictionary word, phrase or
+  benchmark word would be changed, or recall drops below its floor.
+- CI builds the installer on every PR, so a broken installer script is caught
+  before release.
+
 ## [1.1.0] — 2026-09-26
 
 ### Fixed

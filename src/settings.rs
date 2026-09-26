@@ -21,7 +21,7 @@ use windows::Win32::Graphics::Gdi::HDC;
 use windows::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, SW_RESTORE};
 
 use crate::ui::{self, card, divider, field, pal, rect, track, Gfx, Surface, TextStyle};
-use crate::{config, hook, learn, safety, startup, toast};
+use crate::{config, hook, learn, overlay, safety, startup};
 
 /// The open settings window, if any.
 static OPEN: AtomicIsize = AtomicIsize::new(0);
@@ -492,7 +492,7 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         learn::clear();
         s.set_text(ids.learned_list, "");
         s.set_text(ids.learned_status, "");
-        toast::show(tr(T::ToastLearnedCleared));
+        overlay::show(tr(T::ToastLearnedCleared));
     } else if id == ids.save_learned {
         let lines: Vec<String> = s
             .text_of(ids.learned_list)
@@ -512,7 +512,7 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
             )
         };
         s.set_text(ids.learned_status, &status);
-        toast::show(tr(T::ToastSaved));
+        overlay::show(tr(T::ToastSaved));
     } else if id == ids.save_list {
         let entries: Vec<String> = s
             .text_of(ids.list)
@@ -523,7 +523,7 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
             .collect();
         safety::set_custom_list(entries);
         config::persist();
-        toast::show(tr(T::ToastSaved));
+        overlay::show(tr(T::ToastSaved));
     } else if id == ids.lang_en || id == ids.lang_th {
         let lang = if id == ids.lang_th {
             Lang::Th
