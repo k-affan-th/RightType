@@ -7,13 +7,13 @@
 
 | Field | Value |
 | --- | --- |
-| Overall status | `IN_PROGRESS — EXTERNAL UNBLOCK REQUIRED` |
-| Active section | `S4/S5 — Windows platform matrix` |
-| Next action | เปิด exact US QWERTY และช่วง hands-off สำหรับ Word/browser E2E; จากนั้นอนุมัติ sleep/lock/UAC transition tests |
-| Current release target | `v1: Windows, Thai Kedmanee ↔ US English QWERTY` |
-| Last updated | `2026-09-21` |
-| Last verified baseline | 77 tests, clippy `-D warnings`, fmt check, E2E matrix 9/9 บน Edge (E-025) — working tree ปัจจุบัน |
-| Worktree note | implementation changes ทั้งหมดถูก commit แล้ว (`HEAD` = baseline); งานที่เปิดคือ external unblock checklist เท่านั้น |
+| Overall status | `IN_PROGRESS — 1.1.0 ready to build; signing + remaining E2E need the product owner` |
+| Active section | `S6 — Release readiness (1.1.0)` |
+| Next action | บนเครื่อง Windows: `pwsh -File packaging\build_release.ps1` จาก commit ที่ tag แล้ว → sign ด้วย certificate ของ product owner → re-run เพื่อสร้าง `SHA256.txt` ใหม่ → อัปโหลดเป็น GitHub Release asset; จากนั้นปิด E2E ที่เหลือ (pending-layout บน Word/Chrome, Undo หลัง anchor กลางคำ, locked clipboard, Electron password field) |
+| Current release target | `v1.1.0: Windows, Thai Kedmanee ↔ US English QWERTY` (1.0.0 = 2026-08-31, ดู `CHANGELOG.md`) |
+| Last updated | `2026-09-26` |
+| Last verified baseline | Linux: 102 tests (69 lib + 30 comprehensive + 3 release-metadata), clippy `-D warnings`, fmt, latency gate ~1.5 µs worst batch; `--features winos` cross-checked clean ด้วย clippy `-D warnings` บน target `x86_64-pc-windows-msvc` (ยังไม่ได้รัน test บน Windows ใน session นี้ — CI job `windows` ทำแทน) |
+| Worktree note | ไม่ commit release artifact (`dist/`) และ E2E log (`e2e/*.log`) อีกต่อไป — artifact ไปอยู่ที่ GitHub Releases; ไฟล์ 1.0.0 เดิมยังอยู่ใน git history ที่ `69a54e9` |
 
 ### Status legend
 
@@ -191,7 +191,7 @@
    ขยายผล 2026-08-31: **Word 3/3** (`word_roundtrip.py`, boundary + live EN→TH + Undo), **Chrome 5/5** และ **Edge 5/5** ในการรันเดียวกัน (`d008_revision.py <browser>`)
    ยังเหลือ: Notepad (WinUI — manual-only ตาม harness) และ seam ของ buffer poison ยังไม่มีเคส
 2. **Residual 2.36%** — ต้องใช้คะแนนแบบไล่ระดับ (`detect::Confidence` มี variant เดียว, `dict` เป็น boolean membership, `th_words.txt` ไม่มีน้ำหนักความถี่) — เสนอเป็น D-009
-3. **Layout-switch race** — `activate_layout` ยังใช้ `PostMessageW` ตอน anchor หน้าต่างนั้นยังเล็กลงแต่ไม่หาย
+3. **Layout-switch race** — `activate_layout` ยังใช้ `PostMessageW` (async) แต่ D-009 ปิดผลกระทบฝั่งเราแล้ว: ระหว่างรอ ≤ 500 ms (`PENDING_LAYOUT_GRACE`) คีย์ถูก translate ด้วย layout ที่ขอ (`effective_layout`) และ switch ของเราไม่นับเป็น context change. ที่เหลือคือแอปที่เพิกเฉย `WM_INPUTLANGCHANGEREQUEST` เกิน grace — fallback เป็นค่าจริงและล้าง token แบบ conservative (fail-safe ไม่ใช่ข้อความผิด). E2E บน Word/Chrome ยังเปิด
 
 **Decision owner:** product owner, 2026-08-31
 
@@ -446,11 +446,11 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 ### Work items
 
 - [~] Release procedure/checklist สร้างแล้วใน [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md); freeze requirement/evidence matrix หลัง platform gates เท่านั้น
-- [ ] สร้าง clean reproducible release artifact
+- [~] สร้าง clean reproducible release artifact — `build_release.ps1` อ่าน version จาก `Cargo.toml`, ส่งให้ ISCC, ใส่ LICENSE/CHANGELOG ใน zip และ hash เฉพาะไฟล์ของ version นี้; `tests/release_metadata.rs` กัน version drift ใน `.iss`/README/CHANGELOG. เหลือรันบน Windows จาก tagged commit
 - [ ] ตรวจ portable startup/config migration/uninstall behavior
 - [~] บันทึก pre-sign SHA-256 ของ local test artifact และ signing/verification procedure แล้ว; signed clean artifact ยัง BLOCKED เพราะไม่มี certificate/release commit
 - [ ] ทำ pilot checklist โดยไม่เก็บ typed content
-- [ ] ตรวจ README, settings screenshots/help และ known limitations รอบสุดท้าย
+- [~] ตรวจ README, settings screenshots/help และ known limitations รอบสุดท้าย — README/CHANGELOG อัปเดตเป็น 1.1.0 (2026-09-26); screenshots ยังไม่มี
 
 ### Exit criteria
 
@@ -529,6 +529,7 @@ Deferred (tracked, not forgotten):
 | E-040 | 2026-09-22 | S2/S3/S5 | `e2e/full_sweep.py` — ทุกโหมด/hotkey/หน้าต่าง บน Chrome + Claude desktop + UI (Welcome/Settings/Stats), physical VK keystrokes | รอบแรก **81/89**: พบบั๊กจริง 2 จุด — (1) Alt+CapsLock (accept suggestion) ปล่อย Alt เปล่า = Alt-tap → Chrome/Electron เข้า menu mode กิน correction ทั้งหมด → แก้ด้วย menu-mask key (vk E8) ใน `inject::release_held`; (2) selection Undo ฉีด Ctrl+Z แข่งกับ Ctrl-up จริงของผู้ใช้ → ได้ตัว `z` → worker รอให้ปล่อย modifier ก่อน. ที่เหลือเป็น test artifact (learn-on-undo ทำงานตามออกแบบ, radio state). รอบสอง **91/91 PASS** | ไม่ครอบ Word, release binary, Notepad WinUI |
 | E-039 | 2026-09-22 | S5 | `e2e/claude_composer.py` บน Claude desktop (Electron) ด้วย debug build + physical VK SendInput | **11/11 PASS** หลังแก้ Thai-layout compound guard (รอบแรก 10/11) | ไม่ครอบ Word/Chrome, release binary (ignore injected by design), ความเร็วพิมพ์มนุษย์จริง |
 | E-037 | 2026-08-24 | S4/S7 | Startup crash ใต้เกม fullscreen (0xC000041D fatal user callback): bisect ด้วย boot markers + env guard | **ROOT CAUSE: toast::init สร้าง layered+region window ตอน startup ใต้ exclusive fullscreen** → fix = lazy creation (สร้างเมื่อ show ครั้งแรก; สร้างไม่ได้ = รัน toast-less ทั้ง session); verify STARTUP alive=True ใต้เกม | toast จะไม่แสดงระหว่าง fullscreen game (by design); ต้อง re-run matrix เมื่อ desktop ปกติ |
+| E-041 | 2026-09-26 | S6 | Release hygiene: version 1.1.0 single-sourced (`Cargo.toml` → `build_release.ps1` → ISCC), `tests/release_metadata.rs`, CI jobs `core`/`windows`/`audit`; `cargo test --all-targets` 102, clippy `-D warnings` (Linux + cross-check `x86_64-pc-windows-msvc --features winos`), fmt, `git diff --check`, `policy_latency` | PASS | ไม่ได้รัน winos tests / release build / installer บน Windows จริง — CI job `windows` และ build ตาม checklist ต้องยืนยัน |
 
 ## Risk register
 
@@ -553,4 +554,5 @@ Deferred (tracked, not forgotten):
 - `2026-08-24` — UAC full cycle PASS หลังผู้ใช้กด consent (E-030); lock/unlock interactive PASS = Bug-1 proof จริง (E-031); **ผู้ใช้แจ้ง space ถูกกิน → พบ off-by-one ใน live commit** แก้แล้ว (E-032); **Word 3/3** (E-033) — S5 matrix เหลือ sleep/resume + polish เท่านั้น
 - `2026-08-24` — **S7 UX first pass**: onboarding + help window, Suggest preview toast (dynamic width), tray tooltip state, settings singleton + clear-learned, stats learned-count, dark theme pass (E-034); **Release rc1**: packaging/installer scripts, zip artifact, local install + autostart (E-035); Word fast-case BLOCKED ชั่วคราวโดย fullscreen game (E-036)
 - `2026-09-21` — **D-009** จาก bug report การใช้งานจริง: whole-token revision หลัง anchor, pending-layout translation, compound/learned English, learned words ถูกใช้จริง + learn-on-revert, Ctrl+CapsLock ก่อน guards, undo invalidation, tray left-click/help/tooltip, Suggest preview (E-038)
+- `2026-09-26` — เตรียม **1.1.0**: bump version (single source = `Cargo.toml`), `CHANGELOG.md`, เลิก commit `dist/` และ `e2e/*.log`, CI ครอบ `winos` + clippy/fmt/audit/latency, อัปเดต control panel และ S6 (E-041)
 - `2026-08-24` — Settings/Stats redesign บนธีมเข้ม + refresh-on-reopen semantics (toast แจ้งทุกครั้ง) + toast modernization (fade, dynamic region, border, duration); **พบ+แก้ startup crash ใต้เกม fullscreen** ด้วย lazy toast creation (E-037); re-install rc1 ให้ผู้ใช้

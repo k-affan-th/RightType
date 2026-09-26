@@ -53,7 +53,7 @@ with a hotkey:
 - **The whole word gets the last say.** A conversion made mid-word is not final:
   when you reach the space, RightType looks at the *entire* word — including the
   part typed after it switched to Thai — and if your keystrokes spell English it
-  puts the whole word back and returns to English. (Before 1.1 only the part after
+  puts the whole word back and returns to English. (Before 1.1.0 only the part after
   the switch was judged, which could leave half-Thai, half-English words.)
 - English is more than the dictionary: compounds of everyday words
   (`middleware`, `workflow`, `frontend`, `codebase`) and words you have taught it
@@ -117,12 +117,13 @@ rather than a blanket ban on every individual BIP39 word.
 
 ## For end users
 
-**Installer (recommended, per-user, no admin):** run
-`RightType-1.0.0-setup.exe` from the release. It installs RightType, offers a
+**Installer (recommended, per-user, no admin):** download
+`RightType-1.1.0-setup.exe` from the
+[Releases page](https://github.com/k-affan-th/RightType/releases) and run it. It installs RightType, offers a
 desktop shortcut and start-at-login, and registers a normal Windows uninstaller
 (Settings -> Apps -> RightType).
 
-**Portable zip:** extract `RightType-1.0.0-x64.zip` and either run
+**Portable zip:** extract `RightType-1.1.0-x64.zip` and either run
 `righttype.exe` where it sits, or install it per-user:
 
 ```powershell
@@ -136,7 +137,7 @@ pwsh -File install.ps1 -Autostart
 - Verify what you downloaded against `SHA256.txt` before running it:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\RightType-1.0.0-setup.exe
+Get-FileHash -Algorithm SHA256 .\RightType-1.1.0-setup.exe
 ```
 - Unsigned builds show a SmartScreen prompt — "More info → Run anyway".
   Signed releases will ship under Azure Trusted Signing in v1.x.
@@ -152,7 +153,12 @@ cargo test
 # Full Windows app:
 cargo run --features winos
 cargo build --release --features winos
+
+# Installer + portable zip + SHA256.txt into dist\ (version from Cargo.toml):
+pwsh -File packaging\build_release.ps1
 ```
+
+Changes per version are in [`CHANGELOG.md`](CHANGELOG.md).
 
 The crate is split into an OS-free **core** (`layout`, `secret`, `dict`, `detect`,
 `segment`, `buffer` — exhaustively unit-tested) and a Windows **integration layer**

@@ -26,6 +26,10 @@ cargo run --release --example policy_latency
 git diff --check
 ```
 
+CI (`.github/workflows/rust.yml`) runs all of these except the signed build on
+every push/PR to `main` (Linux core + `windows-latest` with `--features winos` +
+`cargo audit`); a green run on the release commit is the record for this section.
+
 - [ ] Record command output, Rust version, target triple and Windows build.
 - [ ] Confirm `cargo tree --features winos --edges normal` has no unintended network/telemetry crate.
 - [ ] Confirm release build has no warning and the latency gate remains below 1 ms/token.
@@ -53,18 +57,12 @@ signtool verify /pa /all $artifact
 Get-AuthenticodeSignature -LiteralPath $artifact
 ```
 
-- [ ] Sign the exact clean-checkout artifact; signing changes its checksum, so compute the published SHA-256 **after** signing. **This is the only remaining step and it needs the product owner's certificate.** Everything else in this section is done: `packaging/build_release.ps1` produces `RightType-1.0.0-setup.exe`, `RightType-1.0.0-x64.zip` and a `SHA256.txt` covering both, and the installer was verified end to end on 2026-08-31 (silent install to a scratch directory, installed binary launched and stayed running, uninstaller removed the directory, an existing install elsewhere untouched). Re-run `build_release.ps1` after signing to regenerate the checksums.
-- [ ] Publish binary, checksum, license files, changelog and known limitations together.
+- [ ] Sign the exact clean-checkout artifact; signing changes its checksum, so compute the published SHA-256 **after** signing. **This is the only remaining step and it needs the product owner's certificate.** Everything else in this section is done: `packaging/build_release.ps1` produces `RightType-<version>-setup.exe`, `RightType-<version>-x64.zip` (with licenses and changelog) and a `SHA256.txt` covering only that version's files, taking the version from `Cargo.toml`; the 1.0.0 installer was verified end to end on 2026-08-31 (silent install to a scratch directory, installed binary launched and stayed running, uninstaller removed the directory, an existing install elsewhere untouched). Re-run `build_release.ps1` after signing to regenerate the checksums.
+- [ ] Publish binary, checksum, license files, changelog and known limitations together as a GitHub Release on the signed tag. Artifacts are not committed to the repository (`dist/` is git-ignored).
 - [ ] Re-download the published files and verify signature/checksum independently.
 
 ## 5. Current local test artifact (not releasable)
 
-| Field | Value |
-| --- | --- |
-| Date | 2026-08-04 |
-| Path | `target/release/righttype.exe` |
-| Size | 2,719,744 bytes |
-| Pre-sign SHA-256 | `4BC8AF40DAE81C75B4797DED823837E1E23E1466C497A9F78F28B977FAEECB31` |
-| Status | Dirty-working-tree test artifact; unsigned; incomplete Windows matrix |
-
-This checksum is evidence for this one local build only. Rebuilds or signing invalidate it.
+None for 1.1.0 yet. The 1.0.0 artifacts (2026-08-31, unsigned) remain in git
+history at `69a54e9` under `dist/`; they predate D-009 and the fixes listed in
+`CHANGELOG.md` and must not be republished as 1.1.0.

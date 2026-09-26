@@ -1,9 +1,13 @@
 ; RightType — Inno Setup script (optional richer installer).
 ; Build:  ISCC packaging\RightType.iss   (requires Inno Setup 6+)
-; Produces dist\RightType-1.0.0-setup.exe
+; Produces dist\RightType-<version>-setup.exe. build_release.ps1 passes the
+; version from Cargo.toml as /DMyAppVersion=...; the fallback below is only
+; for a manual ISCC run and must match Cargo.toml.
 
 #define MyAppName "RightType"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.1.0"
+#endif
 #define MyAppExe "righttype.exe"
 
 [Setup]
