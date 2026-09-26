@@ -13,13 +13,11 @@ use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use native_windows_gui as nwg;
-use windows::core::PCWSTR;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateFontW, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, DrawTextW,
-    EndPaint, FillRect, FrameRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor,
-    SetWindowRgn, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET, DT_CENTER,
-    DT_SINGLELINE, DT_VCENTER, HGDIOBJ, OUT_DEFAULT_PRECIS, PAINTSTRUCT, TRANSPARENT,
+    BeginPaint, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect,
+    FrameRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor, SetWindowRgn, DT_CENTER,
+    DT_SINGLELINE, DT_VCENTER, HGDIOBJ, PAINTSTRUCT, TRANSPARENT,
 };
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -218,7 +216,8 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str) {
     // Width grows with the message (suggestion previews are longer than the
     // original mode labels) but stays a compact pill.
     let units: Vec<u16> = text.encode_utf16().collect();
-    let w = px((units.len() as i32 * 7 + 28).clamp(W, 520));
+    // Measured, not estimated: Thai tone marks and vowels take no width.
+    let w = (crate::ui::text_width(text, 15, 600) + px(32)).clamp(px(W), px(520));
     let h = px(H);
     let (x, y) = bottom_right(w);
     let _ = SetWindowPos(
@@ -271,26 +270,10 @@ unsafe fn paint(hwnd: HWND) {
     FrameRect(hdc, &rc, border);
     let _ = DeleteObject(HGDIOBJ(border.0));
 
-    // White, centred Segoe UI text.
+    // White, centred text in the interface typeface.
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, COLORREF(0x00FF_FFFF));
-    let face: Vec<u16> = "Segoe UI\0".encode_utf16().collect();
-    let font = CreateFontW(
-        -px(15),
-        0,
-        0,
-        0,
-        600,
-        0,
-        0,
-        0,
-        DEFAULT_CHARSET.0 as u32,
-        OUT_DEFAULT_PRECIS.0 as u32,
-        CLIP_DEFAULT_PRECIS.0 as u32,
-        CLEARTYPE_QUALITY.0 as u32,
-        0,
-        PCWSTR(face.as_ptr()),
-    );
+    let font = crate::ui::make_font(15, 600);
     let old = SelectObject(hdc, HGDIOBJ(font.0));
     let mut text: Vec<u16> = TEXT.with(|t| t.borrow().encode_utf16().collect());
     DrawTextW(

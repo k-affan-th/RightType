@@ -40,6 +40,11 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   sidebar with General / Hotkeys / Blocked apps / Privacy & about pages, cards,
   toggle switches, a segmented mode picker, key caps for hotkeys, and an accent
   colour. Changes in Settings apply immediately (no Apply/OK).
+- **Learned words are editable.** Settings → Learned words lists every word
+  RightType has learned; add, remove or clear them and Save — changes take
+  effect at once.
+- **Typeface:** IBM Plex Sans Thai is embedded and used for every window and
+  the toast, so Thai and English share one modern design.
 - **Thai interface.** Every window, the tray menu and all messages are available
   in Thai; the language follows Windows and can be switched in Settings.
 - **Light and dark** — the windows follow the Windows app theme (previously

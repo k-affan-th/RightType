@@ -26,6 +26,8 @@ SetupIconFile=..\assets\icon.ico
 
 [Files]
 Source: "..\target\release\{#MyAppExe}"; DestDir: "{app}"; Flags: ignoreversion
+; The embedded interface typeface (IBM Plex Sans Thai) is SIL OFL: ship its licence.
+Source: "..\assets\fonts\OFL.txt"; DestDir: "{app}"; DestName: "FONT-LICENSE-OFL.txt"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\RightType"; Filename: "{app}\{#MyAppExe}"

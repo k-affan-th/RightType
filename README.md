@@ -26,8 +26,9 @@ RightType lives in the **system tray** (no window, no console). Click the tray i
 **Start with Windows**, **Settings**, **Statistics**, **Hotkeys & help**, and **Quit**.
 The tooltip shows the current mode, and the icon turns grey while RightType is off.
 
-**Settings** has four pages — General (mode, on/off, start with Windows, learning),
-Hotkeys, Blocked apps and Privacy & about. Changes take effect the moment you make
+**Settings** has five pages — General (mode, on/off, start with Windows, learning),
+Hotkeys, Learned words (see, add, remove or clear what RightType has learned),
+Blocked apps and Privacy & about. Changes take effect the moment you make
 them. The interface is in **English or Thai** (it follows the Windows display
 language; switch it at the bottom of the Settings sidebar), follows the Windows
 **light/dark** app theme, and stays sharp at any display scaling.
@@ -168,8 +169,10 @@ Changes per version are in [`CHANGELOG.md`](CHANGELOG.md).
 
 The windows are drawn by `src/ui.rs` (real Win32 controls with custom painting, so
 keyboard navigation and screen readers keep working). A debug build opens one
-directly for a quick look: `RIGHTTYPE_SHOW=settings` (or `settings-hotkeys`,
-`settings-blocked`, `settings-about`, `welcome`, `help`, `stats`).
+directly for a quick look: `RIGHTTYPE_SHOW=settings` (or `settings-hotkeys`, `settings-learned`,
+`settings-blocked`, `settings-about`, `welcome`, `help`, `stats`). The interface
+typeface is IBM Plex Sans Thai, embedded from `assets/fonts` under the SIL Open
+Font License (`assets/fonts/OFL.txt`).
 
 The crate is split into an OS-free **core** (`layout`, `secret`, `dict`, `detect`,
 `segment`, `buffer` — exhaustively unit-tested) and a Windows **integration layer**

@@ -127,6 +127,7 @@ texts! {
     SettingsTitle => "RightType — Settings", "RightType — ตั้งค่า";
     NavGeneral => "General", "ทั่วไป";
     NavHotkeys => "Hotkeys", "ปุ่มลัด";
+    NavLearned => "Learned words", "คำที่เรียนรู้";
     NavBlocked => "Blocked apps", "แอปที่ไม่ทำงาน";
     NavAbout => "Privacy & about", "ความเป็นส่วนตัว";
     HeadMode => "Correction mode", "วิธีแก้คำ";
@@ -141,7 +142,7 @@ texts! {
     RowLearn => "Learn new words", "เรียนรู้คำใหม่";
     SubLearn => "Remembers words you type often or put back. Saved on this PC only.", "จำคำที่คุณพิมพ์บ่อยหรือแก้กลับ บันทึกไว้ในเครื่องนี้เท่านั้น";
     LearnedCount => "Learned words: {n}", "คำที่เรียนรู้แล้ว: {n}";
-    BtnClearLearned => "Clear", "ล้าง";
+    BtnEditLearned => "Edit…", "แก้ไข…";
     HeadLanguage => "Language", "ภาษา";
     HeadHotkeys => "Hotkeys", "ปุ่มลัด";
     NoteHotkeysFixed => "Hotkeys work in every app and are fixed in this version.", "ปุ่มลัดใช้ได้ทุกแอป และยังเปลี่ยนไม่ได้ในเวอร์ชันนี้";
@@ -151,6 +152,11 @@ texts! {
     HkUndo => "Undo the last fix", "ย้อนการแก้ล่าสุด";
     HkAccept => "Use the suggestion", "ใช้คำแนะนำ";
     HkPanic => "Turn RightType off / on", "ปิด / เปิด RightType";
+    LearnedIntro => "RightType treats these as real words and never converts them. One word per line, Thai or English — delete a line to forget that word.", "RightType ถือว่าคำเหล่านี้เป็นคำจริงและจะไม่แปลงเลย หนึ่งคำต่อบรรทัด ภาษาไทยหรืออังกฤษก็ได้ — ลบบรรทัดออกเพื่อให้ลืมคำนั้น";
+    BtnSaveLearned => "Save", "บันทึก";
+    BtnClearAll => "Clear all", "ล้างทั้งหมด";
+    LearnedSaved => "Saved {n} words.", "บันทึก {n} คำแล้ว";
+    LearnedSkipped => "Saved {n} words. Skipped {k} lines that are not a single word.", "บันทึก {n} คำแล้ว ข้าม {k} บรรทัดที่ไม่ใช่คำเดียว";
     HeadBlocked => "Blocked apps", "แอปที่ไม่ทำงาน";
     BlockedAlways => "RightType always stays out of password fields, terminals, password managers and crypto wallets.", "RightType ไม่ทำงานในช่องรหัสผ่าน เทอร์มินัล โปรแกรมจัดการรหัสผ่าน และกระเป๋าคริปโตเสมอ";
     BlockedAdd => "Also stay out of these apps — one program name per line, for example notepad.exe:", "ไม่ทำงานในแอปเหล่านี้ด้วย — หนึ่งชื่อโปรแกรมต่อบรรทัด เช่น notepad.exe:";
@@ -233,7 +239,7 @@ mod tests {
     #[test]
     fn placeholders_match_between_languages() {
         for key in T::ALL {
-            for name in ["{n}", "{v}", "{mode}"] {
+            for name in ["{n}", "{k}", "{v}", "{mode}"] {
                 assert_eq!(
                     key.get(Lang::En).contains(name),
                     key.get(Lang::Th).contains(name),

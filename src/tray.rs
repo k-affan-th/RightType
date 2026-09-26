@@ -51,6 +51,7 @@ struct Tray {
 /// Build the tray UI, install the hook, and run the event loop until Quit.
 pub fn run() {
     nwg::init().expect("Failed to init Native Windows GUI");
+    crate::ui::load_fonts();
     crate::ui::refresh();
 
     // The small status toast (shown on layout switch / mode change).
@@ -280,8 +281,9 @@ pub fn run() {
         match what.as_str() {
             "settings" => settings::open(),
             "settings-hotkeys" => settings::open_page(2),
-            "settings-blocked" => settings::open_page(3),
-            "settings-about" => settings::open_page(4),
+            "settings-learned" => settings::open_page(3),
+            "settings-blocked" => settings::open_page(4),
+            "settings-about" => settings::open_page(5),
             "stats" => stats::open(),
             "welcome" => crate::onboard::show(true),
             "help" => crate::onboard::show(false),

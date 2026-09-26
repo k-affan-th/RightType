@@ -52,6 +52,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GWL_EXSTYLE, GWL_STYLE, HMENU, SPI_GETWORKAREA, SWP_NOACTIVATE, SWP_NOZORDER, SW_HIDE, SW_SHOW,
     SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, WINDOW_EX_STYLE, WINDOW_STYLE,
 };
+use zeroize::Zeroize;
 
 // ------------------------------------------------------------------ palette
 
@@ -234,10 +235,51 @@ impl Drop for Fonts {
     }
 }
 
-/// Segoe UI at `size` 96-DPI pixels of character height. Thai falls back to
-/// Leelawadee UI through Windows font linking.
-fn make_font(size: i32, weight: i32) -> HFONT {
-    let face: Vec<u16> = "Segoe UI\0".encode_utf16().collect();
+/// The interface typeface: IBM Plex Sans Thai (SIL OFL, `assets/fonts`),
+/// embedded in the binary. One family draws both Thai and Latin, so a mixed
+/// line such as `เปิดพร้อม Windows` is set in one consistent design instead of
+/// Segoe UI with a Thai fallback font. Two weights are bundled; GDI names the
+/// semibold one as its own family.
+static FONT_REGULAR: &[u8] = include_bytes!("../assets/fonts/IBMPlexSansThai-Regular.ttf");
+static FONT_SEMIBOLD: &[u8] = include_bytes!("../assets/fonts/IBMPlexSansThai-SemiBold.ttf");
+const FACE_REGULAR: &str = "IBM Plex Sans Thai";
+const FACE_SEMIBOLD: &str = "IBM Plex Sans Thai SmBld";
+/// Used if the embedded fonts could not be registered.
+const FACE_FALLBACK: &str = "Segoe UI";
+
+static FONTS_LOADED: AtomicBool = AtomicBool::new(false);
+
+/// Make the embedded typeface available to this process (only). Call once at
+/// startup, before any window or toast is created.
+pub fn load_fonts() {
+    let mut ok = true;
+    for data in [FONT_REGULAR, FONT_SEMIBOLD] {
+        let mut count = 0u32;
+        let handle = unsafe {
+            windows::Win32::Graphics::Gdi::AddFontMemResourceEx(
+                data.as_ptr() as *const c_void,
+                data.len() as u32,
+                None,
+                // Written by the call despite the `*const` in the binding.
+                std::ptr::addr_of_mut!(count).cast_const(),
+            )
+        };
+        ok &= !handle.is_invalid() && count > 0;
+    }
+    FONTS_LOADED.store(ok, Ordering::Relaxed);
+}
+
+/// A font of the interface typeface at `size` 96-DPI pixels of character
+/// height; `weight` ≥ 600 selects the semibold cut.
+pub fn make_font(size: i32, weight: i32) -> HFONT {
+    let (face, weight) = if !FONTS_LOADED.load(Ordering::Relaxed) {
+        (FACE_FALLBACK, weight)
+    } else if weight >= 600 {
+        (FACE_SEMIBOLD, 400)
+    } else {
+        (FACE_REGULAR, 400)
+    };
+    let face: Vec<u16> = format!("{face}\0").encode_utf16().collect();
     unsafe {
         CreateFontW(
             -px(size),
@@ -469,34 +511,43 @@ pub fn text(
 
 /// A single symbol (e.g. a check mark) centred in `rc`, sized to fit it.
 pub fn glyph(hdc: HDC, s: &str, rc: RECT, color: Rgb) {
-    let face: Vec<u16> = "Segoe UI Symbol\0".encode_utf16().collect();
+    let size = (rc.bottom - rc.top) * 7 / 10;
+    // `make_font` takes 96-DPI units; `rc` is already in device pixels.
+    let dpi = DPI.load(Ordering::Relaxed) as i32;
+    let font = make_font(size * 96 / dpi.max(1), 700);
+    text(
+        hdc,
+        s,
+        rc,
+        font,
+        color,
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+    );
     unsafe {
-        let font = CreateFontW(
-            -((rc.bottom - rc.top) * 7 / 10),
-            0,
-            0,
-            0,
-            700,
-            0,
-            0,
-            0,
-            DEFAULT_CHARSET.0 as u32,
-            OUT_DEFAULT_PRECIS.0 as u32,
-            CLIP_DEFAULT_PRECIS.0 as u32,
-            CLEARTYPE_QUALITY.0 as u32,
-            0,
-            PCWSTR(face.as_ptr()),
-        );
-        text(
-            hdc,
-            s,
-            rc,
-            font,
-            color,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE,
-        );
         let _ = DeleteObject(HGDIOBJ(font.0));
     }
+}
+
+/// Width in device pixels of `s` on one line in the interface typeface.
+pub fn text_width(s: &str, size: i32, weight: i32) -> i32 {
+    let mut wide: Vec<u16> = s.encode_utf16().collect();
+    let font = make_font(size, weight);
+    let mut rc = RECT::default();
+    unsafe {
+        let hdc = windows::Win32::Graphics::Gdi::GetDC(None);
+        let old = SelectObject(hdc, HGDIOBJ(font.0));
+        DrawTextW(
+            hdc,
+            &mut wide,
+            &mut rc,
+            DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX,
+        );
+        SelectObject(hdc, old);
+        windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc);
+        let _ = DeleteObject(HGDIOBJ(font.0));
+    }
+    wide.zeroize();
+    rc.right - rc.left
 }
 
 /// Height `s` needs when wrapped to `width` device pixels.

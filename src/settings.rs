@@ -1,9 +1,9 @@
 //! Settings window — Windows only.
 //!
-//! A sidebar with four pages — General, Hotkeys, Blocked apps, Privacy &
-//! about — in the shared [`ui`] look. Every change applies and is saved the
-//! moment it is made (no Apply/OK), except the blocked-apps list, which is a
-//! text box and has its own Save button.
+//! A sidebar with five pages — General, Hotkeys, Learned words, Blocked apps,
+//! Privacy & about — in the shared [`ui`] look. Every change applies and is
+//! saved the moment it is made (no Apply/OK), except the two lists (learned
+//! words, blocked apps), which are text boxes with their own Save button.
 //!
 //! Only one settings window exists at a time: opening it again brings the
 //! existing one forward. The built-in app blacklist is described but not
@@ -34,8 +34,17 @@ const CW: i32 = 504;
 
 const PAGE_GENERAL: u8 = 1;
 const PAGE_HOTKEYS: u8 = 2;
-const PAGE_BLOCKED: u8 = 3;
-const PAGE_ABOUT: u8 = 4;
+const PAGE_LEARNED: u8 = 3;
+const PAGE_BLOCKED: u8 = 4;
+const PAGE_ABOUT: u8 = 5;
+/// Sidebar entries, in page order.
+const NAV: [T; 5] = [
+    T::NavGeneral,
+    T::NavHotkeys,
+    T::NavLearned,
+    T::NavBlocked,
+    T::NavAbout,
+];
 
 /// Toggle rows on the General page: y of each row inside the behaviour card.
 const ROW_H: i32 = 64;
@@ -75,7 +84,7 @@ pub const HOTKEYS: &[Hotkey] = &[
 ];
 
 struct Ids {
-    nav: [u16; 4],
+    nav: [u16; 5],
     lang_en: u16,
     lang_th: u16,
     mode_auto: u16,
@@ -86,7 +95,11 @@ struct Ids {
     startup: u16,
     learn: u16,
     learned: u16,
-    clear: u16,
+    edit_learned: u16,
+    learned_list: u16,
+    learned_status: u16,
+    save_learned: u16,
+    clear_learned: u16,
     list: u16,
     save_list: u16,
 }
@@ -103,7 +116,7 @@ pub fn open() {
     open_on(PAGE_GENERAL);
 }
 
-/// Open on a given page (1 = General … 4 = Privacy & about); debug harness use.
+/// Open on a given page (1 = General … 5 = Privacy & about); debug harness use.
 #[cfg(debug_assertions)]
 pub fn open_page(page: u8) {
     open_on(page.clamp(PAGE_GENERAL, PAGE_ABOUT));
@@ -141,9 +154,8 @@ fn open_on(page: u8) {
         p.bg,
         0,
     );
-    let nav_labels = [T::NavGeneral, T::NavHotkeys, T::NavBlocked, T::NavAbout];
-    let mut nav = [0u16; 4];
-    for (i, label) in nav_labels.iter().enumerate() {
+    let mut nav = [0u16; 5];
+    for (i, label) in NAV.iter().enumerate() {
         nav[i] = s.nav(tr(*label), i == 0, (12, 84 + i as i32 * 40, 196, 36));
     }
     s.label(
@@ -215,10 +227,10 @@ fn open_on(page: u8) {
         p.surface,
         g,
     );
-    let clear = s.button(
-        tr(T::BtnClearLearned),
+    let edit_learned = s.button(
+        tr(T::BtnEditLearned),
         false,
-        (X0 + CW - 116, learned_y, 96, 32),
+        (X0 + CW - 136, learned_y, 116, 32),
         p.surface,
         g,
     );
@@ -256,6 +268,39 @@ fn open_on(page: u8) {
         (X0, note_y, CW, 36),
         p.bg,
         h,
+    );
+
+    // --- Learned words ----------------------------------------------------
+    let l = PAGE_LEARNED;
+    s.label(
+        tr(T::NavLearned),
+        TextStyle::Title,
+        (X0, 18, CW, 36),
+        p.bg,
+        l,
+    );
+    s.label(
+        tr(T::LearnedIntro),
+        TextStyle::Dim,
+        (X0, 70, CW, 60),
+        p.bg,
+        l,
+    );
+    let learned_list = s.edit(&learn::list().join("\r\n"), (X0 + 10, 150, CW - 20, 252), l);
+    let learned_status = s.label("", TextStyle::Small, (X0, 432, CW - 300, 36), p.bg, l);
+    let clear_learned = s.button(
+        tr(T::BtnClearAll),
+        false,
+        (X0 + CW - 290, 428, 140, 34),
+        p.bg,
+        l,
+    );
+    let save_learned = s.button(
+        tr(T::BtnSaveLearned),
+        true,
+        (X0 + CW - 140, 428, 140, 34),
+        p.bg,
+        l,
     );
 
     // --- Blocked apps -----------------------------------------------------
@@ -345,7 +390,11 @@ fn open_on(page: u8) {
         startup,
         learn,
         learned,
-        clear,
+        edit_learned,
+        learned_list,
+        learned_status,
+        save_learned,
+        clear_learned,
         list,
         save_list,
     };
@@ -415,6 +464,10 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         s.show_page(i as u8 + 1);
         return;
     }
+    if id == ids.edit_learned {
+        go_to(win, PAGE_LEARNED);
+        return;
+    }
     let mode = if id == ids.mode_auto {
         Some(hook::Mode::Auto)
     } else if id == ids.mode_suggest {
@@ -435,9 +488,31 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     } else if id == ids.learn {
         learn::set_enabled(s.checked(ids.learn));
         config::persist();
-    } else if id == ids.clear {
+    } else if id == ids.clear_learned {
         learn::clear();
+        s.set_text(ids.learned_list, "");
+        s.set_text(ids.learned_status, "");
         toast::show(tr(T::ToastLearnedCleared));
+    } else if id == ids.save_learned {
+        let lines: Vec<String> = s
+            .text_of(ids.learned_list)
+            .lines()
+            .map(str::to_string)
+            .collect();
+        let result = learn::replace(&lines);
+        // Show the list as it was kept: sorted, deduplicated, invalid lines gone.
+        s.set_text(ids.learned_list, &learn::list().join("\r\n"));
+        let n = result.kept.to_string();
+        let status = if result.skipped == 0 {
+            trf(T::LearnedSaved, &[("n", &n)])
+        } else {
+            trf(
+                T::LearnedSkipped,
+                &[("n", &n), ("k", &result.skipped.to_string())],
+            )
+        };
+        s.set_text(ids.learned_status, &status);
+        toast::show(tr(T::ToastSaved));
     } else if id == ids.save_list {
         let entries: Vec<String> = s
             .text_of(ids.list)
@@ -468,6 +543,14 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     sync(win);
 }
 
+/// Switch page as if its sidebar entry had been clicked.
+fn go_to(win: &SettingsWindow, page: u8) {
+    for (i, nav) in win.ids.nav.iter().enumerate() {
+        win.surface.set_checked(*nav, i as u8 + 1 == page);
+    }
+    win.surface.show_page(page);
+}
+
 fn finish(win: &Rc<SettingsWindow>) {
     let my = win.surface.hwnd.0 as isize;
     let _ = OPEN.compare_exchange(my, 0, Ordering::AcqRel, Ordering::Acquire);
@@ -496,6 +579,9 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             for i in 1..HOTKEYS.len() as i32 {
                 divider(hdc, X0 + 16, 74 + i * 52 - 1, CW - 32);
             }
+        }
+        PAGE_LEARNED => {
+            field(g, rect(X0, 142, CW, 268));
         }
         PAGE_BLOCKED => {
             field(g, rect(X0, 198, CW, 212));

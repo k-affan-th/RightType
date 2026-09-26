@@ -27,6 +27,7 @@ Copy-Item "$root\README.md" $stage -Force
 Copy-Item "$root\CHANGELOG.md" $stage -Force
 Copy-Item "$root\LICENSE-MIT" $stage -Force
 Copy-Item "$root\LICENSE-APACHE" $stage -Force
+Copy-Item "$root\assets\fonts\OFL.txt" "$stage\FONT-LICENSE-OFL.txt" -Force
 Compress-Archive -Path "$stage\*" -DestinationPath "$dist\RightType-$ver-x64.zip" -Force
 Remove-Item $stage -Recurse -Force
 
