@@ -102,7 +102,9 @@ def type_keys(s):
 def write_config(mode="auto", learn=True, onboarded=True):
     (DATA / "config.toml").write_text(
         f'enabled = true\nmode = "{mode}"\nlearn = {str(learn).lower()}\n'
-        f"custom_blacklist = []\nonboarded = {str(onboarded).lower()}\n",
+        f"custom_blacklist = []\nonboarded = {str(onboarded).lower()}\n"
+        # The UI checks below match English control names.
+        'language = "en"\n',
         encoding="utf-8",
     )
 
@@ -381,7 +383,7 @@ def ui_sweep():
             time.sleep(1.0)
         check("ui", "Get started marks onboarded", config_value("onboarded"), "true")
 
-    # Settings: change mode + learning, Apply persists and takes effect.
+    # Settings: every change applies and is saved at once (no Apply button).
     RT = start_rt({"RIGHTTYPE_SHOW": "settings"})
     w = find_window("RightType — Settings")
     check("ui", "settings window opens", str(w is not None), "True")
@@ -389,20 +391,23 @@ def ui_sweep():
         radios = {r.window_text().split(" ")[0]: r for r in w.descendants(control_type="RadioButton")}
         check("ui", "settings shows current mode (Manual)", str(bool(radios["Manual"].is_selected())), "True")
         radios["Suggest"].click()
+        time.sleep(1.0)
+        check("ui", "choosing a mode saves it", config_value("mode"), "suggest")
         boxes = {c.window_text(): c for c in w.descendants(control_type="CheckBox")}
-        learn = boxes.get("Learn new words automatically")
+        learn = boxes.get("Learn new words")
+        check("ui", "learning toggle present", str(learn is not None), "True")
         if learn and learn.get_toggle_state() == 0:
             learn.click()
-        buttons = {b.window_text(): b for b in w.descendants(control_type="Button")}
-        buttons["Apply"].click()
+            time.sleep(1.0)
+        check("ui", "toggling learning saves it", config_value("learn"), "true")
+        radios["Hotkeys"].click()
+        time.sleep(0.5)
+        keys = [t.window_text() for t in w.descendants(control_type="Text")]
+        check("ui", "hotkeys page lists Ctrl + CapsLock", str("Ctrl + CapsLock" in keys), "True")
+        w.close()
         time.sleep(1.0)
-        check("ui", "Apply saves mode", config_value("mode"), "suggest")
-        check("ui", "Apply saves learning", config_value("learn"), "true")
-        radios["Auto"].click()
-        buttons["Cancel"].click()
-        time.sleep(1.0)
-        check("ui", "Cancel discards changes", config_value("mode"), "suggest")
-        check("ui", "Cancel closes the window", str(find_window("RightType — Settings", 1) is None), "True")
+        check("ui", "closing keeps the saved mode", config_value("mode"), "suggest")
+        check("ui", "window closes", str(find_window("RightType — Settings", 1) is None), "True")
 
     RT = start_rt({"RIGHTTYPE_SHOW": "stats"})
     w = find_window("RightType — Statistics")

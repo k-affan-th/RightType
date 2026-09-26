@@ -462,7 +462,9 @@ Manual action ต้องแก้เฉพาะ target ที่ผู้ใ�
 
 ## S7 — UX modernization (v1.x track, user-directed)
 
-**Status:** `[~] IN_PROGRESS — first pass shipped in rc1`
+**Status:** `[~] IN_PROGRESS — redesign done in code (2026-09-26); needs a look on real Windows`
+
+> **2026-09-26 redesign:** ผู้ใช้แจ้งว่าหน้าตา "ไม่น่าใช้" — สาเหตุจริงที่พบ: (1) process ไม่ DPI-aware ทำให้ Windows ขยาย bitmap จนเบลอที่ 125–200 %, (2) checkbox/radio แบบ themed ไม่สนสีตัวอักษรใน dark mode, (3) ปุ่ม push แบบเก่า. แก้ด้วย `ui.rs` (DPI scale, light/dark palette ตาม Windows, custom draw ผ่าน `NM_CUSTOMDRAW`/`SS_OWNERDRAW` บน control จริงจึงยังใช้ keyboard/screen reader ได้), Settings แบบ sidebar 4 หน้า apply ทันที, Welcome/Stats ใหม่, UI ภาษาไทยทั้งหมด (`i18n.rs`), icon ใหม่ + icon สีเทาตอนปิด, manifest/version/icon ใน exe (`build.rs`). ตรวจด้วย screenshot ผ่าน Wine (light/dark, EN/TH, 96/144 DPI) — ยังต้องดูบน Windows จริง (Segoe UI/Leelawadee, Mica ไม่ได้ใช้)
 
 > **2026-09-21 audit:** สามรายการด้านล่าง (tray "Hotkeys / Help…", Suggest preview toast, tray tooltip ตาม state) **ไม่มีอยู่ใน binary** ณ 1.0.0 — ละเมิด invariant ข้อ 5 (Honest UX); ทำจริงแล้วใน D-009 change set พร้อม left-click เปิดเมนู
 
@@ -477,9 +479,10 @@ Shipped in rc1:
 
 Deferred (tracked, not forgotten):
 
-- [ ] Full visual redesign (accent buttons/owner-draw, icon set per state) — needs design assets
-- [ ] Thai-language UI strings (i18n table)
-- [ ] DPI-aware layout for Settings (absolute pixel positions today)
+- [x] Full visual redesign (accent buttons, custom-drawn toggles/segments/nav, cards, key caps; icon set per state: on/off) — 2026-09-26, `ui.rs`, `packaging/icons/make_icons.py`
+- [x] Thai-language UI strings (i18n table) — `src/i18n.rs`, ทุก string มีทั้งสองภาษา (compile-time), เลือกได้ใน Settings
+- [x] DPI-aware layout for Settings — system-DPI-aware (manifest + runtime), ทุกระยะผ่าน `ui::px`; toast ด้วย
+- [x] Light theme — ตาม `AppsUseLightTheme`
 - [ ] Remappable hotkeys / per-app profiles — stays per D-005
 - [ ] Mica backdrop (removed: stripes label brushes; revisit with owner-draw)
 

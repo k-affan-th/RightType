@@ -54,6 +54,10 @@ features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Dwm",
+    "Win32_Graphics_GdiPlus",
+    "Win32_Globalization",
+    "Win32_UI_Controls",
+    "Win32_UI_HiDpi",
     "Win32_UI_Accessibility",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
@@ -71,6 +75,10 @@ features = [
     "Win32_System_Diagnostics_Debug",
     "Win32_Security",
 ]
+
+[build-dependencies]
+# Windows resources (icon, manifest, version info); build-time only.
+embed-resource = "3"
 
 [dev-dependencies]
 

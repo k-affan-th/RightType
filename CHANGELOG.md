@@ -36,6 +36,18 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Changed
 
+- **New look.** Settings, Welcome and Statistics were rebuilt: a Settings
+  sidebar with General / Hotkeys / Blocked apps / Privacy & about pages, cards,
+  toggle switches, a segmented mode picker, key caps for hotkeys, and an accent
+  colour. Changes in Settings apply immediately (no Apply/OK).
+- **Thai interface.** Every window, the tray menu and all messages are available
+  in Thai; the language follows Windows and can be switched in Settings.
+- **Light and dark** — the windows follow the Windows app theme (previously
+  always dark).
+- **Sharp at any display scaling** — RightType is DPI-aware; at 125–200 %
+  Windows used to stretch its windows and toast into a blur.
+- **New icon**, with a grey tray icon while RightType is off; the `.exe` now
+  carries the icon and version information.
 - Compounds of everyday English words (`middleware`, `workflow`, `frontend`,
   `codebase`) are treated as English.
 - Learned words take effect immediately in every decision (they were stored

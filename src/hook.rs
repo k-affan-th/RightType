@@ -78,12 +78,14 @@ impl Mode {
         }
     }
 
+    /// Toast text announcing this mode, in the interface language.
     pub fn label(self) -> &'static str {
-        match self {
-            Self::Manual => "Manual mode",
-            Self::Auto => "Auto mode",
-            Self::Suggest => "Suggest mode",
-        }
+        use righttype::i18n::{tr, T};
+        tr(match self {
+            Self::Manual => T::ToastModeManual,
+            Self::Auto => T::ToastModeAuto,
+            Self::Suggest => T::ToastModeSuggest,
+        })
     }
 }
 
@@ -330,9 +332,9 @@ unsafe fn undo_last_correction() {
         }
         // The typist meant what they typed: keep typing it in its own layout.
         activate_layout(layout_of(restored));
-        crate::toast::show("Undo");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
     } else {
-        crate::toast::show("RightType: undo injection failed");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrUndoInject));
     }
 }
 
@@ -549,11 +551,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // password field or blacklisted app.
     if vk == VK_CAPITAL.0 && is_down(VK_CONTROL) && is_down(VK_MENU) {
         let now_on = !ENABLED.fetch_xor(true, Ordering::Relaxed);
-        crate::toast::show(if now_on {
-            "RightType: ON"
+        crate::toast::show(righttype::i18n::tr(if now_on {
+            righttype::i18n::T::ToastOn
         } else {
-            "RightType: OFF"
-        });
+            righttype::i18n::T::ToastOff
+        }));
         crate::config::persist_async();
         return true;
     }
@@ -630,7 +632,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                     st.mark = TokenMark::Decided { learn: true };
                     st.undo = None;
                 });
-                crate::toast::show("Undo");
+                crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
             } else if !manual::request_undo_selection(
                 GetForegroundWindow().0 as isize,
                 crate::focus::generation(),
@@ -926,7 +928,7 @@ unsafe fn accept_suggestion() {
         &suggestion.corrected,
         Some(suggestion.boundary_vk),
     ) {
-        crate::toast::show("RightType: suggestion injection failed");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrSuggestInject));
         return;
     }
 
@@ -972,7 +974,9 @@ unsafe fn convert_last_word() {
             let changed = converted != last_word;
             if changed {
                 if !inject::apply(backspaces, &converted, Some(boundary_vk)) {
-                    crate::toast::show("RightType: correction injection failed");
+                    crate::toast::show(righttype::i18n::tr(
+                        righttype::i18n::T::ErrCorrectionInject,
+                    ));
                     converted.zeroize();
                     last_word.zeroize();
                     return;
@@ -1011,7 +1015,7 @@ unsafe fn convert_last_word() {
     let changed = converted != word;
     if changed {
         if !inject::apply(backspaces, &converted, None) {
-            crate::toast::show("RightType: correction injection failed");
+            crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
             word.zeroize();
             converted.zeroize();
             return;
@@ -1051,7 +1055,7 @@ unsafe fn withdraw_owned_run() -> bool {
     let run = STATE.with(|s| s.borrow().buf.current().to_string());
     let delta = render::delta(&owned.rendered, &run);
     if !delta.is_empty() && !inject::apply(delta.backspaces, &delta.insert, None) {
-        crate::toast::show("RightType: correction injection failed");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
     }
     true
 }
@@ -1161,7 +1165,7 @@ where
 
     let delta = render::delta(&on_screen, &target);
     if !delta.is_empty() && !apply(delta.backspaces, &delta.insert, None) {
-        crate::toast::show("RightType: correction injection failed");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
         STATE.with(|s| s.borrow_mut().owned = None);
         return false;
     }
@@ -1236,7 +1240,7 @@ where
     let backspaces = word.chars().count() - usize::from(boundary_vk.is_none());
     let mut corrected = d.corrected;
     if !apply(backspaces, &corrected, boundary_vk) {
-        crate::toast::show("RightType: correction injection failed");
+        crate::toast::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
         corrected.zeroize();
         return false;
     }

@@ -5,19 +5,21 @@
 //! saved), not counts — but to keep that guarantee unambiguous, these counters
 //! reset every restart rather than accumulating in a file.
 //!
-//! The window follows the app-wide **refresh-on-reopen** rule: opening it while
-//! one is already visible closes the old one and opens a fresh copy, announced
-//! with a toast (mirroring mode changes).
+//! Opening the window while one is already visible replaces it with a fresh
+//! copy, so the numbers are always current.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicIsize, AtomicU64, Ordering};
 
 use native_windows_gui as nwg;
-use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use righttype::i18n::{tr, T};
+use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::HDC;
 use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
-use crate::{learn, theme, toast};
+use crate::learn;
+use crate::ui::{self, card, pal, rect, Gfx, Surface, TextStyle};
 
 static AUTO: AtomicU64 = AtomicU64::new(0);
 static MANUAL: AtomicU64 = AtomicU64::new(0);
@@ -40,13 +42,17 @@ pub fn snapshot() -> (u64, u64) {
     (AUTO.load(Ordering::Relaxed), MANUAL.load(Ordering::Relaxed))
 }
 
+const W: i32 = 520;
+const H: i32 = 330;
+const X: i32 = 28;
+const TILE_W: i32 = 144;
+const TILE_GAP: i32 = 16;
+const TILE_Y: i32 = 76;
+const TILE_H: i32 = 118;
+
 struct StatsWindow {
     window: nwg::Window,
-    _font: nwg::Font,
-    _big: nwg::Font,
-    _labels: Vec<nwg::Label>,
-    close: nwg::Button,
-    _theme: Option<nwg::RawEventHandler>,
+    surface: Rc<Surface>,
     handler: RefCell<Option<nwg::EventHandler>>,
 }
 
@@ -62,120 +68,104 @@ pub fn open() {
                 LPARAM(0),
             );
         }
-        toast::show("Statistics refreshed");
-    } else {
-        toast::show("Statistics");
     }
-
-    let mut font = nwg::Font::default();
-    let _ = nwg::Font::builder()
-        .family("Segoe UI")
-        .size(15)
-        .build(&mut font);
-    let mut big = nwg::Font::default();
-    let _ = nwg::Font::builder()
-        .family("Segoe UI")
-        .size(22)
-        .build(&mut big);
+    ui::refresh();
 
     let mut window = nwg::Window::default();
     let _ = nwg::Window::builder()
         .flags(nwg::WindowFlags::WINDOW)
-        .size((420, 340))
-        .position((240, 160))
-        .title("RightType — Statistics")
+        .size((W, H))
+        .title(tr(T::StatsTitle))
         .topmost(true)
         .build(&mut window);
-    let hwnd = window
-        .handle
-        .hwnd()
-        .map(|h| HWND(h as _))
-        .unwrap_or(HWND(std::ptr::null_mut()));
-    theme::apply_frame(hwnd);
-    let themed = theme::subclass_colors(hwnd, 0x5254_0012);
+    let surface = Surface::attach(&window, 0x5254_0012, Box::new(paint));
+    let s = &surface;
+    let p = pal();
 
-    let mut labels: Vec<nwg::Label> = Vec::new();
-    macro_rules! label {
-        ($text:expr, $x:expr, $y:expr, $w:expr, $h:expr, $f:expr) => {{
-            let mut l = nwg::Label::default();
-            let _ = nwg::Label::builder()
-                .text($text)
-                .font(Some(&$f))
-                .position(($x, $y))
-                .size(($w, $h))
-                .parent(&window)
-                .build(&mut l);
-            labels.push(l);
-        }};
+    s.label(
+        tr(T::StatsHead),
+        TextStyle::Title,
+        (X, 22, W - 2 * X, 36),
+        p.bg,
+        0,
+    );
+    let (auto, manual) = snapshot();
+    let tiles = [
+        (auto.to_string(), T::StatsAuto),
+        (manual.to_string(), T::StatsManual),
+        (learn::count().to_string(), T::StatsLearned),
+    ];
+    for (i, (value, caption)) in tiles.iter().enumerate() {
+        let x = X + i as i32 * (TILE_W + TILE_GAP);
+        s.label(
+            value,
+            TextStyle::Display,
+            (x + 18, TILE_Y + 14, TILE_W - 36, 48),
+            p.surface,
+            0,
+        );
+        s.label(
+            tr(*caption),
+            TextStyle::Small,
+            (x + 18, TILE_Y + 66, TILE_W - 36, 40),
+            p.surface,
+            0,
+        );
     }
-
-    label!("Statistics — this session", 24, 18, 360, 34, big);
-    label!("Corrected automatically", 28, 74, 220, 24, font);
-    label!("Corrected via hotkey", 28, 106, 220, 24, font);
-    label!("Total corrections", 28, 138, 220, 24, font);
-    label!("Learned words (saved locally)", 28, 170, 260, 24, font);
-
-    let (a, m) = snapshot();
-    let sa = a.to_string();
-    let sm = m.to_string();
-    let st = (a + m).to_string();
-    let sl = learn::count().to_string();
-    label!(sa.as_str(), 330, 68, 64, 30, big);
-    label!(sm.as_str(), 330, 100, 64, 30, big);
-    label!(st.as_str(), 330, 132, 64, 30, big);
-    label!(sl.as_str(), 330, 164, 64, 30, big);
-
-    label!(
-        "Counts reset on restart. Nothing you type is ever saved.",
-        24,
-        216,
-        380,
-        40,
-        font
+    s.label(
+        tr(T::StatsNote),
+        TextStyle::Small,
+        (X, TILE_Y + TILE_H + 18, W - 2 * X, 36),
+        p.bg,
+        0,
+    );
+    let close = s.button(
+        tr(T::BtnClose),
+        false,
+        (W - X - 110, H - 28 - 34, 110, 34),
+        p.bg,
+        0,
     );
 
-    let mut close = nwg::Button::default();
-    let _ = nwg::Button::builder()
-        .text("Close")
-        .font(Some(&font))
-        .position((300, 280))
-        .size((96, 30))
-        .parent(&window)
-        .build(&mut close);
-
-    window.set_visible(true);
-    OPEN_STATS.store(
-        window.handle.hwnd().map(|h| h as isize).unwrap_or(0),
-        Ordering::Release,
-    );
-
-    let ui = Rc::new(StatsWindow {
+    ui::size_and_center(surface.hwnd, W, H);
+    let win = Rc::new(StatsWindow {
         window,
-        _font: font,
-        _big: big,
-        _labels: labels,
-        close,
-        _theme: themed,
+        surface,
         handler: RefCell::new(None),
     });
+    win.window.set_visible(true);
+    OPEN_STATS.store(win.surface.hwnd.0 as isize, Ordering::Release);
 
-    let ui_h = ui.clone();
-    let handler = nwg::full_bind_event_handler(&ui.window.handle, move |evt, _data, handle| {
-        use nwg::Event as E;
-        match evt {
-            E::OnButtonClick if handle == ui_h.close.handle => finish(&ui_h),
-            E::OnWindowClose if handle == ui_h.window.handle => finish(&ui_h),
-            _ => {}
+    let weak = Rc::downgrade(&win);
+    win.surface.on_click(move |id| {
+        if id == close {
+            if let Some(win) = weak.upgrade() {
+                finish(&win);
+            }
         }
     });
-    *ui.handler.borrow_mut() = Some(handler);
-
-    fn finish(ui: &Rc<StatsWindow>) {
-        let my = ui.window.handle.hwnd().map(|h| h as isize).unwrap_or(0);
-        let _ = OPEN_STATS.compare_exchange(my, 0, Ordering::AcqRel, Ordering::Acquire);
-        if let Some(h) = ui.handler.borrow_mut().take() {
-            nwg::unbind_event_handler(&h);
+    let win_h = win.clone();
+    let handler = nwg::full_bind_event_handler(&win.window.handle, move |evt, _data, handle| {
+        if matches!(evt, nwg::Event::OnWindowClose) && handle == win_h.window.handle {
+            finish(&win_h);
         }
-        ui.window.close();
+    });
+    *win.handler.borrow_mut() = Some(handler);
+}
+
+fn finish(win: &Rc<StatsWindow>) {
+    let my = win.surface.hwnd.0 as isize;
+    let _ = OPEN_STATS.compare_exchange(my, 0, Ordering::AcqRel, Ordering::Acquire);
+    win.surface.detach();
+    if let Some(h) = win.handler.borrow_mut().take() {
+        nwg::unbind_event_handler(&h);
+    }
+    win.window.close();
+}
+
+fn paint(g: &Gfx, _hdc: HDC, _rc: RECT, _page: u8) {
+    for i in 0..3 {
+        let x = X + i * (TILE_W + TILE_GAP);
+        card(g, rect(x, TILE_Y, TILE_W, TILE_H));
     }
 }

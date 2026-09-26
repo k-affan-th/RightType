@@ -11,6 +11,7 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 
 use crate::{hook, learn, safety};
+use righttype::i18n::Lang;
 
 static PERSIST_TX: OnceLock<SyncSender<()>> = OnceLock::new();
 
@@ -32,6 +33,9 @@ pub struct Config {
     /// First-run onboarding shown? UX: the welcome/hotkeys window appears once.
     #[serde(default)]
     pub onboarded: bool,
+    /// Interface language, `"en"` or `"th"`; absent means follow Windows.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -71,6 +75,7 @@ impl Default for Config {
             learn: false,
             custom_blacklist: Vec::new(),
             onboarded: false,
+            language: None,
         }
     }
 }
@@ -106,6 +111,25 @@ pub fn apply(cfg: &Config) {
     hook::set_mode(mode);
     learn::set_enabled(cfg.learn);
     safety::set_custom_list(cfg.custom_blacklist.clone());
+    set_language(cfg.language.as_deref().and_then(Lang::from_code));
+}
+
+/// The language the user picked, or `None` to follow Windows.
+static LANGUAGE: std::sync::Mutex<Option<Lang>> = std::sync::Mutex::new(None);
+
+/// The user's language choice (`None` = follow Windows).
+pub fn language_choice() -> Option<Lang> {
+    *LANGUAGE.lock().unwrap()
+}
+
+/// Record the language choice and switch the interface to it.
+pub fn set_language(choice: Option<Lang>) {
+    *LANGUAGE.lock().unwrap() = choice;
+    let lang = choice.unwrap_or_else(|| {
+        let langid = unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() };
+        Lang::from_windows_langid(langid)
+    });
+    righttype::i18n::set_lang(lang);
 }
 
 /// Has the first-run onboarding been shown/completed?
@@ -135,6 +159,7 @@ pub fn persist() {
         learn: learn::is_enabled(),
         custom_blacklist: safety::custom_list(),
         onboarded: onboarded(),
+        language: language_choice().map(|lang| lang.code().to_string()),
     };
     let Some(p) = config_path() else {
         return;

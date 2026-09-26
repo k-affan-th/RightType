@@ -41,11 +41,11 @@ mod startup;
 #[cfg(feature = "winos")]
 mod stats;
 #[cfg(feature = "winos")]
-mod theme;
-#[cfg(feature = "winos")]
 mod toast;
 #[cfg(feature = "winos")]
 mod tray;
+#[cfg(feature = "winos")]
+mod ui;
 
 #[cfg(not(feature = "winos"))]
 fn main() {
@@ -61,6 +61,15 @@ fn main() {
 
 #[cfg(feature = "winos")]
 fn main() {
+    // Crisp text at 125–200 % display scaling: without this Windows renders the
+    // windows and the toast at 96 DPI and stretches the bitmap. System-aware
+    // (not per-monitor) keeps every window's layout valid on every screen.
+    unsafe {
+        use windows::Win32::UI::HiDpi::{
+            SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_SYSTEM_AWARE,
+        };
+        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
+    }
     // RAM hardening: exclude our heap from crash dumps, suppress the fault
     // dialog. Best-effort, before anything else touches secret-adjacent memory.
     unsafe { ram::harden_process() };

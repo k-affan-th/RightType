@@ -29,10 +29,13 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use zeroize::Zeroize;
 
+use crate::ui::px;
+
 const TIMER_ID: usize = 7;
 const FADE_TIMER_ID: usize = 8;
 const SHOW_MS_BASE: u32 = 900;
 const FADE_STEP_MS: u32 = 30;
+// Sizes in 96-DPI units; scaled with `ui::px` when used.
 const W: i32 = 116;
 const H: i32 = 34;
 const MARGIN: i32 = 12;
@@ -74,7 +77,7 @@ fn ensure_created() -> bool {
     if nwg::Window::builder()
         .flags(nwg::WindowFlags::POPUP)
         .ex_flags(EX_FLAGS)
-        .size((W, H))
+        .size((px(W), px(H)))
         .position((-4000, -4000))
         .title("")
         .build(&mut window)
@@ -90,7 +93,7 @@ fn ensure_created() -> bool {
             // Layered window: enables per-pixel alpha for the fade-out.
             let _ = SetLayeredWindowAttributes(HWND(h as _), COLORREF(0), 255_u8, LWA_ALPHA);
             // Rounded "pill" corners.
-            let rgn = CreateRoundRectRgn(0, 0, W + 1, H + 1, H, H);
+            let rgn = CreateRoundRectRgn(0, 0, px(W) + 1, px(H) + 1, px(H), px(H));
             SetWindowRgn(HWND(h as _), rgn, true);
         }
     }
@@ -215,7 +218,8 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str) {
     // Width grows with the message (suggestion previews are longer than the
     // original mode labels) but stays a compact pill.
     let units: Vec<u16> = text.encode_utf16().collect();
-    let w = (units.len() as i32 * 7 + 28).clamp(W, 520);
+    let w = px((units.len() as i32 * 7 + 28).clamp(W, 520));
+    let h = px(H);
     let (x, y) = bottom_right(w);
     let _ = SetWindowPos(
         hwnd,
@@ -223,10 +227,10 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str) {
         x,
         y,
         w,
-        H,
+        h,
         SWP_NOACTIVATE | SWP_SHOWWINDOW,
     );
-    let rgn = CreateRoundRectRgn(0, 0, w + 1, H + 1, H, H);
+    let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, h, h);
     SetWindowRgn(hwnd, rgn, true);
     ALPHA.store(255, Ordering::Relaxed);
     let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
@@ -246,7 +250,10 @@ unsafe fn bottom_right(width: i32) -> (i32, i32) {
         Some(&mut wa as *mut RECT as *mut c_void),
         SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
     );
-    (wa.right - width - MARGIN, wa.bottom - H - MARGIN)
+    (
+        wa.right - width - px(MARGIN),
+        wa.bottom - px(H) - px(MARGIN),
+    )
 }
 
 unsafe fn paint(hwnd: HWND) {
@@ -269,7 +276,7 @@ unsafe fn paint(hwnd: HWND) {
     SetTextColor(hdc, COLORREF(0x00FF_FFFF));
     let face: Vec<u16> = "Segoe UI\0".encode_utf16().collect();
     let font = CreateFontW(
-        -15,
+        -px(15),
         0,
         0,
         0,

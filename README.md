@@ -21,10 +21,16 @@ RightLang is excellent but unmaintained, and its design causes real bugs:
 
 ## How it works
 
-RightType lives in the **system tray** (no window, no console). Right-click the tray
-icon (left- or right-click) for: **Enable**, **Manual/Auto/Suggest** mode, **Learn new
-words**, **Start with Windows**, **Hotkeys & help**, and **Quit**. The tooltip shows the
-current mode.
+RightType lives in the **system tray** (no window, no console). Click the tray icon
+(left or right) for: **Enable**, **Manual/Auto/Suggest** mode, **Learn new words**,
+**Start with Windows**, **Settings**, **Statistics**, **Hotkeys & help**, and **Quit**.
+The tooltip shows the current mode, and the icon turns grey while RightType is off.
+
+**Settings** has four pages — General (mode, on/off, start with Windows, learning),
+Hotkeys, Blocked apps and Privacy & about. Changes take effect the moment you make
+them. The interface is in **English or Thai** (it follows the Windows display
+language; switch it at the bottom of the Settings sidebar), follows the Windows
+**light/dark** app theme, and stays sharp at any display scaling.
 
 **Manual mode (default)** — type freely; when you notice a wrong-layout word, fix it
 with a hotkey:
@@ -159,6 +165,11 @@ pwsh -File packaging\build_release.ps1
 ```
 
 Changes per version are in [`CHANGELOG.md`](CHANGELOG.md).
+
+The windows are drawn by `src/ui.rs` (real Win32 controls with custom painting, so
+keyboard navigation and screen readers keep working). A debug build opens one
+directly for a quick look: `RIGHTTYPE_SHOW=settings` (or `settings-hotkeys`,
+`settings-blocked`, `settings-about`, `welcome`, `help`, `stats`).
 
 The crate is split into an OS-free **core** (`layout`, `secret`, `dict`, `detect`,
 `segment`, `buffer` — exhaustively unit-tested) and a Windows **integration layer**
