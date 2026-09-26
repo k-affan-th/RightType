@@ -8,9 +8,9 @@
 | Field | Value |
 | --- | --- |
 | Overall status | `IN_PROGRESS — 1.1.0 ready to build; signing + remaining E2E need the product owner` |
-| Active section | `S6 — Release readiness (1.1.0)` |
-| Next action | บนเครื่อง Windows: `pwsh -File packaging\build_release.ps1` จาก commit ที่ tag แล้ว → sign ด้วย certificate ของ product owner → re-run เพื่อสร้าง `SHA256.txt` ใหม่ → อัปโหลดเป็น GitHub Release asset; จากนั้นปิด E2E ที่เหลือ (pending-layout บน Word/Chrome, Undo หลัง anchor กลางคำ, locked clipboard, Electron password field) |
-| Current release target | `v1.1.0: Windows, Thai Kedmanee ↔ US English QWERTY` (1.0.0 = 2026-08-31, ดู `CHANGELOG.md`) |
+| Active section | `S8 — RightType 2.0 (M0)` |
+| Next action | 1.1.0 ออกแล้ว (GitHub Release v1.1.0, 2026-09-26) — เริ่ม S8 M0: ประตูคุณภาพใน CI, overlay, per-monitor DPI, ศัพท์เทคนิค, แจ้งเตือน hook, ตัวติดตั้งไทย |
+| Current release target | `v2.0.0` — แผนใน S8, ไอเดียทั้งหมดใน `IDEAS.md` (1.1.0 = 2026-09-26, 1.0.0 = 2026-08-31) |
 | Last updated | `2026-09-26` |
 | Last verified baseline | Linux: 102 tests (69 lib + 30 comprehensive + 3 release-metadata), clippy `-D warnings`, fmt, latency gate ~1.5 µs worst batch; `--features winos` cross-checked clean ด้วย clippy `-D warnings` บน target `x86_64-pc-windows-msvc` (ยังไม่ได้รัน test บน Windows ใน session นี้ — CI job `windows` ทำแทน) |
 | Worktree note | ไม่ commit release artifact (`dist/`) และ E2E log (`e2e/*.log`) อีกต่อไป — artifact ไปอยู่ที่ GitHub Releases; ไฟล์ 1.0.0 เดิมยังอยู่ใน git history ที่ `69a54e9` |
@@ -483,8 +483,76 @@ Deferred (tracked, not forgotten):
 - [x] Thai-language UI strings (i18n table) — `src/i18n.rs`, ทุก string มีทั้งสองภาษา (compile-time), เลือกได้ใน Settings
 - [x] DPI-aware layout for Settings — system-DPI-aware (manifest + runtime), ทุกระยะผ่าน `ui::px`; toast ด้วย
 - [x] Light theme — ตาม `AppsUseLightTheme`
-- [ ] Remappable hotkeys / per-app profiles — stays per D-005
+- [ ] Remappable hotkeys / per-app profiles — stays per D-005 in v1; scheduled for 2.0 (S8 M2/M3)
 - [ ] Mica backdrop (removed: stripes label brushes; revisit with owner-draw)
+
+---
+
+## S8 — RightType 2.0
+
+**Status:** `[ ] TODO — แผนอนุมัติแล้ว 2026-09-26; เริ่มที่ M0`
+**Depends on:** 1.1.0 (released 2026-09-26)
+**ไอเดียทั้งหมดรวมที่ไม่เข้า 2.0:** [IDEAS.md](IDEAS.md)
+
+**เป้าหมาย:** เปลี่ยนจาก "แก้คำที่พิมพ์ผิดภาษา" เป็น "การพิมพ์สองภาษาที่ไม่ผิดตั้งแต่แรก และมองเห็นได้ว่าโปรแกรมทำอะไร"
+
+**Invariants เพิ่มเติมของ 2.0**
+- ทุกข้อเดิมใน "Product invariants" ยังใช้
+- ไม่มีโค้ดเครือข่าย และ CI ต้องยังตรวจได้
+- ข้อมูลใหม่ที่เก็บลงดิสก์ (ตัวนับสถิติ, ภาษาต่อช่อง) ต้องเป็น metadata ล้วน ปิดเป็นค่าเริ่มต้น และบันทึกใน THREAT_MODEL ก่อน merge
+- ทุก PR ต้องผ่านประตูคุณภาพของ M0: audit ต้องไม่แปลงคำหรือวลีในพจนานุกรมผิดแม้แต่คำเดียว, benchmark "แก้คำที่พิมพ์ถูก" ต้องเป็น 0, และ recall ต้องไม่ตก
+- `hook.rs` กับ `sim.rs` แก้คู่กันเสมอ
+- ข้อความใหม่ทุกข้อความต้องมีทั้งสองภาษาใน `i18n.rs`
+- UI ใหม่ต้อง render ภาพให้เจ้าของดูก่อน merge
+
+**วิธีทำงาน:** หนึ่ง milestone ต่อหนึ่ง PR, merge เมื่อ CI เขียว และบันทึกหลักฐานใน Evidence ledger
+
+### M0 — ฐานก่อนสร้างของใหม่
+- [ ] **ประตูคุณภาพใน CI:** `false_positive_audit` และ `typing_benchmark` ได้โหมด `--check` แล้วรันใน job `core`
+- [ ] **แยก toast เป็นระบบ overlay** (`toast.rs` → `overlay.rs`) วางได้ทั้งมุมจอและข้างเคอร์เซอร์
+- [ ] **Per-monitor DPI v2:** manifest เป็น PMv2 และ `ui::Surface` จัด layout ใหม่เมื่อได้ `WM_DPICHANGED`
+- [ ] **ศัพท์เทคนิคติดแอป** (`assets/tech_terms.txt`) เข้า overlay เดียวกับ learned words แก้ `WangchanBERTa`, `LoRA`, `PyThaiNLP` ที่ benchmark ยังพลาด
+- [ ] **แจ้งเตือนเมื่อ hook หลุดแล้วติดตั้งใหม่ไม่สำเร็จ** + ไอคอน tray สถานะเตือน
+- [ ] **ตัวติดตั้งภาษาไทย** (`RightType.iss`)
+
+### M1 — มองเห็นได้
+- [ ] **ป้ายภาษาข้างเคอร์เซอร์** (`caret.rs`)
+  - ตำแหน่งจาก `GetGUIThreadInfo().rcCaret` และ UIA TextPattern สำหรับ Chromium/Electron ถ้าหาไม่ได้กลับไปมุมจอ
+  - แสดง TH/EN และกะพริบเมื่อแก้คำ ไม่แสดงเนื้อหาที่พิมพ์
+- [ ] **Suggest ข้างเคอร์เซอร์ + กด Tab เพื่อใช้** (Tab จะรับคำแนะนำเฉพาะตอนมีคำแนะนำค้างอยู่)
+- [ ] **หน้าต่างซ่อมข้อความ** (`fixer.rs`) บนแกนใหม่ OS-free `repair.rs` ซึ่งเข้า audit ด้วย + ซ่อมข้อความในคลิปบอร์ด
+
+### M2 — ผิดน้อยลงตั้งแต่ต้น
+- [ ] **แยกคำกำกวมด้วยบริบท** (`context.rs`): ใช้ภาษาของคำก่อนหน้าที่เพิ่งถูกแปลงจาก layout ผิดแบบเดียวกัน, benchmark ต้องมีคำกำกวม
+- [ ] **เดาภาษาล่วงหน้าต่อช่อง** (`predict.rs` + winos)
+  - key คือ exe + ประเภทช่อง, สลับ layout เมื่อหลักฐานพอ (≥20 คำ, ≥80%)
+  - ไม่บันทึกในช่องรหัสผ่านหรือแอปที่บล็อก, ปิดเป็นค่าเริ่มต้น, มีปุ่มล้าง
+- [ ] **โปรไฟล์ต่อแอป** (ปิดงานที่ D-005 เลื่อนไว้) Auto / Suggest / Manual / ปิด โดย blacklist ความปลอดภัย override ไม่ได้
+
+### M3 — คุมได้จากคีย์บอร์ด
+- [ ] **แก้ย้อนหลายคำ:** กด Shift+Backspace ซ้ำ, `LastCompleted` เปลี่ยนเป็น ring สูงสุด 8 คำ (zeroize และล้างเมื่อ context เปลี่ยน, เคอร์เซอร์ขยับ หรือ seed guard ทำงาน), อัปเดต THREAT_MODEL
+- [ ] **Command palette ข้างเคอร์เซอร์:** แก้คำ, สอนคำ, หยุดชั่วคราว, เปลี่ยนโหมด, ปิดในแอปนี้, ซ่อมข้อความ, ตั้งค่า
+- [ ] **หยุดชั่วคราว 10/30/60 นาที** จาก tray และ palette
+- [ ] **ปุ่มลัดตั้งเองได้** (ปิดงานที่ D-005 เลื่อนไว้) พร้อมตรวจการชนกันเอง
+
+### M4 — ใช้ต่อเนื่อง
+- [ ] **รายงานประจำสัปดาห์:** ต้องเปิดเอง เพราะต้องเก็บตัวนับข้ามการเปิดโปรแกรมใหม่
+- [ ] **คำที่เรียนรู้:** นำเข้า/ส่งออก + โฟลเดอร์ซิงก์ (ย้ายที่อยู่ `learned.txt`, รวมเมื่อโหลด, reload เมื่อไฟล์เปลี่ยน)
+- [ ] **ปุ่ม "ตรวจสอบอัปเดต"** เปิดหน้า Releases ในเบราว์เซอร์ ตัวแอปไม่ต่อเน็ต
+
+### M5 — ปล่อย 2.0
+- [ ] **winget manifest** ส่งจาก Release workflow
+- [ ] **Microsoft Store (MSIX) และ code signing:** เตรียม packaging และขั้นตอนใน workflow ไว้ **BLOCKED จนกว่าเจ้าของจะมีบัญชีและ certificate**
+- [ ] **E2E บน Windows:** ทดลองรันใน `windows-latest` ถ้ารันไม่ได้ให้เป็น checklist ก่อนปล่อย
+  - รวมเคส HUD, predictive, palette, sleep/resume, locked clipboard และ Electron
+- [ ] **ปล่อย 2.0.0:** README และภาพหน้าจอใหม่, CHANGELOG 2.0.0, bump version, รัน Release workflow
+
+### ไม่อยู่ใน 2.0 (อยู่ใน IDEAS.md)
+- พจนานุกรมไทยที่มีความถี่คำ (รอข้อมูลที่ license ใช้ได้)
+- แป้นปัตตะโชติ และอังกฤษ UK/AU/CA
+- macOS
+- live Suggest เต็มรูปแบบ
+- ตรวจอัปเดตในแอปแบบต่อเน็ต (ขัดกับคำสัญญา)
 
 ---
 
@@ -559,4 +627,5 @@ Deferred (tracked, not forgotten):
 - `2026-08-24` — **S7 UX first pass**: onboarding + help window, Suggest preview toast (dynamic width), tray tooltip state, settings singleton + clear-learned, stats learned-count, dark theme pass (E-034); **Release rc1**: packaging/installer scripts, zip artifact, local install + autostart (E-035); Word fast-case BLOCKED ชั่วคราวโดย fullscreen game (E-036)
 - `2026-09-21` — **D-009** จาก bug report การใช้งานจริง: whole-token revision หลัง anchor, pending-layout translation, compound/learned English, learned words ถูกใช้จริง + learn-on-revert, Ctrl+CapsLock ก่อน guards, undo invalidation, tray left-click/help/tooltip, Suggest preview (E-038)
 - `2026-09-26` — เตรียม **1.1.0**: bump version (single source = `Cargo.toml`), `CHANGELOG.md`, เลิก commit `dist/` และ `e2e/*.log`, CI ครอบ `winos` + clippy/fmt/audit/latency, อัปเดต control panel และ S6 (E-041)
+- `2026-09-26` — ออก 1.1.0 ผ่าน Release workflow; อนุมัติแผน **2.0** (S8 M0–M5) และสร้าง `IDEAS.md` เป็นคลังไอเดีย
 - `2026-08-24` — Settings/Stats redesign บนธีมเข้ม + refresh-on-reopen semantics (toast แจ้งทุกครั้ง) + toast modernization (fade, dynamic region, border, duration); **พบ+แก้ startup crash ใต้เกม fullscreen** ด้วย lazy toast creation (E-037); re-install rc1 ให้ผู้ใช้
