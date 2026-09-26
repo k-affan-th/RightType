@@ -18,6 +18,7 @@
 //! mistakes 28 of 6,574 for compounds while the top 30,000 mistakes 5, all rare
 //! words that the Thai dictionary itself still claims first.
 
+use std::collections::HashSet;
 use std::sync::OnceLock;
 
 use crate::dict::{self, Dictionary};
@@ -119,6 +120,17 @@ pub fn is_word(token: &str, en: &Dictionary) -> bool {
     en.contains(token) || is_compound(token)
 }
 
+/// A bundled technical term in exactly its usual casing (`PyThaiNLP`,
+/// `RoBERTa`, `LoRA`) — see `assets/tech_terms.txt`. Exact casing is what
+/// makes a mixed-case reading safe to trust: Thai typed on the Thai layout
+/// produces arbitrary capitals, but not these particular ones.
+pub fn is_tech_term(token: &str) -> bool {
+    static TERMS: OnceLock<HashSet<&'static str>> = OnceLock::new();
+    TERMS
+        .get_or_init(|| dict::tech_terms().collect())
+        .contains(token)
+}
+
 /// A number as written in running text: `40`, `12,480`, `0.912`, `64%`,
 /// `2e-5`, `3.` (a numbered heading), `2567`.
 pub fn is_number(token: &str) -> bool {
@@ -206,6 +218,9 @@ pub fn is_technical(token: &str, en: &Dictionary) -> bool {
     // `d`, `pk` and `fd`), a short function word, an acronym such as `F1`, a
     // number, or a derived word.
     let part_ok = |p: &str| {
+        if is_tech_term(p) {
+            return true;
+        }
         let lower = p.to_ascii_lowercase();
         (p.len() >= MIN_PART_CHARS
             && compound_shape(p).is_some()
@@ -229,7 +244,7 @@ pub fn is_technical(token: &str, en: &Dictionary) -> bool {
             // range is `is_number`'s business, not a hyphenated term.
             && parts.iter().any(|p| p.bytes().filter(u8::is_ascii_alphabetic).count() >= 2);
     }
-    is_number(token) || is_acronym(token) || is_derived(token, en)
+    is_number(token) || is_acronym(token) || is_derived(token, en) || is_tech_term(token)
 }
 
 /// Can `token` still grow into English — a longer dictionary word, or a
@@ -334,7 +349,7 @@ mod tests {
             "abcDef1",
             "ditCud",
             "doyIRd",
-            "PyThaiNLP",
+            "PyThaiNlp",
             "WORKFLOWING1",
             "x-",
             "-x",

@@ -34,8 +34,8 @@ const ARTICLE: &str = include_str!("data/academic_th_en.txt");
 const RUNS: u64 = 50;
 
 /// Wrong-layout words RightType must fix by itself (mean over runs) when the
-/// typist never switches: 118 of 131 at the time of writing.
-const MIN_AUTO_FIXED: f64 = 115.0;
+/// typist never switches: 127 of 131 since the bundled tech terms (was 118).
+const MIN_AUTO_FIXED: f64 = 124.0;
 
 /// Assumed human timings (seconds). 200 keystrokes per minute is a typical
 /// office typist (about 40 WPM).

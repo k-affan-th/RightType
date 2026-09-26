@@ -126,7 +126,22 @@ fn normalize(s: &str) -> String {
 /// Bundled English dictionary (common words).
 pub fn english() -> &'static Dictionary {
     static D: OnceLock<Dictionary> = OnceLock::new();
-    D.get_or_init(|| Dictionary::from_words(include_str!("../assets/en_words.txt").lines()))
+    D.get_or_init(|| {
+        Dictionary::from_words(
+            include_str!("../assets/en_words.txt")
+                .lines()
+                .chain(tech_terms()),
+        )
+    })
+}
+
+/// The bundled technical terms (`assets/tech_terms.txt`) in their usual
+/// casing: programming languages, frameworks, models, products, acronyms.
+pub fn tech_terms() -> impl Iterator<Item = &'static str> {
+    include_str!("../assets/tech_terms.txt")
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
 }
 
 /// Bundled Thai dictionary.
