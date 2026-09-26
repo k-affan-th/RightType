@@ -25,6 +25,12 @@ jobs:
       run: cargo test --all-targets
     - name: Latency gate
       run: cargo run --release --example policy_latency
+    # RightType 2.0 quality gate: no correctly typed dictionary word, phrase or
+    # benchmark word may be changed, and recall may not fall below its floor.
+    - name: False-positive audit
+      run: cargo run --release --example false_positive_audit -- --check
+    - name: Typing benchmark
+      run: cargo run --release --example typing_benchmark -- --check
 
   # The Windows integration layer (hook, inject, tray, ...). It only compiles
   # on Windows, so the Linux job above never sees it.
