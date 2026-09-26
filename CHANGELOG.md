@@ -2,7 +2,7 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [1.1.0] — unreleased
+## [1.1.0] — 2026-09-26
 
 ### Fixed
 
@@ -85,8 +85,9 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 - Cargo.toml is the single source of the version; `build_release.ps1` passes it
   to the installer, and the portable zip now carries the licenses and this
   changelog.
-- Release artifacts are no longer committed to the repository; they are
-  published as GitHub Release assets.
+- Release artifacts are no longer committed to the repository: the Release
+  workflow builds them on Windows and publishes them as GitHub Release assets,
+  with install instructions in Thai and English.
 - CI now builds, lints and tests the Windows integration layer and runs
   `cargo audit`.
 
