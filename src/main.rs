@@ -39,6 +39,8 @@ mod onboard;
 #[cfg(feature = "winos")]
 mod overlay;
 #[cfg(feature = "winos")]
+mod palette;
+#[cfg(feature = "winos")]
 mod ram;
 #[cfg(feature = "winos")]
 mod safety;

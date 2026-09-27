@@ -84,6 +84,10 @@ pub enum Anchor {
     /// Just below `rect` (screen pixels; e.g. the text cursor), or just above
     /// it when there is no room below; kept inside that monitor's work area.
     Near(RECT),
+    /// Near the text cursor, looked up when the pill is shown (always after
+    /// the caller returns — the lookup can be slow). No cursor: a message
+    /// goes to the corner, a badge is not shown.
+    Caret,
 }
 
 /// `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` — float above everything,
@@ -216,11 +220,18 @@ pub fn show_at(text: &str, anchor: Anchor) {
 /// Flash a short tag (`TH` / `EN`) just below `caret`. Always shown after the
 /// caller returns — the keyboard hook calls this, and must not wait for the
 /// window to move and repaint.
+#[cfg_attr(not(debug_assertions), allow(dead_code))] // debug harness
 pub fn badge_at(text: &str, caret: RECT) {
     show_styled(text, Anchor::Near(caret), Style::Badge, true);
 }
 
+/// Flash a short tag at the text cursor, wherever it turns out to be.
+pub fn badge_at_caret(text: &str) {
+    show_styled(text, Anchor::Caret, Style::Badge, true);
+}
+
 fn show_styled(text: &str, anchor: Anchor, style: Style, defer: bool) {
+    let defer = defer || matches!(anchor, Anchor::Caret);
     if TOAST_HWND.load(Ordering::Acquire) == 0 {
         if unsafe { GetCurrentThreadId() } != UI_THREAD_ID.load(Ordering::Acquire) {
             return; // worker thread + no window yet (e.g. fullscreen) — skip
@@ -272,6 +283,14 @@ unsafe fn dismiss_on_ui(hwnd: HWND) {
 }
 
 unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
+    let anchor = match anchor {
+        Anchor::Caret => match crate::caret::find_caret() {
+            Some(caret) => Anchor::Near(caret),
+            None if style == Style::Badge => return,
+            None => Anchor::Corner,
+        },
+        other => other,
+    };
     TEXT.with(|t| {
         let mut t = t.borrow_mut();
         t.zeroize();
@@ -282,7 +301,10 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
     let units: Vec<u16> = text.encode_utf16().collect();
     // Measured, not estimated: Thai tone marks and vowels take no width.
     let monitor = match anchor {
-        Anchor::Corner => MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTOPRIMARY),
+        // (Caret was resolved above.)
+        Anchor::Corner | Anchor::Caret => {
+            MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTOPRIMARY)
+        }
         Anchor::Near(rc) => MonitorFromPoint(
             POINT {
                 x: rc.left,
@@ -335,7 +357,7 @@ fn place(monitor: HMONITOR, anchor: Anchor, w: i32, h: i32, dpi: u32) -> (i32, i
     let wa = crate::ui::work_area(monitor);
     let margin = px_at(MARGIN, dpi);
     let (x, y) = match anchor {
-        Anchor::Corner => (wa.right - w - margin, wa.bottom - h - margin),
+        Anchor::Corner | Anchor::Caret => (wa.right - w - margin, wa.bottom - h - margin),
         Anchor::Near(rc) => {
             let gap = px_at(GAP, dpi);
             let below = rc.bottom + gap;

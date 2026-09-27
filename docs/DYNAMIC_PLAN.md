@@ -8,8 +8,8 @@
 | Field | Value |
 | --- | --- |
 | Overall status | `IN_PROGRESS — 1.1.0 ready to build; signing + remaining E2E need the product owner` |
-| Active section | `S8 — RightType 2.0 (M4)` |
-| Next action | S8 M4a เสร็จ (รายงาน 7 วัน, โฟลเดอร์ซิงก์) — เริ่ม M4b: UIA caret, command palette, ปุ่มลัดตั้งเองได้ |
+| Active section | `S8 — RightType 2.0 (M5)` |
+| Next action | S8 M4 เสร็จ — M5 ความแม่นยำ, M6 แป้นอื่น, M7 ปล่อย 2.0 |
 | Current release target | `v2.0.0` — แผนใน S8, ไอเดียทั้งหมดใน `IDEAS.md` (1.1.0 = 2026-09-26, 1.0.0 = 2026-08-31) |
 | Last updated | `2026-09-26` |
 | Last verified baseline | Linux: 102 tests (69 lib + 30 comprehensive + 3 release-metadata), clippy `-D warnings`, fmt, latency gate ~1.5 µs worst batch; `--features winos` cross-checked clean ด้วย clippy `-D warnings` บน target `x86_64-pc-windows-msvc` (ยังไม่ได้รัน test บน Windows ใน session นี้ — CI job `windows` ทำแทน) |
@@ -490,7 +490,7 @@ Deferred (tracked, not forgotten):
 
 ## S8 — RightType 2.0
 
-**Status:** `[~] IN_PROGRESS — M4b` (M0–M3, M4a เสร็จ) (แผนอนุมัติ 2026-09-26; เจ้าของเพิ่มความแม่นยำ M5 และแป้นอื่น M6, เลื่อน Store/code signing ออก)
+**Status:** `[~] IN_PROGRESS — M5` (M0–M4 เสร็จ) (แผนอนุมัติ 2026-09-26; เจ้าของเพิ่มความแม่นยำ M5 และแป้นอื่น M6, เลื่อน Store/code signing ออก)
 **Depends on:** 1.1.0 (released 2026-09-26)
 **ไอเดียทั้งหมดรวมที่ไม่เข้า 2.0:** [IDEAS.md](IDEAS.md)
 
@@ -555,9 +555,9 @@ Deferred (tracked, not forgotten):
 - [x] **เดาภาษาล่วงหน้าต่อช่อง** (`predict.rs` แกน OS-free + `habits.rs`): key = exe + class ของ control ที่โฟกัส, ≥20 คำ และ ≥80%, ลดครึ่งที่ 400 คำ, สูงสุด 500 ช่อง; สลับตอนโฟกัส (WinEvent) หลังเช็กช่องรหัสผ่าน/แอปที่บล็อก/แอปที่ปิด; **ปิดเป็นค่าเริ่มต้น** เปิดใน Settings → แอป มีปุ่มล้าง; เก็บ `contexts.toml` (จำนวนคำเท่านั้น)
 
 ### M4 — คุมจากคีย์บอร์ด + ใช้ต่อเนื่อง
-- [ ] **ตำแหน่งเคอร์เซอร์ผ่าน UIA TextPattern** (ย้ายมาจาก M2) สำหรับแอปที่ไม่มี system caret
-- [ ] **Command palette ข้างเคอร์เซอร์:** แก้คำ, สอนคำ, หยุดชั่วคราว, เปลี่ยนโหมด, ปิดในแอปนี้, ซ่อมข้อความ, ตั้งค่า
-- [ ] **ปุ่มลัดตั้งเองได้** (ปิดงานที่ D-005 เลื่อนไว้) พร้อมตรวจการชนกันเอง
+- [x] **ตำแหน่งเคอร์เซอร์ผ่าน UIA TextPattern (M4b):** `focus::uia_caret_rect` (selection → bounding rect, ขยายเป็นตัวอักษรถ้าว่าง) ใช้เมื่อไม่มี system caret; หาตำแหน่ง *หลัง* hook return เสมอ (`Anchor::Caret`) ไม่เพิ่มหน่วงการพิมพ์
+- [x] **Command palette ข้างเคอร์เซอร์ (M4b, `palette.rs`):** Ctrl+Alt+Space → ซ่อมข้อความ, หยุด 30 นาที/กลับมาทำงาน, ปิด/เปิดในแอปนี้, โหมด Auto/Suggest/Manual, ตั้งค่า; ลูกศร + Enter, Esc ปิด แล้วคืนโฟกัส; ไม่แตะข้อความ ("แก้คำ/สอนคำ" ยังใช้ปุ่มลัดเดิม)
+- [x] **ปุ่มลัดตั้งเองได้ (M4b, `hotkeys.rs` แกน OS-free มี test):** Settings → ปุ่มลัด กด "เปลี่ยน" แล้วกดปุ่มใหม่ (hook จับให้, Esc ยกเลิก); ปฏิเสธปุ่มที่รบกวนการพิมพ์และปุ่มที่ชนกัน; คืนค่าเดิมได้; เก็บเฉพาะที่ต่างจากค่าเดิมใน `config.toml`
 - [x] **รายงานประจำสัปดาห์ (M4a):** กราฟ 7 วัน + รวมคำที่แก้และเวลาที่ประหยัดในหน้าสถิติ; **ปิดเป็นค่าเริ่มต้น** เปิดที่หน้าสถิติ; เก็บวันละ 2 ตัวเลขใน `stats.toml` สูงสุด 56 วัน (`usage.rs` แกน OS-free มี test); ปิดแล้วลบไฟล์
 - [x] **โฟลเดอร์ซิงก์คำที่เรียนรู้ (M4a):** เลือกโฟลเดอร์ (OneDrive/Drive/ไดรฟ์ทีม) → รวมรายการทั้งสองที่แล้วเขียนไปที่โฟลเดอร์ (`RightType learned words.txt`); ตรวจทุก ~6 วิ ถ้าเครื่องอื่นแก้ไฟล์ก็โหลดใหม่; ปุ่ม "เฉพาะเครื่องนี้" ย้ายกลับ; แอปไม่ต่อเน็ตเอง
 
@@ -665,4 +665,5 @@ Deferred (tracked, not forgotten):
 - `2026-09-27` — **S8 M2 ครบ**: ป้าย TH/EN ข้างเคอร์เซอร์, Suggest ข้างเคอร์เซอร์ + Tab, หน้าต่างซ่อมข้อความ (`repair.rs` เข้าประตู audit 0/20,000); UIA TextPattern เลื่อนไป M4
 - `2026-09-27` — **S8 M3 ครบ**: ตรวจข้อมูลแล้วไม่ทำการตีความคำก่อนหน้าใหม่ (เหตุผลใน M3); เพิ่มกฎ `ซ`→`:`/`ฦ`→`?` ที่ผ่านประตู; เดาภาษาต่อช่อง (opt-in, `contexts.toml` เก็บจำนวนคำเท่านั้น)
 - `2026-09-27` — **S8 M4a**: รายงาน 7 วัน (opt-in, `stats.toml` เก็บตัวเลขรายวัน) และโฟลเดอร์ซิงก์คำที่เรียนรู้; แก้ข้อที่ review บอทพบใน PR #4/#6/#7 (font lifetime, audit ครอบศัพท์เทคนิค, Tab ตรวจ context, นับภาษาตามคำที่ผู้ใช้เก็บ)
+- `2026-09-27` — **S8 M4b**: ปุ่มลัดตั้งเองได้ (จับปุ่มผ่าน hook), command palette, หาเคอร์เซอร์ผ่าน UIA หลัง hook return
 - `2026-08-24` — Settings/Stats redesign บนธีมเข้ม + refresh-on-reopen semantics (toast แจ้งทุกครั้ง) + toast modernization (fade, dynamic region, border, duration); **พบ+แก้ startup crash ใต้เกม fullscreen** ด้วย lazy toast creation (E-037); re-install rc1 ให้ผู้ใช้

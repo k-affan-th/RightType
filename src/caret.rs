@@ -7,10 +7,11 @@
 //! never the text around the cursor — and nothing is recorded.
 //!
 //! The position comes from the system caret (`GetGUIThreadInfo`), which
-//! classic Win32 controls, Office and Chromium-based apps keep up to date.
-//! Apps that draw their own cursor without one get no tag (the layout
-//! indicator in the taskbar still shows the switch), and the Suggest hint falls
-//! back to the screen corner.
+//! classic Win32 controls, Office and Chromium-based apps keep up to date, and
+//! otherwise from UI Automation's text pattern (apps that draw their own
+//! cursor). Both are looked up after the keyboard hook has returned. Where
+//! neither says, there is no tag (the taskbar still shows the language) and
+//! the Suggest hint goes to the screen corner.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -73,27 +74,30 @@ pub fn caret_rect() -> Option<RECT> {
     }
 }
 
-/// RightType just switched the layout to `layout`: flash its tag at the caret.
+/// The text cursor from the system caret or, failing that, UI Automation.
+/// UI thread, outside the keyboard hook.
+pub fn find_caret() -> Option<RECT> {
+    caret_rect().or_else(crate::focus::uia_caret_rect)
+}
+
+/// RightType just switched the layout to `layout`: flash its tag at the caret
+/// (found after the hook returns; no caret, no tag).
 pub fn layout_switched(layout: InputLayout) {
     if !is_enabled() {
         return;
     }
-    if let Some(caret) = caret_rect() {
-        overlay::badge_at(
-            match layout {
-                InputLayout::ThaiKedmanee => "TH",
-                InputLayout::UsQwerty => "EN",
-            },
-            caret,
-        );
-    }
+    overlay::badge_at_caret(match layout {
+        InputLayout::ThaiKedmanee => "TH",
+        InputLayout::UsQwerty => "EN",
+    });
 }
 
-/// Where the Suggest hint goes: next to the caret when it can be found (and
-/// hints there are on), otherwise the screen corner.
+/// Where the Suggest hint goes: next to the caret when hints there are on
+/// (found after the hook returns, the corner if there is none).
 pub fn hint_anchor() -> Anchor {
-    match caret_rect() {
-        Some(caret) if is_enabled() => Anchor::Near(caret),
-        _ => Anchor::Corner,
+    if is_enabled() {
+        Anchor::Caret
+    } else {
+        Anchor::Corner
     }
 }

@@ -166,7 +166,18 @@ texts! {
     BtnEditLearned => "Edit…", "แก้ไข…";
     HeadLanguage => "Language", "ภาษา";
     HeadHotkeys => "Hotkeys", "ปุ่มลัด";
-    NoteHotkeysFixed => "Hotkeys work in every app and are fixed in this version.", "ปุ่มลัดใช้ได้ทุกแอป และยังเปลี่ยนไม่ได้ในเวอร์ชันนี้";
+    NoteHotkeys => "Hotkeys work in every app. To change one, click Change and press the new keys.", "ปุ่มลัดใช้ได้ทุกแอป กด เปลี่ยน แล้วกดปุ่มใหม่ที่ต้องการ";
+    HkPalette => "Open the command palette", "เปิดเมนูคำสั่ง";
+    BtnChange => "Change", "เปลี่ยน";
+    BtnResetKeys => "Reset all", "คืนค่าเดิม";
+    HkPress => "Press the new keys for: {v} — Esc cancels.", "กดปุ่มใหม่สำหรับ: {v} — Esc เพื่อยกเลิก";
+    HkUnusable => "That would get in the way of typing — use Ctrl or Alt with it.", "ปุ่มนี้จะรบกวนการพิมพ์ — ใช้ร่วมกับ Ctrl หรือ Alt";
+    HkTaken => "Already used for: {v}", "ใช้กับ: {v} อยู่แล้ว";
+    HkReset => "All hotkeys are back to the defaults.", "คืนปุ่มลัดทั้งหมดเป็นค่าเดิมแล้ว";
+    PaletteHead => "RightType", "RightType";
+    PalettePause => "Pause for 30 minutes", "หยุดชั่วคราว 30 นาที";
+    PaletteAppOff => "Turn off in {app}", "ปิดใน {app}";
+    PaletteAppOn => "Turn back on in {app}", "เปิดกลับใน {app}";
     HkFlip => "Fix or flip back the last word", "แก้หรือสลับคำล่าสุดกลับ";
     HkSelection => "Convert the selected text", "แปลงข้อความที่เลือก";
     HkCycle => "Switch correction mode", "สลับโหมดการแก้คำ";
@@ -288,7 +299,12 @@ mod tests {
     fn thai_strings_are_actually_thai() {
         // Strings that are only key names, a product name or an example may
         // stay identical; everything else must contain Thai.
-        const SAME: &[T] = &[T::ToastSuggestAccept, T::AboutVersion, T::WelcomeExample];
+        const SAME: &[T] = &[
+            T::ToastSuggestAccept,
+            T::AboutVersion,
+            T::WelcomeExample,
+            T::PaletteHead,
+        ];
         for key in T::ALL {
             if SAME.contains(key) {
                 continue;

@@ -50,6 +50,9 @@ pub struct Config {
     /// A folder to keep the learned words in (e.g. a OneDrive folder).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub learned_folder: Option<String>,
+    /// Hotkeys changed from the defaults: action → `Ctrl + Alt + Space`.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub hotkeys: BTreeMap<String, String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -95,6 +98,7 @@ impl Default for Config {
             predict_layout: false,
             keep_stats: false,
             learned_folder: None,
+            hotkeys: BTreeMap::new(),
         }
     }
 }
@@ -133,6 +137,9 @@ pub fn apply(cfg: &Config) {
     set_language(cfg.language.as_deref().and_then(Lang::from_code));
     crate::caret::set_enabled(cfg.caret_hints);
     crate::habits::set_enabled(cfg.predict_layout);
+    hook::set_hotkeys(righttype::hotkeys::Hotkeys::from_config(
+        cfg.hotkeys.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+    ));
     if let Some(folder) = cfg.learned_folder.as_deref() {
         learn::start_with_folder(Some(folder.into()));
     }
@@ -202,6 +209,11 @@ pub fn persist() {
         predict_layout: crate::habits::is_enabled(),
         keep_stats: crate::stats::keeps_daily(),
         learned_folder: learn::folder().map(|p| p.to_string_lossy().into_owned()),
+        hotkeys: hook::hotkeys()
+            .to_config()
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect(),
     };
     let Some(p) = config_path() else {
         return;

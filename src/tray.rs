@@ -404,6 +404,7 @@ pub fn run() {
             "settings-blocked" => settings::open_page(4),
             "settings-about" => settings::open_page(5),
             "stats" => stats::open(),
+            "palette" => crate::palette::request_open(),
             "fixer" => crate::fixer::open_demo(
                 "l;ylfu8iy[ hello \u{e41}\u{e19}\u{e1e}\u{e1e}\u{e33}\u{e41}\u{e30} answer PyThaiNLP lj'wa]N,k.shsojvp",
             ),
