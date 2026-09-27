@@ -315,6 +315,9 @@ struct SuggestionRecord {
     corrected: String,
     boundary_vk: u16,
     created: Instant,
+    /// Where it was made: Tab accepts it only in the same window and field.
+    hwnd: isize,
+    focus_generation: u64,
 }
 
 /// Tab takes a Suggest hint only this soon after it appeared; later, Tab is
@@ -656,16 +659,25 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // Tab (alone) right after a Suggest hint takes it, like Alt+CapsLock. The
     // hint exists only until the next key, so Tab is otherwise untouched.
+    // This runs ahead of the context checks below, so it checks for itself
+    // that the caret is still where the hint was made: same window, same
+    // focused field (a Tab that ended the word may have moved focus, so a
+    // hint made at a Tab boundary is never taken by Tab), and not a password
+    // field.
     if vk == VK_TAB.0
         && !is_down(VK_SHIFT)
         && !is_down(VK_CONTROL)
         && !is_down(VK_MENU)
         && STATE.with(|s| {
-            s.borrow()
-                .suggestion
-                .as_ref()
-                .is_some_and(|x| x.created.elapsed() < SUGGEST_TAB_WINDOW)
+            s.borrow().suggestion.as_ref().is_some_and(|x| {
+                x.created.elapsed() < SUGGEST_TAB_WINDOW
+                    && x.boundary_vk != VK_TAB.0
+                    && x.hwnd == GetForegroundWindow().0 as isize
+                    && x.focus_generation == crate::focus::generation()
+            })
         })
+        && !safety::is_password_field()
+        && !crate::focus::is_password_field()
     {
         accept_suggestion();
         return true;
@@ -985,6 +997,8 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                     corrected: d.corrected,
                     boundary_vk: vk,
                     created: Instant::now(),
+                    hwnd: GetForegroundWindow().0 as isize,
+                    focus_generation: crate::focus::generation(),
                 });
             });
             crate::overlay::show_at(&hint, crate::caret::hint_anchor());
