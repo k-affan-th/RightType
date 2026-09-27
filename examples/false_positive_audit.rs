@@ -32,6 +32,8 @@ const MAX_UNKNOWN_THAI_CHANGED: usize = 120;
 const MIN_THAI_RECALL: usize = 60_550;
 /// Thai recall with the Pattachote table (2.0 M6), measured when it was added.
 const MIN_PATTACHOTE_THAI_RECALL: usize = 60_150;
+/// English recall with the Pattachote table (2.0 M6), measured 86,833.
+const MIN_PATTACHOTE_ENGLISH_RECALL: usize = 86_750;
 /// English dictionary words typed on the Thai layout that must come back.
 const MIN_ENGLISH_RECALL: usize = 86_600;
 
@@ -334,6 +336,11 @@ fn main() {
     if recall_thai < MIN_PATTACHOTE_THAI_RECALL {
         failures.push(format!(
             "Pattachote Thai recall {recall_thai} below floor {MIN_PATTACHOTE_THAI_RECALL}"
+        ));
+    }
+    if recall_english < MIN_PATTACHOTE_ENGLISH_RECALL {
+        failures.push(format!(
+            "Pattachote English recall {recall_english} below floor {MIN_PATTACHOTE_ENGLISH_RECALL}"
         ));
     }
 
