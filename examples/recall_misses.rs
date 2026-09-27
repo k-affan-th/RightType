@@ -36,7 +36,7 @@ fn main() {
             misses.push((freq.get(w).copied().unwrap_or(0), w, typed, got));
         }
     }
-    misses.sort_by(|a, b| b.0.cmp(&a.0));
+    misses.sort_by_key(|m| std::cmp::Reverse(m.0));
     println!("{} misses", misses.len());
     for (f, w, t, g) in misses.iter().take(60) {
         println!("{f}\t{w}\t{t}\t{g:?}\ten={}", en.contains(t));

@@ -203,13 +203,12 @@ fn key_from_name(name: &str) -> Option<u16> {
             let bytes = name.as_bytes();
             if bytes.len() == 1 && bytes[0].is_ascii_alphanumeric() {
                 bytes[0].to_ascii_uppercase() as u16
-            } else if let Some(n) = name.strip_prefix('f').and_then(|n| n.parse::<u16>().ok()) {
+            } else {
+                let n = name.strip_prefix('f')?.parse::<u16>().ok()?;
                 if !(1..=24).contains(&n) {
                     return None;
                 }
                 vk::F1 + n - 1
-            } else {
-                return None;
             }
         }
     };
@@ -288,14 +287,31 @@ impl Hotkeys {
         self.chords.iter().any(|c| c.key == key)
     }
 
-    /// From the config (`action = "Ctrl + CapsLock"`): unknown actions, bad or
-    /// unusable chords and duplicates are ignored, keeping the default.
+    /// From the config (`action = "Ctrl + CapsLock"`). The saved chords are
+    /// applied together — so two actions that swapped chords survive a restart
+    /// — then unknown actions and bad or unusable chords are dropped, and if
+    /// two actions still share a chord the saved ones among them fall back to
+    /// their defaults until none do.
     pub fn from_config<'a>(entries: impl IntoIterator<Item = (&'a str, &'a str)>) -> Self {
         let mut hotkeys = Hotkeys::default();
+        let mut saved = [false; 7];
         for (name, text) in entries {
             if let (Some(action), Some(chord)) = (Action::from_name(name), Chord::parse(text)) {
-                let _ = hotkeys.set(action, chord);
+                if chord.is_usable() {
+                    hotkeys.chords[index(action)] = chord;
+                    saved[index(action)] = true;
+                }
             }
+        }
+        loop {
+            let clash = (0..7).find(|&i| {
+                (0..7).any(|j| j != i && hotkeys.chords[i] == hotkeys.chords[j]) && saved[i]
+            });
+            let Some(i) = clash else {
+                break;
+            };
+            hotkeys.chords[i] = default_chord(Action::ALL[i]);
+            saved[i] = false;
         }
         hotkeys
     }
@@ -389,5 +405,25 @@ mod tests {
         let saved = h.to_config();
         let again = Hotkeys::from_config(saved.iter().map(|(k, v)| (*k, v.as_str())));
         assert_eq!(again, h);
+    }
+
+    #[test]
+    fn swapped_chords_survive_a_restart() {
+        let mut h = Hotkeys::default();
+        let flip = h.chord(Action::Flip);
+        let selection = h.chord(Action::Selection);
+        h.set(Action::Flip, Chord::parse("F8").unwrap()).unwrap();
+        h.set(Action::Selection, flip).unwrap();
+        h.set(Action::Flip, selection).unwrap();
+        let saved = h.to_config();
+        let again = Hotkeys::from_config(saved.iter().map(|(k, v)| (*k, v.as_str())));
+        assert_eq!(again, h);
+    }
+
+    #[test]
+    fn a_saved_clash_falls_back_to_the_defaults() {
+        let h = Hotkeys::from_config([("palette", "Ctrl + CapsLock")]);
+        assert_eq!(h.chord(Action::Palette), default_chord(Action::Palette));
+        assert_eq!(h.chord(Action::Cycle), default_chord(Action::Cycle));
     }
 }

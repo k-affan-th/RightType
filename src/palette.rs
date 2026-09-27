@@ -16,8 +16,9 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 use native_windows_gui as nwg;
 use righttype::i18n::{tr, trf, T};
 use righttype::per_app::AppMode;
-use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::HDC;
+use windows::Win32::Graphics::Gdi::{MonitorFromPoint, MONITOR_DEFAULTTONEAREST};
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, KillTimer, SetForegroundWindow, SetTimer, SetWindowPos, HWND_TOPMOST,
     SWP_NOSIZE,
@@ -146,18 +147,29 @@ fn open() {
         })
         .collect();
     ui::size_and_center(surface.hwnd, W, h);
-    // Next to the caret when there is one.
+    // Next to the caret when there is one: below it, or above it when there
+    // is no room below, and always inside that monitor's work area.
     if let Some(caret) = caret {
         unsafe {
-            let _ = SetWindowPos(
-                surface.hwnd,
-                HWND_TOPMOST,
-                caret.left,
-                caret.bottom + ui::px(8),
-                0,
-                0,
-                SWP_NOSIZE,
+            let (w, h) = (ui::px(W), ui::px(h));
+            let monitor = MonitorFromPoint(
+                POINT {
+                    x: caret.left,
+                    y: caret.bottom,
+                },
+                MONITOR_DEFAULTTONEAREST,
             );
+            let wa = ui::work_area(monitor);
+            let gap = ui::px(8);
+            let below = caret.bottom + gap;
+            let y = if below + h <= wa.bottom {
+                below
+            } else {
+                caret.top - gap - h
+            };
+            let x = caret.left.clamp(wa.left, (wa.right - w).max(wa.left));
+            let y = y.clamp(wa.top, (wa.bottom - h).max(wa.top));
+            let _ = SetWindowPos(surface.hwnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE);
         }
     }
     let first = items.first().map(|(id, _)| *id);
