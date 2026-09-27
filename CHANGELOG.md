@@ -54,6 +54,21 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 - **Sync folder for learned words** (Settings → Learned words): keep the list
   in a OneDrive / Google Drive / team folder; both lists are merged when you
   choose it, and a change made on another PC is picked up within seconds.
+- **Change the hotkeys** (Settings → Hotkeys): click Change and press the new
+  keys. Chords that would get in the way of typing, and chords already in use,
+  are refused; Reset all brings back the defaults.
+- **Command palette** (`Ctrl`+`Alt`+`Space`): a short list next to the text
+  cursor — Fix text, pause, turn RightType off in this app, switch mode,
+  settings. Arrow keys and Enter, Esc to close.
+- The TH / EN tag and the Suggest hint now also find the text cursor in apps
+  that draw their own (through UI Automation).
+- **Suggest while typing**: in Suggest mode the Thai reading appears next to
+  the cursor as soon as the keys typed so far clearly spell it (the bar Auto
+  uses); Tab flips the word there and then.
+- Thai words whose keys give no letters on the English layout come back:
+  `57'` → ถึง, `]'` → ลง, `[688]` → บุคคล. Numbers, dates, times, prices and
+  emoticons never change (0 of 750,043 tested); 163 more Thai dictionary words
+  are recovered.
 - **Check for updates** in Settings → Privacy & about: opens the Releases page
   in your browser; RightType itself still never goes online.
 

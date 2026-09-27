@@ -12,6 +12,7 @@
 //! - [`secret`] — hard-deny key/address shapes plus password/BIP39 stream guards.
 //! - [`dict`] — word dictionaries for membership checks.
 //! - [`english`] — English beyond the dictionary: compounds and continuations.
+//! - [`hotkeys`] — the hotkeys, how they are written, and which are safe.
 //! - [`i18n`] — interface strings in English and Thai.
 //! - [`predict`] — per-field language habits (opt-in) for switching before typing.
 //! - [`per_app`] — per-app correction modes and their text form.
@@ -28,6 +29,7 @@ pub mod buffer;
 pub mod detect;
 pub mod dict;
 pub mod english;
+pub mod hotkeys;
 pub mod i18n;
 pub mod layout;
 pub mod per_app;

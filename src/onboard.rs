@@ -13,7 +13,7 @@ use righttype::i18n::{tr, trf, T};
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Gdi::HDC;
 
-use crate::settings::HOTKEYS;
+use crate::settings::hotkey_rows;
 use crate::ui::{self, card, divider, pal, rect, Gfx, Surface, TextStyle};
 use crate::{config, hook};
 
@@ -49,7 +49,7 @@ fn layout(first_run: bool) -> Layout {
         }
     } else {
         let keys_y = 84;
-        let rows = HOTKEYS.len();
+        let rows = hotkey_rows().len();
         Layout {
             example_y: None,
             keys_y,
@@ -117,17 +117,17 @@ pub fn show(first_run: bool) {
             0,
         );
     }
-    for (i, hk) in HOTKEYS.iter().take(lay.rows).enumerate() {
+    for (i, (action, keys)) in hotkey_rows().into_iter().take(lay.rows).enumerate() {
         let y = lay.keys_y + 4 + i as i32 * ROW;
         s.label(
-            tr(hk.action),
+            tr(action),
             TextStyle::Body,
             (X + 20, y + 12, 230, 22),
             p.surface,
             0,
         );
         s.label(
-            hk.keys,
+            &keys,
             TextStyle::Keys,
             (X + CW - 20 - 240, y + 8, 240, 30),
             p.surface,

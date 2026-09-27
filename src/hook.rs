@@ -31,13 +31,16 @@ use std::time::{Duration, Instant};
 use zeroize::Zeroize;
 
 use righttype::buffer::{Key, WordBuffer};
+use righttype::hotkeys::{Action, Chord, Hotkeys};
 use righttype::layout::auto_convert;
 use righttype::per_app::AppMode;
 use righttype::recent::Recent;
 use righttype::render;
 use righttype::{dict, policy, secret};
 
-use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
+use std::ffi::c_void;
+
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 #[cfg(debug_assertions)]
 use windows::Win32::UI::Input::KeyboardAndMouse::VK_PACKET;
@@ -94,8 +97,64 @@ impl Mode {
 
 static MODE: AtomicU8 = AtomicU8::new(Mode::Manual as u8);
 
-/// Backspace is physically down (a further key-down is an auto-repeat).
-static BACKSPACE_HELD: AtomicBool = AtomicBool::new(false);
+/// The key last pressed and not yet released (a further key-down of it is an
+/// auto-repeat).
+static HELD_KEY: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
+
+/// The hotkeys in use (Settings → Hotkeys).
+static HOTKEYS: std::sync::RwLock<Option<Hotkeys>> = std::sync::RwLock::new(None);
+
+pub fn hotkeys() -> Hotkeys {
+    HOTKEYS.read().unwrap().clone().unwrap_or_default()
+}
+
+pub fn set_hotkeys(hotkeys: Hotkeys) {
+    *HOTKEYS.write().unwrap() = Some(hotkeys);
+}
+
+/// Settings is waiting for the next chord for this action; the result is
+/// posted to `hwnd` as [`WM_HOTKEY_CAPTURED`].
+static CAPTURE: Mutex<Option<(Action, isize)>> = Mutex::new(None);
+/// The captured chord (`None` inside = cancelled with Esc).
+static CAPTURED: Mutex<Option<(Action, Option<Chord>)>> = Mutex::new(None);
+pub const WM_HOTKEY_CAPTURED: u32 = 0x8000 + 0x530;
+
+/// Capture the next chord pressed anywhere as the new hotkey for `action`.
+pub fn begin_capture(action: Action, hwnd: isize) {
+    *CAPTURE.lock().unwrap() = Some((action, hwnd));
+}
+
+pub fn cancel_capture() {
+    CAPTURE.lock().unwrap().take();
+}
+
+/// The chord captured for Settings, once it has been posted.
+pub fn take_captured() -> Option<(Action, Option<Chord>)> {
+    CAPTURED.lock().unwrap().take()
+}
+
+/// While Settings captures a hotkey: the first non-modifier key (CapsLock
+/// counts) with the modifiers held is the chord; Esc cancels. The key is
+/// swallowed either way.
+unsafe fn capture_key(vk: u16) -> bool {
+    let Some((action, hwnd)) = *CAPTURE.lock().unwrap() else {
+        return false;
+    };
+    if is_modifier(vk) && vk != VK_CAPITAL.0 {
+        return false;
+    }
+    CAPTURE.lock().unwrap().take();
+    let chord = (vk != VK_ESCAPE.0)
+        .then(|| Chord::new(is_down(VK_CONTROL), is_down(VK_SHIFT), is_down(VK_MENU), vk));
+    *CAPTURED.lock().unwrap() = Some((action, chord));
+    let _ = PostMessageW(
+        HWND(hwnd as *mut c_void),
+        WM_HOTKEY_CAPTURED,
+        WPARAM(0),
+        LPARAM(0),
+    );
+    true
+}
 
 /// Master on/off, controlled from the tray. When off the hook passes every key
 /// straight through and touches nothing.
@@ -118,6 +177,7 @@ pub fn set_enabled(on: bool) {
             st.undo = None;
             st.recent.clear();
             st.suggestion = None;
+            st.live_hint = None;
         });
     }
 }
@@ -243,6 +303,16 @@ struct HookState {
     /// after a boundary (pressed again: the word before, and so on).
     recent: Recent,
     suggestion: Option<SuggestionRecord>,
+    /// A Suggest hint shown while the word is still being typed (Suggest
+    /// mode): Tab flips the word in progress. Only where it was shown.
+    live_hint: Option<LiveHint>,
+}
+
+#[derive(Clone, Copy)]
+struct LiveHint {
+    hwnd: isize,
+    focus_generation: u64,
+    created: Instant,
 }
 
 impl HookState {
@@ -261,6 +331,7 @@ impl HookState {
             mark: TokenMark::Plain,
             recent: Recent::new(),
             suggestion: None,
+            live_hint: None,
         }
     }
 }
@@ -560,6 +631,7 @@ fn caret_may_have_moved() {
         st.undo = None;
         st.recent.clear();
         st.suggestion = None;
+        st.live_hint = None;
     });
 }
 
@@ -654,10 +726,19 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     let vk = kb.vkCode as u16;
     let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
     // Windows repeats a held key as more key-downs; only a release ends it.
-    let repeat = vk == VK_BACK.0 && BACKSPACE_HELD.swap(down, Ordering::Relaxed) && down;
+    let repeat = if down {
+        HELD_KEY.swap(vk, Ordering::Relaxed) == vk
+    } else {
+        let _ = HELD_KEY.compare_exchange(vk, 0, Ordering::Relaxed, Ordering::Relaxed);
+        false
+    };
     if !down {
         return false;
     }
+    if capture_key(vk) {
+        return true;
+    }
+    let action = hotkeys().action_for(vk, is_down(VK_CONTROL), is_down(VK_SHIFT), is_down(VK_MENU));
 
     // Tab (alone) right after a Suggest hint takes it, like Alt+CapsLock. The
     // hint exists only until the next key, so Tab is otherwise untouched.
@@ -684,11 +765,32 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         accept_suggestion();
         return true;
     }
+    // Tab while a hint is showing for the word still being typed: flip it now.
+    if vk == VK_TAB.0
+        && !is_down(VK_SHIFT)
+        && !is_down(VK_CONTROL)
+        && !is_down(VK_MENU)
+        && STATE.with(|s| {
+            let st = s.borrow();
+            !st.buf.current().is_empty()
+                && st.live_hint.is_some_and(|h| {
+                    h.created.elapsed() < SUGGEST_TAB_WINDOW
+                        && h.hwnd == GetForegroundWindow().0 as isize
+                        && h.focus_generation == crate::focus::generation()
+                })
+        })
+        && !safety::is_password_field()
+        && !crate::focus::is_password_field()
+    {
+        STATE.with(|s| s.borrow_mut().live_hint = None);
+        crate::overlay::dismiss();
+        convert_last_word();
+        return true;
+    }
 
-    // Shift+Backspace hotkey.
-    let is_shift_backspace =
-        vk == VK_BACK.0 && is_down(VK_SHIFT) && !is_down(VK_CONTROL) && !is_down(VK_MENU);
-    if !is_shift_backspace && !is_modifier(vk) {
+    // The flip hotkey (Shift+Backspace by default) keeps the recent words.
+    let is_flip = action == Some(Action::Flip);
+    if !is_flip && action.is_none() && !is_modifier(vk) {
         // Keys that edit or move away from the text before the caret, and any
         // command chord, make the recent words stale. Typing (a character or
         // a boundary) keeps them: it only adds after them.
@@ -700,17 +802,20 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                 st.recent.clear();
             }
             st.suggestion = None;
+            st.live_hint = None;
         });
-    } else if vk == VK_CAPITAL.0 {
-        // CapsLock chords (convert selection, undo, ...) can rewrite text.
+    } else if (action.is_some() && !is_flip) || vk == VK_CAPITAL.0 {
+        // Other hotkeys (convert selection, undo, ...) can rewrite text, and
+        // CapsLock alone changes what the next keys type.
+        // (The pending suggestion stays: the Accept hotkey is one of these.)
         STATE.with(|s| s.borrow_mut().recent.clear());
     }
 
-    // Panic switch: Ctrl+Alt+CapsLock instantly flips master enable, either way.
-    // Checked before the enabled gate and the sensitive-context guard below so
-    // it always works — including turning back ON, and even from inside a
-    // password field or blacklisted app.
-    if vk == VK_CAPITAL.0 && is_down(VK_CONTROL) && is_down(VK_MENU) {
+    // Panic switch (Ctrl+Alt+CapsLock by default) instantly flips master
+    // enable, either way. Checked before the enabled gate and the
+    // sensitive-context guard below so it always works — including turning
+    // back ON, and even from inside a password field or blacklisted app.
+    if action == Some(Action::Panic) {
         let now_on = !ENABLED.fetch_xor(true, Ordering::Relaxed);
         crate::overlay::show(righttype::i18n::tr(if now_on {
             righttype::i18n::T::ToastOn
@@ -732,8 +837,17 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // focus we cannot classify, which the guards below must treat as a
     // password field — so the chord used to fall through there and silently
     // toggle CapsLock instead of switching mode.
-    if vk == VK_CAPITAL.0 && is_down(VK_CONTROL) && !is_down(VK_SHIFT) && !is_down(VK_MENU) {
+    if action == Some(Action::Cycle) {
         cycle_mode();
+        return true;
+    }
+
+    // The command palette never touches text either: it opens everywhere.
+    // Opened after this callback returns, never inside the hook.
+    if action == Some(Action::Palette) {
+        if !repeat {
+            crate::palette::request_open();
+        }
         return true;
     }
 
@@ -776,18 +890,16 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             let mut st = s.borrow_mut();
             st.buf.clear();
             st.suggestion = None;
+            st.live_hint = None;
             st.recent.clear();
         });
         return false;
     };
 
-    // CapsLock: a hotkey carrier when chorded, otherwise a normal toggle.
-    if vk == VK_CAPITAL.0 {
-        let ctrl = is_down(VK_CONTROL);
-        let shift = is_down(VK_SHIFT);
-        let alt = is_down(VK_MENU);
-        if ctrl && shift {
-            // Ctrl+Shift+CapsLock: undo the last correction (one-shot). Swallow.
+    // The text hotkeys (CapsLock chords by default).
+    {
+        if action == Some(Action::Undo) {
+            // Undo the last correction (one-shot). Swallow.
             e2e_trace("undo-hotkey received".to_string());
             // A run we still own is the most recent correction there is, and it
             // has no Undo record yet (that is written when the run anchors), so
@@ -810,12 +922,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             }
             return true;
         }
-        if alt {
+        if action == Some(Action::Accept) {
             accept_suggestion();
             return true;
         }
-        if shift {
-            // Shift+CapsLock: convert the current selection. Swallow.
+        if action == Some(Action::Selection) {
+            // Convert the current selection. Swallow.
             e2e_trace("convert-selection-hotkey received".to_string());
             manual::request_convert_selection(
                 GetForegroundWindow().0 as isize,
@@ -823,13 +935,16 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             );
             return true;
         }
-        return false;
+        // CapsLock alone (or a chord that is not a hotkey) is a normal toggle.
+        if vk == VK_CAPITAL.0 {
+            return false;
+        }
     }
 
     // Shift+Backspace: flip the current word in place. Always swallowed — even
     // when there's nothing to convert — so the key's auto-repeat can't fall
     // through to a destructive Backspace and delete the result we just injected.
-    if vk == VK_BACK.0 && is_down(VK_SHIFT) && !is_down(VK_CONTROL) && !is_down(VK_MENU) {
+    if is_flip {
         // Holding the keys acts once: each flip reaches one word further back,
         // so auto-repeat would run through all of them in a blink.
         if repeat {
@@ -883,6 +998,14 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             Key::Backspace => STATE.with(|s| s.borrow().owned.is_some()),
             _ => false,
         };
+        if matches!(key, Key::Char(_))
+            && mode_now == Mode::Suggest
+            && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
+            && policy::supported_layout_id(layout_id(effective_layout()))
+                == Some(policy::InputLayout::UsQwerty)
+        {
+            show_live_hint();
+        }
         if may_reconcile
             && mode_now == Mode::Auto
             && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
@@ -1016,6 +1139,45 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     swallow
 }
 
+/// Suggest mode, mid-word: when the keys typed so far clearly read as Thai
+/// (the same bar Auto uses before it rewrites anything), show that reading
+/// next to the cursor; Tab then flips the word. Nothing changes on screen
+/// unless the typist asks.
+fn show_live_hint() {
+    let (run, guarding) = STATE.with(|s| {
+        let st = s.borrow();
+        (st.buf.current().to_string(), st.seed.guarding())
+    });
+    if guarding || run.is_empty() {
+        return;
+    }
+    let reading = policy::live_reading(&run, false, dict::english(), dict::thai());
+    if let policy::Reading::Thai(mut thai) = reading {
+        let mut hint = format!("{thai}  ·  Tab");
+        crate::overlay::show_at(&hint, crate::caret::hint_anchor());
+        hint.zeroize();
+        thai.zeroize();
+        let here = LiveHint {
+            hwnd: unsafe { GetForegroundWindow() }.0 as isize,
+            focus_generation: crate::focus::generation(),
+            created: Instant::now(),
+        };
+        STATE.with(|s| s.borrow_mut().live_hint = Some(here));
+        LIVE_HINT_SHOWN.with(|c| c.set(true));
+    } else if LIVE_HINT_SHOWN.with(|c| c.replace(false)) {
+        // The reading died: take the hint (and its "Tab") off the screen.
+        crate::overlay::dismiss();
+    }
+    let mut run = run;
+    run.zeroize();
+}
+
+thread_local! {
+    /// A live hint is on screen (so it can be taken down when it no longer
+    /// applies).
+    static LIVE_HINT_SHOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// A seed phrase was just recognised: drop every copy of recently typed text
 /// we still hold (Undo record, last word, pending Suggest hint), so the words
 /// that came before the threshold do not outlive it in this process.
@@ -1025,6 +1187,7 @@ fn forget_recent_text() {
         st.undo = None;
         st.recent.clear();
         st.suggestion = None;
+        st.live_hint = None;
     });
     crate::overlay::dismiss();
 }
@@ -1623,6 +1786,7 @@ unsafe fn sync_context() {
             st.seed.reset();
             st.recent.clear();
             st.suggestion = None;
+            st.live_hint = None;
             st.last_hwnd = hwnd_i;
             st.last_hkl = hkl_i;
             st.last_focus_generation = focus_generation;

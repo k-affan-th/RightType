@@ -23,6 +23,7 @@ use windows::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, S
 
 use crate::ui::{self, card, divider, field, pal, rect, track, Gfx, Surface, TextStyle};
 use crate::{config, hook, learn, overlay, safety, startup};
+use righttype::hotkeys::{Action, Hotkeys, Refusal};
 use righttype::per_app;
 use zeroize::Zeroize;
 
@@ -55,38 +56,27 @@ const CARD_B_Y: i32 = 282;
 /// The per-field language card on the Apps page.
 const PREDICT_Y: i32 = 548;
 
-pub struct Hotkey {
-    pub action: T,
-    pub keys: &'static str,
+/// The label of each hotkey action.
+pub fn action_label(action: Action) -> T {
+    match action {
+        Action::Flip => T::HkFlip,
+        Action::Selection => T::HkSelection,
+        Action::Cycle => T::HkCycle,
+        Action::Undo => T::HkUndo,
+        Action::Accept => T::HkAccept,
+        Action::Panic => T::HkPanic,
+        Action::Palette => T::HkPalette,
+    }
 }
 
-/// The fixed v1 hotkeys, shared with the Welcome window.
-pub const HOTKEYS: &[Hotkey] = &[
-    Hotkey {
-        action: T::HkFlip,
-        keys: "Shift + Backspace",
-    },
-    Hotkey {
-        action: T::HkSelection,
-        keys: "Shift + CapsLock",
-    },
-    Hotkey {
-        action: T::HkCycle,
-        keys: "Ctrl + CapsLock",
-    },
-    Hotkey {
-        action: T::HkUndo,
-        keys: "Ctrl + Shift + CapsLock",
-    },
-    Hotkey {
-        action: T::HkAccept,
-        keys: "Alt + CapsLock",
-    },
-    Hotkey {
-        action: T::HkPanic,
-        keys: "Ctrl + Alt + CapsLock",
-    },
-];
+/// Every hotkey as `(label, keys)`, shared with the Welcome window.
+pub fn hotkey_rows() -> Vec<(T, String)> {
+    let keys = hook::hotkeys();
+    Action::ALL
+        .into_iter()
+        .map(|a| (action_label(a), keys.chord(a).format()))
+        .collect()
+}
 
 struct Ids {
     nav: [u16; 5],
@@ -104,6 +94,11 @@ struct Ids {
     edit_learned: u16,
     learned_list: u16,
     learned_status: u16,
+    /// Per action (in `Action::ALL` order): its keys label and Change button.
+    key_labels: Vec<u16>,
+    key_buttons: Vec<u16>,
+    keys_status: u16,
+    keys_reset: u16,
     save_learned: u16,
     clear_learned: u16,
     list: u16,
@@ -125,6 +120,7 @@ struct SettingsWindow {
     surface: Rc<Surface>,
     ids: Ids,
     handler: RefCell<Option<nwg::EventHandler>>,
+    raw: RefCell<Option<nwg::RawEventHandler>>,
 }
 
 /// Open the settings window, or bring the open one forward.
@@ -261,28 +257,44 @@ fn open_on(page: u8) {
         p.bg,
         h,
     );
-    for (i, hk) in HOTKEYS.iter().enumerate() {
+    let mut key_labels = Vec::new();
+    let mut key_buttons = Vec::new();
+    for (i, (label, keys)) in hotkey_rows().into_iter().enumerate() {
         let y = 74 + i as i32 * 52;
         s.label(
-            tr(hk.action),
+            tr(label),
             TextStyle::Body,
-            (X0 + 20, y + 14, 240, 24),
+            (X0 + 20, y + 14, 250, 24),
             p.surface,
             h,
         );
-        s.label(
-            hk.keys,
+        key_labels.push(s.label(
+            &keys,
             TextStyle::Keys,
-            (X0 + CW - 20 - 250, y + 12, 250, 30),
+            (X0 + CW - 20 - 96 - 236, y + 12, 236, 30),
             p.surface,
             h,
-        );
+        ));
+        key_buttons.push(s.button(
+            tr(T::BtnChange),
+            false,
+            (X0 + CW - 20 - 88, y + 10, 88, 32),
+            p.surface,
+            h,
+        ));
     }
-    let note_y = 74 + HOTKEYS.len() as i32 * 52 + 16;
-    s.label(
-        tr(T::NoteHotkeysFixed),
+    let note_y = 74 + Action::ALL.len() as i32 * 52 + 16;
+    let keys_status = s.label(
+        tr(T::NoteHotkeys),
         TextStyle::Small,
-        (X0, note_y, CW, 36),
+        (X0, note_y, CW - 170, 44),
+        p.bg,
+        h,
+    );
+    let keys_reset = s.button(
+        tr(T::BtnResetKeys),
+        false,
+        (X0 + CW - 150, note_y, 150, 34),
         p.bg,
         h,
     );
@@ -483,6 +495,10 @@ fn open_on(page: u8) {
         edit_learned,
         learned_list,
         learned_status,
+        key_labels,
+        key_buttons,
+        keys_status,
+        keys_reset,
         save_learned,
         clear_learned,
         list,
@@ -506,6 +522,7 @@ fn open_on(page: u8) {
         surface,
         ids,
         handler: RefCell::new(None),
+        raw: RefCell::new(None),
     });
     sync(&win);
     win.surface
@@ -527,6 +544,19 @@ fn open_on(page: u8) {
         }
     });
     *win.handler.borrow_mut() = Some(handler);
+    let weak = Rc::downgrade(&win);
+    let raw =
+        nwg::bind_raw_event_handler(&win.window.handle, 0x5254_0016, move |_h, msg, _w, _l| {
+            if msg == hook::WM_HOTKEY_CAPTURED {
+                if let Some(win) = weak.upgrade() {
+                    captured(&win);
+                }
+                return Some(0);
+            }
+            None
+        })
+        .ok();
+    *win.raw.borrow_mut() = raw;
 }
 
 /// Reflect the running state in every control.
@@ -675,6 +705,19 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
             // The folder could not be written: nothing changed.
             None => s.set_text(ids.learned_status, tr(T::ErrFile)),
         }
+    } else if let Some(i) = ids.key_buttons.iter().position(|b| *b == id) {
+        let action = Action::ALL[i];
+        hook::begin_capture(action, s.hwnd.0 as isize);
+        s.set_text(
+            ids.keys_status,
+            &trf(T::HkPress, &[("v", tr(action_label(action)))]),
+        );
+    } else if id == ids.keys_reset {
+        hook::cancel_capture();
+        hook::set_hotkeys(Hotkeys::default());
+        config::persist();
+        show_hotkeys(win);
+        s.set_text(ids.keys_status, tr(T::HkReset));
     } else if id == ids.import_learned {
         import_learned(win);
     } else if id == ids.export_learned {
@@ -810,6 +853,38 @@ fn export_learned(win: &SettingsWindow) {
     );
 }
 
+/// Put the current chords in the Hotkeys page's labels.
+fn show_hotkeys(win: &SettingsWindow) {
+    for ((_, keys), label) in hotkey_rows().iter().zip(&win.ids.key_labels) {
+        win.surface.set_text(*label, keys);
+    }
+}
+
+/// The keyboard hook captured a chord for the action being changed.
+fn captured(win: &SettingsWindow) {
+    let Some((action, chord)) = hook::take_captured() else {
+        return;
+    };
+    let status = win.ids.keys_status;
+    let Some(chord) = chord else {
+        win.surface.set_text(status, tr(T::NoteHotkeys));
+        return;
+    };
+    let mut keys = hook::hotkeys();
+    match keys.set(action, chord) {
+        Ok(()) => {
+            hook::set_hotkeys(keys);
+            config::persist();
+            show_hotkeys(win);
+            win.surface.set_text(status, tr(T::ToastSaved));
+        }
+        Err(Refusal::Unusable) => win.surface.set_text(status, tr(T::HkUnusable)),
+        Err(Refusal::Taken(other)) => win
+            .surface
+            .set_text(status, &trf(T::HkTaken, &[("v", tr(action_label(other)))])),
+    }
+}
+
 /// Switch page as if its sidebar entry had been clicked.
 fn go_to(win: &SettingsWindow, page: u8) {
     for (i, nav) in win.ids.nav.iter().enumerate() {
@@ -821,9 +896,13 @@ fn go_to(win: &SettingsWindow, page: u8) {
 fn finish(win: &Rc<SettingsWindow>) {
     let my = win.surface.hwnd.0 as isize;
     let _ = OPEN.compare_exchange(my, 0, Ordering::AcqRel, Ordering::Acquire);
+    hook::cancel_capture();
     win.surface.detach();
     if let Some(h) = win.handler.borrow_mut().take() {
         nwg::unbind_event_handler(&h);
+    }
+    if let Some(h) = win.raw.borrow_mut().take() {
+        let _ = nwg::unbind_raw_event_handler(&h);
     }
     win.window.close();
 }
@@ -842,8 +921,8 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             }
         }
         PAGE_HOTKEYS => {
-            card(g, rect(X0, 68, CW, HOTKEYS.len() as i32 * 52 + 8));
-            for i in 1..HOTKEYS.len() as i32 {
+            card(g, rect(X0, 68, CW, Action::ALL.len() as i32 * 52 + 8));
+            for i in 1..Action::ALL.len() as i32 {
                 divider(hdc, X0 + 16, 74 + i * 52 - 1, CW - 32);
             }
         }

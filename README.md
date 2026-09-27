@@ -51,6 +51,9 @@ with a hotkey:
 | `Tab` or `Alt`+`CapsLock` | Accept the current Suggest hint (Tab only right after it appears; otherwise Tab is Tab) |
 | `Ctrl`+`Shift`+`CapsLock` | Undo the last correction (selection undo requires the same focused context) |
 | `Ctrl`+`Alt`+`CapsLock` | Enable/disable RightType immediately |
+| `Ctrl`+`Alt`+`Space` | Command palette: fix text, pause, off in this app, switch mode, settings |
+
+Every hotkey can be changed in Settings → Hotkeys (click **Change**, press the new keys).
 
 **Auto mode** — direction-aware, built for how each language is actually written:
 

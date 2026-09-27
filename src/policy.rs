@@ -74,6 +74,9 @@ pub fn detect_token(
     let has_latin = token.chars().any(|c| c.is_ascii_alphabetic());
     match layout {
         InputLayout::UsQwerty => {
+            if !has_latin && !has_thai {
+                return us_layout_letterless(token, th);
+            }
             if !has_latin || has_thai || english::is_compound(token.trim()) {
                 return None;
             }
@@ -89,6 +92,36 @@ pub fn detect_token(
                 .or_else(|| thai_layout_trailing_mark(token, th))
         }
     }
+}
+
+/// A Thai word typed on the English layout whose keys give no letters at all
+/// — `57'` is ถึง, `]'` is ลง, `.0` is ใจ, `[688]` is บุคคล. The whole token
+/// must read as one Thai dictionary word. Numbers stay numbers (`86` would
+/// read คุ, `5,` in a list จม), with or without punctuation around them, and a
+/// run of one repeated key (`''`, `--`) is left alone.
+fn us_layout_letterless(token: &str, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    // Punctuation that goes with numbers (`5,` `3.` `50%` `(12)` `$5`); `'`
+    // is not among them — on Kedmanee it is ง, and `57'` is ถึง.
+    const NUMBER_MARKS: &[char] = &[',', '.', '%', '(', ')', '$', '#', '!', '?', ':', ';', '"'];
+    let core = token.trim_matches(NUMBER_MARKS);
+    if !core.is_empty() && core.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let mut chars = token.chars();
+    let first = chars.next()?;
+    if chars.all(|c| c == first) {
+        return None;
+    }
+    let reading = crate::layout::en_to_th(token);
+    if reading.chars().count() < 2 || !th.contains(&reading) {
+        return None;
+    }
+    Some(Detection {
+        corrected: reading,
+        confidence: Confidence::High,
+        evidence: Evidence::ExactDictionary,
+    })
 }
 
 /// Punctuation the typist meant as ASCII even when it is typed next to a
@@ -447,6 +480,23 @@ mod tests {
         assert_eq!(fix("ก๊าซ"), None);
         // Not a known word before the ซ: no guess.
         assert_eq!(fix("กขฃซ"), None);
+    }
+
+    #[test]
+    fn thai_words_typed_without_letters_come_back_but_numbers_stay() {
+        let en = crate::dict::english();
+        let th = crate::dict::thai();
+        let fix = |t: &str| detect_token(t, InputLayout::UsQwerty, en, th).map(|d| d.corrected);
+        assert_eq!(fix("57'").as_deref(), Some("ถึง"));
+        assert_eq!(fix("]'").as_deref(), Some("ลง"));
+        assert_eq!(fix("0[").as_deref(), Some("จบ"));
+        assert_eq!(fix("=,").as_deref(), Some("ชม"));
+        assert_eq!(fix("[688]").as_deref(), Some("บุคคล"));
+        for keep in [
+            "86", "90", "469", "5,", "86,", "(97)", "''", "--", "3.14", "10:30", ":)",
+        ] {
+            assert_eq!(fix(keep), None, "{keep}");
+        }
     }
 
     #[test]

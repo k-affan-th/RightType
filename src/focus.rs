@@ -131,6 +131,60 @@ unsafe fn refresh_status() {
     FIELD_STATUS.store(status, Ordering::Relaxed);
 }
 
+/// The text cursor of the focused element, from UI Automation, in screen
+/// pixels — for apps that draw their own cursor and keep no system caret
+/// (many Chromium/Electron editors). Slow (a cross-process call), so never
+/// called from inside the keyboard hook.
+pub fn uia_caret_rect() -> Option<windows::Win32::Foundation::RECT> {
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationTextPattern, IUIAutomationTextRange, TextUnit_Character, UIA_TextPatternId,
+    };
+    fn bounds(range: &IUIAutomationTextRange) -> Option<windows::Win32::Foundation::RECT> {
+        unsafe {
+            let array = range.GetBoundingRectangles().ok()?;
+            if array.is_null() {
+                return None;
+            }
+            let count = (*array).rgsabound[0].cElements as usize;
+            let data = (*array).pvData as *const f64;
+            let rect = (count >= 4 && !data.is_null()).then(|| {
+                let (x, y, w, h) = (*data, *data.add(1), *data.add(2), *data.add(3));
+                windows::Win32::Foundation::RECT {
+                    left: x as i32,
+                    top: y as i32,
+                    right: (x + w.max(1.0)) as i32,
+                    bottom: (y + h) as i32,
+                }
+            });
+            let _ = windows::Win32::System::Ole::SafeArrayDestroy(array);
+            rect.filter(|r| r.bottom > r.top)
+        }
+    }
+    UIA.with(|u| {
+        let uia = u.borrow().clone()?;
+        unsafe {
+            let element = uia.GetFocusedElement().ok()?;
+            let pattern: IUIAutomationTextPattern =
+                element.GetCurrentPatternAs(UIA_TextPatternId).ok()?;
+            let selection = pattern.GetSelection().ok()?;
+            if selection.Length().ok()? < 1 {
+                return None;
+            }
+            let range = selection.GetElement(0).ok()?;
+            // An empty selection (just a caret) often has no rectangle: use
+            // the character after it, whose left edge is the caret.
+            bounds(&range).or_else(|| {
+                let one = range.Clone().ok()?;
+                one.ExpandToEnclosingUnit(TextUnit_Character).ok()?;
+                bounds(&one).map(|r| windows::Win32::Foundation::RECT {
+                    right: r.left + 1,
+                    ..r
+                })
+            })
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{status_is_protected, FIELD_PASSWORD, FIELD_SAFE, FIELD_UNKNOWN};

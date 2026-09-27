@@ -1310,6 +1310,21 @@ impl Surface {
         )
     }
 
+    /// One entry of a list of commands (the palette): a push button that
+    /// joins the previous entry's group, so the arrow keys move between them.
+    pub fn list_item(&self, s: &str, first: bool, rc: (i32, i32, i32, i32), bg: Rgb) -> u16 {
+        let group = if first { WS_GROUP } else { 0 };
+        self.create(
+            "BUTTON",
+            s,
+            BS_PUSHBUTTON | WS_TABSTOP | group,
+            rc,
+            Kind::Secondary,
+            bg,
+            0,
+        )
+    }
+
     /// A card row that is a check box.
     pub fn toggle(
         &self,
