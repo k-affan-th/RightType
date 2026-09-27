@@ -9,7 +9,7 @@
 | --- | --- |
 | Overall status | `IN_PROGRESS — 1.1.0 ready to build; signing + remaining E2E need the product owner` |
 | Active section | `S8 — RightType 2.0 (M7)` |
-| Next action | S8 M6 เสร็จ — M7 ปล่อย 2.0 |
+| Next action | S8 M7: merge แล้วรัน Release workflow (v2.0.0) |
 | Current release target | `v2.0.0` — แผนใน S8, ไอเดียทั้งหมดใน `IDEAS.md` (1.1.0 = 2026-09-26, 1.0.0 = 2026-08-31) |
 | Last updated | `2026-09-26` |
 | Last verified baseline | Linux: 102 tests (69 lib + 30 comprehensive + 3 release-metadata), clippy `-D warnings`, fmt, latency gate ~1.5 µs worst batch; `--features winos` cross-checked clean ด้วย clippy `-D warnings` บน target `x86_64-pc-windows-msvc` (ยังไม่ได้รัน test บน Windows ใน session นี้ — CI job `windows` ทำแทน) |
@@ -579,10 +579,10 @@ Deferred (tracked, not forgotten):
 - [x] Settings → ปุ่มลัด: ตัวเลือกแป้นไทย Kedmanee / Pattachote + หมายเหตุว่าอังกฤษ US/UK ตรวจเอง; แก้ชื่อปุ่มลัดที่ถูกปุ่มยาวบัง (ชื่อกับ keycap วาดใน control เดียว)
 
 ### M7 — ปล่อย 2.0
-- [ ] **winget manifest** ส่งจาก Release workflow ผู้ใช้อัปเดตได้ด้วย `winget upgrade`
-- [ ] **E2E บน Windows:** ทดลองรันใน `windows-latest` ถ้ารันไม่ได้ให้เป็น checklist ก่อนปล่อย
-  - รวมเคส HUD, predictive, palette, แป้นใหม่, sleep/resume, locked clipboard และ Electron
-- [ ] **ปล่อย 2.0.0:** README และภาพหน้าจอใหม่, CHANGELOG 2.0.0, bump version, รัน Release workflow
+- [x] **winget manifest** (`packaging/winget.ps1`, schema 1.6.0, `k-affan-th.RightType`, inno, scope user; ผ่าน JSON schema ทางการทั้ง 3 ไฟล์): Release workflow สร้างและแนบ `winget-manifests-<ver>.zip` ทุกครั้ง และส่ง PR เข้า winget-pkgs ด้วย wingetcreate **เมื่อมี secret `WINGET_TOKEN`** (ยังไม่มี → เจ้าของส่งเองครั้งแรก หรือเพิ่ม secret)
+- [x] **E2E บน Windows → checklist:** `windows-latest` ไม่มีแป้นไทย/UIA ของแอปจริง จึงเป็น RELEASE_CHECKLIST §3b (pause, per-app, flip หลายคำ, caret tag/UIA, Tab, Fix text, predictive, palette, hotkeys, 7 วัน, sync, ปัตตะโชติ, UK, DPI, winget) + `release_gaps.py chrome` (flip, tab) ที่มีอยู่
+- [x] **ปล่อย 2.0.0:** README (ภาพหน้าจอ 6 ภาพใน `docs/img/`, winget, แป้นที่รองรับ), CHANGELOG 2.0.0, version 2.0.0
+- [ ] รัน Release workflow หลัง merge
 
 ### เลื่อนออกจาก 2.0
 - **Microsoft Store (MSIX) และ code signing:** เจ้าของขอเว้นไว้ก่อน (2026-09-26) ผู้ใช้ยังเห็นกล่อง SmartScreen

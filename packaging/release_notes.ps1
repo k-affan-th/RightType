@@ -1,6 +1,6 @@
 # Write the GitHub Release description: how to install (Thai and English) and
 # this version's section of CHANGELOG.md.
-# Usage: pwsh -File packaging\release_notes.ps1 -Version 1.1.0 -Out release-notes.md
+# Usage: pwsh -File packaging\release_notes.ps1 -Version 2.0.0 -Out release-notes.md
 
 param(
     [Parameter(Mandatory)][string]$Version,
@@ -33,6 +33,8 @@ $notes = @"
 4. RightType จะอยู่ที่มุมขวาล่าง (ไอคอน **Aก**) คลิกเพื่อเปิดเมนูและหน้าตั้งค่า
 
 ไม่อยากติดตั้ง? ดาวน์โหลด ``$zip`` แตกไฟล์ แล้วเปิด ``righttype.exe`` ได้เลย
+มี winget? ``winget install k-affan-th.RightType`` แล้วอัปเดตด้วย ``winget upgrade k-affan-th.RightType``
+(ใช้ได้เมื่อ winget รับแพ็กเกจแล้ว)
 ถอนการติดตั้ง: Settings → Apps → RightType
 
 ## Install
@@ -44,6 +46,8 @@ $notes = @"
 4. RightType lives in the notification area (the **Aก** icon); click it for the menu and Settings.
 
 No installer wanted? Download ``$zip``, extract it and run ``righttype.exe``.
+With winget: ``winget install k-affan-th.RightType``, and later ``winget upgrade k-affan-th.RightType``
+(once winget has accepted the package).
 Uninstall: Settings → Apps → RightType.
 
 ## What's new

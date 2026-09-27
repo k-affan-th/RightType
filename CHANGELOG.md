@@ -2,7 +2,15 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — 2.0 in progress
+## [2.0.0] — 2026-09-27
+
+RightType 2.0 shows what it does where you are typing, lets you steer it from
+the keyboard, and works with more keyboards. The highlights:
+a `TH` / `EN` tag and Suggest hints at the text cursor (Tab takes a hint),
+Pause, a mode per app, flipping back several words, a Fix text window, a
+command palette, hotkeys you can change, Thai Pattachote and UK English, an
+opt-in 7-day chart and learned-words sync folder, and install/upgrade through
+winget. As always, it never goes online and never saves what you type.
 
 ### Fixed
 
@@ -109,6 +117,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   benchmark word would be changed, or recall drops below its floor.
 - CI builds the installer on every PR, so a broken installer script is caught
   before release.
+- **winget**: each release carries winget manifests
+  (`winget-manifests-<version>.zip`, package `k-affan-th.RightType`), and the
+  Release workflow submits them to winget when a `WINGET_TOKEN` secret is set.
+- Release checklist: a 2.0 section of checks that need a real Windows desktop.
 
 ## [1.1.0] — 2026-09-26
 

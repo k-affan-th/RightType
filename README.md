@@ -21,6 +21,12 @@ RightLang is excellent but unmaintained, and its design causes real bugs:
 
 ## How it works
 
+| Settings | Apps: a mode per app | Statistics |
+| --- | --- | --- |
+| ![Settings, General page](docs/img/settings.png) | ![Settings, Apps page in dark mode](docs/img/apps-dark.png) | ![Statistics with the last 7 days](docs/img/stats.png) |
+| **Fix text** (Thai interface) | **Command palette** | **Hotkeys you can change** (Thai interface) |
+| ![Fix text window](docs/img/fix-text-th.png) | ![Command palette](docs/img/palette-dark.png) | ![Settings, Hotkeys page](docs/img/hotkeys-th.png) |
+
 RightType lives in the **system tray** (no window, no console). Click the tray icon
 (left or right) for: **Enable**, **Pause** (10 minutes, 30 minutes or an hour —
 it switches itself back on), **Manual/Auto/Suggest** mode, **In this app** (a mode
@@ -80,10 +86,12 @@ Every hotkey can be changed in Settings → Hotkeys (click **Change**, press the
   miss. It deliberately does not destructively convert mid-word runs that aren't
   fully-known Thai — those stay available to Manual and Suggest.
 
-**Suggest mode** uses the same completed-token policy as Auto's boundary path,
-but only displays a hint showing the suggested text. It changes text only after
-`Alt`+`CapsLock`, and discards the hint when focus, layout, mode, or typing
-context changes.
+**Suggest mode** uses the same rules as Auto but only shows the fix next to the
+text cursor — as soon as the keys typed so far clearly spell it, not only at the
+space. It changes text only when you take it (`Tab` right after it appears, or
+`Alt`+`CapsLock`), and drops the hint when focus, layout, mode, or typing
+context changes. A small `TH` / `EN` tag also flashes at the cursor whenever
+RightType switches the language.
 
 **Learning** (opt-in, "Learn new words") — an English word you type three times is
 remembered, and so is any word you *flip back* after RightType changed it
@@ -121,14 +129,17 @@ A keyboard tool sees everything you type. RightType is designed so secrets never
   Password-like/long ASCII can be wrong-layout Thai;
   it is eligible only when the complete conversion is fully-known Thai, and it is never
   sent to the learning/persistence path.
-- **Minimal in-memory footprint** — it holds only the current word, **zeroized on every
-  word boundary**, and runs **non-elevated**.
+- **Minimal in-memory footprint** — it holds only the word in progress and, for
+  flipping back, the last few words (at most 8, dropped on a click, arrow key or
+  window change); all are **zeroized** when dropped, and it runs **non-elevated**.
 - **No telemetry, zero network code** — verifiable in `Cargo.lock`; there is no HTTP,
   update, or analytics crate anywhere in the dependency tree.
 - **Nothing typed is written to disk** — the only files are app settings
-  (`%APPDATA%\RightType\config.toml`) and, *if you opt into* "Learn new words", the
-  learned words themselves (`learned.txt`). Learning is **off by default** and never
-  runs in the sensitive contexts above.
+  (`%APPDATA%\RightType\config.toml`) and, only if you turn them on: the learned
+  words (`learned.txt`, "Learn new words"), two numbers per day for the 7-day
+  chart (`stats.toml`) and per-field word counts for guessing a field's language
+  (`contexts.toml`). All are **off by default**, and learning never runs in the
+  sensitive contexts above.
 
 The detailed data lifetimes, controls, and known residual risks are documented in
 [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md). In particular, ordinary English
@@ -148,15 +159,20 @@ rather than a blanket ban on every individual BIP39 word.
 
 ถอนการติดตั้ง: Settings → Apps → RightType
 
+มี winget? `winget install k-affan-th.RightType` แล้วอัปเดตด้วย `winget upgrade k-affan-th.RightType`
+
 ### Install (no building needed)
 
+**winget:** `winget install k-affan-th.RightType`, later `winget upgrade k-affan-th.RightType`
+(once winget has accepted the release).
+
 **Installer (recommended, per-user, no admin):** download
-`RightType-1.1.0-setup.exe` from the
+`RightType-2.0.0-setup.exe` from the
 [latest release](https://github.com/k-affan-th/RightType/releases/latest) and run it.
 It installs RightType, offers a desktop shortcut and start-at-login, and registers
 a normal Windows uninstaller (Settings -> Apps -> RightType).
 
-**Portable zip:** extract `RightType-1.1.0-x64.zip` and run `righttype.exe` where it
+**Portable zip:** extract `RightType-2.0.0-x64.zip` and run `righttype.exe` where it
 sits — or install it per-user from the extracted folder:
 
 ```powershell
@@ -170,10 +186,10 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -Autostart
 - Verify what you downloaded against `SHA256.txt` before running it:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\RightType-1.1.0-setup.exe
+Get-FileHash -Algorithm SHA256 .\RightType-2.0.0-setup.exe
 ```
 - Unsigned builds show a SmartScreen prompt — "More info → Run anyway".
-  Signed releases will ship under Azure Trusted Signing in v1.x.
+  Code signing is planned for a later release.
 
 ## For developers
 

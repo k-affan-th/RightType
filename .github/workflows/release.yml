@@ -4,7 +4,7 @@ name: Release
 # publishes them as a GitHub Release, so nobody has to build RightType to use it.
 #
 # Two ways to start it:
-# - push a tag `v<version>` matching Cargo.toml (`git tag v1.1.0 && git push origin v1.1.0`);
+# - push a tag `v<version>` matching Cargo.toml (`git tag v2.0.0 && git push origin v2.0.0`);
 # - Actions → Release → "Run workflow" on main: it tags the commit itself.
 
 on:
@@ -54,6 +54,13 @@ jobs:
       shell: pwsh
       run: ./packaging/build_release.ps1
 
+    - name: winget manifests
+      shell: pwsh
+      run: |
+        $ver = "${{ steps.version.outputs.version }}"
+        ./packaging/winget.ps1 -Version $ver
+        Compress-Archive -Path "dist/winget/$ver/*" -DestinationPath "dist/winget-manifests-$ver.zip"
+
     - name: Release notes
       shell: pwsh
       run: ./packaging/release_notes.ps1 -Version "${{ steps.version.outputs.version }}" -Out release-notes.md
@@ -67,10 +74,33 @@ jobs:
         $files = @(
           "dist/RightType-$ver-setup.exe",
           "dist/RightType-$ver-x64.zip",
-          "dist/SHA256.txt"
+          "dist/SHA256.txt",
+          "dist/winget-manifests-$ver.zip"
         )
         foreach ($f in $files) { if (-not (Test-Path $f)) { throw "missing $f" } }
         gh release create "v$ver" @files `
           --title "RightType $ver" `
           --notes-file release-notes.md `
           --target "$env:GITHUB_SHA"
+
+    # A pull request to microsoft/winget-pkgs, so `winget install righttype`
+    # and `winget upgrade` pick up this version. Needs a WINGET_TOKEN secret
+    # (a GitHub token that can fork and open PRs); without one, submit the
+    # attached winget-manifests zip by hand (see packaging/winget.ps1).
+    - name: Check for a winget token
+      id: winget
+      shell: pwsh
+      env:
+        WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      run: |
+        "submit=$(-not [string]::IsNullOrEmpty($env:WINGET_TOKEN))".ToLower() >> $env:GITHUB_OUTPUT
+
+    - name: Submit to winget
+      if: steps.winget.outputs.submit == 'true'
+      shell: pwsh
+      env:
+        WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      run: |
+        $ver = "${{ steps.version.outputs.version }}"
+        Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+        ./wingetcreate.exe submit --token $env:WINGET_TOKEN "dist/winget/$ver"
