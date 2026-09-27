@@ -54,17 +54,20 @@ impl Daily {
 
     pub fn record_auto(&mut self, today: u32) {
         self.days.entry(today).or_default().auto += 1;
-        self.prune(today);
+        let _ = self.prune(today);
     }
 
     pub fn record_manual(&mut self, today: u32, n: u64) {
         self.days.entry(today).or_default().manual += n;
-        self.prune(today);
+        let _ = self.prune(today);
     }
 
-    fn prune(&mut self, today: u32) {
+    /// Drop days older than [`KEEP_DAYS`]. Returns whether any were dropped.
+    pub fn prune(&mut self, today: u32) -> bool {
+        let before = self.days.len();
         let oldest = today.saturating_sub(KEEP_DAYS - 1);
         self.days.retain(|&d, _| d >= oldest);
+        self.days.len() != before
     }
 
     /// The 7 days ending with `today`, oldest first.
@@ -83,7 +86,7 @@ impl Daily {
         let mut daily = Self {
             days: entries.into_iter().collect(),
         };
-        daily.prune(today);
+        let _ = daily.prune(today);
         daily
     }
 }
@@ -126,5 +129,14 @@ mod tests {
             today,
         );
         assert_eq!(daily.entries().count(), 1);
+    }
+
+    #[test]
+    fn pruning_reports_whether_anything_was_dropped() {
+        let today = day_number(2026, 9, 27);
+        let mut daily = Daily::from_entries([(today, Day::default())], today);
+        assert!(!daily.prune(today));
+        assert!(daily.prune(today + KEEP_DAYS));
+        assert_eq!(daily.entries().count(), 0);
     }
 }

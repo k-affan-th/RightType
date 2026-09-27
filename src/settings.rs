@@ -663,13 +663,18 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         } else {
             None
         };
-        let n = learn::set_folder(folder);
-        config::persist();
-        s.set_text(ids.learned_list, &learn::list().join("\r\n"));
-        s.set_text(
-            ids.learned_status,
-            &trf(T::LearnedMoved, &[("n", &n.to_string())]),
-        );
+        match learn::set_folder(folder) {
+            Some(n) => {
+                config::persist();
+                s.set_text(ids.learned_list, &learn::list().join("\r\n"));
+                s.set_text(
+                    ids.learned_status,
+                    &trf(T::LearnedMoved, &[("n", &n.to_string())]),
+                );
+            }
+            // The folder could not be written: nothing changed.
+            None => s.set_text(ids.learned_status, tr(T::ErrFile)),
+        }
     } else if id == ids.import_learned {
         import_learned(win);
     } else if id == ids.export_learned {

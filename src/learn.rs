@@ -105,12 +105,28 @@ pub fn start_with_folder(folder: Option<PathBuf>) {
 
 /// Move the list to `folder` (or back to this PC with `None`): the words
 /// here and the words already there are merged, written there, and used.
-/// Returns how many words the list has afterwards.
-pub fn set_folder(folder: Option<PathBuf>) -> usize {
-    let mut words = list();
+/// Returns how many words the list has afterwards, or `None` — with nothing
+/// changed — when the destination cannot be written (read-only, offline).
+pub fn set_folder(folder: Option<PathBuf>) -> Option<usize> {
+    let previous = FOLDER.lock().unwrap().clone();
     *FOLDER.lock().unwrap() = folder;
+    let writable = learned_path().is_some_and(|p| {
+        if let Some(dir) = p.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(p)
+            .is_ok()
+    });
+    if !writable {
+        *FOLDER.lock().unwrap() = previous;
+        return None;
+    }
+    let mut words = list();
     words.extend(read_file());
-    replace(&words).kept
+    Some(replace(&words).kept)
 }
 
 /// The words in the current file (unchecked lines; `replace` checks them).
@@ -373,6 +389,11 @@ fn persist_word(word: &str) {
     let Some(p) = learned_path() else {
         return;
     };
+    // Another PC may have changed a synced list since we last looked: after
+    // appending, load the whole file instead of just marking it seen, or its
+    // words would be missed until the next outside change.
+    let modified = std::fs::metadata(&p).and_then(|m| m.modified()).ok();
+    let unseen = FOLDER.lock().unwrap().is_some() && modified != *SEEN.lock().unwrap();
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -384,7 +405,11 @@ fn persist_word(word: &str) {
     {
         let _ = writeln!(f, "{word}");
     }
-    note_seen();
+    if unseen {
+        reload();
+    } else {
+        note_seen();
+    }
 }
 
 #[cfg(test)]

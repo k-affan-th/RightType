@@ -100,7 +100,15 @@ pub fn set_keep_daily(on: bool) {
             .days
             .into_iter()
             .filter_map(|(k, [auto, manual])| Some((k.parse::<u32>().ok()?, Day { auto, manual })));
-        *DAILY.lock().unwrap() = Some(Daily::from_entries(entries, today()));
+        let entries: Vec<(u32, Day)> = entries.collect();
+        let loaded = entries.len();
+        let daily = Daily::from_entries(entries, today());
+        // Expired days were dropped on load: write that back, so the file
+        // never holds more than the promised 56 days.
+        if daily.entries().count() != loaded {
+            DIRTY.store(true, Ordering::Relaxed);
+        }
+        *DAILY.lock().unwrap() = Some(daily);
     } else {
         *DAILY.lock().unwrap() = None;
         DIRTY.store(false, Ordering::Relaxed);
@@ -137,6 +145,12 @@ pub fn save() {
 pub fn tick() {
     if TICKS.fetch_add(1, Ordering::Relaxed) + 1 >= 40 {
         TICKS.store(0, Ordering::Relaxed);
+        // A PC left running for weeks still ages out old days.
+        if let Some(daily) = DAILY.lock().unwrap().as_mut() {
+            if daily.prune(today()) {
+                DIRTY.store(true, Ordering::Relaxed);
+            }
+        }
         save();
     }
 }
