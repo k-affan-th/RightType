@@ -17,6 +17,11 @@
 //!
 //! Time is estimated from counted actions with the constants below; the
 //! pipeline's own processing time is measured.
+//!
+//! With `--check` it is part of CI's quality gate (RightType 2.0, M0): it
+//! exits non-zero if RightType changes a correctly typed word in any run, or
+//! if a typist who never switches layout gets fewer words fixed than
+//! [`MIN_AUTO_FIXED`].
 
 use std::time::{Duration, Instant};
 
@@ -27,6 +32,10 @@ use righttype::sim::Engine;
 
 const ARTICLE: &str = include_str!("data/academic_th_en.txt");
 const RUNS: u64 = 50;
+
+/// Wrong-layout words RightType must fix by itself (mean over runs) when the
+/// typist never switches: 127 of 131 since the bundled tech terms (was 118).
+const MIN_AUTO_FIXED: f64 = 124.0;
 
 /// Assumed human timings (seconds). 200 keystrokes per minute is a typical
 /// office typist (about 40 WPM).
@@ -311,6 +320,8 @@ fn mean(v: &[f64]) -> f64 {
 
 fn main() {
     let out = std::env::args().skip_while(|a| a != "--out").nth(1);
+    let check = std::env::args().any(|a| a == "--check");
+    let mut failures: Vec<String> = Vec::new();
     righttype::english::warm();
     let chars = ARTICLE.trim_end().chars().count();
     let words = ARTICLE.split_whitespace().count();
@@ -361,6 +372,20 @@ fn main() {
             "{}: final text differs",
             s.name
         );
+        let false_changes: usize = outcomes.iter().map(|o| o.false_changes).sum();
+        if false_changes > 0 {
+            failures.push(format!(
+                "{}: {false_changes} correctly typed words changed",
+                s.name
+            ));
+        }
+        if s.righttype && s.forget >= 1.0 && f(&|o| o.auto_fixed as f64) < MIN_AUTO_FIXED {
+            failures.push(format!(
+                "{}: {:.1} words fixed automatically (floor {MIN_AUTO_FIXED})",
+                s.name,
+                f(&|o| o.auto_fixed as f64)
+            ));
+        }
         push(format!(
             "| {} | {:.1} | {:.1} | {:.1} of {:.1} | {:.1} | {:.0} | {:.0} s | {:.0} | {:+.1}% |",
             s.name,
@@ -429,5 +454,15 @@ fn main() {
     if let Some(path) = out {
         std::fs::write(&path, report).expect("writing report");
         eprintln!("wrote {path}");
+    }
+    if check {
+        if failures.is_empty() {
+            println!("quality gate: PASS");
+        } else {
+            for f in &failures {
+                eprintln!("quality gate: FAIL — {f}");
+            }
+            std::process::exit(1);
+        }
     }
 }

@@ -15,6 +15,20 @@
 //!   written (no spaces).
 //! - English words, every one in the bundled dictionary, typed on the English
 //!   layout, alone and with `:`, `?`, `"`, `)` after them.
+//!
+//! With `--check` it is CI's quality gate (RightType 2.0, M0): it exits
+//! non-zero when a dictionary word or phrase typed correctly is changed, when
+//! unknown-Thai changes exceed their budget, or when recall on wrong-layout
+//! dictionary words drops below its floor. Raise a floor when recall
+//! improves; lowering one needs a reason in `docs/TYPING_BENCHMARK.md`.
+
+/// Unknown Thai strings (one random letter changed) that may be changed:
+/// 90 of 50,800 at the time of writing (0.18 %).
+const MAX_UNKNOWN_THAI_CHANGED: usize = 120;
+/// Thai dictionary words typed on the English layout that must come back.
+const MIN_THAI_RECALL: usize = 60_400;
+/// English dictionary words typed on the Thai layout that must come back.
+const MIN_ENGLISH_RECALL: usize = 86_600;
 
 use righttype::dict;
 use righttype::policy::{detect_token, InputLayout};
@@ -33,6 +47,8 @@ impl Rng {
 }
 
 fn main() {
+    let check = std::env::args().any(|a| a == "--check");
+    let mut failures: Vec<String> = Vec::new();
     righttype::english::warm();
     let en = dict::english();
     let th = dict::thai();
@@ -79,6 +95,12 @@ fn main() {
         total,
         &hits,
     );
+    if !hits.is_empty() {
+        failures.push(format!(
+            "{} Thai dictionary words changed (must be 0)",
+            hits.len()
+        ));
+    }
 
     // Unknown Thai words.
     let letters: Vec<char> = "กขคงจฉชซญดตถทธนบปผพฟภมยรลวศษสหอฮะาำิีึืุูเแโใไ่้๊๋็์ั".chars().collect();
@@ -105,6 +127,12 @@ fn main() {
         total,
         &hits,
     );
+    if hits.len() > MAX_UNKNOWN_THAI_CHANGED {
+        failures.push(format!(
+            "{} unknown Thai words changed (budget {MAX_UNKNOWN_THAI_CHANGED})",
+            hits.len()
+        ));
+    }
 
     // Thai phrases.
     let mut hits = Vec::new();
@@ -119,6 +147,9 @@ fn main() {
         }
     }
     report("Thai phrases (2–4 words) on the Thai layout", total, &hits);
+    if !hits.is_empty() {
+        failures.push(format!("{} Thai phrases changed (must be 0)", hits.len()));
+    }
 
     // English words on the English layout.
     let mut hits = Vec::new();
@@ -142,6 +173,9 @@ fn main() {
         total,
         &hits,
     );
+    if !hits.is_empty() {
+        failures.push(format!("{} English words changed (must be 0)", hits.len()));
+    }
 
     // Recall: the same dictionaries typed on the *wrong* layout.
     let mut fixed = 0;
@@ -155,6 +189,9 @@ fn main() {
         "Recall: Thai dictionary words typed on the English layout, fixed: {fixed} of {}",
         thai_words.len()
     );
+    if fixed < MIN_THAI_RECALL {
+        failures.push(format!("Thai recall {fixed} below floor {MIN_THAI_RECALL}"));
+    }
     let mut fixed = 0;
     for w in &english_words {
         let typed = righttype::layout::en_to_th(w);
@@ -166,7 +203,22 @@ fn main() {
         "Recall: English dictionary words typed on the Thai layout, fixed: {fixed} of {}",
         english_words.len()
     );
+    if fixed < MIN_ENGLISH_RECALL {
+        failures.push(format!(
+            "English recall {fixed} below floor {MIN_ENGLISH_RECALL}"
+        ));
+    }
     if let Some(path) = dump {
         std::fs::write(path, dumped).expect("writing dump");
+    }
+    if check {
+        if failures.is_empty() {
+            println!("quality gate: PASS");
+        } else {
+            for f in &failures {
+                eprintln!("quality gate: FAIL — {f}");
+            }
+            std::process::exit(1);
+        }
     }
 }

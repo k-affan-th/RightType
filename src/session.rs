@@ -41,8 +41,38 @@ const WTS_SESSION_UNLOCK: usize = 0x8;
 const WATCHDOG_TIMER_ID: usize = 1;
 const WATCHDOG_INTERVAL_MS: u32 = 1500;
 
-/// Set by a resume/unlock event; the next timer tick reinstalls and clears it.
+/// Set by a resume/unlock event or a failed reinstall; the next timer tick
+/// reinstalls and clears it.
 static NEEDS_REINSTALL: AtomicBool = AtomicBool::new(false);
+
+/// Whether the last hook (re)installation succeeded. While it is false the
+/// tray shows that RightType is not working, and every timer tick retries.
+static HEALTHY: AtomicBool = AtomicBool::new(true);
+
+/// Is the keyboard hook installed? `false` after a reinstall failed, until one
+/// succeeds.
+pub fn is_healthy() -> bool {
+    HEALTHY.load(Ordering::Relaxed)
+}
+
+/// Reinstall the hook and tell the user when that starts or stops working.
+/// A failure is retried on every timer tick (1.5 s) until it succeeds.
+unsafe fn reinstall() {
+    use righttype::i18n::{tr, T};
+    match hook::reinstall() {
+        Ok(()) => {
+            if !HEALTHY.swap(true, Ordering::Relaxed) {
+                crate::overlay::show(tr(T::ToastHookBack));
+            }
+        }
+        Err(_) => {
+            if HEALTHY.swap(false, Ordering::Relaxed) {
+                crate::overlay::show(tr(T::ToastHookLost));
+            }
+            NEEDS_REINSTALL.store(true, Ordering::Relaxed);
+        }
+    }
+}
 
 /// How long the hook may stay silent while the user is giving input before it
 /// is presumed evicted.
@@ -79,7 +109,7 @@ unsafe fn check_liveness() {
     ) {
         crate::hook::e2e_trace("session: hook silent during input, reinstall".to_string());
         LAST_LIVENESS_REINSTALL.store(now, Ordering::Relaxed);
-        let _ = hook::reinstall();
+        reinstall();
     }
 }
 
@@ -112,19 +142,19 @@ pub unsafe fn on_message(msg: u32, wparam: usize) {
     match msg {
         WM_TIMER if wparam == WATCHDOG_TIMER_ID => {
             if NEEDS_REINSTALL.swap(false, Ordering::Relaxed) {
-                let _ = hook::reinstall();
+                reinstall();
             } else {
                 check_liveness();
             }
         }
         WM_POWERBROADCAST if wparam == PBT_APMRESUMEAUTOMATIC || wparam == PBT_APMRESUMESUSPEND => {
             crate::hook::e2e_trace(format!("session: power resume ({wparam:#x}) reinstall"));
-            let _ = hook::reinstall();
+            reinstall();
             NEEDS_REINSTALL.store(true, Ordering::Relaxed);
         }
         WM_WTSSESSION_CHANGE if wparam == WTS_SESSION_UNLOCK => {
             crate::hook::e2e_trace("session: unlock reinstall".to_string());
-            let _ = hook::reinstall();
+            reinstall();
             NEEDS_REINSTALL.store(true, Ordering::Relaxed);
         }
         _ => {}

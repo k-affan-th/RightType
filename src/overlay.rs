@@ -1,11 +1,16 @@
-//! Tiny, modern status toast — Windows only.
+//! The overlay: a small floating pill for status and hints — Windows only.
 //!
-//! Deliberately minimal: it flashes a small dark pill in the **bottom-right
-//! corner** only on rare, deliberate state changes — switching Auto/Manual mode
-//! (via the Ctrl+CapsLock shortcut or the tray) and enable/disable — then fades.
-//! It does NOT announce auto layout switches (too frequent — Windows' own language
-//! indicator already shows those) nor individual corrections (you see the word
-//! change). Custom-painted (GDI), borderless, and it never steals focus.
+//! It flashes a dark pill, then fades. [`show`] puts it in the **bottom-right
+//! corner of the monitor you are working on** (the one holding the foreground
+//! window), for rare, deliberate state changes — mode, on/off, errors — and the
+//! Suggest hint. [`show_at`] puts it next to a rectangle instead (the text
+//! cursor, for the caret HUD). It does NOT announce auto layout switches (too
+//! frequent — Windows' own language indicator already shows those) nor
+//! individual corrections (you see the word change).
+//!
+//! Custom-painted (GDI), borderless, never takes focus, and sized for the DPI
+//! of the monitor it appears on. What it shows is wiped from memory when it
+//! hides: a Suggest hint is typed content.
 
 use std::cell::RefCell;
 use std::ffi::c_void;
@@ -13,30 +18,37 @@ use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use native_windows_gui as nwg;
-use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, RECT, WPARAM};
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect,
     FrameRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor, SetWindowRgn, DT_CENTER,
-    DT_SINGLELINE, DT_VCENTER, HGDIOBJ, PAINTSTRUCT, TRANSPARENT,
+    DT_SINGLELINE, DT_VCENTER, HGDIOBJ, HMONITOR, PAINTSTRUCT, TRANSPARENT,
+};
+use windows::Win32::Graphics::Gdi::{
+    MonitorFromPoint, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
 };
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClientRect, KillTimer, PostMessageW, SetLayeredWindowAttributes, SetTimer, SetWindowPos,
-    ShowWindow, SystemParametersInfoW, HWND_TOPMOST, LWA_ALPHA, SPI_GETWORKAREA, SWP_NOACTIVATE,
-    SWP_SHOWWINDOW, SW_HIDE, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    GetClientRect, GetForegroundWindow, KillTimer, PostMessageW, SetLayeredWindowAttributes,
+    SetTimer, SetWindowPos, ShowWindow, HWND_TOPMOST, LWA_ALPHA, SWP_NOACTIVATE, SWP_SHOWWINDOW,
+    SW_HIDE,
 };
 use zeroize::Zeroize;
 
-use crate::ui::px;
+use crate::ui::{px, px_at};
 
 const TIMER_ID: usize = 7;
 const FADE_TIMER_ID: usize = 8;
 const SHOW_MS_BASE: u32 = 900;
 const FADE_STEP_MS: u32 = 30;
-// Sizes in 96-DPI units; scaled with `ui::px` when used.
+// Sizes in 96-DPI units; scaled for the target monitor when shown.
 const W: i32 = 116;
 const H: i32 = 34;
 const MARGIN: i32 = 12;
+/// Gap between an anchor rectangle (the caret) and the pill.
+const GAP: i32 = 6;
+const FONT_SIZE: i32 = 15;
+const FONT_WEIGHT: i32 = 600;
 const WM_PAINT: u32 = 0x000F;
 const WM_ERASEBKGND: u32 = 0x0014;
 const WM_TIMER: u32 = 0x0113;
@@ -45,8 +57,23 @@ const WM_HIDE_TOAST: u32 = 0x8000 + 0x526;
 
 static TOAST_HWND: AtomicIsize = AtomicIsize::new(0);
 static UI_THREAD_ID: AtomicU32 = AtomicU32::new(0);
-static PENDING_TEXT: Mutex<Option<String>> = Mutex::new(None);
-static ALPHA: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(255);
+static PENDING: Mutex<Option<(String, Anchor)>> = Mutex::new(None);
+static ALPHA: AtomicU32 = AtomicU32::new(255);
+/// The DPI of the monitor the pill is on, for painting.
+static DPI: AtomicU32 = AtomicU32::new(96);
+
+/// Where the pill appears.
+#[derive(Clone, Copy, Debug)]
+pub enum Anchor {
+    /// Bottom-right corner of the work area of the monitor holding the
+    /// foreground window.
+    Corner,
+    /// Just below `rect` (screen pixels; e.g. the text cursor), or just above
+    /// it when there is no room below; kept inside that monitor's work area.
+    // Used by the caret HUD (2.0 M1); until then only by the debug harness.
+    #[cfg_attr(not(debug_assertions), allow(dead_code))]
+    Near(RECT),
+}
 
 /// `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` — float above everything,
 /// stay off the taskbar, and (crucially) never take focus from what's being typed.
@@ -60,6 +87,13 @@ struct Toast {
 thread_local! {
     static TOAST: RefCell<Option<Toast>> = const { RefCell::new(None) };
     static TEXT: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// Record the calling thread as the one that owns the overlay window. Call once
+/// from the UI thread at startup: [`show`] creates the window lazily only on
+/// this thread, and posts to it from any other.
+pub fn register_ui_thread() {
+    UI_THREAD_ID.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
 }
 
 /// Create the toast window lazily on the UI thread. Returns true when the
@@ -134,8 +168,8 @@ fn ensure_created() -> bool {
                 Some(0)
             }
             WM_SHOW_TOAST => {
-                if let Some(mut text) = PENDING_TEXT.lock().unwrap().take() {
-                    unsafe { show_on_ui(hwnd, &text) };
+                if let Some((mut text, anchor)) = PENDING.lock().unwrap().take() {
+                    unsafe { show_on_ui(hwnd, &text, anchor) };
                     text.zeroize();
                 }
                 Some(0)
@@ -157,9 +191,14 @@ fn ensure_created() -> bool {
     true
 }
 
-/// Flash `text` briefly in the bottom-right corner. Calls from workers are posted
-/// back to the UI thread that owns the toast window.
+/// Flash `text` briefly in the bottom-right corner of the monitor in use.
+/// Calls from workers are posted back to the UI thread that owns the window.
 pub fn show(text: &str) {
+    show_at(text, Anchor::Corner);
+}
+
+/// Flash `text` briefly at `anchor`.
+pub fn show_at(text: &str, anchor: Anchor) {
     if TOAST_HWND.load(Ordering::Acquire) == 0 {
         if unsafe { GetCurrentThreadId() } != UI_THREAD_ID.load(Ordering::Acquire) {
             return; // worker thread + no window yet (e.g. fullscreen) — skip
@@ -171,9 +210,11 @@ pub fn show(text: &str) {
     let raw = TOAST_HWND.load(Ordering::Acquire);
     let hwnd = HWND(raw as *mut c_void);
     if unsafe { GetCurrentThreadId() } == UI_THREAD_ID.load(Ordering::Acquire) {
-        unsafe { show_on_ui(hwnd, text) };
+        unsafe { show_on_ui(hwnd, text, anchor) };
     } else {
-        *PENDING_TEXT.lock().unwrap() = Some(text.to_string());
+        if let Some((mut old, _)) = PENDING.lock().unwrap().replace((text.to_string(), anchor)) {
+            old.zeroize();
+        }
         unsafe {
             let _ = PostMessageW(hwnd, WM_SHOW_TOAST, WPARAM(0), LPARAM(0));
         }
@@ -183,7 +224,7 @@ pub fn show(text: &str) {
 /// Hide the toast now and wipe its text — used when what it shows may be
 /// sensitive (a Suggest hint made just before a seed phrase was recognised).
 pub fn dismiss() {
-    if let Some(mut text) = PENDING_TEXT.lock().unwrap().take() {
+    if let Some((mut text, _)) = PENDING.lock().unwrap().take() {
         text.zeroize();
     }
     let raw = TOAST_HWND.load(Ordering::Acquire);
@@ -207,7 +248,7 @@ unsafe fn dismiss_on_ui(hwnd: HWND) {
     let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
 }
 
-unsafe fn show_on_ui(hwnd: HWND, text: &str) {
+unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor) {
     TEXT.with(|t| {
         let mut t = t.borrow_mut();
         t.zeroize();
@@ -217,9 +258,22 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str) {
     // original mode labels) but stays a compact pill.
     let units: Vec<u16> = text.encode_utf16().collect();
     // Measured, not estimated: Thai tone marks and vowels take no width.
-    let w = (crate::ui::text_width(text, 15, 600) + px(32)).clamp(px(W), px(520));
-    let h = px(H);
-    let (x, y) = bottom_right(w);
+    let monitor = match anchor {
+        Anchor::Corner => MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTOPRIMARY),
+        Anchor::Near(rc) => MonitorFromPoint(
+            POINT {
+                x: rc.left,
+                y: rc.bottom,
+            },
+            MONITOR_DEFAULTTONEAREST,
+        ),
+    };
+    let dpi = crate::ui::monitor_dpi(monitor);
+    DPI.store(dpi, Ordering::Relaxed);
+    let w = (crate::ui::text_width_at(text, FONT_SIZE, FONT_WEIGHT, dpi) + px_at(32, dpi))
+        .clamp(px_at(W, dpi), px_at(520, dpi));
+    let h = px_at(H, dpi);
+    let (x, y) = place(monitor, anchor, w, h, dpi);
     let _ = SetWindowPos(
         hwnd,
         HWND_TOPMOST,
@@ -240,18 +294,27 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str) {
     let _ = InvalidateRect(hwnd, None, true);
 }
 
-/// Bottom-right of the work area (so it sits above the taskbar, wherever it is).
-unsafe fn bottom_right(width: i32) -> (i32, i32) {
-    let mut wa = RECT::default();
-    let _ = SystemParametersInfoW(
-        SPI_GETWORKAREA,
-        0,
-        Some(&mut wa as *mut RECT as *mut c_void),
-        SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
-    );
+/// Top-left of a `w`×`h` pill for `anchor`, inside `monitor`'s work area (so
+/// it never sits under the taskbar, wherever that is).
+fn place(monitor: HMONITOR, anchor: Anchor, w: i32, h: i32, dpi: u32) -> (i32, i32) {
+    let wa = crate::ui::work_area(monitor);
+    let margin = px_at(MARGIN, dpi);
+    let (x, y) = match anchor {
+        Anchor::Corner => (wa.right - w - margin, wa.bottom - h - margin),
+        Anchor::Near(rc) => {
+            let gap = px_at(GAP, dpi);
+            let below = rc.bottom + gap;
+            let y = if below + h <= wa.bottom {
+                below
+            } else {
+                rc.top - gap - h
+            };
+            (rc.left, y)
+        }
+    };
     (
-        wa.right - width - px(MARGIN),
-        wa.bottom - px(H) - px(MARGIN),
+        x.clamp(wa.left, (wa.right - w).max(wa.left)),
+        y.clamp(wa.top, (wa.bottom - h).max(wa.top)),
     )
 }
 
@@ -273,7 +336,7 @@ unsafe fn paint(hwnd: HWND) {
     // White, centred text in the interface typeface.
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, COLORREF(0x00FF_FFFF));
-    let font = crate::ui::make_font(15, 600);
+    let font = crate::ui::make_font_at(FONT_SIZE, FONT_WEIGHT, DPI.load(Ordering::Relaxed));
     let old = SelectObject(hdc, HGDIOBJ(font.0));
     let mut text: Vec<u16> = TEXT.with(|t| t.borrow().encode_utf16().collect());
     DrawTextW(

@@ -25,6 +25,12 @@ jobs:
       run: cargo test --all-targets
     - name: Latency gate
       run: cargo run --release --example policy_latency
+    # RightType 2.0 quality gate: no correctly typed dictionary word, phrase or
+    # benchmark word may be changed, and recall may not fall below its floor.
+    - name: False-positive audit
+      run: cargo run --release --example false_positive_audit -- --check
+    - name: Typing benchmark
+      run: cargo run --release --example typing_benchmark -- --check
 
   # The Windows integration layer (hook, inject, tray, ...). It only compiles
   # on Windows, so the Linux job above never sees it.
@@ -38,6 +44,17 @@ jobs:
       run: cargo test --features winos --all-targets
     - name: Release build
       run: cargo build --release --features winos
+    # Build the installer and zip exactly as a release would, so a broken
+    # packaging script or .iss is caught on the PR, not on release day.
+    - name: Install Inno Setup
+      run: choco install innosetup --no-progress -y
+    - name: Package
+      shell: pwsh
+      run: |
+        ./packaging/build_release.ps1
+        # build_release.ps1 skips the installer when Inno Setup is missing;
+        # here it must exist.
+        if (-not (Get-ChildItem dist -Filter "RightType-*-setup.exe")) { throw "setup.exe was not built" }
     - name: No network or telemetry crates
       shell: pwsh
       run: |

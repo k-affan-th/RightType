@@ -29,6 +29,8 @@ mod manual;
 #[cfg(feature = "winos")]
 mod onboard;
 #[cfg(feature = "winos")]
+mod overlay;
+#[cfg(feature = "winos")]
 mod ram;
 #[cfg(feature = "winos")]
 mod safety;
@@ -40,8 +42,6 @@ mod settings;
 mod startup;
 #[cfg(feature = "winos")]
 mod stats;
-#[cfg(feature = "winos")]
-mod toast;
 #[cfg(feature = "winos")]
 mod tray;
 #[cfg(feature = "winos")]
@@ -61,14 +61,19 @@ fn main() {
 
 #[cfg(feature = "winos")]
 fn main() {
-    // Crisp text at 125–200 % display scaling: without this Windows renders the
-    // windows and the toast at 96 DPI and stretches the bitmap. System-aware
-    // (not per-monitor) keeps every window's layout valid on every screen.
+    // Crisp text at 125–200 % display scaling on every monitor: per-monitor
+    // aware (v2), so a window moved to a screen with another scale re-lays
+    // itself out (ui.rs) instead of being bitmap-stretched. The manifest asks
+    // for the same; this covers a binary run without it. Windows too old for
+    // v2 fall back to system-aware.
     unsafe {
         use windows::Win32::UI::HiDpi::{
-            SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_SYSTEM_AWARE,
+            SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+            DPI_AWARENESS_CONTEXT_SYSTEM_AWARE,
         };
-        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
+        if SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2).is_err() {
+            let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
+        }
     }
     // RAM hardening: exclude our heap from crash dumps, suppress the fault
     // dialog. Best-effort, before anything else touches secret-adjacent memory.

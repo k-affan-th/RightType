@@ -97,6 +97,7 @@ texts! {
     ModeSuggest => "Suggest", "แนะนำ";
     ModeManual => "Manual", "กดแก้เอง";
     StateOff => "Off", "ปิดอยู่";
+    StateHookLost => "Not working — retrying", "หยุดทำงาน — กำลังลองใหม่";
 
     // Toasts.
     ToastOn => "RightType is on", "RightType เปิดแล้ว";
@@ -107,6 +108,8 @@ texts! {
     ToastLearnOn => "Learning new words", "เปิดการเรียนรู้คำใหม่";
     ToastLearnOff => "Not learning new words", "ปิดการเรียนรู้คำใหม่";
     ToastUndo => "Undone", "ย้อนกลับแล้ว";
+    ToastHookLost => "RightType lost the keyboard — retrying…", "RightType ตรวจจับคีย์บอร์ดไม่ได้ — กำลังลองใหม่…";
+    ToastHookBack => "RightType is working again", "RightType กลับมาทำงานแล้ว";
     ToastSaved => "Saved", "บันทึกแล้ว";
     ToastLearnedCleared => "Learned words cleared", "ล้างคำที่เรียนรู้แล้ว";
     ToastSuggestAccept => "Alt+CapsLock", "Alt+CapsLock";
