@@ -57,10 +57,23 @@ const WM_HIDE_TOAST: u32 = 0x8000 + 0x526;
 
 static TOAST_HWND: AtomicIsize = AtomicIsize::new(0);
 static UI_THREAD_ID: AtomicU32 = AtomicU32::new(0);
-static PENDING: Mutex<Option<(String, Anchor)>> = Mutex::new(None);
+static PENDING: Mutex<Option<(String, Anchor, Style)>> = Mutex::new(None);
 static ALPHA: AtomicU32 = AtomicU32::new(255);
 /// The DPI of the monitor the pill is on, for painting.
 static DPI: AtomicU32 = AtomicU32::new(96);
+
+/// How the pill looks and how long it stays.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Style {
+    /// A message: at least [`W`] wide, held longer the longer the text.
+    Pill,
+    /// A short tag (`TH` / `EN`) next to the caret: as narrow as its text and
+    /// gone quickly, so it never sits over what is being typed.
+    Badge,
+}
+
+const BADGE_MIN_W: i32 = 44;
+const BADGE_MS: u32 = 800;
 
 /// Where the pill appears.
 #[derive(Clone, Copy, Debug)]
@@ -70,8 +83,6 @@ pub enum Anchor {
     Corner,
     /// Just below `rect` (screen pixels; e.g. the text cursor), or just above
     /// it when there is no room below; kept inside that monitor's work area.
-    // Used by the caret HUD (2.0 M1); until then only by the debug harness.
-    #[cfg_attr(not(debug_assertions), allow(dead_code))]
     Near(RECT),
 }
 
@@ -168,8 +179,8 @@ fn ensure_created() -> bool {
                 Some(0)
             }
             WM_SHOW_TOAST => {
-                if let Some((mut text, anchor)) = PENDING.lock().unwrap().take() {
-                    unsafe { show_on_ui(hwnd, &text, anchor) };
+                if let Some((mut text, anchor, style)) = PENDING.lock().unwrap().take() {
+                    unsafe { show_on_ui(hwnd, &text, anchor, style) };
                     text.zeroize();
                 }
                 Some(0)
@@ -199,6 +210,17 @@ pub fn show(text: &str) {
 
 /// Flash `text` briefly at `anchor`.
 pub fn show_at(text: &str, anchor: Anchor) {
+    show_styled(text, anchor, Style::Pill, false);
+}
+
+/// Flash a short tag (`TH` / `EN`) just below `caret`. Always shown after the
+/// caller returns — the keyboard hook calls this, and must not wait for the
+/// window to move and repaint.
+pub fn badge_at(text: &str, caret: RECT) {
+    show_styled(text, Anchor::Near(caret), Style::Badge, true);
+}
+
+fn show_styled(text: &str, anchor: Anchor, style: Style, defer: bool) {
     if TOAST_HWND.load(Ordering::Acquire) == 0 {
         if unsafe { GetCurrentThreadId() } != UI_THREAD_ID.load(Ordering::Acquire) {
             return; // worker thread + no window yet (e.g. fullscreen) — skip
@@ -209,10 +231,11 @@ pub fn show_at(text: &str, anchor: Anchor) {
     }
     let raw = TOAST_HWND.load(Ordering::Acquire);
     let hwnd = HWND(raw as *mut c_void);
-    if unsafe { GetCurrentThreadId() } == UI_THREAD_ID.load(Ordering::Acquire) {
-        unsafe { show_on_ui(hwnd, text, anchor) };
+    if !defer && unsafe { GetCurrentThreadId() } == UI_THREAD_ID.load(Ordering::Acquire) {
+        unsafe { show_on_ui(hwnd, text, anchor, style) };
     } else {
-        if let Some((mut old, _)) = PENDING.lock().unwrap().replace((text.to_string(), anchor)) {
+        let pending = (text.to_string(), anchor, style);
+        if let Some((mut old, _, _)) = PENDING.lock().unwrap().replace(pending) {
             old.zeroize();
         }
         unsafe {
@@ -224,7 +247,7 @@ pub fn show_at(text: &str, anchor: Anchor) {
 /// Hide the toast now and wipe its text — used when what it shows may be
 /// sensitive (a Suggest hint made just before a seed phrase was recognised).
 pub fn dismiss() {
-    if let Some((mut text, _)) = PENDING.lock().unwrap().take() {
+    if let Some((mut text, _, _)) = PENDING.lock().unwrap().take() {
         text.zeroize();
     }
     let raw = TOAST_HWND.load(Ordering::Acquire);
@@ -248,7 +271,7 @@ unsafe fn dismiss_on_ui(hwnd: HWND) {
     let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
 }
 
-unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor) {
+unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
     TEXT.with(|t| {
         let mut t = t.borrow_mut();
         t.zeroize();
@@ -270,8 +293,17 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor) {
     };
     let dpi = crate::ui::monitor_dpi(monitor);
     DPI.store(dpi, Ordering::Relaxed);
-    let w = (crate::ui::text_width_at(text, FONT_SIZE, FONT_WEIGHT, dpi) + px_at(32, dpi))
-        .clamp(px_at(W, dpi), px_at(520, dpi));
+    let w = (crate::ui::text_width_at(text, FONT_SIZE, FONT_WEIGHT, dpi) + px_at(32, dpi)).clamp(
+        px_at(
+            if style == Style::Badge {
+                BADGE_MIN_W
+            } else {
+                W
+            },
+            dpi,
+        ),
+        px_at(520, dpi),
+    );
     let h = px_at(H, dpi);
     let (x, y) = place(monitor, anchor, w, h, dpi);
     let _ = SetWindowPos(
@@ -287,7 +319,10 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor) {
     SetWindowRgn(hwnd, rgn, true);
     ALPHA.store(255, Ordering::Relaxed);
     let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
-    let hold = (SHOW_MS_BASE + units.len() as u32 * 18).min(2400);
+    let hold = match style {
+        Style::Pill => (SHOW_MS_BASE + units.len() as u32 * 18).min(2400),
+        Style::Badge => BADGE_MS,
+    };
     let _ = KillTimer(hwnd, TIMER_ID);
     let _ = KillTimer(hwnd, FADE_TIMER_ID);
     SetTimer(hwnd, TIMER_ID, hold, None);

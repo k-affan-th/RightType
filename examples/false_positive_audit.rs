@@ -11,6 +11,7 @@
 //! - Unknown Thai: each dictionary word with one letter changed, kept only if
 //!   the result is neither a word nor segmentable — the names and typos the
 //!   dictionary cannot vouch for.
+//! - Fix text: 20,000 correct mixed Thai/English sentences through `repair`.
 //! - Thai phrases: 200,000 random runs of 2–4 dictionary words, as Thai is
 //!   written (no spaces).
 //! - English words, every one in the bundled dictionary, typed on the English
@@ -175,6 +176,35 @@ fn main() {
     );
     if !hits.is_empty() {
         failures.push(format!("{} English words changed (must be 0)", hits.len()));
+    }
+
+    // Fix text (2.0): correctly typed mixed Thai/English sentences pasted into
+    // the Fix text window must come back unchanged.
+    let mut hits = Vec::new();
+    let total = 20_000;
+    for _ in 0..total {
+        let n = 4 + rng.below(7);
+        let sentence: Vec<&str> = (0..n)
+            .map(|_| {
+                if rng.below(2) == 0 {
+                    thai_words[rng.below(thai_words.len())]
+                } else {
+                    english_words[rng.below(english_words.len())]
+                }
+            })
+            .collect();
+        let text = sentence.join(" ");
+        let fixed = righttype::repair::repair(&text, en, th);
+        if !fixed.changes.is_empty() {
+            hits.push((text, fixed.text));
+        }
+    }
+    report("Fix text: mixed correct sentences", total, &hits);
+    if !hits.is_empty() {
+        failures.push(format!(
+            "{} Fix text sentences changed (must be 0)",
+            hits.len()
+        ));
     }
 
     // Recall: the same dictionaries typed on the *wrong* layout.

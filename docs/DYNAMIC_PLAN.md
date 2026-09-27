@@ -8,8 +8,8 @@
 | Field | Value |
 | --- | --- |
 | Overall status | `IN_PROGRESS — 1.1.0 ready to build; signing + remaining E2E need the product owner` |
-| Active section | `S8 — RightType 2.0 (M2)` |
-| Next action | S8 M1 (กลุ่ม A) เสร็จ — เริ่ม M2: ป้ายภาษาข้างเคอร์เซอร์, Suggest ข้างเคอร์เซอร์ + Tab, หน้าต่างซ่อมข้อความ |
+| Active section | `S8 — RightType 2.0 (M3)` |
+| Next action | S8 M2 เสร็จ — เริ่ม M3: แยกคำกำกวมด้วยบริบท, เดาภาษาล่วงหน้าต่อช่อง (opt-in) |
 | Current release target | `v2.0.0` — แผนใน S8, ไอเดียทั้งหมดใน `IDEAS.md` (1.1.0 = 2026-09-26, 1.0.0 = 2026-08-31) |
 | Last updated | `2026-09-26` |
 | Last verified baseline | Linux: 102 tests (69 lib + 30 comprehensive + 3 release-metadata), clippy `-D warnings`, fmt, latency gate ~1.5 µs worst batch; `--features winos` cross-checked clean ด้วย clippy `-D warnings` บน target `x86_64-pc-windows-msvc` (ยังไม่ได้รัน test บน Windows ใน session นี้ — CI job `windows` ทำแทน) |
@@ -490,7 +490,7 @@ Deferred (tracked, not forgotten):
 
 ## S8 — RightType 2.0
 
-**Status:** `[~] IN_PROGRESS — M2` (M0, M1 เสร็จ) (แผนอนุมัติ 2026-09-26; เจ้าของเพิ่มความแม่นยำ M5 และแป้นอื่น M6, เลื่อน Store/code signing ออก)
+**Status:** `[~] IN_PROGRESS — M3` (M0–M2 เสร็จ) (แผนอนุมัติ 2026-09-26; เจ้าของเพิ่มความแม่นยำ M5 และแป้นอื่น M6, เลื่อน Store/code signing ออก)
 **Depends on:** 1.1.0 (released 2026-09-26)
 **ไอเดียทั้งหมดรวมที่ไม่เข้า 2.0:** [IDEAS.md](IDEAS.md)
 
@@ -540,11 +540,13 @@ Deferred (tracked, not forgotten):
 - [x] เคส E2E ใหม่ใน `e2e/release_gaps.py` (`flip_sweep`) ให้รันบน Windows ก่อนปล่อย
 
 ### M2 — มองเห็นได้
-- [ ] **ป้ายภาษาข้างเคอร์เซอร์** (`caret.rs` บน `overlay::show_at`)
-  - ตำแหน่งจาก `GetGUIThreadInfo().rcCaret` และ UIA TextPattern สำหรับ Chromium/Electron ถ้าหาไม่ได้กลับไปมุมจอ
-  - แสดง TH/EN และกะพริบเมื่อแก้คำ ไม่แสดงเนื้อหาที่พิมพ์
-- [ ] **Suggest ข้างเคอร์เซอร์ + กด Tab เพื่อใช้** (Tab จะรับคำแนะนำเฉพาะตอนมีคำแนะนำค้างอยู่)
-- [ ] **หน้าต่างซ่อมข้อความ** (`fixer.rs`) บนแกนใหม่ OS-free `repair.rs` ซึ่งเข้า audit ด้วย + ซ่อมข้อความในคลิปบอร์ด
+- [x] **ป้ายภาษาข้างเคอร์เซอร์** (`caret.rs` บน `overlay::badge_at`): ป้าย `TH`/`EN` ใต้เคอร์เซอร์ทุกครั้งที่ RightType สลับ layout (หลังแก้คำ/flip) แสดงหลัง hook return แล้ว ไม่แสดงเนื้อหาที่พิมพ์; ตำแหน่งจาก system caret (`GetGUIThreadInfo` + `ClientToScreen`)
+  - ยังไม่ทำ: UIA TextPattern สำหรับแอปที่วาดเคอร์เซอร์เองโดยไม่มี system caret — แอปเหล่านั้นจะไม่มีป้าย (Windows ยังแสดงภาษาที่ taskbar) ย้ายไป M4 พร้อม palette ที่ต้องใช้ตำแหน่งเดียวกัน
+- [x] **Suggest ข้างเคอร์เซอร์ + กด Tab เพื่อใช้**: Tab (ไม่กดปุ่มอื่นร่วม) รับคำแนะนำเฉพาะภายใน 4 วิ และก่อนกดปุ่มอื่น; ไม่มีคำแนะนำ = Tab ปกติ; หาเคอร์เซอร์ไม่เจอ → มุมจอ
+- [x] ตั้งค่า "แสดงป้ายข้างเคอร์เซอร์" (General) เก็บใน `config.toml` (`caret_hints`)
+- [x] **หน้าต่างซ่อมข้อความ** (`fixer.rs`) บนแกน OS-free `repair.rs` (มี unit test และเข้าประตู audit: ประโยคไทย/อังกฤษที่ถูก 20,000 ประโยคต้องไม่เปลี่ยน = 0) + ปุ่ม "วางแล้วแก้" จากคลิปบอร์ด + คัดลอก; เปิดจาก tray
+  - แทนการไฮไลต์/คลิกคำ: บรรทัดสถานะบอกคำที่แก้ (3 คำแรก) และช่องผลลัพธ์แก้ไขเองได้
+- [x] เคส E2E ใหม่ `tab_sweep` ใน `e2e/release_gaps.py`
 
 ### M3 — ผิดน้อยลงตั้งแต่ต้น
 - [ ] **แยกคำกำกวมด้วยบริบท** (`context.rs`): ใช้ภาษาของคำก่อนหน้าที่เพิ่งถูกแปลงจาก layout ผิดแบบเดียวกัน, benchmark ต้องมีคำกำกวม
@@ -553,6 +555,7 @@ Deferred (tracked, not forgotten):
   - ไม่บันทึกในช่องรหัสผ่านหรือแอปที่บล็อก, ปิดเป็นค่าเริ่มต้น, มีปุ่มล้าง
 
 ### M4 — คุมจากคีย์บอร์ด + ใช้ต่อเนื่อง
+- [ ] **ตำแหน่งเคอร์เซอร์ผ่าน UIA TextPattern** (ย้ายมาจาก M2) สำหรับแอปที่ไม่มี system caret
 - [ ] **Command palette ข้างเคอร์เซอร์:** แก้คำ, สอนคำ, หยุดชั่วคราว, เปลี่ยนโหมด, ปิดในแอปนี้, ซ่อมข้อความ, ตั้งค่า
 - [ ] **ปุ่มลัดตั้งเองได้** (ปิดงานที่ D-005 เลื่อนไว้) พร้อมตรวจการชนกันเอง
 - [ ] **รายงานประจำสัปดาห์:** ต้องเปิดเอง เพราะต้องเก็บตัวนับข้ามการเปิดโปรแกรมใหม่
@@ -659,4 +662,5 @@ Deferred (tracked, not forgotten):
 - `2026-09-26` — ออก 1.1.0 ผ่าน Release workflow; อนุมัติแผน **2.0** (S8 M0–M5) และสร้าง `IDEAS.md` เป็นคลังไอเดีย
 - `2026-09-26` — **S8 M0 ครบ**: CI quality gate (`--check`), ศัพท์เทคนิค (benchmark 118 → 127/131, แปลงผิด 0), ตัวติดตั้งไทย + สร้าง installer ใน CI, แจ้งเตือน hook หลุด, overlay (มุมจอ/ข้างเคอร์เซอร์, ตรวจด้วย Wine ที่ 144 DPI), per-monitor DPI v2; พบบั๊ก toast ไม่ขึ้นตั้งแต่ lazy creation (E-037) แก้แล้ว
 - `2026-09-27` — **S8 M1 (กลุ่ม A) ครบ** ตามคำขอเจ้าของให้งานที่เห็นผลทันทีมาก่อน: หยุดชั่วคราว, โหมดแยกตามแอป, แก้ย้อนหลายคำ (ring 8 คำ + mouse hook ล้างเมื่อคลิก), นำเข้า/ส่งออกคำที่เรียนรู้, เวลาที่ประหยัด, ปุ่มตรวจสอบอัปเดต; เรียง milestone ใหม่ (M2 มองเห็นได้, M3 ผิดน้อยลง, M4 คีย์บอร์ด+ใช้ต่อเนื่อง)
+- `2026-09-27` — **S8 M2 ครบ**: ป้าย TH/EN ข้างเคอร์เซอร์, Suggest ข้างเคอร์เซอร์ + Tab, หน้าต่างซ่อมข้อความ (`repair.rs` เข้าประตู audit 0/20,000); UIA TextPattern เลื่อนไป M4
 - `2026-08-24` — Settings/Stats redesign บนธีมเข้ม + refresh-on-reopen semantics (toast แจ้งทุกครั้ง) + toast modernization (fade, dynamic region, border, duration); **พบ+แก้ startup crash ใต้เกม fullscreen** ด้วย lazy toast creation (E-037); re-install rc1 ให้ผู้ใช้

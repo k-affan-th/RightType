@@ -23,6 +23,8 @@ Cases:
   electron  — the password guard in a real Electron app.
   flip      — (in chrome) Shift+Backspace pressed again flips the word before
               too (2.0); a caret move in between forgets the recent words.
+  tab       — (in chrome) Suggest mode: Tab right after a hint takes it; Tab
+              with no hint is still Tab (2.0).
 """
 
 import ctypes
@@ -114,6 +116,21 @@ def flip_sweep(t):
         then=[flip, flip], settle=1.0)
     run(t, "a caret move forgets the recent words", "l;ylfu ", "l;ylfu",
         then=[lambda: tap(fs.END), flip], settle=1.0)
+    fs.set_mode("auto")
+
+
+TAB = 0x09
+
+
+def tab_sweep(t):
+    print(f"\n=== {t.name}: Suggest + Tab ===", flush=True)
+    t.focus()
+    check(t.name, "mode set to suggest", str(fs.set_mode("suggest")), "True")
+    run(t, "Tab takes the Suggest hint", "l;ylfu ", "สวัสดี",
+        then=[lambda: tap(TAB)], settle=1.0)
+    # In a browser text box Tab moves focus: the text stays as typed.
+    run(t, "Tab without a hint changes nothing", "hello ", "hello",
+        then=[lambda: tap(TAB)], settle=1.0)
     fs.set_mode("auto")
 
 
@@ -269,6 +286,7 @@ def main():
                     seed_sweep(t)
                     pending_sweep(t)
                     flip_sweep(t)
+                    tab_sweep(t)
                 if "clipboard" in want:
                     clipboard_sweep(t)
             finally:

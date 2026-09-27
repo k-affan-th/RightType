@@ -41,6 +41,8 @@ pub struct Config {
     /// Per-app modes: executable name → `auto` / `suggest` / `manual` / `off`.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub app_modes: BTreeMap<String, String>,
+    /// TH/EN tag and Suggest hints next to the text cursor.
+    pub caret_hints: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -82,6 +84,7 @@ impl Default for Config {
             onboarded: false,
             language: None,
             app_modes: BTreeMap::new(),
+            caret_hints: true,
         }
     }
 }
@@ -118,6 +121,7 @@ pub fn apply(cfg: &Config) {
     learn::set_enabled(cfg.learn);
     safety::set_custom_list(cfg.custom_blacklist.clone());
     set_language(cfg.language.as_deref().and_then(Lang::from_code));
+    crate::caret::set_enabled(cfg.caret_hints);
     crate::apps::set_all(
         cfg.app_modes
             .iter()
@@ -177,6 +181,7 @@ pub fn persist() {
             .into_iter()
             .map(|(exe, mode)| (exe, mode.name().to_string()))
             .collect(),
+        caret_hints: crate::caret::is_enabled(),
     };
     let Some(p) = config_path() else {
         return;

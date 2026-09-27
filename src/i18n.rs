@@ -87,6 +87,7 @@ texts! {
     TraySuggest => "Suggest mode", "โหมดแนะนำ";
     TrayLearn => "Learn new words", "เรียนรู้คำใหม่";
     TrayStartup => "Start with Windows", "เปิดพร้อม Windows";
+    TrayFix => "Fix text…", "ซ่อมข้อความ…";
     TraySettings => "Settings…", "ตั้งค่า…";
     TrayStats => "Statistics…", "สถิติ…";
     TrayHelp => "Hotkeys && help…", "ปุ่มลัดและวิธีใช้…";
@@ -150,7 +151,7 @@ texts! {
     NavAbout => "Privacy & about", "ความเป็นส่วนตัว";
     HeadMode => "Correction mode", "วิธีแก้คำ";
     DescAuto => "Fixes words as you type — Thai as soon as your keys spell a Thai word, English when you press Space.", "แก้ให้ทันทีขณะพิมพ์ — เป็นภาษาไทยทันทีที่ปุ่มที่กดสะกดเป็นคำไทย และเป็นภาษาอังกฤษเมื่อกดเว้นวรรค";
-    DescSuggest => "Shows the fix in a small hint. Press Alt+CapsLock to use it.", "แสดงคำที่ถูกเป็นคำแนะนำเล็ก ๆ กด Alt+CapsLock เพื่อใช้คำนั้น";
+    DescSuggest => "Shows the fix in a small hint next to the cursor. Press Tab (or Alt+CapsLock) to use it.", "แสดงคำที่ถูกเป็นคำแนะนำเล็ก ๆ ข้างเคอร์เซอร์ กด Tab (หรือ Alt+CapsLock) เพื่อใช้คำนั้น";
     DescManual => "Never changes text by itself. Press Shift+Backspace to fix the last word.", "ไม่แก้ข้อความเอง กด Shift+Backspace เพื่อแก้คำล่าสุด";
     HeadBehaviour => "Behaviour", "การทำงาน";
     RowEnabled => "RightType is on", "เปิดใช้งาน RightType";
@@ -159,6 +160,8 @@ texts! {
     SubStartup => "Runs quietly in the notification area when you sign in.", "ทำงานเงียบ ๆ ที่มุมจอเมื่อเข้าสู่ระบบ";
     RowLearn => "Learn new words", "เรียนรู้คำใหม่";
     SubLearn => "Remembers words you type often or put back. Saved on this PC only.", "จำคำที่คุณพิมพ์บ่อยหรือแก้กลับ บันทึกไว้ในเครื่องนี้เท่านั้น";
+    RowCaret => "Hints at the text cursor", "แสดงป้ายข้างเคอร์เซอร์";
+    SubCaret => "A TH / EN tag when the language switches, and Suggest hints (Tab to use).", "ป้าย TH / EN เมื่อสลับภาษา และคำแนะนำ (กด Tab เพื่อใช้)";
     LearnedCount => "Learned words: {n}", "คำที่เรียนรู้แล้ว: {n}";
     BtnEditLearned => "Edit…", "แก้ไข…";
     HeadLanguage => "Language", "ภาษา";
@@ -210,6 +213,20 @@ texts! {
     HelpHeadline => "Hotkeys", "ปุ่มลัด";
     WelcomeMode => "Current mode: {mode}. Switch anytime with Ctrl+CapsLock.", "โหมดตอนนี้: {mode} สลับได้ทุกเมื่อด้วย Ctrl+CapsLock";
     BtnGetStarted => "Get started", "เริ่มใช้งาน";
+
+    // Fix text window.
+    FixTitle => "RightType — Fix text", "RightType — ซ่อมข้อความ";
+    FixHead => "Fix text", "ซ่อมข้อความ";
+    FixIntro => "Paste text typed in the wrong layout. Each word is fixed the same way RightType fixes it while you type. Nothing is saved.", "วางข้อความที่พิมพ์ผิดภาษา แล้วแต่ละคำจะถูกแก้แบบเดียวกับตอนพิมพ์ ไม่มีการบันทึกข้อความเลย";
+    FixInput => "Your text", "ข้อความของคุณ";
+    FixOutput => "Fixed", "ข้อความที่แก้แล้ว";
+    BtnFix => "Fix", "แก้";
+    BtnPasteFix => "Paste and fix", "วางแล้วแก้";
+    BtnCopy => "Copy", "คัดลอก";
+    FixChanged => "Words fixed ({n}):", "คำที่แก้ ({n}):";
+    FixNothing => "Nothing needed fixing.", "ไม่มีคำที่ต้องแก้";
+    FixCopied => "Copied — paste it where you need it.", "คัดลอกแล้ว วางได้เลย";
+    ErrClipboardEmpty => "The clipboard has no text.", "คลิปบอร์ดไม่มีข้อความ";
 
     // Statistics window.
     StatsTitle => "RightType — Statistics", "RightType — สถิติ";
