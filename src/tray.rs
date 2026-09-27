@@ -109,6 +109,9 @@ fn app_mode_label(mode: AppMode) -> &'static str {
 
 /// Build the tray UI, install the hook, and run the event loop until Quit.
 pub fn run() {
+    // Before any RightType window can take focus: the keyboard of the app
+    // the user is in, for the English keyboard in use (see hook.rs).
+    hook::remember_startup_layout();
     nwg::init().expect("Failed to init Native Windows GUI");
     crate::ui::load_fonts();
     crate::ui::refresh();
