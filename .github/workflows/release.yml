@@ -59,7 +59,13 @@ jobs:
       run: |
         $ver = "${{ steps.version.outputs.version }}"
         ./packaging/winget.ps1 -Version $ver
-        Compress-Archive -Path "dist/winget/$ver/*" -DestinationPath "dist/winget-manifests-$ver.zip"
+        $zip = "dist/winget-manifests-$ver.zip"
+        Compress-Archive -Path "dist/winget/$ver/*" -DestinationPath $zip
+        # SHA256.txt was written by build_release.ps1 before this archive
+        # existed: add it, in the same format, so every asset can be checked.
+        $f = Get-Item $zip
+        "{0}  {1}  ({2} bytes)" -f (Get-FileHash $f.FullName -Algorithm SHA256).Hash, $f.Name, $f.Length |
+          Add-Content "dist/SHA256.txt" -Encoding utf8
 
     - name: Release notes
       shell: pwsh

@@ -7,9 +7,10 @@
 use crate::detect::{self, Confidence, Detection, Evidence};
 use crate::dict::Dictionary;
 use crate::english;
-use crate::layout::{en_to_th, th_to_en};
+use crate::layout::{en_to_th, th_to_en, ThaiVariant};
 use crate::secret::{self, SecretKind};
 use crate::segment;
+use std::sync::RwLock;
 
 /// Shortest in-flight token the live path will consider at all. Two-character
 /// candidates are excluded because valid short words (`สว`) are frequently true
@@ -66,15 +67,45 @@ pub fn supported_layout_id(hkl: u32) -> Option<InputLayout> {
     None
 }
 
-/// Whether a Thai `HKL` is the keyboard of the table in use: the default
-/// Thai keyboard for Kedmanee, any other Thai keyboard for Pattachote. Only
-/// that one is accepted, so keys are never read through the other table
-/// when both keyboards are installed.
-fn thai_keyboard_matches(hkl: u32, variant: crate::layout::ThaiVariant) -> bool {
+/// The Thai keyboards other than the default one, by the high word of their
+/// handle, with the table each one follows. Filled by the Windows layer from
+/// the keyboard's layout file (Windows also has a Kedmanee without ShiftLock,
+/// and a Pattachote without it). Empty until then.
+static THAI_KEYBOARDS: RwLock<Vec<(u16, ThaiVariant)>> = RwLock::new(Vec::new());
+
+/// Tell the policy which table each installed non-default Thai keyboard uses.
+pub fn set_thai_keyboards(keyboards: Vec<(u16, ThaiVariant)>) {
+    if let Ok(mut k) = THAI_KEYBOARDS.write() {
+        *k = keyboards;
+    }
+}
+
+/// Which table a Thai `HKL` follows: Kedmanee for the default keyboard, what
+/// `known` says for the others. With nothing known (the layout files could
+/// not be read), any other Thai keyboard is taken as Pattachote.
+fn thai_table_of(hkl: u32, known: &[(u16, ThaiVariant)]) -> Option<ThaiVariant> {
     let language = hkl & 0xFFFF;
     let device = hkl >> 16;
-    let default = device == 0 || device == language;
-    default == (variant == crate::layout::ThaiVariant::Kedmanee)
+    if device == 0 || device == language {
+        return Some(ThaiVariant::Kedmanee);
+    }
+    if known.is_empty() {
+        return Some(ThaiVariant::Pattachote);
+    }
+    known
+        .iter()
+        .find(|(d, _)| u32::from(*d) == device)
+        .map(|(_, v)| *v)
+}
+
+/// Whether a Thai `HKL` is a keyboard of the table in use. Only those are
+/// accepted, so keys are never read through the other table when both kinds
+/// of keyboard are installed.
+fn thai_keyboard_matches(hkl: u32, variant: ThaiVariant) -> bool {
+    THAI_KEYBOARDS
+        .read()
+        .map(|known| thai_table_of(hkl, &known) == Some(variant))
+        .unwrap_or(false)
 }
 
 /// Whether `hkl` is the keyboard whose table is in use: the chosen Thai
@@ -589,13 +620,22 @@ mod tests {
         // Thai variants only once the user has chosen Pattachote.
         assert_eq!(supported_layout_id(0x0001_041E), None);
         assert_eq!(supported_layout_id(0xF001_041E), None);
-        // And then only they: Kedmanee is never read through Pattachote.
+        // And then only they: Kedmanee is never read through Pattachote,
+        // including Kedmanee without ShiftLock (also not the default).
         use crate::layout::ThaiVariant::{Kedmanee, Pattachote};
-        assert!(thai_keyboard_matches(0x041E_041E, Kedmanee));
-        assert!(!thai_keyboard_matches(0xF001_041E, Kedmanee));
-        assert!(thai_keyboard_matches(0xF001_041E, Pattachote));
-        assert!(!thai_keyboard_matches(0x041E_041E, Pattachote));
-        assert!(!thai_keyboard_matches(0x0000_041E, Pattachote));
+        let known = [
+            (0xF001, Pattachote),
+            (0xF002, Kedmanee),
+            (0xF003, Pattachote),
+        ];
+        assert_eq!(thai_table_of(0x041E_041E, &known), Some(Kedmanee));
+        assert_eq!(thai_table_of(0x0000_041E, &known), Some(Kedmanee));
+        assert_eq!(thai_table_of(0xF001_041E, &known), Some(Pattachote));
+        assert_eq!(thai_table_of(0xF002_041E, &known), Some(Kedmanee));
+        assert_eq!(thai_table_of(0xF003_041E, &known), Some(Pattachote));
+        assert_eq!(thai_table_of(0xF00F_041E, &known), None);
+        // Layout files unreadable: any other Thai keyboard is Pattachote.
+        assert_eq!(thai_table_of(0xF002_041E, &[]), Some(Pattachote));
     }
 
     #[test]
