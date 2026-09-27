@@ -22,13 +22,17 @@ RightLang is excellent but unmaintained, and its design causes real bugs:
 ## How it works
 
 RightType lives in the **system tray** (no window, no console). Click the tray icon
-(left or right) for: **Enable**, **Manual/Auto/Suggest** mode, **Learn new words**,
+(left or right) for: **Enable**, **Pause** (10 minutes, 30 minutes or an hour —
+it switches itself back on), **Manual/Auto/Suggest** mode, **In this app** (a mode
+of its own, or off, for the app you were just typing in), **Learn new words**,
 **Start with Windows**, **Settings**, **Statistics**, **Hotkeys & help**, and **Quit**.
 The tooltip shows the current mode, and the icon turns grey while RightType is off.
 
 **Settings** has five pages — General (mode, on/off, start with Windows, learning),
-Hotkeys, Learned words (see, add, remove or clear what RightType has learned),
-Blocked apps and Privacy & about. Changes take effect the moment you make
+Hotkeys, Learned words (see, add, remove, clear, import or export what RightType
+has learned), Apps (a mode per app, e.g. `code.exe = manual`, and apps to stay out
+of) and Privacy & about (with a **Check for updates** button that opens the
+Releases page in your browser — RightType itself never goes online). Changes take effect the moment you make
 them. The interface is in **English or Thai** (it follows the Windows display
 language; switch it at the bottom of the Settings sidebar), follows the Windows
 **light/dark** app theme, and stays sharp at any display scaling.
@@ -38,9 +42,9 @@ with a hotkey:
 
 | Hotkey | Action |
 | --- | --- |
-| `Shift`+`Backspace` | Convert the last word in place — or, right after Auto changed a word, flip it back |
+| `Shift`+`Backspace` | Convert the last word in place — or, right after Auto changed a word, flip it back. Press it again to flip the word before as well (up to 8 words) |
 | `Shift`+`CapsLock` | Convert the current **selection** (v1 temporarily reads it with Copy, restores an empty/plain-Unicode clipboard, then injects Unicode; any non-text/app-specific clipboard format is refused) |
-| `Ctrl`+`CapsLock` | Cycle **Manual** → **Auto** → **Suggest** (works in every app, including ones RightType otherwise stays out of) |
+| `Ctrl`+`CapsLock` | Cycle **Manual** → **Auto** → **Suggest** (works in every app, including ones RightType otherwise stays out of; in an app with its own mode, cycles that app's mode) |
 | `Alt`+`CapsLock` | Accept the current Suggest hint |
 | `Ctrl`+`Shift`+`CapsLock` | Undo the last correction (selection undo requires the same focused context) |
 | `Ctrl`+`Alt`+`CapsLock` | Enable/disable RightType immediately |

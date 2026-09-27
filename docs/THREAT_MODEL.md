@@ -6,10 +6,15 @@
 ## Trust boundaries
 
 1. The low-level keyboard hook receives global key events inside the RightType process.
+   A low-level mouse hook (2.0) looks only at whether a button went down — never
+   where — so a click that moves the caret drops everything recorded about the
+   text before it (word in progress, owned run, Undo, recent words, Suggest).
 2. Focus/UI Automation and foreground-process queries decide whether the context is safe.
 3. `SendInput` crosses from RightType into the focused application.
 4. Selection conversion temporarily crosses the Windows clipboard boundary for `Ctrl+C`.
 5. Config and opt-in learned words cross the disk boundary under `%APPDATA%\RightType`.
+6. "Check for updates" (2.0) asks Windows to open the Releases page in the default
+   browser (`ShellExecuteW`); RightType itself still makes no network connection.
 
 ## Data and lifetime matrix
 
@@ -23,7 +28,11 @@
 | Learning pending word | In-memory repeat counter while learning is enabled | Only qualifying word after third sighting is appended to `learned.txt`; a word the user restores by reverting an automatic conversion (Undo / Shift+Backspace) is appended at once, English or Thai; no network | opt-in; letters-of-one-script shape guard, secret guard, length bounds; disable drains/zeroizes pending map; bounded persistence queue | whitelist is structural, not per-app; adversarial persistence audit open |
 | Learned words | Loaded from `learned.txt` into the in-memory dictionary overlay for the process lifetime | Already on disk by the user's opt-in | "Clear learned words" empties file and overlay | overlay strings are not zeroized (they are the user's persisted vocabulary, not transient input) |
 | Settings | Runtime state and custom blacklist | `config.toml`; no typed content/network | bounded async writes from hook-triggered changes | file permissions/atomic-write behavior not audited |
-| Stats | Two process-local counters | None | reset on process exit | none content-related |
+| Recent words (2.0) | Up to 8 completed words as on screen, with their boundaries, for Shift+Backspace pressed repeatedly | None | `Drop` zeroize; cleared by Backspace, navigation keys, any Ctrl/Alt/CapsLock chord, a mouse click, a focus/window/layout change, switching off, and the seed-phrase guard; only words separated by single spaces are kept together | more than one word of recent text is in memory at once (v1 kept one); same boundaries as the v1 last word |
+| Per-app modes (2.0) | Executable name → mode; the last app typed in (its executable name only) | `app_modes` in `config.toml`; no typed content; no network | edited in Settings → Apps or the tray's "In this app"; the safety blacklist is checked first and cannot be overridden | exe names reveal which apps have a mode set |
+| Pause (2.0) | End time of a pause, process-local | None; a pause is not saved as "off" | ends on the 1.5 s timer or when switched on by any means | none content-related |
+| Learned-words export/import (2.0) | A file the user chooses in a dialog | The learned list written to / read from that file, only on the button press; imported lines pass the same shape and secret guards as the editor; files over 1 MB refused | user-initiated only | the exported file is outside `%APPDATA%\RightType` and outside RightType's "Clear" |
+| Stats | Two process-local counters (time saved is computed from them) | None | reset on process exit | none content-related |
 | Toast/UI copy | Fixed status/error strings; the Suggest hint shows the candidate text | None | UI-thread owned; the displayed text is zeroized when the toast hides | Windows UI evidence open |
 
 ## Deny policy
@@ -43,7 +52,7 @@
 - Mid-word (live) conversion is held as soon as three seed words are in a row, so a
   fourth cannot be converted before its boundary; the tracker itself counts each
   completed token exactly once.
-- When the run trips, the Undo record, the last completed word and any pending
+- When the run trips, the Undo record, the recent completed words and any pending
   Suggest hint (including the toast text) are dropped and zeroized, so the words
   before the threshold do not outlive it in the process.
 

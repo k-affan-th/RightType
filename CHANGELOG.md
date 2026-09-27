@@ -14,8 +14,30 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   the monitor under the mouse, and re-lays a window out when it is dragged to a
   monitor with another scale.
 
+### Added
+
+- **Pause** from the tray: 10 minutes, 30 minutes or an hour, then RightType
+  switches itself back on (the tooltip shows the time left). A pause is never
+  saved as "off".
+- **A mode per app**: Auto, Suggest, Manual or Off for one program — say Manual
+  in your code editor and Auto in chat. Set it from the tray (**In this app**,
+  for the app you were just typing in) or in Settings → **Apps**. The built-in
+  safety list (password managers, terminals, wallets) still always wins.
+  `Ctrl`+`CapsLock` in such an app cycles that app's mode.
+- **Flip back several words**: press `Shift`+`Backspace` again to flip the word
+  before as well, up to 8 words, so a phrase typed in the wrong layout comes
+  back without selecting it. A click, arrow key or Backspace in between starts
+  over.
+- **Import / Export** learned words as a text file (Settings → Learned words).
+- **Time saved** estimate in Statistics.
+- **Check for updates** in Settings → Privacy & about: opens the Releases page
+  in your browser; RightType itself still never goes online.
+
 ### Changed
 
+- A mouse click now counts as moving the caret: the word in progress, Undo and
+  the words kept for `Shift`+`Backspace` are dropped, so a flip can never edit
+  text somewhere else.
 - The status pill appears on the monitor you are working on (the one holding
   the active window) instead of always the primary one, sized for that
   monitor. It can also be placed next to the text cursor (used by the 2.0 caret

@@ -21,6 +21,8 @@ Cases:
               released. The lock is verified from a third process first, so
               the case cannot pass vacuously.
   electron  — the password guard in a real Electron app.
+  flip      — (in chrome) Shift+Backspace pressed again flips the word before
+              too (2.0); a caret move in between forgets the recent words.
 """
 
 import ctypes
@@ -44,6 +46,7 @@ accept = fs.accept
 undo = fs.undo
 select_word = fs.select_word
 convert_sel = fs.convert_sel
+flip = fs.flip
 
 
 # --------------------------------------------------------------------------- seed
@@ -99,6 +102,19 @@ def pending_sweep(t):
     # nothing may be deleted.
     run(t, "Undo after mid-word anchor deletes nothing", "l;ylfu8iy[", "สวัสดีครับ",
         then=[undo], settle=1.2)
+
+
+def flip_sweep(t):
+    print(f"\n=== {t.name}: flip back several words ===", flush=True)
+    t.focus()
+    check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
+    run(t, "Shift+Backspace once flips the last word", "l;ylfu 8iy[ ", "l;ylfu ครับ",
+        then=[flip], settle=1.0)
+    run(t, "Shift+Backspace twice flips two words", "l;ylfu 8iy[ ", "สวัสดี ครับ",
+        then=[flip, flip], settle=1.0)
+    run(t, "a caret move forgets the recent words", "l;ylfu ", "l;ylfu",
+        then=[lambda: tap(fs.END), flip], settle=1.0)
+    fs.set_mode("auto")
 
 
 class Word(fs.Target):
@@ -252,6 +268,7 @@ def main():
                 if "chrome" in want:
                     seed_sweep(t)
                     pending_sweep(t)
+                    flip_sweep(t)
                 if "clipboard" in want:
                     clipboard_sweep(t)
             finally:

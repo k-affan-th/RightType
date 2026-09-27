@@ -17,6 +17,10 @@
 //! input also counts as input, so a mouse-only session reinstalls at most once
 //! per [`SILENCE_MS`] — cheap, and harmless to a live hook. Feed every raw
 //! window message to [`on_message`].
+//!
+//! The same timer ends a **pause** ([`pause`]): RightType is switched off for a
+//! while and switches itself back on, so it cannot be forgotten off after a
+//! game or a presentation.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -71,6 +75,66 @@ unsafe fn reinstall() {
             }
             NEEDS_REINSTALL.store(true, Ordering::Relaxed);
         }
+    }
+}
+
+/// `GetTickCount` time a pause ends; 0 = not paused.
+static PAUSED_UNTIL: AtomicU32 = AtomicU32::new(0);
+
+/// Switch RightType off for `minutes`; it switches itself back on afterwards.
+/// Does nothing while it is already off (and not paused): that is the user's
+/// own choice, and a pause must not turn it on later.
+pub fn pause(minutes: u32) {
+    if !hook::is_enabled() && !is_paused() {
+        return;
+    }
+    let until = unsafe { GetTickCount() }.wrapping_add(minutes.max(1) * 60_000);
+    // 0 means "not paused"; step over it in the (1 in 4 billion) case.
+    PAUSED_UNTIL.store(until.max(1), Ordering::Relaxed);
+    hook::set_enabled(false);
+}
+
+/// End a pause now.
+pub fn resume() {
+    if PAUSED_UNTIL.swap(0, Ordering::Relaxed) != 0 {
+        hook::set_enabled(true);
+    }
+}
+
+pub fn is_paused() -> bool {
+    PAUSED_UNTIL.load(Ordering::Relaxed) != 0
+}
+
+/// Whole minutes left in the pause (rounded up), if paused.
+pub fn pause_minutes_left() -> Option<u32> {
+    let until = PAUSED_UNTIL.load(Ordering::Relaxed);
+    (until != 0).then(|| minutes_left(unsafe { GetTickCount() }, until))
+}
+
+fn minutes_left(now: u32, until: u32) -> u32 {
+    let ms = until.wrapping_sub(now) as i32;
+    (ms.max(0) as u32).div_ceil(60_000)
+}
+
+/// Has the pause ending at `until` run out at `now`? Wrapping-safe.
+fn pause_is_over(now: u32, until: u32) -> bool {
+    now.wrapping_sub(until) as i32 >= 0
+}
+
+/// Timer tick: end the pause when its time is up, or forget it when the user
+/// switched RightType back on some other way (tray, hotkey, Settings).
+fn check_pause() {
+    use righttype::i18n::{tr, T};
+    let until = PAUSED_UNTIL.load(Ordering::Relaxed);
+    if until == 0 {
+        return;
+    }
+    if hook::is_enabled() {
+        PAUSED_UNTIL.store(0, Ordering::Relaxed);
+    } else if pause_is_over(unsafe { GetTickCount() }, until) {
+        PAUSED_UNTIL.store(0, Ordering::Relaxed);
+        hook::set_enabled(true);
+        crate::overlay::show(tr(T::ToastOn));
     }
 }
 
@@ -141,6 +205,7 @@ pub unsafe fn disarm(hwnd: HWND) {
 pub unsafe fn on_message(msg: u32, wparam: usize) {
     match msg {
         WM_TIMER if wparam == WATCHDOG_TIMER_ID => {
+            check_pause();
             if NEEDS_REINSTALL.swap(false, Ordering::Relaxed) {
                 reinstall();
             } else {
@@ -184,6 +249,19 @@ mod tests {
     #[test]
     fn reinstalls_are_rate_limited() {
         assert!(!hook_looks_evicted(100_000, 99_000, 60_000, 90_000));
+    }
+
+    #[test]
+    fn a_pause_ends_on_time_even_across_the_tick_rollover() {
+        assert!(!pause_is_over(1_000, 61_000));
+        assert!(pause_is_over(61_000, 61_000));
+        let until = 30_000u32; // wrapped past u32::MAX
+        assert!(!pause_is_over(u32::MAX - 10_000, until));
+        assert!(pause_is_over(until + 1, until));
+        assert_eq!(minutes_left(0, 600_000), 10);
+        assert_eq!(minutes_left(1, 600_000), 10);
+        assert_eq!(minutes_left(600_000, 600_000), 0);
+        assert_eq!(minutes_left(u32::MAX - 59_998, 1), 1);
     }
 
     #[test]

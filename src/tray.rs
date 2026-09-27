@@ -12,7 +12,8 @@ use native_windows_gui as nwg;
 use windows::Win32::Foundation::HWND;
 
 use crate::{config, focus, hook, learn, overlay, session, settings, startup, stats};
-use righttype::i18n::{tr, T};
+use righttype::i18n::{tr, trf, T};
+use righttype::per_app::AppMode;
 
 thread_local! {
     /// Last tooltip pushed to the shell, so the timer refresh is a no-op
@@ -36,9 +37,18 @@ struct Tray {
     _tray: nwg::TrayNotification,
     menu: nwg::Menu,
     m_enabled: nwg::MenuItem,
+    pause: nwg::Menu,
+    m_pause: [nwg::MenuItem; 3],
+    m_resume: nwg::MenuItem,
     m_auto: nwg::MenuItem,
     m_manual: nwg::MenuItem,
     m_suggest: nwg::MenuItem,
+    this_app: nwg::Menu,
+    /// The app the submenu applies to (disabled; its name as the label).
+    m_app_name: nwg::MenuItem,
+    m_app_default: nwg::MenuItem,
+    /// Auto, Suggest, Manual, Off.
+    m_app_modes: [nwg::MenuItem; 4],
     m_learn: nwg::MenuItem,
     m_startup: nwg::MenuItem,
     m_settings: nwg::MenuItem,
@@ -46,6 +56,54 @@ struct Tray {
     m_help: nwg::MenuItem,
     _sep: nwg::MenuSeparator,
     m_quit: nwg::MenuItem,
+}
+
+/// Pause lengths offered in the tray menu, in minutes.
+const PAUSE_MINUTES: [u32; 3] = [10, 30, 60];
+/// The per-app choices in the "In this app" submenu, in menu order.
+const APP_MODES: [AppMode; 4] = [
+    AppMode::Auto,
+    AppMode::Suggest,
+    AppMode::Manual,
+    AppMode::Off,
+];
+
+fn item(parent: &nwg::Menu, text: &str) -> nwg::MenuItem {
+    let mut item = nwg::MenuItem::default();
+    nwg::MenuItem::builder()
+        .text(text)
+        .parent(parent)
+        .build(&mut item)
+        .expect("menu item");
+    item
+}
+
+fn submenu(parent: &nwg::Menu, text: &str) -> nwg::Menu {
+    let mut menu = nwg::Menu::default();
+    nwg::Menu::builder()
+        .text(text)
+        .parent(parent)
+        .build(&mut menu)
+        .expect("submenu");
+    menu
+}
+
+fn separator(parent: &nwg::Menu) {
+    let mut sep = nwg::MenuSeparator::default();
+    nwg::MenuSeparator::builder()
+        .parent(parent)
+        .build(&mut sep)
+        .expect("sep");
+}
+
+/// The label of an app mode in the "In this app" submenu.
+fn app_mode_label(mode: AppMode) -> &'static str {
+    tr(match mode {
+        AppMode::Auto => T::TrayAuto,
+        AppMode::Suggest => T::TraySuggest,
+        AppMode::Manual => T::TrayManual,
+        AppMode::Off => T::TrayAppOff,
+    })
 }
 
 /// Build the tray UI, install the hook, and run the event loop until Quit.
@@ -104,6 +162,16 @@ pub fn run() {
         .build(&mut m_enabled)
         .expect("enabled item");
 
+    let pause = submenu(&menu, tr(T::TrayPause));
+    let m_pause = [
+        item(&pause, tr(T::TrayPause10)),
+        item(&pause, tr(T::TrayPause30)),
+        item(&pause, tr(T::TrayPause60)),
+    ];
+    separator(&pause);
+    let m_resume = item(&pause, tr(T::TrayResume));
+    separator(&menu);
+
     let mut m_auto = nwg::MenuItem::default();
     nwg::MenuItem::builder()
         .text(tr(T::TrayAuto))
@@ -124,6 +192,14 @@ pub fn run() {
         .parent(&menu)
         .build(&mut m_suggest)
         .expect("suggest item");
+
+    let this_app = submenu(&menu, tr(T::TrayThisApp));
+    let m_app_name = item(&this_app, tr(T::TrayNoApp));
+    m_app_name.set_enabled(false);
+    separator(&this_app);
+    let m_app_default = item(&this_app, tr(T::TrayAppDefault));
+    let m_app_modes = APP_MODES.map(|mode| item(&this_app, app_mode_label(mode)));
+    separator(&menu);
 
     let mut m_learn = nwg::MenuItem::default();
     nwg::MenuItem::builder()
@@ -188,9 +264,16 @@ pub fn run() {
         _tray: tray,
         menu,
         m_enabled,
+        pause,
+        m_pause,
+        m_resume,
         m_auto,
         m_manual,
         m_suggest,
+        this_app,
+        m_app_name,
+        m_app_default,
+        m_app_modes,
         m_learn,
         m_startup,
         m_settings,
@@ -244,6 +327,34 @@ pub fn run() {
                     ui_h.m_suggest.set_checked(true);
                     overlay::show(tr(T::ToastModeSuggest));
                     config::persist();
+                } else if let Some(i) = ui_h.m_pause.iter().position(|m| handle == m.handle) {
+                    let minutes = PAUSE_MINUTES[i];
+                    session::pause(minutes);
+                    if session::is_paused() {
+                        overlay::show(&trf(T::ToastPaused, &[("n", &minutes.to_string())]));
+                    }
+                } else if handle == ui_h.m_resume.handle {
+                    if session::is_paused() {
+                        session::resume();
+                        overlay::show(tr(T::ToastOn));
+                    }
+                } else if handle == ui_h.m_app_default.handle
+                    || ui_h.m_app_modes.iter().any(|m| handle == m.handle)
+                {
+                    if let Some(app) = crate::apps::last_app() {
+                        let mode = ui_h
+                            .m_app_modes
+                            .iter()
+                            .position(|m| handle == m.handle)
+                            .map(|i| APP_MODES[i]);
+                        crate::apps::set(&app, mode);
+                        let label = match mode {
+                            Some(mode) => app_mode_label(mode),
+                            None => tr(T::TrayAppDefault),
+                        };
+                        overlay::show(&trf(T::ToastAppMode, &[("mode", label), ("app", &app)]));
+                        config::persist();
+                    }
                 } else if handle == ui_h.m_learn.handle {
                     let on = !learn::is_enabled();
                     learn::set_enabled(on);
@@ -349,16 +460,20 @@ const WM_TIMER: u32 = 0x0113;
 fn sync_state(ui: &Rc<Tray>) {
     let enabled = hook::is_enabled();
     let healthy = session::is_healthy();
+    let paused = session::pause_minutes_left();
     let state = if !healthy {
-        tr(T::StateHookLost)
+        tr(T::StateHookLost).to_string()
+    } else if let Some(minutes) = paused {
+        trf(T::StatePaused, &[("n", &minutes.max(1).to_string())])
     } else if enabled {
         tr(match hook::mode() {
             hook::Mode::Auto => T::ModeAuto,
             hook::Mode::Suggest => T::ModeSuggest,
             hook::Mode::Manual => T::ModeManual,
         })
+        .to_string()
     } else {
-        tr(T::StateOff)
+        tr(T::StateOff).to_string()
     };
     let tip = format!("RightType — {state}");
     if TIP.with(|t| t.replace(tip.clone())) != tip {
@@ -382,9 +497,36 @@ fn sync_state(ui: &Rc<Tray>) {
             (&ui.m_stats, T::TrayStats),
             (&ui.m_help, T::TrayHelp),
             (&ui.m_quit, T::TrayQuit),
+            (&ui.m_pause[0], T::TrayPause10),
+            (&ui.m_pause[1], T::TrayPause30),
+            (&ui.m_pause[2], T::TrayPause60),
+            (&ui.m_resume, T::TrayResume),
+            (&ui.m_app_default, T::TrayAppDefault),
         ] {
             set_menu_text(item, tr(key));
         }
+        for (item, mode) in ui.m_app_modes.iter().zip(APP_MODES) {
+            set_menu_text(item, app_mode_label(mode));
+        }
+        set_submenu_text(&ui.pause, tr(T::TrayPause));
+        set_submenu_text(&ui.this_app, tr(T::TrayThisApp));
+    }
+    ui.m_resume.set_enabled(paused.is_some());
+    for item in &ui.m_pause {
+        item.set_enabled(enabled || paused.is_some());
+    }
+    // "In this app": the app last typed in, and its mode.
+    let app = crate::apps::last_app();
+    let own = app.as_deref().and_then(crate::apps::lookup);
+    set_menu_text(
+        &ui.m_app_name,
+        app.as_deref().unwrap_or_else(|| tr(T::TrayNoApp)),
+    );
+    ui.m_app_default.set_enabled(app.is_some());
+    ui.m_app_default.set_checked(app.is_some() && own.is_none());
+    for (item, mode) in ui.m_app_modes.iter().zip(APP_MODES) {
+        item.set_enabled(app.is_some());
+        item.set_checked(own == Some(mode));
     }
     ui.m_learn.set_checked(learn::is_enabled());
     ui.m_enabled.set_checked(enabled);
@@ -396,11 +538,24 @@ fn sync_state(ui: &Rc<Tray>) {
 
 /// Relabel a menu item (nwg has no setter): used when the language changes.
 fn set_menu_text(item: &nwg::MenuItem, text: &str) {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        SetMenuItemInfoW, HMENU, MENUITEMINFOW, MIIM_STRING,
-    };
     let Some((hmenu, id)) = item.handle.hmenu_item() else {
         return;
+    };
+    set_item_text(hmenu as _, id, text);
+}
+
+/// Relabel a submenu's entry in its parent menu. A popup entry's command id is
+/// its submenu handle.
+fn set_submenu_text(menu: &nwg::Menu, text: &str) {
+    let Some((parent, sub)) = menu.handle.hmenu() else {
+        return;
+    };
+    set_item_text(parent as _, sub as usize as u32, text);
+}
+
+fn set_item_text(hmenu: *mut core::ffi::c_void, id: u32, text: &str) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetMenuItemInfoW, HMENU, MENUITEMINFOW, MIIM_STRING,
     };
     let mut wide: Vec<u16> = format!("{text}\0").encode_utf16().collect();
     let info = MENUITEMINFOW {

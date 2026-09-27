@@ -62,20 +62,8 @@ pub fn set_custom_list(entries: Vec<String>) {
     *CUSTOM_BLACKLIST.lock().unwrap() = entries.into_iter().map(|s| s.to_lowercase()).collect();
 }
 
-/// Is the foreground app one we must not run in? Heavier (opens the process), so
-/// the caller caches this per foreground window rather than per keystroke.
-///
-/// # Safety
-/// `hwnd` must be a valid window handle (the current foreground window).
-pub unsafe fn is_blacklisted_app(hwnd: HWND) -> bool {
-    let Some(exe) = foreground_exe(hwnd) else {
-        // Unknown process identity is not evidence that a context is safe.
-        return true;
-    };
-    is_blacklisted_name(&exe)
-}
-
-fn is_blacklisted_name(exe: &str) -> bool {
+/// Is `exe` (an executable name) on the built-in or the user's blocked list?
+pub fn is_blacklisted_name(exe: &str) -> bool {
     let exe = exe.to_lowercase();
     BLACKLIST.contains(&exe.as_str()) || CUSTOM_BLACKLIST.lock().unwrap().contains(&exe)
 }
@@ -96,7 +84,11 @@ pub unsafe fn is_password_field() -> bool {
     (GetWindowLongPtrW(gui.hwndFocus, GWL_STYLE) & ES_PASSWORD) != 0
 }
 
-unsafe fn foreground_exe(hwnd: HWND) -> Option<String> {
+/// The executable name (lower case) of the process owning `hwnd`.
+///
+/// # Safety
+/// `hwnd` must be a window handle (it may be stale; that yields `None`).
+pub unsafe fn foreground_exe(hwnd: HWND) -> Option<String> {
     let mut pid = 0u32;
     GetWindowThreadProcessId(hwnd, Some(&mut pid));
     if pid == 0 {

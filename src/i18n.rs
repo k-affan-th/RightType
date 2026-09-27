@@ -91,6 +91,15 @@ texts! {
     TrayStats => "Statistics…", "สถิติ…";
     TrayHelp => "Hotkeys && help…", "ปุ่มลัดและวิธีใช้…";
     TrayQuit => "Quit", "ออกจากโปรแกรม";
+    TrayPause => "Pause", "หยุดชั่วคราว";
+    TrayPause10 => "For 10 minutes", "10 นาที";
+    TrayPause30 => "For 30 minutes", "30 นาที";
+    TrayPause60 => "For 1 hour", "1 ชั่วโมง";
+    TrayResume => "Resume now", "กลับมาทำงานเดี๋ยวนี้";
+    TrayThisApp => "In this app", "ในแอปนี้";
+    TrayNoApp => "Type in an app first", "พิมพ์ในแอปที่ต้องการก่อน";
+    TrayAppDefault => "Use the default mode", "ใช้โหมดปกติ";
+    TrayAppOff => "Off in this app", "ปิดในแอปนี้";
 
     // Modes and state, as short labels.
     ModeAuto => "Auto", "อัตโนมัติ";
@@ -98,6 +107,9 @@ texts! {
     ModeManual => "Manual", "กดแก้เอง";
     StateOff => "Off", "ปิดอยู่";
     StateHookLost => "Not working — retrying", "หยุดทำงาน — กำลังลองใหม่";
+    StatePaused => "Paused — back in {n} min", "หยุดชั่วคราว — กลับมาในอีก {n} นาที";
+    StateAppMode => "{mode} in {app}", "{mode} ใน {app}";
+    ModeOff => "Off", "ปิด";
 
     // Toasts.
     ToastOn => "RightType is on", "RightType เปิดแล้ว";
@@ -108,6 +120,9 @@ texts! {
     ToastLearnOn => "Learning new words", "เปิดการเรียนรู้คำใหม่";
     ToastLearnOff => "Not learning new words", "ปิดการเรียนรู้คำใหม่";
     ToastUndo => "Undone", "ย้อนกลับแล้ว";
+    ToastFlippedWords => "Flipped back {n} words", "แก้ย้อน {n} คำแล้ว";
+    ToastPaused => "Paused for {n} minutes", "หยุดชั่วคราว {n} นาที";
+    ToastAppMode => "{mode} in {app}", "{mode} ใน {app}";
     ToastHookLost => "RightType lost the keyboard — retrying…", "RightType ตรวจจับคีย์บอร์ดไม่ได้ — กำลังลองใหม่…";
     ToastHookBack => "RightType is working again", "RightType กลับมาทำงานแล้ว";
     ToastSaved => "Saved", "บันทึกแล้ว";
@@ -131,7 +146,7 @@ texts! {
     NavGeneral => "General", "ทั่วไป";
     NavHotkeys => "Hotkeys", "ปุ่มลัด";
     NavLearned => "Learned words", "คำที่เรียนรู้";
-    NavBlocked => "Blocked apps", "แอปที่ไม่ทำงาน";
+    NavBlocked => "Apps", "แอป";
     NavAbout => "Privacy & about", "ความเป็นส่วนตัว";
     HeadMode => "Correction mode", "วิธีแก้คำ";
     DescAuto => "Fixes words as you type — Thai as soon as your keys spell a Thai word, English when you press Space.", "แก้ให้ทันทีขณะพิมพ์ — เป็นภาษาไทยทันทีที่ปุ่มที่กดสะกดเป็นคำไทย และเป็นภาษาอังกฤษเมื่อกดเว้นวรรค";
@@ -158,9 +173,19 @@ texts! {
     LearnedIntro => "RightType treats these as real words and never converts them. One word per line, Thai or English — delete a line to forget that word.", "RightType ถือว่าคำเหล่านี้เป็นคำจริงและจะไม่แปลงเลย หนึ่งคำต่อบรรทัด ภาษาไทยหรืออังกฤษก็ได้ — ลบบรรทัดออกเพื่อให้ลืมคำนั้น";
     BtnSaveLearned => "Save", "บันทึก";
     BtnClearAll => "Clear all", "ล้างทั้งหมด";
+    BtnImport => "Import…", "นำเข้า…";
+    BtnExport => "Export…", "ส่งออก…";
+    LearnedImported => "Added {n} words from the file.", "เพิ่ม {n} คำจากไฟล์แล้ว";
+    LearnedExported => "Saved {n} words to the file.", "บันทึก {n} คำลงไฟล์แล้ว";
+    ErrFile => "Could not use that file.", "ใช้ไฟล์นั้นไม่ได้";
+    FileFilter => "Text files (*.txt)", "ไฟล์ข้อความ (*.txt)";
     LearnedSaved => "Saved {n} words.", "บันทึก {n} คำแล้ว";
     LearnedSkipped => "Saved {n} words. Skipped {k} lines that are not a single word.", "บันทึก {n} คำแล้ว ข้าม {k} บรรทัดที่ไม่ใช่คำเดียว";
     HeadBlocked => "Blocked apps", "แอปที่ไม่ทำงาน";
+    HeadAppModes => "Mode per app", "โหมดของแต่ละแอป";
+    AppModesIntro => "One app per line: name.exe = auto, suggest, manual or off. Quicker: tray menu → In this app.", "หนึ่งแอปต่อบรรทัด: ชื่อ.exe = auto, suggest, manual หรือ off หรือตั้งจากเมนูที่ถาดไอคอน → ในแอปนี้";
+    AppsSaved => "Saved.", "บันทึกแล้ว";
+    AppsSkipped => "Saved. Skipped {k} lines that are not name.exe = mode.", "บันทึกแล้ว ข้าม {k} บรรทัดที่ไม่ใช่รูปแบบ ชื่อ.exe = โหมด";
     BlockedAlways => "RightType always stays out of password fields, terminals, password managers and crypto wallets.", "RightType ไม่ทำงานในช่องรหัสผ่าน เทอร์มินัล โปรแกรมจัดการรหัสผ่าน และกระเป๋าคริปโตเสมอ";
     BlockedAdd => "Also stay out of these apps — one program name per line, for example notepad.exe:", "ไม่ทำงานในแอปเหล่านี้ด้วย — หนึ่งชื่อโปรแกรมต่อบรรทัด เช่น notepad.exe:";
     BtnSaveList => "Save list", "บันทึกรายการ";
@@ -172,6 +197,8 @@ texts! {
     HeadAbout => "About", "เกี่ยวกับ";
     AboutVersion => "RightType {v}", "RightType {v}";
     AboutLicense => "Free and open source — MIT or Apache-2.0.", "ฟรีและโอเพนซอร์ส — MIT หรือ Apache-2.0";
+    BtnCheckUpdates => "Check for updates", "ตรวจสอบอัปเดต";
+    AboutUpdates => "Opens the download page in your browser. RightType itself never goes online.", "เปิดหน้าดาวน์โหลดในเบราว์เซอร์ ตัว RightType เองไม่ต่ออินเทอร์เน็ต";
     BtnClose => "Close", "ปิด";
 
     // Welcome / help window.
@@ -190,6 +217,9 @@ texts! {
     StatsAuto => "Fixed automatically", "แก้อัตโนมัติ";
     StatsManual => "Fixed with a hotkey", "แก้ด้วยปุ่มลัด";
     StatsLearned => "Learned words", "คำที่เรียนรู้";
+    StatsSaved => "Time saved (estimate)", "เวลาที่ประหยัด (ประมาณ)";
+    StatsSavedValue => "{n} min", "{n} นาที";
+    StatsSavedSeconds => "{n} s", "{n} วินาที";
     StatsNote => "Counts start again when RightType restarts. Nothing you type is saved.", "ตัวเลขจะเริ่มใหม่เมื่อเปิดโปรแกรมใหม่ และไม่มีการบันทึกสิ่งที่คุณพิมพ์";
 }
 
@@ -242,7 +272,7 @@ mod tests {
     #[test]
     fn placeholders_match_between_languages() {
         for key in T::ALL {
-            for name in ["{n}", "{k}", "{v}", "{mode}"] {
+            for name in ["{n}", "{k}", "{v}", "{mode}", "{app}"] {
                 assert_eq!(
                     key.get(Lang::En).contains(name),
                     key.get(Lang::Th).contains(name),
