@@ -50,33 +50,40 @@ pub const KLID_THAI_KEDMANEE: u32 = 0x0000_041E;
 ///   is set to US; its default handle can mean the Canadian French layout.
 /// * **Thai**: the default keyboard (Kedmanee). Other Thai keyboards are
 ///   accepted only when the user has chosen Pattachote in Settings (their
-///   handles vary, so the choice is the user's, not guessed).
+///   handles vary, so the choice is the user's, not guessed), and then the
+///   default one is not: keys are only ever read through the matching table.
 ///
 /// Anything else (Dvorak, other languages) is `None`: RightType stays out.
 pub fn supported_layout_id(hkl: u32) -> Option<InputLayout> {
     let language = hkl & 0xFFFF;
-    let device = hkl >> 16;
     if language & 0x3FF == 0x09 {
         return english_variant_of(hkl).map(|_| InputLayout::UsQwerty);
     }
     if language == KLID_THAI_KEDMANEE {
-        let default = device == 0 || device == language;
-        let pattachote = crate::layout::thai_variant() == crate::layout::ThaiVariant::Pattachote;
-        return (default || pattachote).then_some(InputLayout::ThaiKedmanee);
+        return thai_keyboard_matches(hkl, crate::layout::thai_variant())
+            .then_some(InputLayout::ThaiKedmanee);
     }
     None
+}
+
+/// Whether a Thai `HKL` is the keyboard of the table in use: the default
+/// Thai keyboard for Kedmanee, any other Thai keyboard for Pattachote. Only
+/// that one is accepted, so keys are never read through the other table
+/// when both keyboards are installed.
+fn thai_keyboard_matches(hkl: u32, variant: crate::layout::ThaiVariant) -> bool {
+    let language = hkl & 0xFFFF;
+    let device = hkl >> 16;
+    let default = device == 0 || device == language;
+    default == (variant == crate::layout::ThaiVariant::Kedmanee)
 }
 
 /// Whether `hkl` is the keyboard whose table is in use: the chosen Thai
 /// keyboard (the default one for Kedmanee, another one for Pattachote), or
 /// the English keyboard last seen.
 pub fn is_preferred_layout(hkl: u32) -> bool {
-    use crate::layout::{english_variant, thai_variant, ThaiVariant};
-    let language = hkl & 0xFFFF;
-    let device = hkl >> 16;
-    if language == KLID_THAI_KEDMANEE {
-        let default = device == 0 || device == language;
-        return default == (thai_variant() == ThaiVariant::Kedmanee);
+    use crate::layout::{english_variant, thai_variant};
+    if hkl & 0xFFFF == KLID_THAI_KEDMANEE {
+        return thai_keyboard_matches(hkl, thai_variant());
     }
     english_variant_of(hkl) == Some(english_variant())
 }
@@ -582,6 +589,13 @@ mod tests {
         // Thai variants only once the user has chosen Pattachote.
         assert_eq!(supported_layout_id(0x0001_041E), None);
         assert_eq!(supported_layout_id(0xF001_041E), None);
+        // And then only they: Kedmanee is never read through Pattachote.
+        use crate::layout::ThaiVariant::{Kedmanee, Pattachote};
+        assert!(thai_keyboard_matches(0x041E_041E, Kedmanee));
+        assert!(!thai_keyboard_matches(0xF001_041E, Kedmanee));
+        assert!(thai_keyboard_matches(0xF001_041E, Pattachote));
+        assert!(!thai_keyboard_matches(0x041E_041E, Pattachote));
+        assert!(!thai_keyboard_matches(0x0000_041E, Pattachote));
     }
 
     #[test]
