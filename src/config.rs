@@ -4,6 +4,7 @@
 //! they survive restarts. **Only app settings live here** — nothing typed is ever
 //! written, in keeping with the no-on-disk-keystrokes guarantee.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::mpsc::{sync_channel, SyncSender};
 use std::sync::OnceLock;
@@ -12,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{hook, learn, safety};
 use righttype::i18n::Lang;
+use righttype::per_app::{normalize_exe, AppMode};
 
 static PERSIST_TX: OnceLock<SyncSender<()>> = OnceLock::new();
 
@@ -36,6 +38,9 @@ pub struct Config {
     /// Interface language, `"en"` or `"th"`; absent means follow Windows.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    /// Per-app modes: executable name → `auto` / `suggest` / `manual` / `off`.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub app_modes: BTreeMap<String, String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -76,6 +81,7 @@ impl Default for Config {
             custom_blacklist: Vec::new(),
             onboarded: false,
             language: None,
+            app_modes: BTreeMap::new(),
         }
     }
 }
@@ -112,6 +118,12 @@ pub fn apply(cfg: &Config) {
     learn::set_enabled(cfg.learn);
     safety::set_custom_list(cfg.custom_blacklist.clone());
     set_language(cfg.language.as_deref().and_then(Lang::from_code));
+    crate::apps::set_all(
+        cfg.app_modes
+            .iter()
+            .filter_map(|(exe, mode)| Some((normalize_exe(exe)?, AppMode::parse(mode)?)))
+            .collect(),
+    );
 }
 
 /// The language the user picked, or `None` to follow Windows.
@@ -153,13 +165,18 @@ pub fn mark_onboarded() {
 /// Snapshot the current runtime state and write it to disk. Best-effort.
 pub fn persist() {
     let cfg = Config {
-        enabled: hook::is_enabled(),
+        // A pause is temporary: it must not be saved as "off".
+        enabled: hook::is_enabled() || crate::session::is_paused(),
         mode: Some(hook::mode().into()),
         auto: None,
         learn: learn::is_enabled(),
         custom_blacklist: safety::custom_list(),
         onboarded: onboarded(),
         language: language_choice().map(|lang| lang.code().to_string()),
+        app_modes: crate::apps::all()
+            .into_iter()
+            .map(|(exe, mode)| (exe, mode.name().to_string()))
+            .collect(),
     };
     let Some(p) = config_path() else {
         return;

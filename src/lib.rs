@@ -13,10 +13,12 @@
 //! - [`dict`] — word dictionaries for membership checks.
 //! - [`english`] — English beyond the dictionary: compounds and continuations.
 //! - [`i18n`] — interface strings in English and Thai.
+//! - [`per_app`] — per-app correction modes and their text form.
 //! - [`detect`] — layout-mismatch detection over completed words.
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
 //! - [`segment`] — Thai word segmentation (maximal matching) for space-less Thai.
 //! - [`render`] — reconciling on-screen text with the run's current best reading.
+//! - [`recent`] — the last few completed words, for flipping back several at once.
 //! - [`sim`] — the hook's Auto pipeline replayed on a string, for benchmarks and tests.
 
 pub mod buffer;
@@ -25,7 +27,9 @@ pub mod dict;
 pub mod english;
 pub mod i18n;
 pub mod layout;
+pub mod per_app;
 pub mod policy;
+pub mod recent;
 pub mod render;
 pub mod secret;
 pub mod segment;

@@ -32,6 +32,8 @@ use zeroize::Zeroize;
 
 use righttype::buffer::{Key, WordBuffer};
 use righttype::layout::auto_convert;
+use righttype::per_app::AppMode;
+use righttype::recent::Recent;
 use righttype::render;
 use righttype::{dict, policy, secret};
 
@@ -48,7 +50,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, PostMessageW,
     SetWindowsHookExW, UnhookWindowsHookEx, GUITHREADINFO, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT,
-    LLKHF_INJECTED, WH_KEYBOARD_LL, WM_INPUTLANGCHANGEREQUEST, WM_KEYDOWN, WM_SYSKEYDOWN,
+    LLKHF_INJECTED, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_INPUTLANGCHANGEREQUEST, WM_KEYDOWN,
+    WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_XBUTTONDOWN,
 };
 
 use crate::{inject, manual, safety};
@@ -91,6 +94,9 @@ impl Mode {
 
 static MODE: AtomicU8 = AtomicU8::new(Mode::Manual as u8);
 
+/// Backspace is physically down (a further key-down is an auto-repeat).
+static BACKSPACE_HELD: AtomicBool = AtomicBool::new(false);
+
 /// Master on/off, controlled from the tray. When off the hook passes every key
 /// straight through and touches nothing.
 static ENABLED: AtomicBool = AtomicBool::new(true);
@@ -110,7 +116,7 @@ pub fn set_enabled(on: bool) {
             st.owned = None;
             st.mark = TokenMark::Plain;
             st.undo = None;
-            st.last_completed = None;
+            st.recent.clear();
             st.suggestion = None;
         });
     }
@@ -122,6 +128,70 @@ pub fn mode() -> Mode {
         2 => Mode::Suggest,
         _ => Mode::Manual,
     }
+}
+
+/// The mode that applies in the app being typed in: its own per-app mode, or
+/// the global one. `None` when RightType is switched off in this app.
+fn mode_here() -> Option<Mode> {
+    let own = STATE.with(|s| s.borrow().app_exe.as_deref().and_then(crate::apps::lookup));
+    match own {
+        Some(AppMode::Off) => None,
+        Some(AppMode::Auto) => Some(Mode::Auto),
+        Some(AppMode::Suggest) => Some(Mode::Suggest),
+        Some(AppMode::Manual) => Some(Mode::Manual),
+        None => Some(mode()),
+    }
+}
+
+impl From<Mode> for AppMode {
+    fn from(mode: Mode) -> Self {
+        match mode {
+            Mode::Auto => AppMode::Auto,
+            Mode::Suggest => AppMode::Suggest,
+            Mode::Manual => AppMode::Manual,
+        }
+    }
+}
+
+/// Ctrl+CapsLock: cycle the mode. In an app with its own mode that is the
+/// mode cycled (so the hotkey does what it visibly does there); elsewhere the
+/// global one.
+unsafe fn cycle_mode() {
+    use righttype::i18n::{tr, trf, T};
+    let exe = safety::foreground_exe(GetForegroundWindow());
+    let own = exe.as_deref().and_then(crate::apps::lookup);
+    match (exe, own) {
+        (Some(exe), Some(own)) => {
+            let next = match own {
+                AppMode::Manual => Mode::Auto,
+                AppMode::Auto => Mode::Suggest,
+                // Suggest, or Off (switched on again by the hotkey).
+                _ => Mode::Manual,
+            };
+            crate::apps::set(&exe, Some(next.into()));
+            crate::overlay::show(&trf(
+                T::ToastAppMode,
+                &[
+                    (
+                        "mode",
+                        tr(match next {
+                            Mode::Auto => T::ModeAuto,
+                            Mode::Suggest => T::ModeSuggest,
+                            Mode::Manual => T::ModeManual,
+                        }),
+                    ),
+                    ("app", &exe),
+                ],
+            ));
+            STATE.with(|s| s.borrow_mut().suggestion = None);
+        }
+        _ => {
+            let next = mode().next();
+            set_mode(next);
+            crate::overlay::show(next.label());
+        }
+    }
+    crate::config::persist_async();
 }
 
 pub fn set_mode(mode: Mode) {
@@ -152,6 +222,9 @@ struct HookState {
     /// manager / terminal). Recomputed only when the window changes — opening the
     /// process every keystroke would be wasteful.
     sensitive_app: bool,
+    /// The foreground app's executable name (lower case), for its per-app mode.
+    /// Recomputed with `sensitive_app`.
+    app_exe: Option<String>,
     /// The most recent correction, kept for one-shot Undo (Ctrl+Shift+CapsLock).
     /// Cleared after use and whenever focus/layout changes (an undo that retypes
     /// into a different window/context than the one it corrected would be wrong).
@@ -166,9 +239,9 @@ struct HookState {
     owned: Option<OwnedRun>,
     /// D-009: who has decided what the current token is.
     mark: TokenMark,
-    /// The last completed word and the boundary key code that completed it.
-    /// Used for manual Shift+Backspace correction immediately after a boundary.
-    last_completed: Option<LastCompleted>,
+    /// The last few completed words, as on screen, for Shift+Backspace right
+    /// after a boundary (pressed again: the word before, and so on).
+    recent: Recent,
     suggestion: Option<SuggestionRecord>,
 }
 
@@ -181,11 +254,12 @@ impl HookState {
             last_hkl: 0,
             last_focus_generation: 0,
             sensitive_app: false,
+            app_exe: None,
             undo: None,
             pending_hkl: None,
             owned: None,
             mark: TokenMark::Plain,
-            last_completed: None,
+            recent: Recent::new(),
             suggestion: None,
         }
     }
@@ -240,19 +314,6 @@ struct SuggestionRecord {
     original: String,
     corrected: String,
     boundary_vk: u16,
-}
-
-struct LastCompleted {
-    word: String,
-    boundary_vk: u16,
-    /// RightType converted this word itself (see [`TokenMark::Converted`]).
-    converted: bool,
-}
-
-impl Drop for LastCompleted {
-    fn drop(&mut self) {
-        self.word.zeroize();
-    }
 }
 
 impl Drop for SuggestionRecord {
@@ -350,12 +411,23 @@ fn boundary_literal(vk: u16) -> char {
     }
 }
 
+/// The boundary key that types `c` (the inverse of [`boundary_literal`]).
+fn boundary_vk(c: char) -> u16 {
+    match c {
+        '\r' => VK_RETURN.0,
+        '\t' => VK_TAB.0,
+        _ => VK_SPACE.0,
+    }
+}
+
 /// The installed hook handle, kept only so [`uninstall`] can remove it. The raw
 /// handle is not `Send`; this wrapper asserts it is safe to move between threads
 /// (we only ever touch it from install/uninstall, never concurrently).
 struct HookHandle(HHOOK);
 unsafe impl Send for HookHandle {}
 static HOOK: Mutex<Option<HookHandle>> = Mutex::new(None);
+/// The low-level mouse hook: a click can move the caret without a keystroke.
+static MOUSE_HOOK: Mutex<Option<HookHandle>> = Mutex::new(None);
 
 /// `GetTickCount` time of the last event the hook received (or of its
 /// installation). The session watchdog compares it with the system's last-input
@@ -405,6 +477,10 @@ pub unsafe fn install() -> windows::core::Result<()> {
     let hmod = GetModuleHandleW(None)?;
     let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(ll_proc), HINSTANCE(hmod.0), 0)?;
     *HOOK.lock().unwrap() = Some(HookHandle(hook));
+    // Best-effort: without it a click is only noticed when focus changes.
+    if let Ok(mouse) = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), HINSTANCE(hmod.0), 0) {
+        *MOUSE_HOOK.lock().unwrap() = Some(HookHandle(mouse));
+    }
     LAST_HOOK_TICK.store(
         windows::Win32::System::SystemInformation::GetTickCount(),
         Ordering::Relaxed,
@@ -428,6 +504,9 @@ pub unsafe fn uninstall() {
     if let Some(h) = HOOK.lock().unwrap().take() {
         let _ = UnhookWindowsHookEx(h.0);
     }
+    if let Some(h) = MOUSE_HOOK.lock().unwrap().take() {
+        let _ = UnhookWindowsHookEx(h.0);
+    }
 }
 
 /// Tear down and re-establish the hook — the recovery action after a power/session
@@ -438,6 +517,40 @@ pub unsafe fn uninstall() {
 pub unsafe fn reinstall() -> windows::core::Result<()> {
     uninstall();
     install()
+}
+
+/// A mouse button went down: the click may have moved the caret, so nothing
+/// recorded about the text before it can be trusted any more — the same as an
+/// arrow key. Only the event type is looked at, never where the click was.
+unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code == HC_ACTION as i32
+        && matches!(
+            wparam.0 as u32,
+            WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
+        )
+    {
+        caret_may_have_moved();
+    }
+    CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
+/// Let go of everything that assumes the caret is where typing left it: the
+/// word in progress, a run we own (left on screen as it is), the Undo record,
+/// the recent words and a pending suggestion.
+fn caret_may_have_moved() {
+    STATE.with(|s| {
+        // Never re-entered from inside the keyboard path, but do not panic if
+        // a nested hook call ever finds the state borrowed.
+        let Ok(mut st) = s.try_borrow_mut() else {
+            return;
+        };
+        st.buf.clear();
+        st.owned = None;
+        st.mark = TokenMark::Plain;
+        st.undo = None;
+        st.recent.clear();
+        st.suggestion = None;
+    });
 }
 
 unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -530,6 +643,8 @@ unsafe fn is_layout_switch_trigger(vk: u16) -> bool {
 unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     let vk = kb.vkCode as u16;
     let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+    // Windows repeats a held key as more key-downs; only a release ends it.
+    let repeat = vk == VK_BACK.0 && BACKSPACE_HELD.swap(down, Ordering::Relaxed) && down;
     if !down {
         return false;
     }
@@ -538,11 +653,21 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     let is_shift_backspace =
         vk == VK_BACK.0 && is_down(VK_SHIFT) && !is_down(VK_CONTROL) && !is_down(VK_MENU);
     if !is_shift_backspace && !is_modifier(vk) {
+        // Keys that edit or move away from the text before the caret, and any
+        // command chord, make the recent words stale. Typing (a character or
+        // a boundary) keeps them: it only adds after them.
+        let stale = is_down(VK_CONTROL) || is_down(VK_MENU) || moves_or_edits(vk);
         STATE.with(|s| {
             let mut st = s.borrow_mut();
-            st.last_completed = None;
+            st.recent.end_chain();
+            if stale {
+                st.recent.clear();
+            }
             st.suggestion = None;
         });
+    } else if vk == VK_CAPITAL.0 {
+        // CapsLock chords (convert selection, undo, ...) can rewrite text.
+        STATE.with(|s| s.borrow_mut().recent.clear());
     }
 
     // Panic switch: Ctrl+Alt+CapsLock instantly flips master enable, either way.
@@ -572,10 +697,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // password field — so the chord used to fall through there and silently
     // toggle CapsLock instead of switching mode.
     if vk == VK_CAPITAL.0 && is_down(VK_CONTROL) && !is_down(VK_SHIFT) && !is_down(VK_MENU) {
-        let next = mode().next();
-        set_mode(next);
-        crate::overlay::show(next.label());
-        crate::config::persist_async();
+        cycle_mode();
         return true;
     }
 
@@ -595,7 +717,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             st.pending_hkl = None;
             st.buf.clear();
             st.mark = TokenMark::Plain;
-            st.last_completed = None;
+            st.recent.clear();
         });
     }
 
@@ -611,6 +733,17 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         STATE.with(|s| s.borrow_mut().suggestion = None);
         return false;
     }
+    // Switched off in this app (its per-app mode): touch nothing, like a
+    // blocked app, but the hotkeys above (on/off, mode cycle) still work.
+    let Some(mode_now) = mode_here() else {
+        STATE.with(|s| {
+            let mut st = s.borrow_mut();
+            st.buf.clear();
+            st.suggestion = None;
+            st.recent.clear();
+        });
+        return false;
+    };
 
     // CapsLock: a hotkey carrier when chorded, otherwise a normal toggle.
     if vk == VK_CAPITAL.0 {
@@ -661,6 +794,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // when there's nothing to convert — so the key's auto-repeat can't fall
     // through to a destructive Backspace and delete the result we just injected.
     if vk == VK_BACK.0 && is_down(VK_SHIFT) && !is_down(VK_CONTROL) && !is_down(VK_MENU) {
+        // Holding the keys acts once: each flip reaches one word further back,
+        // so auto-repeat would run through all of them in a blink.
+        if repeat {
+            return true;
+        }
         // While we own the run the screen does not match the buffer, so the
         // manual path's backspace count would be wrong. Withdraw our rendering
         // first; the typist asked for the raw keystrokes back.
@@ -675,6 +813,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
 
     let Some(key) = classify(vk, kb.scanCode as u16) else {
+        // Something we cannot follow (a dead key, a function key): the text
+        // before the caret may not be what we recorded.
+        STATE.with(|s| s.borrow_mut().recent.clear());
         return false;
     };
 
@@ -687,6 +828,10 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // Drive the buffer; only a boundary can return a completed word.
     let completed = STATE.with(|s| s.borrow_mut().buf.observe(key));
+    if completed.is_none() && key == Key::Boundary {
+        // A boundary after nothing (a second space) is not in the record.
+        STATE.with(|s| s.borrow_mut().recent.clear());
+    }
     let Some(mut word) = completed else {
         // D-008 revisable rendering: reconcile the screen with the run's current
         // best reading. Only Char and Backspace change the run, and only a
@@ -703,7 +848,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             _ => false,
         };
         if may_reconcile
-            && mode() == Mode::Auto
+            && mode_now == Mode::Auto
             && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
             && policy::supported_layout_id(layout_id(effective_layout()))
                 == Some(policy::InputLayout::UsQwerty)
@@ -770,7 +915,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     e2e_trace(format!(
         "word={word:?} layout={active_layout:?} converted={converted} det={:?} mode={:?}",
         detection.as_ref().map(|d| d.corrected.clone()),
-        mode()
+        mode_now
     ));
 
     // Track the meaningful English stream, including a wrong-layout candidate.
@@ -796,7 +941,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // Auto mode commits only at this boundary; Manual mode retains the token for
     // Shift+Backspace.
-    let swallow = match (mode(), detection) {
+    let swallow = match (mode_now, detection) {
         (Mode::Auto, Some(d)) => {
             let mut corrected = d.corrected.clone();
             let done = maybe_correct(&word, Some(vk), d);
@@ -839,21 +984,30 @@ fn forget_recent_text() {
     STATE.with(|s| {
         let mut st = s.borrow_mut();
         st.undo = None;
-        st.last_completed = None;
+        st.recent.clear();
         st.suggestion = None;
     });
     crate::overlay::dismiss();
 }
 
-/// Keep the word a boundary just completed, for Shift+Backspace right after it.
+/// Keep the word a boundary just completed (as it is on screen), for
+/// Shift+Backspace right after it.
 fn remember_completed(word: &str, boundary_vk: u16, converted: bool) {
     STATE.with(|s| {
-        s.borrow_mut().last_completed = Some(LastCompleted {
-            word: word.to_string(),
-            boundary_vk,
-            converted,
-        });
+        s.borrow_mut()
+            .recent
+            .push(word, boundary_literal(boundary_vk), converted)
     });
+}
+
+/// Keys that move the caret or change text other than by typing after it.
+fn moves_or_edits(vk: u16) -> bool {
+    [
+        VK_BACK, VK_DELETE, VK_INSERT, VK_ESCAPE, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_HOME,
+        VK_END, VK_PRIOR, VK_NEXT,
+    ]
+    .iter()
+    .any(|k| k.0 == vk)
 }
 
 /// Exact 32-bit keyboard layout identifiers supported by the v1 mapping tables.
@@ -969,57 +1123,62 @@ unsafe fn accept_suggestion() {
     suggestion.corrected.zeroize();
 }
 
+/// Shift+Backspace with no word in progress: flip one more of the recent
+/// words back to the other layout (see [`Recent`]). The whole span from that
+/// word to the caret is retyped in one injection, and it is one Undo step.
+unsafe fn flip_back_recent() {
+    let Some(step) = STATE.with(|s| s.borrow().recent.next_step(auto_convert)) else {
+        return;
+    };
+    if step.insert.chars().count() + 1 == step.backspaces
+        && step.restore.strip_suffix(step.boundary) == Some(step.insert.as_str())
+    {
+        // Nothing changes on screen (a number, say): just move on to the
+        // word before it on the next press.
+        STATE.with(|s| s.borrow_mut().recent.commit(auto_convert));
+        return;
+    }
+    if !inject::apply(
+        step.backspaces,
+        &step.insert,
+        Some(boundary_vk(step.boundary)),
+    ) {
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+        STATE.with(|s| s.borrow_mut().recent.clear());
+        return;
+    }
+    STATE.with(|s| s.borrow_mut().recent.commit(auto_convert));
+    set_undo(
+        step.insert.chars().count() + 1,
+        &step.restore,
+        UndoKind::Manual,
+    );
+    crate::stats::record_manual();
+    // Flipping back a word RightType converted by itself is the clearest
+    // "that was a real word" there is.
+    if let Some(word) = step.learn.as_deref() {
+        crate::learn::learn_now(word);
+    }
+    activate_layout(layout_of(&step.newest));
+    if step.words > 1 {
+        crate::overlay::show(&righttype::i18n::trf(
+            righttype::i18n::T::ToastFlippedWords,
+            &[("n", &step.words.to_string())],
+        ));
+    }
+}
+
 /// Manual: flip the layout of the word currently in the buffer, in place. A no-op
 /// when the buffer is empty (e.g. an auto-repeat after the word was already
 /// converted) — the caller swallows the key either way.
 unsafe fn convert_last_word() {
     let mut word = STATE.with(|s| s.borrow().buf.current().to_string());
     if word.is_empty() {
-        // Try to convert the last completed word if we just hit a boundary (e.g. Space)
-        let last = STATE.with(|s| s.borrow_mut().last_completed.take());
-        if let Some(mut last) = last {
-            let mut last_word = std::mem::take(&mut last.word);
-            let boundary_vk = last.boundary_vk;
-            let backspaces = last_word.chars().count() + 1; // +1 for the boundary character
-            let mut converted = auto_convert(&last_word);
-            let changed = converted != last_word;
-            if changed {
-                if !inject::apply(backspaces, &converted, Some(boundary_vk)) {
-                    crate::overlay::show(righttype::i18n::tr(
-                        righttype::i18n::T::ErrCorrectionInject,
-                    ));
-                    converted.zeroize();
-                    last_word.zeroize();
-                    return;
-                }
-                set_undo(
-                    converted.chars().count() + 1,
-                    &format!("{}{}", last_word, boundary_literal(boundary_vk)),
-                    UndoKind::Manual,
-                );
-                crate::stats::record_manual();
-                // Flipping back a word RightType converted by itself is the
-                // clearest "that was a real word" there is.
-                if last.converted {
-                    crate::learn::learn_now(&converted);
-                }
-
-                // Switch language layout to the one of the converted word
-                let to_thai = converted
-                    .chars()
-                    .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
-                activate_layout(if to_thai {
-                    policy::InputLayout::ThaiKedmanee
-                } else {
-                    policy::InputLayout::UsQwerty
-                });
-            }
-            converted.zeroize();
-            last_word.zeroize();
-        }
+        // Right after a boundary: flip the word before it — and, pressed
+        // again, the word before that one too (up to `Recent::CAP`).
+        flip_back_recent();
         return;
     }
-    STATE.with(|s| s.borrow_mut().last_completed = None);
 
     let backspaces = word.chars().count();
     let mut converted = auto_convert(&word);
@@ -1388,7 +1547,7 @@ unsafe fn sync_context() {
             st.owned = None;
             st.mark = TokenMark::Plain;
             st.seed.reset();
-            st.last_completed = None;
+            st.recent.clear();
             st.suggestion = None;
             st.last_hwnd = hwnd_i;
             st.last_hkl = hkl_i;
@@ -1398,8 +1557,17 @@ unsafe fn sync_context() {
     });
     // Re-evaluate the (heavier) app blacklist only when the window changed.
     if window_changed {
-        let blacklisted = safety::is_blacklisted_app(hwnd);
-        STATE.with(|s| s.borrow_mut().sensitive_app = blacklisted);
+        let exe = safety::foreground_exe(hwnd);
+        // Unknown process identity is not evidence that a context is safe.
+        let blacklisted = exe.as_deref().map_or(true, safety::is_blacklisted_name);
+        if let Some(exe) = exe.as_deref() {
+            crate::apps::note_typing_in(exe);
+        }
+        STATE.with(|s| {
+            let mut st = s.borrow_mut();
+            st.sensitive_app = blacklisted;
+            st.app_exe = exe;
+        });
     }
 }
 

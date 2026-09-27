@@ -37,12 +37,36 @@ pub fn record_manual() {
     MANUAL.fetch_add(1, Ordering::Relaxed);
 }
 
+/// Rough time a correction saves, in seconds, using the typing benchmark's
+/// human timings (`examples/typing_benchmark.rs`: 0.30 s a keystroke, 0.60 s
+/// to switch layout, 0.80 s to notice a wrong word, 0.40 s for
+/// Shift+Backspace) and a typical 6-key word. An automatic fix saves noticing,
+/// deleting and retyping the word and switching layout; a hotkey fix saves the
+/// same minus the noticing, plus the hotkey itself.
+const SECONDS_PER_AUTO: f64 = 0.80 + 6.0 * 0.30 + 0.60 + 6.0 * 0.30;
+const SECONDS_PER_MANUAL: f64 = 6.0 * 0.30 + 0.60 + 6.0 * 0.30 - 0.40;
+
+/// Estimated seconds saved by `auto` and `manual` corrections.
+pub fn seconds_saved(auto: u64, manual: u64) -> u64 {
+    (auto as f64 * SECONDS_PER_AUTO + manual as f64 * SECONDS_PER_MANUAL).round() as u64
+}
+
+/// "42 s" under a minute, whole minutes after that.
+fn format_saved(seconds: u64) -> String {
+    use righttype::i18n::trf;
+    if seconds < 60 {
+        trf(T::StatsSavedSeconds, &[("n", &seconds.to_string())])
+    } else {
+        trf(T::StatsSavedValue, &[("n", &(seconds / 60).to_string())])
+    }
+}
+
 /// `(auto corrections, manual corrections)` since this run started.
 pub fn snapshot() -> (u64, u64) {
     (AUTO.load(Ordering::Relaxed), MANUAL.load(Ordering::Relaxed))
 }
 
-const W: i32 = 520;
+const W: i32 = 680;
 const H: i32 = 330;
 const X: i32 = 28;
 const TILE_W: i32 = 144;
@@ -94,6 +118,7 @@ pub fn open() {
         (auto.to_string(), T::StatsAuto),
         (manual.to_string(), T::StatsManual),
         (learn::count().to_string(), T::StatsLearned),
+        (format_saved(seconds_saved(auto, manual)), T::StatsSaved),
     ];
     for (i, (value, caption)) in tiles.iter().enumerate() {
         let x = X + i as i32 * (TILE_W + TILE_GAP);
@@ -164,8 +189,20 @@ fn finish(win: &Rc<StatsWindow>) {
 }
 
 fn paint(g: &Gfx, _hdc: HDC, _rc: RECT, _page: u8) {
-    for i in 0..3 {
+    for i in 0..4 {
         let x = X + i * (TILE_W + TILE_GAP);
         card(g, rect(x, TILE_Y, TILE_W, TILE_H));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn time_saved_is_a_plain_estimate() {
+        assert_eq!(seconds_saved(0, 0), 0);
+        assert_eq!(seconds_saved(1, 0), 5);
+        assert_eq!(seconds_saved(0, 10), 38);
     }
 }

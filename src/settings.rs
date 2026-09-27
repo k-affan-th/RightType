@@ -1,9 +1,10 @@
 //! Settings window — Windows only.
 //!
-//! A sidebar with five pages — General, Hotkeys, Learned words, Blocked apps,
-//! Privacy & about — in the shared [`ui`] look. Every change applies and is
-//! saved the moment it is made (no Apply/OK), except the two lists (learned
-//! words, blocked apps), which are text boxes with their own Save button.
+//! A sidebar with five pages — General, Hotkeys, Learned words, Apps (per-app
+//! modes and blocked apps), Privacy & about — in the shared [`ui`] look. Every
+//! change applies and is saved the moment it is made (no Apply/OK), except the
+//! lists (learned words, per-app modes, blocked apps), which are text boxes
+//! with a Save button.
 //!
 //! Only one settings window exists at a time: opening it again brings the
 //! existing one forward. The built-in app blacklist is described but not
@@ -22,6 +23,8 @@ use windows::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, S
 
 use crate::ui::{self, card, divider, field, pal, rect, track, Gfx, Surface, TextStyle};
 use crate::{config, hook, learn, overlay, safety, startup};
+use righttype::per_app;
+use zeroize::Zeroize;
 
 /// The open settings window, if any.
 static OPEN: AtomicIsize = AtomicIsize::new(0);
@@ -102,6 +105,11 @@ struct Ids {
     clear_learned: u16,
     list: u16,
     save_list: u16,
+    app_modes: u16,
+    apps_status: u16,
+    import_learned: u16,
+    export_learned: u16,
+    check_updates: u16,
 }
 
 struct SettingsWindow {
@@ -287,11 +295,13 @@ fn open_on(page: u8) {
         l,
     );
     let learned_list = s.edit(&learn::list().join("\r\n"), (X0 + 10, 150, CW - 20, 252), l);
-    let learned_status = s.label("", TextStyle::Small, (X0, 432, CW - 300, 36), p.bg, l);
+    let import_learned = s.button(tr(T::BtnImport), false, (X0, 428, 100, 34), p.bg, l);
+    let export_learned = s.button(tr(T::BtnExport), false, (X0 + 106, 428, 100, 34), p.bg, l);
+    let learned_status = s.label("", TextStyle::Small, (X0, 474, CW, 40), p.bg, l);
     let clear_learned = s.button(
         tr(T::BtnClearAll),
         false,
-        (X0 + CW - 290, 428, 140, 34),
+        (X0 + CW - 284, 428, 136, 34),
         p.bg,
         l,
     );
@@ -303,7 +313,7 @@ fn open_on(page: u8) {
         l,
     );
 
-    // --- Blocked apps -----------------------------------------------------
+    // --- Apps: per-app modes and blocked apps -------------------------------
     let b = PAGE_BLOCKED;
     s.label(
         tr(T::NavBlocked),
@@ -313,28 +323,55 @@ fn open_on(page: u8) {
         b,
     );
     s.label(
-        tr(T::BlockedAlways),
+        tr(T::HeadAppModes),
+        TextStyle::BodyStrong,
+        (X0, 66, CW, 20),
+        p.bg,
+        b,
+    );
+    s.label(
+        tr(T::AppModesIntro),
         TextStyle::Dim,
-        (X0, 70, CW, 56),
+        (X0, 90, CW, 44),
+        p.bg,
+        b,
+    );
+    let app_modes = s.edit(
+        &per_app::format_list(&crate::apps::all()),
+        (X0 + 10, 146, CW - 20, 96),
+        b,
+    );
+    s.label(
+        tr(T::HeadBlocked),
+        TextStyle::BodyStrong,
+        (X0, 270, CW, 20),
         p.bg,
         b,
     );
     s.label(
         tr(T::BlockedAdd),
-        TextStyle::Body,
-        (X0, 134, CW, 56),
+        TextStyle::Dim,
+        (X0, 294, CW, 44),
         p.bg,
         b,
     );
     let list = s.edit(
         &safety::custom_list().join("\r\n"),
-        (X0 + 10, 206, CW - 20, 196),
+        (X0 + 10, 350, CW - 20, 72),
         b,
     );
+    let apps_status = s.label("", TextStyle::Small, (X0, 452, CW - 160, 36), p.bg, b);
     let save_list = s.button(
         tr(T::BtnSaveList),
         true,
-        (X0 + CW - 140, 428, 140, 34),
+        (X0 + CW - 140, 448, 140, 34),
+        p.bg,
+        b,
+    );
+    s.label(
+        tr(T::BlockedAlways),
+        TextStyle::Small,
+        (X0, 496, CW, 40),
         p.bg,
         b,
     );
@@ -377,6 +414,20 @@ fn open_on(page: u8) {
         p.bg,
         a,
     );
+    let check_updates = s.button(
+        tr(T::BtnCheckUpdates),
+        false,
+        (X0, about_y + 88, 190, 34),
+        p.bg,
+        a,
+    );
+    s.label(
+        tr(T::AboutUpdates),
+        TextStyle::Small,
+        (X0 + 204, about_y + 86, CW - 204, 40),
+        p.bg,
+        a,
+    );
 
     let ids = Ids {
         nav,
@@ -397,6 +448,11 @@ fn open_on(page: u8) {
         clear_learned,
         list,
         save_list,
+        app_modes,
+        apps_status,
+        import_learned,
+        export_learned,
+        check_updates,
     };
 
     ui::size_and_center(surface.hwnd, W, H);
@@ -522,8 +578,26 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
             .map(str::to_lowercase)
             .collect();
         safety::set_custom_list(entries);
+        let (modes, skipped) = per_app::parse_list(&s.text_of(ids.app_modes));
+        crate::apps::set_all(modes);
+        // Show the list as it was kept: normalised, sorted, bad lines gone.
+        s.set_text(ids.app_modes, &per_app::format_list(&crate::apps::all()));
+        s.set_text(
+            ids.apps_status,
+            &if skipped == 0 {
+                tr(T::AppsSaved).to_string()
+            } else {
+                trf(T::AppsSkipped, &[("k", &skipped.to_string())])
+            },
+        );
         config::persist();
         overlay::show(tr(T::ToastSaved));
+    } else if id == ids.import_learned {
+        import_learned(win);
+    } else if id == ids.export_learned {
+        export_learned(win);
+    } else if id == ids.check_updates {
+        open_releases_page();
     } else if id == ids.lang_en || id == ids.lang_th {
         let lang = if id == ids.lang_th {
             Lang::Th
@@ -541,6 +615,103 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         }
     }
     sync(win);
+}
+
+/// Where new versions are published. Opened in the browser: RightType itself
+/// never connects to a network.
+const RELEASES_URL: &str = "https://github.com/k-affan-th/RightType/releases/latest";
+
+fn open_releases_page() {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let verb: Vec<u16> = "open\0".encode_utf16().collect();
+    let url: Vec<u16> = format!("{RELEASES_URL}\0").encode_utf16().collect();
+    unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR(verb.as_ptr()),
+            PCWSTR(url.as_ptr()),
+            PCWSTR::null(),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        );
+    }
+}
+
+/// Learned-word files larger than this are refused (a word list is small).
+const MAX_IMPORT_BYTES: u64 = 1 << 20;
+
+/// Ask for a `.txt` file to open (`save` = false) or write.
+fn pick_file(win: &SettingsWindow, save: bool) -> Option<std::path::PathBuf> {
+    let mut dialog = nwg::FileDialog::default();
+    let filters = format!("{}|All files (*.*)", tr(T::FileFilter));
+    nwg::FileDialog::builder()
+        .action(if save {
+            nwg::FileDialogAction::Save
+        } else {
+            nwg::FileDialogAction::Open
+        })
+        .filters(filters.as_str())
+        .build(&mut dialog)
+        .ok()?;
+    if !dialog.run(Some(&win.window)) {
+        return None;
+    }
+    let mut path = std::path::PathBuf::from(dialog.get_selected_item().ok()?);
+    if save && path.extension().is_none() {
+        path.set_extension("txt");
+    }
+    Some(path)
+}
+
+/// Add the words in a file to the learned list (nothing already there is
+/// removed). The words pass the same checks as ones typed in the editor.
+fn import_learned(win: &SettingsWindow) {
+    let Some(path) = pick_file(win, false) else {
+        return;
+    };
+    let text = std::fs::metadata(&path)
+        .ok()
+        .filter(|m| m.len() <= MAX_IMPORT_BYTES)
+        .and_then(|_| std::fs::read_to_string(&path).ok());
+    let s = &win.surface;
+    let Some(mut text) = text else {
+        s.set_text(win.ids.learned_status, tr(T::ErrFile));
+        return;
+    };
+    let before = learn::count();
+    let mut lines = learn::list();
+    lines.extend(text.lines().map(str::to_string));
+    text.zeroize();
+    let result = learn::replace(&lines);
+    let added = result.kept.saturating_sub(before);
+    s.set_text(win.ids.learned_list, &learn::list().join("\r\n"));
+    s.set_text(
+        win.ids.learned_status,
+        &trf(T::LearnedImported, &[("n", &added.to_string())]),
+    );
+    overlay::show(tr(T::ToastSaved));
+}
+
+/// Write the learned list to a file of the user's choosing, one word per line.
+fn export_learned(win: &SettingsWindow) {
+    let Some(path) = pick_file(win, true) else {
+        return;
+    };
+    let words = learn::list();
+    let mut text = words.join("\r\n");
+    text.push_str("\r\n");
+    let ok = std::fs::write(&path, &text).is_ok();
+    text.zeroize();
+    win.surface.set_text(
+        win.ids.learned_status,
+        &if ok {
+            trf(T::LearnedExported, &[("n", &words.len().to_string())])
+        } else {
+            tr(T::ErrFile).to_string()
+        },
+    );
 }
 
 /// Switch page as if its sidebar entry had been clicked.
@@ -584,7 +755,8 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             field(g, rect(X0, 142, CW, 268));
         }
         PAGE_BLOCKED => {
-            field(g, rect(X0, 198, CW, 212));
+            field(g, rect(X0, 138, CW, 112));
+            field(g, rect(X0, 342, CW, 88));
         }
         PAGE_ABOUT => {
             card(g, rect(X0, 68, CW, 4 * 56 + 8));

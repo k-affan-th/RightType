@@ -11,6 +11,8 @@
 #![cfg_attr(feature = "winos", windows_subsystem = "windows")]
 
 #[cfg(feature = "winos")]
+mod apps;
+#[cfg(feature = "winos")]
 mod clipboard;
 #[cfg(feature = "winos")]
 mod config;
