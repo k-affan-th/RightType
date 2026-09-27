@@ -58,10 +58,12 @@ fn main() {
         .map(str::trim)
         .filter(|w| !w.is_empty() && !w.starts_with('#'))
         .collect();
+    // The bundled technical terms are part of the English dictionary too.
     let english_words: Vec<&str> = include_str!("../assets/en_words.txt")
         .lines()
         .map(|l| l.split_whitespace().next().unwrap_or(""))
         .filter(|w| !w.is_empty())
+        .chain(dict::tech_terms())
         .collect();
     let mut rng = Rng(0xC0FF_EE11_2233_4455);
     let dump = std::env::var("AUDIT_DUMP").ok();
