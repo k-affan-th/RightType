@@ -18,6 +18,12 @@
 //!   conversions (Undo, or Shift+Backspace on it). That is an explicit "this was
 //!   a real word", so it is learned at once, in either script.
 //!
+//! **Sync folder** (2.0): the list can live in a folder the user picks — a
+//! OneDrive, Google Drive or team folder — instead of `%APPDATA%`. Choosing it
+//! merges both lists into the folder; a change made there by another PC is
+//! picked up within seconds ([`tick`]). RightType itself never goes online:
+//! syncing is the folder's own business.
+//!
 //! Guards (privacy first): letters of one script only, bounded length, not
 //! already known, never secret-shaped. It runs only after the per-context
 //! guards in `safety`/`focus` have excluded password fields, wallets and
@@ -30,6 +36,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::{Mutex, OnceLock};
+use std::time::SystemTime;
 
 use righttype::{dict, secret};
 use zeroize::Zeroize;
@@ -45,6 +52,14 @@ static ENABLED: AtomicBool = AtomicBool::new(false);
 static LEARNED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 static PENDING: Mutex<BTreeMap<String, u8>> = Mutex::new(BTreeMap::new());
 static PERSIST_TX: OnceLock<SyncSender<String>> = OnceLock::new();
+/// The user's sync folder, if any.
+static FOLDER: Mutex<Option<PathBuf>> = Mutex::new(None);
+/// The file's modification time after RightType last wrote or read it, to
+/// tell another PC's change from our own.
+static SEEN: Mutex<Option<SystemTime>> = Mutex::new(None);
+static TICKS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+/// File name inside a sync folder.
+const SYNC_FILE: &str = "RightType learned words.txt";
 
 pub fn is_enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
@@ -61,9 +76,71 @@ pub fn set_enabled(on: bool) {
 }
 
 fn learned_path() -> Option<PathBuf> {
+    if let Some(folder) = FOLDER.lock().unwrap().as_ref() {
+        return Some(folder.join(SYNC_FILE));
+    }
     let mut p = crate::data_dir::righttype_dir()?;
     p.push("learned.txt");
     Some(p)
+}
+
+/// The sync folder in use, if any.
+pub fn folder() -> Option<PathBuf> {
+    FOLDER.lock().unwrap().clone()
+}
+
+/// Remember the file's current modification time as our own.
+fn note_seen() {
+    let modified = learned_path()
+        .and_then(|p| std::fs::metadata(p).ok())
+        .and_then(|m| m.modified().ok());
+    *SEEN.lock().unwrap() = modified;
+}
+
+/// At startup, from the config: use `folder` (no merge) and load from it.
+pub fn start_with_folder(folder: Option<PathBuf>) {
+    *FOLDER.lock().unwrap() = folder;
+    reload();
+}
+
+/// Move the list to `folder` (or back to this PC with `None`): the words
+/// here and the words already there are merged, written there, and used.
+/// Returns how many words the list has afterwards.
+pub fn set_folder(folder: Option<PathBuf>) -> usize {
+    let mut words = list();
+    *FOLDER.lock().unwrap() = folder;
+    words.extend(read_file());
+    replace(&words).kept
+}
+
+/// The words in the current file (unchecked lines; `replace` checks them).
+fn read_file() -> Vec<String> {
+    learned_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .map(|s| s.lines().map(str::trim).map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
+/// Make the file the list again: forget what was learned and load it.
+fn reload() {
+    dict::english().forget_learned();
+    dict::thai().forget_learned();
+    load();
+    note_seen();
+}
+
+/// Session timer tick (1.5 s): every few seconds, pick up a change another
+/// PC made to the list in the sync folder.
+pub fn tick() {
+    if TICKS.fetch_add(1, Ordering::Relaxed) % 4 != 0 || FOLDER.lock().unwrap().is_none() {
+        return;
+    }
+    let modified = learned_path()
+        .and_then(|p| std::fs::metadata(p).ok())
+        .and_then(|m| m.modified().ok());
+    if modified.is_some() && modified != *SEEN.lock().unwrap() {
+        reload();
+    }
 }
 
 /// Load the persisted learned words into the live dictionaries. Call once at
@@ -111,6 +188,7 @@ pub fn clear() {
     if let Some(p) = learned_path() {
         let _ = std::fs::write(p, "");
     }
+    note_seen();
     if let Some(s) = LEARNED.lock().unwrap().as_mut() {
         s.clear();
     }
@@ -250,6 +328,7 @@ pub fn replace(lines: &[String]) -> Replaced {
         let _ = std::fs::write(p, &text);
         text.zeroize();
     }
+    note_seen();
     let count = kept.len();
     *LEARNED.lock().unwrap() = Some(kept.into_iter().collect());
     Replaced {
@@ -305,6 +384,7 @@ fn persist_word(word: &str) {
     {
         let _ = writeln!(f, "{word}");
     }
+    note_seen();
 }
 
 #[cfg(test)]

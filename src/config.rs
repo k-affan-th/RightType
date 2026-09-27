@@ -45,6 +45,11 @@ pub struct Config {
     pub caret_hints: bool,
     /// Switch to each field's usual language on focus (opt-in).
     pub predict_layout: bool,
+    /// Keep two counts per day for the 7-day view (opt-in).
+    pub keep_stats: bool,
+    /// A folder to keep the learned words in (e.g. a OneDrive folder).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub learned_folder: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -88,6 +93,8 @@ impl Default for Config {
             app_modes: BTreeMap::new(),
             caret_hints: true,
             predict_layout: false,
+            keep_stats: false,
+            learned_folder: None,
         }
     }
 }
@@ -126,6 +133,12 @@ pub fn apply(cfg: &Config) {
     set_language(cfg.language.as_deref().and_then(Lang::from_code));
     crate::caret::set_enabled(cfg.caret_hints);
     crate::habits::set_enabled(cfg.predict_layout);
+    if let Some(folder) = cfg.learned_folder.as_deref() {
+        learn::start_with_folder(Some(folder.into()));
+    }
+    if cfg.keep_stats != crate::stats::keeps_daily() {
+        crate::stats::set_keep_daily(cfg.keep_stats);
+    }
     crate::apps::set_all(
         cfg.app_modes
             .iter()
@@ -187,6 +200,8 @@ pub fn persist() {
             .collect(),
         caret_hints: crate::caret::is_enabled(),
         predict_layout: crate::habits::is_enabled(),
+        keep_stats: crate::stats::keeps_daily(),
+        learned_folder: learn::folder().map(|p| p.to_string_lossy().into_owned()),
     };
     let Some(p) = config_path() else {
         return;

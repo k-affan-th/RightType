@@ -178,6 +178,11 @@ texts! {
     BtnClearAll => "Clear all", "ล้างทั้งหมด";
     BtnImport => "Import…", "นำเข้า…";
     BtnExport => "Export…", "ส่งออก…";
+    LearnedHere => "Saved on this PC only.", "บันทึกไว้ในเครื่องนี้เท่านั้น";
+    LearnedInFolder => "Kept in: {v}", "เก็บไว้ที่: {v}";
+    BtnSyncFolder => "Sync folder…", "โฟลเดอร์ซิงก์…";
+    BtnThisPc => "This PC only", "เฉพาะเครื่องนี้";
+    LearnedMoved => "{n} words, merged with any already there.", "{n} คำ รวมกับที่มีอยู่แล้ว";
     LearnedImported => "Added {n} words from the file.", "เพิ่ม {n} คำจากไฟล์แล้ว";
     LearnedExported => "Saved {n} words to the file.", "บันทึก {n} คำลงไฟล์แล้ว";
     ErrFile => "Could not use that file.", "ใช้ไฟล์นั้นไม่ได้";
@@ -241,6 +246,11 @@ texts! {
     StatsSaved => "Time saved (estimate)", "เวลาที่ประหยัด (ประมาณ)";
     StatsSavedValue => "{n} min", "{n} นาที";
     StatsSavedSeconds => "{n} s", "{n} วินาที";
+    StatsWeekHead => "Last 7 days", "7 วันที่ผ่านมา";
+    StatsWeekTotal => "{n} words fixed this week, about {m} min saved.", "สัปดาห์นี้แก้ {n} คำ ประหยัดเวลาราว {m} นาที";
+    StatsWeekOff => "Turn on daily counts below to see the last 7 days.", "เปิดการเก็บจำนวนรายวันด้านล่างเพื่อดู 7 วันที่ผ่านมา";
+    RowKeepStats => "Keep daily counts on this PC", "เก็บจำนวนรายวันไว้ในเครื่องนี้";
+    SubKeepStats => "Two numbers per day, never what you type. Off deletes them.", "เก็บแค่ตัวเลขวันละสองค่า ไม่เก็บสิ่งที่พิมพ์ ปิดแล้วลบทิ้ง";
     StatsNote => "Counts start again when RightType restarts. Nothing you type is saved.", "ตัวเลขจะเริ่มใหม่เมื่อเปิดโปรแกรมใหม่ และไม่มีการบันทึกสิ่งที่คุณพิมพ์";
 }
 
@@ -293,7 +303,7 @@ mod tests {
     #[test]
     fn placeholders_match_between_languages() {
         for key in T::ALL {
-            for name in ["{n}", "{k}", "{v}", "{mode}", "{app}"] {
+            for name in ["{n}", "{k}", "{v}", "{mode}", "{app}", "{m}"] {
                 assert_eq!(
                     key.get(Lang::En).contains(name),
                     key.get(Lang::Th).contains(name),
