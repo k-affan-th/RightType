@@ -69,11 +69,22 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   `57'` → ถึง, `]'` → ลง, `[688]` → บุคคล. Numbers, dates, times, prices and
   emoticons never change (0 of 750,043 tested); 163 more Thai dictionary words
   are recovered.
+- **Thai Pattachote keyboard**: choose it in Settings → Hotkeys → Thai
+  keyboard. Its table comes from the maintained xkeyboard-config layout; the
+  same quality gate runs on it (no Thai or English dictionary word changed;
+  60,213 of 60,964 Thai words recovered).
+- **English on the UK keyboard, and English of other countries** (Australia,
+  New Zealand, Canada set to the US keyboard, …): RightType now works with
+  them instead of staying off. Which English keyboard you use is found
+  automatically, so Thai text converted back to English gets the UK
+  punctuation (`"` `@` `£` `#`) when that is your keyboard.
 - **Check for updates** in Settings → Privacy & about: opens the Releases page
   in your browser; RightType itself still never goes online.
 
 ### Changed
 
+- Hotkey names in Settings and Welcome are no longer hidden under long key
+  combinations; they are cut short with "…" only when there is truly no room.
 - A mouse click now counts as moving the caret: the word in progress, Undo and
   the words kept for `Shift`+`Backspace` are dropped, so a flip can never edit
   text somewhere else.

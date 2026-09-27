@@ -8,8 +8,8 @@
 | Field | Value |
 | --- | --- |
 | Overall status | `IN_PROGRESS — 1.1.0 ready to build; signing + remaining E2E need the product owner` |
-| Active section | `S8 — RightType 2.0 (M6)` |
-| Next action | S8 M5 เสร็จ — M6 แป้นอื่น, M7 ปล่อย 2.0 |
+| Active section | `S8 — RightType 2.0 (M7)` |
+| Next action | S8 M6 เสร็จ — M7 ปล่อย 2.0 |
 | Current release target | `v2.0.0` — แผนใน S8, ไอเดียทั้งหมดใน `IDEAS.md` (1.1.0 = 2026-09-26, 1.0.0 = 2026-08-31) |
 | Last updated | `2026-09-26` |
 | Last verified baseline | Linux: 102 tests (69 lib + 30 comprehensive + 3 release-metadata), clippy `-D warnings`, fmt, latency gate ~1.5 µs worst batch; `--features winos` cross-checked clean ด้วย clippy `-D warnings` บน target `x86_64-pc-windows-msvc` (ยังไม่ได้รัน test บน Windows ใน session นี้ — CI job `windows` ทำแทน) |
@@ -90,6 +90,8 @@
 ### [x] D-002 — v1 scope versus full RightLang parity (`ACCEPTED`)
 
 **Accepted contract:** ship v1 ด้วย Thai Kedmanee ↔ US English QWERTY ที่ตรวจครบก่อน; ย้าย Pattachote/Dvorak/UK-AU-CA ไป `v1.x parity track` โดย engine API ต้องไม่ปิดทางเพิ่ม layout และ Auto ต้องปิดตัวเองเมื่อ HKL ไม่ตรงคู่ที่รองรับ
+
+**2.0 (S8 M6):** เพิ่มปัตตะโชติ (ผู้ใช้เลือก) และอังกฤษบนแป้น UK / อังกฤษประเทศอื่นบนแป้น US (ตรวจเอง); Dvorak และแป้นอื่นยังปิดตามสัญญาเดิม
 
 **Decision owner:** product owner delegated assessment to the implementation team on 2026-08-04
 
@@ -490,7 +492,7 @@ Deferred (tracked, not forgotten):
 
 ## S8 — RightType 2.0
 
-**Status:** `[~] IN_PROGRESS — M6` (M0–M5 เสร็จ) (แผนอนุมัติ 2026-09-26; เจ้าของเพิ่มความแม่นยำ M5 และแป้นอื่น M6, เลื่อน Store/code signing ออก)
+**Status:** `[~] IN_PROGRESS — M7` (M0–M6 เสร็จ) (แผนอนุมัติ 2026-09-26; เจ้าของเพิ่มความแม่นยำ M5 และแป้นอื่น M6, เลื่อน Store/code signing ออก)
 **Depends on:** 1.1.0 (released 2026-09-26)
 **ไอเดียทั้งหมดรวมที่ไม่เข้า 2.0:** [IDEAS.md](IDEAS.md)
 
@@ -568,10 +570,13 @@ Deferred (tracked, not forgotten):
 - [x] **โมเดลภาษาเล็ก ๆ (n-gram) — ไม่ทำ:** M3 พบว่าไม่มีคำกำกวมที่ benchmark พลาด และ M5 พบว่าคำที่เหลือติดประตูคำอังกฤษ ไม่มีข้อมูลบอกว่าต้องใช้
 
 ### M6 — แป้นพิมพ์แบบอื่น (เพิ่มตามที่เจ้าของขอ 2026-09-26)
-- [ ] **แป้นไทยปัตตะโชติ** และ **อังกฤษ UK/AU/CA**
-  - เพิ่มตารางแป้นใน `layout/` และให้ `policy::supported_layout_id` รู้จัก HKL ของแป้นเหล่านี้ (ปรับ D-002)
-  - ทุกคู่แป้นต้องมีชุด sim/benchmark/audit ของตัวเอง
-- [ ] Settings แสดงแป้นที่ตรวจพบ และคู่แป้นที่ใช้อยู่
+- [x] **แป้นไทยปัตตะโชติ** (`layout/pattachote.rs`, ตารางสร้างจาก xkeyboard-config `th` แบบ `pat`; ตาราง Kedmanee ของเราตรงกับ `basic` ทุกปุ่ม ใช้ยืนยันแหล่ง) และ **อังกฤษ UK** (`QwertyUk`: `"` `@` `£` `#` `~` `¬`)
+  - `policy::supported_layout_id` (ปรับ D-002): อังกฤษทุกประเทศที่ใช้แป้น US (0x0409/0x0C09/0x1409) หรือ UK (0x0809); ค่าเริ่มต้นของแคนาดา (0x1009) ไม่รับ เพราะอาจเป็น Canadian French; Dvorak และภาษาอื่นยังปิด
+  - ไทย: Windows ไม่บอกแบบถูก ๆ ว่า HKL ไทยตัวไหนเป็นปัตตะโชติ → **ผู้ใช้เลือก** (Settings → ปุ่มลัด → แป้นพิมพ์ไทย); เมื่อเลือกปัตตะโชติ รับ HKL ไทยทุกตัว และตอนสลับภาษาเลือกแป้นที่ตรงกับตาราง (`is_preferred_layout`) ก่อน
+  - อังกฤษ US/UK ตรวจเองจาก HKL ที่ใช้อยู่ (`note_english_variant`) และตอนเริ่มจากรายการแป้นที่ติดตั้ง
+  - `thai_layout_trailing_mark` อ่านจากตาราง (ปุ่มที่ให้ `:`/`?`) แทนการ hardcode ซ/ฦ
+  - audit: ปัตตะโชติ คำไทย/อังกฤษเปลี่ยน **0**, recall ไทย 60,213 / อังกฤษ 86,833 (พื้น 60,150); UK คำอังกฤษเปลี่ยน **0**
+- [x] Settings → ปุ่มลัด: ตัวเลือกแป้นไทย Kedmanee / Pattachote + หมายเหตุว่าอังกฤษ US/UK ตรวจเอง; แก้ชื่อปุ่มลัดที่ถูกปุ่มยาวบัง (ชื่อกับ keycap วาดใน control เดียว)
 
 ### M7 — ปล่อย 2.0
 - [ ] **winget manifest** ส่งจาก Release workflow ผู้ใช้อัปเดตได้ด้วย `winget upgrade`

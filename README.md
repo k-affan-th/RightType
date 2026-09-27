@@ -90,9 +90,12 @@ remembered, and so is any word you *flip back* after RightType changed it
 (`Shift`+`Backspace` or Undo), immediately and in either language. Learned words
 take effect at once for every decision.
 
-Version 1 intentionally supports only the exact Thai Kedmanee ↔ US English QWERTY
-pair and the fixed hotkeys above. Pattachote/Dvorak/UK-AU-CA layouts, remappable
-hotkeys, and per-app mode profiles are tracked for v1.x.
+Supported keyboards: Thai **Kedmanee** (default) or **Pattachote** (Settings →
+Hotkeys → Thai keyboard), with English on the **US** or **UK** keyboard — English
+of any country typed on either (Australia, New Zealand, Canada set to US, …),
+found automatically. Dvorak and other layouts are left alone: RightType stays off
+while one is active. Hotkeys can be changed in Settings → Hotkeys, and each app
+can have its own mode (Settings → Apps).
 
 Short, genuinely ambiguous words (e.g. `ok` vs Thai `นา`, which share keys) are left for
 you to fix manually — no tool can resolve those without guessing.

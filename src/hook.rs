@@ -558,6 +558,7 @@ pub unsafe fn install() -> windows::core::Result<()> {
     let hmod = GetModuleHandleW(None)?;
     let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(ll_proc), HINSTANCE(hmod.0), 0)?;
     *HOOK.lock().unwrap() = Some(HookHandle(hook));
+    detect_english_variant();
     // Best-effort: without it a click is only noticed when focus changes.
     if let Ok(mouse) = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), HINSTANCE(hmod.0), 0) {
         *MOUSE_HOOK.lock().unwrap() = Some(HookHandle(mouse));
@@ -873,6 +874,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // If focus or layout changed since the last key, the buffered word is stale.
     sync_context();
+    note_english_variant(effective_layout());
 
     // Never run where secrets are typed: blacklisted apps, or password fields
     // (native ES_PASSWORD, or UIA-detected ones in browsers/Electron/UWP).
@@ -1229,9 +1231,35 @@ fn moves_or_edits(vk: u16) -> bool {
     .any(|k| k.0 == vk)
 }
 
-/// Exact 32-bit keyboard layout identifiers supported by the v1 mapping tables.
-/// Checking the whole KLID keeps UK English and Thai Pattachote out of Auto mode;
-/// sharing a primary language does not make their physical-key mapping compatible.
+/// Remember which English keyboard (US or UK) the typist uses, from an
+/// English layout whenever one is active — Thai text converted to English
+/// then comes out in the punctuation of that keyboard.
+fn note_english_variant(hkl: HKL) {
+    if let Some(v) = policy::english_variant_of(layout_id(hkl)) {
+        righttype::layout::set_english_variant(v);
+    }
+}
+
+/// At startup: the English keyboard among the installed layouts.
+unsafe fn detect_english_variant() {
+    let count = GetKeyboardLayoutList(None);
+    if count <= 0 {
+        return;
+    }
+    let mut list = vec![HKL::default(); count as usize];
+    let got = GetKeyboardLayoutList(Some(&mut list)).max(0) as usize;
+    if let Some(hkl) = list
+        .iter()
+        .take(got)
+        .find(|h| policy::english_variant_of(layout_id(**h)).is_some())
+    {
+        note_english_variant(*hkl);
+    }
+}
+
+/// The whole 32-bit handle: [`policy::supported_layout_id`] reads both the
+/// language and the keyboard from it, since sharing a language does not make
+/// two keyboards' physical-key mappings compatible.
 fn layout_id(hkl: HKL) -> u32 {
     hkl.0 as usize as u32
 }
@@ -1250,7 +1278,11 @@ unsafe fn activate_layout(target: policy::InputLayout) {
     }
     let mut list = vec![HKL::default(); count as usize];
     let got = GetKeyboardLayoutList(Some(&mut list)).max(0) as usize;
-    for hkl in list.iter().take(got) {
+    list.truncate(got);
+    // With several keyboards for the language (US and UK, Kedmanee and
+    // Pattachote), the one whose table is in use comes first.
+    list.sort_by_key(|h| !policy::is_preferred_layout(layout_id(*h)));
+    for hkl in list.iter() {
         if policy::supported_layout_id(layout_id(*hkl)) == Some(target) {
             let foreground = GetForegroundWindow();
             let mut gui = GUITHREADINFO {
