@@ -1016,11 +1016,28 @@ fn forget_recent_text() {
 /// Keep the word a boundary just completed (as it is on screen), for
 /// Shift+Backspace right after it.
 fn remember_completed(word: &str, boundary_vk: u16, converted: bool) {
-    STATE.with(|s| {
-        s.borrow_mut()
-            .recent
-            .push(word, boundary_literal(boundary_vk), converted)
+    let exe = STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        st.recent
+            .push(word, boundary_literal(boundary_vk), converted);
+        st.app_exe.clone()
     });
+    if let Some(exe) = exe {
+        crate::habits::record_word(&exe, word);
+    }
+}
+
+/// Switch the focused field to `layout` (the per-field habit, on focus).
+///
+/// # Safety
+/// UI (hook) thread only.
+pub unsafe fn switch_layout(layout: policy::InputLayout) {
+    // A focus event can be delivered while the keyboard path is running on
+    // this thread (it pumps messages while injecting); never re-enter it.
+    if STATE.with(|s| s.try_borrow_mut().is_err()) || INJECTING.load(Ordering::Relaxed) {
+        return;
+    }
+    activate_layout(layout);
 }
 
 /// Keys that move the caret or change text other than by typing after it.

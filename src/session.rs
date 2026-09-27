@@ -206,6 +206,7 @@ pub unsafe fn on_message(msg: u32, wparam: usize) {
     match msg {
         WM_TIMER if wparam == WATCHDOG_TIMER_ID => {
             check_pause();
+            crate::habits::tick();
             if NEEDS_REINSTALL.swap(false, Ordering::Relaxed) {
                 reinstall();
             } else {

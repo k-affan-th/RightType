@@ -40,6 +40,14 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   there too. **Tab** takes a Suggest hint right after it appears (Tab is
   otherwise untouched; `Alt`+`CapsLock` still works). Can be turned off in
   Settings → General.
+- **Guess each field's language** (opt-in, Settings → Apps): RightType counts
+  how many Thai and English words you finish in each kind of field (the program
+  and the kind of control), and once a field clearly has one language (20+
+  words, 80 %+), clicking into it switches the keyboard before you type. Only
+  the counts are stored (`contexts.toml`), and **Clear** removes them.
+- A colon or question mark typed after a Thai phrase on the Thai layout (the
+  keys give ซ and ฦ there) comes back as `:` / `?` when the phrase is known
+  Thai (a dictionary word or three or more known words).
 - **Check for updates** in Settings → Privacy & about: opens the Releases page
   in your browser; RightType itself still never goes online.
 

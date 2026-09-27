@@ -460,6 +460,7 @@ pub fn run() {
     nwg::dispatch_thread_events();
 
     unsafe { focus::disarm() };
+    crate::habits::save();
     if let Some(hwnd) = hwnd {
         unsafe { session::disarm(hwnd) };
     }

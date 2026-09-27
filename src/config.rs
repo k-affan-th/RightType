@@ -43,6 +43,8 @@ pub struct Config {
     pub app_modes: BTreeMap<String, String>,
     /// TH/EN tag and Suggest hints next to the text cursor.
     pub caret_hints: bool,
+    /// Switch to each field's usual language on focus (opt-in).
+    pub predict_layout: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -85,6 +87,7 @@ impl Default for Config {
             language: None,
             app_modes: BTreeMap::new(),
             caret_hints: true,
+            predict_layout: false,
         }
     }
 }
@@ -122,6 +125,7 @@ pub fn apply(cfg: &Config) {
     safety::set_custom_list(cfg.custom_blacklist.clone());
     set_language(cfg.language.as_deref().and_then(Lang::from_code));
     crate::caret::set_enabled(cfg.caret_hints);
+    crate::habits::set_enabled(cfg.predict_layout);
     crate::apps::set_all(
         cfg.app_modes
             .iter()
@@ -182,6 +186,7 @@ pub fn persist() {
             .map(|(exe, mode)| (exe, mode.name().to_string()))
             .collect(),
         caret_hints: crate::caret::is_enabled(),
+        predict_layout: crate::habits::is_enabled(),
     };
     let Some(p) = config_path() else {
         return;

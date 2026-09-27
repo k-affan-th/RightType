@@ -105,6 +105,8 @@ unsafe extern "system" fn on_focus(
 ) {
     FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
     refresh_status();
+    // After the password check above: the habit switch never runs in one.
+    crate::habits::on_focus();
 }
 
 unsafe fn refresh_status() {
