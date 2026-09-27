@@ -51,6 +51,7 @@ struct Tray {
     m_app_modes: [nwg::MenuItem; 4],
     m_learn: nwg::MenuItem,
     m_startup: nwg::MenuItem,
+    m_fix: nwg::MenuItem,
     m_settings: nwg::MenuItem,
     m_stats: nwg::MenuItem,
     m_help: nwg::MenuItem,
@@ -215,6 +216,8 @@ pub fn run() {
         .build(&mut m_startup)
         .expect("startup item");
 
+    let m_fix = item(&menu, tr(T::TrayFix));
+
     let mut m_settings = nwg::MenuItem::default();
     nwg::MenuItem::builder()
         .text(tr(T::TraySettings))
@@ -276,6 +279,7 @@ pub fn run() {
         m_app_modes,
         m_learn,
         m_startup,
+        m_fix,
         m_settings,
         m_stats,
         m_help,
@@ -369,6 +373,8 @@ pub fn run() {
                     let on = !startup::is_enabled();
                     startup::set_enabled(on);
                     ui_h.m_startup.set_checked(on);
+                } else if handle == ui_h.m_fix.handle {
+                    crate::fixer::open();
                 } else if handle == ui_h.m_settings.handle {
                     settings::open();
                 } else if handle == ui_h.m_stats.handle {
@@ -398,9 +404,21 @@ pub fn run() {
             "settings-blocked" => settings::open_page(4),
             "settings-about" => settings::open_page(5),
             "stats" => stats::open(),
+            "fixer" => crate::fixer::open_demo(
+                "l;ylfu8iy[ hello \u{e41}\u{e19}\u{e1e}\u{e1e}\u{e33}\u{e41}\u{e30} answer PyThaiNLP lj'wa]N,k.shsojvp",
+            ),
             "welcome" => crate::onboard::show(true),
             "help" => crate::onboard::show(false),
             "overlay" => overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastModeAuto)),
+            "badge" => overlay::badge_at(
+                "TH",
+                windows::Win32::Foundation::RECT {
+                    left: 300,
+                    top: 200,
+                    right: 302,
+                    bottom: 220,
+                },
+            ),
             "overlay-near" => overlay::show_at(
                 "สวัสดี hello",
                 overlay::Anchor::Near(windows::Win32::Foundation::RECT {
@@ -493,6 +511,7 @@ fn sync_state(ui: &Rc<Tray>) {
             (&ui.m_suggest, T::TraySuggest),
             (&ui.m_learn, T::TrayLearn),
             (&ui.m_startup, T::TrayStartup),
+            (&ui.m_fix, T::TrayFix),
             (&ui.m_settings, T::TraySettings),
             (&ui.m_stats, T::TrayStats),
             (&ui.m_help, T::TrayHelp),

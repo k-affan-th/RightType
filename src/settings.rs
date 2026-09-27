@@ -31,7 +31,7 @@ static OPEN: AtomicIsize = AtomicIsize::new(0);
 
 /// Client size and layout, in 96-DPI units.
 const W: i32 = 760;
-const H: i32 = 572;
+const H: i32 = 636;
 const X0: i32 = 232;
 const CW: i32 = 504;
 
@@ -97,6 +97,7 @@ struct Ids {
     enabled: u16,
     startup: u16,
     learn: u16,
+    caret_hints: u16,
     learned: u16,
     edit_learned: u16,
     learned_list: u16,
@@ -227,7 +228,8 @@ fn open_on(page: u8) {
     let enabled = s.toggle(tr(T::RowEnabled), tr(T::SubEnabled), row(0), p.surface, g);
     let startup = s.toggle(tr(T::RowStartup), tr(T::SubStartup), row(1), p.surface, g);
     let learn = s.toggle(tr(T::RowLearn), tr(T::SubLearn), row(2), p.surface, g);
-    let learned_y = CARD_B_Y + 3 * ROW_H + 14;
+    let caret_hints = s.toggle(tr(T::RowCaret), tr(T::SubCaret), row(3), p.surface, g);
+    let learned_y = CARD_B_Y + 4 * ROW_H + 14;
     let learned = s.label(
         "",
         TextStyle::Dim,
@@ -440,6 +442,7 @@ fn open_on(page: u8) {
         enabled,
         startup,
         learn,
+        caret_hints,
         learned,
         edit_learned,
         learned_list,
@@ -504,6 +507,7 @@ fn sync(win: &SettingsWindow) {
     s.set_checked(ids.enabled, hook::is_enabled());
     s.set_checked(ids.startup, startup::is_enabled());
     s.set_checked(ids.learn, learn::is_enabled());
+    s.set_checked(ids.caret_hints, crate::caret::is_enabled());
     s.set_text(
         ids.learned,
         &trf(T::LearnedCount, &[("n", &learn::count().to_string())]),
@@ -543,6 +547,9 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         startup::set_enabled(s.checked(ids.startup));
     } else if id == ids.learn {
         learn::set_enabled(s.checked(ids.learn));
+        config::persist();
+    } else if id == ids.caret_hints {
+        crate::caret::set_enabled(s.checked(ids.caret_hints));
         config::persist();
     } else if id == ids.clear_learned {
         learn::clear();
@@ -740,8 +747,8 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
         PAGE_GENERAL => {
             card(g, rect(X0, 98, CW, 132));
             track(g, rect(X0 + 16, 110, CW - 32, 48));
-            card(g, rect(X0, CARD_B_Y, CW, 3 * ROW_H + 64));
-            for i in 1..=3 {
+            card(g, rect(X0, CARD_B_Y, CW, 4 * ROW_H + 64));
+            for i in 1..=4 {
                 divider(hdc, X0 + 16, CARD_B_Y + i * ROW_H + 2, CW - 32);
             }
         }

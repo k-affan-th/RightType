@@ -18,6 +18,7 @@
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
 //! - [`segment`] — Thai word segmentation (maximal matching) for space-less Thai.
 //! - [`render`] — reconciling on-screen text with the run's current best reading.
+//! - [`repair`] — fixing a whole piece of finished text (the Fix text window).
 //! - [`recent`] — the last few completed words, for flipping back several at once.
 //! - [`sim`] — the hook's Auto pipeline replayed on a string, for benchmarks and tests.
 
@@ -31,6 +32,7 @@ pub mod per_app;
 pub mod policy;
 pub mod recent;
 pub mod render;
+pub mod repair;
 pub mod secret;
 pub mod segment;
 pub mod sim;

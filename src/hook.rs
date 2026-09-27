@@ -314,7 +314,12 @@ struct SuggestionRecord {
     original: String,
     corrected: String,
     boundary_vk: u16,
+    created: Instant,
 }
+
+/// Tab takes a Suggest hint only this soon after it appeared; later, Tab is
+/// just Tab again.
+const SUGGEST_TAB_WINDOW: Duration = Duration::from_secs(4);
 
 impl Drop for SuggestionRecord {
     fn drop(&mut self) {
@@ -649,6 +654,23 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return false;
     }
 
+    // Tab (alone) right after a Suggest hint takes it, like Alt+CapsLock. The
+    // hint exists only until the next key, so Tab is otherwise untouched.
+    if vk == VK_TAB.0
+        && !is_down(VK_SHIFT)
+        && !is_down(VK_CONTROL)
+        && !is_down(VK_MENU)
+        && STATE.with(|s| {
+            s.borrow()
+                .suggestion
+                .as_ref()
+                .is_some_and(|x| x.created.elapsed() < SUGGEST_TAB_WINDOW)
+        })
+    {
+        accept_suggestion();
+        return true;
+    }
+
     // Shift+Backspace hotkey.
     let is_shift_backspace =
         vk == VK_BACK.0 && is_down(VK_SHIFT) && !is_down(VK_CONTROL) && !is_down(VK_MENU);
@@ -956,15 +978,16 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         (Mode::Suggest, Some(d)) => {
             // Show *what* would be written, not just that something would:
             // a hint you cannot read is a hint you cannot judge.
-            let mut hint = format!("{}  ·  Alt+CapsLock", d.corrected);
+            let mut hint = format!("{}  ·  Tab", d.corrected);
             STATE.with(|s| {
                 s.borrow_mut().suggestion = Some(SuggestionRecord {
                     original: word.clone(),
                     corrected: d.corrected,
                     boundary_vk: vk,
+                    created: Instant::now(),
                 });
             });
-            crate::overlay::show(&hint);
+            crate::overlay::show_at(&hint, crate::caret::hint_anchor());
             hint.zeroize();
             false
         }
@@ -1020,6 +1043,7 @@ fn layout_id(hkl: HKL) -> u32 {
 /// Switch the foreground window to one exact layout supported by the v1 mapping
 /// tables. No-op if that layout is not installed.
 unsafe fn activate_layout(target: policy::InputLayout) {
+    let layout = target;
     // Already there, or already on its way there.
     if policy::supported_layout_id(layout_id(effective_layout())) == Some(target) {
         return;
@@ -1073,8 +1097,9 @@ unsafe fn activate_layout(target: policy::InputLayout) {
                 st.last_hkl = hkl.0 as isize;
             });
             // No toast here: a layout switch happens on every ignition, which is
-            // too frequent — and Windows' own language indicator already reflects
-            // it. We only toast deliberate, rare changes (mode / enabled).
+            // too frequent for a message. Just a small TH/EN tag at the caret,
+            // where the eyes are (shown after this callback returns).
+            crate::caret::layout_switched(layout);
             return;
         }
     }

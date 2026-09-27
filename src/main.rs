@@ -13,11 +13,15 @@
 #[cfg(feature = "winos")]
 mod apps;
 #[cfg(feature = "winos")]
+mod caret;
+#[cfg(feature = "winos")]
 mod clipboard;
 #[cfg(feature = "winos")]
 mod config;
 #[cfg(feature = "winos")]
 mod data_dir;
+#[cfg(feature = "winos")]
+mod fixer;
 #[cfg(feature = "winos")]
 mod focus;
 #[cfg(feature = "winos")]

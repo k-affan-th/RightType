@@ -30,6 +30,16 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   over.
 - **Import / Export** learned words as a text file (Settings → Learned words).
 - **Time saved** estimate in Statistics.
+- **Fix text** window (tray → Fix text…): paste a paragraph typed in the wrong
+  layout, or take it from the clipboard with **Paste and fix**, and copy back
+  the fixed text. Every word is judged by the same rules as while typing; in
+  a test of 20,000 correctly typed mixed Thai/English sentences, none was
+  changed.
+- **Hints at the text cursor**: a small `TH` / `EN` tag flashes under the text
+  cursor when RightType switches the language, and the Suggest hint appears
+  there too. **Tab** takes a Suggest hint right after it appears (Tab is
+  otherwise untouched; `Alt`+`CapsLock` still works). Can be turned off in
+  Settings → General.
 - **Check for updates** in Settings → Privacy & about: opens the Releases page
   in your browser; RightType itself still never goes online.
 

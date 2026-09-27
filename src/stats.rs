@@ -37,6 +37,11 @@ pub fn record_manual() {
     MANUAL.fetch_add(1, Ordering::Relaxed);
 }
 
+/// Record `n` words fixed by hand at once (the Fix text window).
+pub fn record_manual_n(n: u64) {
+    MANUAL.fetch_add(n, Ordering::Relaxed);
+}
+
 /// Rough time a correction saves, in seconds, using the typing benchmark's
 /// human timings (`examples/typing_benchmark.rs`: 0.30 s a keystroke, 0.60 s
 /// to switch layout, 0.80 s to notice a wrong word, 0.40 s for
