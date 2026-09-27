@@ -12,18 +12,82 @@
 //! punctuation) pass through unchanged.
 
 mod kedmanee;
+mod pattachote;
 mod qwerty;
 
+use std::sync::atomic::{AtomicU8, Ordering};
+
 pub use kedmanee::Kedmanee;
-pub use qwerty::QwertyEn;
+pub use pattachote::Pattachote;
+pub use qwerty::{QwertyEn, QwertyUk};
 
 /// Identifies a concrete keyboard layout.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum LayoutId {
     /// US English QWERTY.
     QwertyEn,
+    /// UK English QWERTY.
+    QwertyUk,
     /// Thai Kedmanee (TIS-820.2538) mapped onto a US physical keyboard.
     Kedmanee,
+    /// Thai Pattachote mapped onto a US physical keyboard.
+    Pattachote,
+}
+
+/// Which Thai layout the typist uses (a setting: Windows does not say which
+/// Thai layout a window has in a way the hook can read cheaply).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ThaiVariant {
+    Kedmanee,
+    Pattachote,
+}
+
+/// Which English layout is active (read from the window's keyboard layout).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum EnglishVariant {
+    Us,
+    Uk,
+}
+
+static THAI: AtomicU8 = AtomicU8::new(0);
+static ENGLISH: AtomicU8 = AtomicU8::new(0);
+
+pub fn set_thai_variant(v: ThaiVariant) {
+    THAI.store(v as u8, Ordering::Relaxed);
+}
+
+pub fn thai_variant() -> ThaiVariant {
+    if THAI.load(Ordering::Relaxed) == ThaiVariant::Pattachote as u8 {
+        ThaiVariant::Pattachote
+    } else {
+        ThaiVariant::Kedmanee
+    }
+}
+
+pub fn set_english_variant(v: EnglishVariant) {
+    ENGLISH.store(v as u8, Ordering::Relaxed);
+}
+
+pub fn english_variant() -> EnglishVariant {
+    if ENGLISH.load(Ordering::Relaxed) == EnglishVariant::Uk as u8 {
+        EnglishVariant::Uk
+    } else {
+        EnglishVariant::Us
+    }
+}
+
+fn thai_layout() -> &'static dyn Layout {
+    match thai_variant() {
+        ThaiVariant::Kedmanee => &Kedmanee,
+        ThaiVariant::Pattachote => &Pattachote,
+    }
+}
+
+fn english_layout() -> &'static dyn Layout {
+    match english_variant() {
+        EnglishVariant::Us => &QwertyEn,
+        EnglishVariant::Uk => &QwertyUk,
+    }
 }
 
 /// A keyboard layout: a bidirectional map between canonical physical keys
@@ -51,14 +115,16 @@ pub fn convert(input: &str, from: &dyn Layout, to: &dyn Layout) -> String {
         .collect()
 }
 
-/// Convenience: text typed on an EN layout that was meant to be Thai.
+/// Convenience: text typed on the English layout that was meant to be Thai
+/// (with the English and Thai layouts currently selected; US and Kedmanee
+/// unless set otherwise).
 pub fn en_to_th(input: &str) -> String {
-    convert(input, &QwertyEn::new(), &Kedmanee::new())
+    convert(input, english_layout(), thai_layout())
 }
 
-/// Convenience: text typed on a Thai layout that was meant to be English.
+/// Convenience: text typed on the Thai layout that was meant to be English.
 pub fn th_to_en(input: &str) -> String {
-    convert(input, &Kedmanee::new(), &QwertyEn::new())
+    convert(input, thai_layout(), english_layout())
 }
 
 /// Convert to the *other* layout, choosing the direction from the script present.

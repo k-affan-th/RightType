@@ -7,9 +7,10 @@
 use crate::detect::{self, Confidence, Detection, Evidence};
 use crate::dict::Dictionary;
 use crate::english;
-use crate::layout::{en_to_th, th_to_en};
+use crate::layout::{en_to_th, th_to_en, ThaiVariant};
 use crate::secret::{self, SecretKind};
 use crate::segment;
+use std::sync::RwLock;
 
 /// Shortest in-flight token the live path will consider at all. Two-character
 /// candidates are excluded because valid short words (`สว`) are frequently true
@@ -38,20 +39,95 @@ pub enum InputLayout {
 pub const KLID_US_QWERTY: u32 = 0x0000_0409;
 pub const KLID_THAI_KEDMANEE: u32 = 0x0000_041E;
 
-/// Resolve a Windows `HKL` value only when its physical-key mapping is the
-/// default layout for the language. Windows commonly returns default handles as
-/// `0x04090409` / `0x041E041E` (device word equals LANGID), while canonical IDs
-/// use a zero device word. Variant layouts use a different device word and are
-/// rejected (for example Pattachote/Dvorak replacement handles).
+/// Resolve a Windows `HKL` (or KLID) to a layout RightType has a table for.
+///
+/// The low word is the language, the high word the keyboard (zero, or equal
+/// to the language, for the language's default keyboard).
+///
+/// * **English**, any country, typed on the US keyboard (device `0x0409`, or
+///   the default keyboard of US / Australia / New Zealand English) or on the
+///   UK keyboard (device `0x0809`, or UK English's default). Which one is
+///   reported by [`english_variant_of`]. Canada is covered when its keyboard
+///   is set to US; its default handle can mean the Canadian French layout.
+/// * **Thai**: the default keyboard (Kedmanee). Other Thai keyboards are
+///   accepted only when the user has chosen Pattachote in Settings (their
+///   handles vary, so the choice is the user's, not guessed), and then the
+///   default one is not: keys are only ever read through the matching table.
+///
+/// Anything else (Dvorak, other languages) is `None`: RightType stays out.
 pub fn supported_layout_id(hkl: u32) -> Option<InputLayout> {
     let language = hkl & 0xFFFF;
+    if language & 0x3FF == 0x09 {
+        return english_variant_of(hkl).map(|_| InputLayout::UsQwerty);
+    }
+    if language == KLID_THAI_KEDMANEE {
+        return thai_keyboard_matches(hkl, crate::layout::thai_variant())
+            .then_some(InputLayout::ThaiKedmanee);
+    }
+    None
+}
+
+/// The Thai keyboards other than the default one, by the high word of their
+/// handle, with the table each one follows. Filled by the Windows layer from
+/// the keyboard's layout file (Windows also has a Kedmanee without ShiftLock,
+/// and a Pattachote without it). Empty until then.
+static THAI_KEYBOARDS: RwLock<Vec<(u16, ThaiVariant)>> = RwLock::new(Vec::new());
+
+/// Tell the policy which table each installed non-default Thai keyboard uses.
+pub fn set_thai_keyboards(keyboards: Vec<(u16, ThaiVariant)>) {
+    if let Ok(mut k) = THAI_KEYBOARDS.write() {
+        *k = keyboards;
+    }
+}
+
+/// Which table a Thai `HKL` follows: Kedmanee for the default keyboard, what
+/// `known` says for the others. A keyboard not in `known` (its layout file
+/// could not be read) is `None`: RightType stays off rather than guess.
+fn thai_table_of(hkl: u32, known: &[(u16, ThaiVariant)]) -> Option<ThaiVariant> {
+    let language = hkl & 0xFFFF;
     let device = hkl >> 16;
-    if device != 0 && device != language {
+    if device == 0 || device == language {
+        return Some(ThaiVariant::Kedmanee);
+    }
+    known
+        .iter()
+        .find(|(d, _)| u32::from(*d) == device)
+        .map(|(_, v)| *v)
+}
+
+/// Whether a Thai `HKL` is a keyboard of the table in use. Only those are
+/// accepted, so keys are never read through the other table when both kinds
+/// of keyboard are installed.
+fn thai_keyboard_matches(hkl: u32, variant: ThaiVariant) -> bool {
+    THAI_KEYBOARDS
+        .read()
+        .map(|known| thai_table_of(hkl, &known) == Some(variant))
+        .unwrap_or(false)
+}
+
+/// Whether `hkl` is the keyboard whose table is in use: the chosen Thai
+/// keyboard (the default one for Kedmanee, another one for Pattachote), or
+/// the English keyboard last seen.
+pub fn is_preferred_layout(hkl: u32) -> bool {
+    use crate::layout::{english_variant, thai_variant};
+    if hkl & 0xFFFF == KLID_THAI_KEDMANEE {
+        return thai_keyboard_matches(hkl, thai_variant());
+    }
+    english_variant_of(hkl) == Some(english_variant())
+}
+
+/// Which English keyboard an English `HKL` uses, if RightType knows it.
+pub fn english_variant_of(hkl: u32) -> Option<crate::layout::EnglishVariant> {
+    use crate::layout::EnglishVariant::{Uk, Us};
+    let language = hkl & 0xFFFF;
+    let device = hkl >> 16;
+    if language & 0x3FF != 0x09 {
         return None;
     }
-    match language {
-        KLID_US_QWERTY => Some(InputLayout::UsQwerty),
-        KLID_THAI_KEDMANEE => Some(InputLayout::ThaiKedmanee),
+    let keyboard = if device == 0 { language } else { device };
+    match keyboard {
+        0x0409 | 0x0C09 | 0x1409 => Some(Us),
+        0x0809 => Some(Uk),
         _ => None,
     }
 }
@@ -195,9 +271,14 @@ fn us_layout_thai_with_punctuation(
 fn thai_layout_trailing_mark(token: &str, th: &Dictionary) -> Option<Detection> {
     let token = token.trim();
     let last = token.chars().last()?;
-    let mark = match last {
-        'ซ' => ':',
-        'ฦ' => '?',
+    // Whatever the Thai layout: the character on the key that gives `:` or
+    // `?` in English (ซ and ฦ on Kedmanee).
+    if !('\u{0E00}'..='\u{0E7F}').contains(&last) {
+        return None;
+    }
+    let mark = match th_to_en(&last.to_string()).as_str() {
+        ":" => ':',
+        "?" => '?',
         _ => return None,
     };
     let head = &token[..token.len() - last.len_utf8()];
@@ -517,9 +598,42 @@ mod tests {
             supported_layout_id(0x041E_041E),
             Some(InputLayout::ThaiKedmanee)
         );
-        assert_eq!(supported_layout_id(0x0000_0809), None); // UK English
-        assert_eq!(supported_layout_id(0x0001_041E), None); // Thai Pattachote
-        assert_eq!(supported_layout_id(0xF001_041E), None); // replacement variant handle
+        use crate::layout::EnglishVariant::{Uk, Us};
+        // UK English, and English of other countries on the US keyboard.
+        assert_eq!(
+            supported_layout_id(0x0000_0809),
+            Some(InputLayout::UsQwerty)
+        );
+        assert_eq!(english_variant_of(0x0809_0809), Some(Uk));
+        // Australia (on the US keyboard, and its own default).
+        assert_eq!(english_variant_of(0x0409_0C09), Some(Us));
+        assert_eq!(english_variant_of(0x0C09_0C09), Some(Us));
+        // Canada set to the US keyboard; its default may be Canadian French.
+        assert_eq!(english_variant_of(0x0409_1009), Some(Us));
+        assert_eq!(english_variant_of(0x1009_1009), None);
+        // US Dvorak, and Japanese.
+        assert_eq!(supported_layout_id(0xF002_0409), None);
+        assert_eq!(supported_layout_id(0x0000_0411), None);
+        // Thai variants only once the user has chosen Pattachote.
+        assert_eq!(supported_layout_id(0x0001_041E), None);
+        assert_eq!(supported_layout_id(0xF001_041E), None);
+        // And then only they: Kedmanee is never read through Pattachote,
+        // including Kedmanee without ShiftLock (also not the default).
+        use crate::layout::ThaiVariant::{Kedmanee, Pattachote};
+        let known = [
+            (0xF001, Pattachote),
+            (0xF002, Kedmanee),
+            (0xF003, Pattachote),
+        ];
+        assert_eq!(thai_table_of(0x041E_041E, &known), Some(Kedmanee));
+        assert_eq!(thai_table_of(0x0000_041E, &known), Some(Kedmanee));
+        assert_eq!(thai_table_of(0xF001_041E, &known), Some(Pattachote));
+        assert_eq!(thai_table_of(0xF002_041E, &known), Some(Kedmanee));
+        assert_eq!(thai_table_of(0xF003_041E, &known), Some(Pattachote));
+        assert_eq!(thai_table_of(0xF00F_041E, &known), None);
+        // Layout files unreadable: no guessing, RightType stays off.
+        assert_eq!(thai_table_of(0xF001_041E, &[]), None);
+        assert_eq!(thai_table_of(0x0000_041E, &[]), Some(Kedmanee));
     }
 
     #[test]

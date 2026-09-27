@@ -166,6 +166,8 @@ texts! {
     BtnEditLearned => "Edit…", "แก้ไข…";
     HeadLanguage => "Language", "ภาษา";
     HeadHotkeys => "Hotkeys", "ปุ่มลัด";
+    HeadThaiKeyboard => "Thai keyboard", "แป้นพิมพ์ไทย";
+    NoteKeyboards => "English: US or UK keyboards, found automatically.", "อังกฤษ: แป้น US หรือ UK ตรวจให้อัตโนมัติ";
     NoteHotkeys => "Hotkeys work in every app. To change one, click Change and press the new keys.", "ปุ่มลัดใช้ได้ทุกแอป กด เปลี่ยน แล้วกดปุ่มใหม่ที่ต้องการ";
     HkPalette => "Open the command palette", "เปิดเมนูคำสั่ง";
     BtnChange => "Change", "เปลี่ยน";

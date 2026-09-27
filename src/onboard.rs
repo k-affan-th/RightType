@@ -120,16 +120,9 @@ pub fn show(first_run: bool) {
     for (i, (action, keys)) in hotkey_rows().into_iter().take(lay.rows).enumerate() {
         let y = lay.keys_y + 4 + i as i32 * ROW;
         s.label(
-            tr(action),
-            TextStyle::Body,
-            (X + 20, y + 12, 230, 22),
-            p.surface,
-            0,
-        );
-        s.label(
-            &keys,
+            &format!("{}\t{keys}", tr(action)),
             TextStyle::Keys,
-            (X + CW - 20 - 240, y + 8, 240, 30),
+            (X + 20, y + 8, CW - 40, 30),
             p.surface,
             0,
         );

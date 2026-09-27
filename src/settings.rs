@@ -55,6 +55,8 @@ const ROW_H: i32 = 64;
 const CARD_B_Y: i32 = 282;
 /// The per-field language card on the Apps page.
 const PREDICT_Y: i32 = 548;
+/// The Thai keyboard picker on the Hotkeys page.
+const KEYBOARD_Y: i32 = 516;
 
 /// The label of each hotkey action.
 pub fn action_label(action: Action) -> T {
@@ -99,6 +101,8 @@ struct Ids {
     key_buttons: Vec<u16>,
     keys_status: u16,
     keys_reset: u16,
+    kedmanee: u16,
+    pattachote: u16,
     save_learned: u16,
     clear_learned: u16,
     list: u16,
@@ -261,17 +265,10 @@ fn open_on(page: u8) {
     let mut key_buttons = Vec::new();
     for (i, (label, keys)) in hotkey_rows().into_iter().enumerate() {
         let y = 74 + i as i32 * 52;
-        s.label(
-            tr(label),
-            TextStyle::Body,
-            (X0 + 20, y + 14, 250, 24),
-            p.surface,
-            h,
-        );
         key_labels.push(s.label(
-            &keys,
+            &format!("{}\t{keys}", tr(label)),
             TextStyle::Keys,
-            (X0 + CW - 20 - 96 - 236, y + 12, 236, 30),
+            (X0 + 20, y + 12, CW - 40 - 96, 30),
             p.surface,
             h,
         ));
@@ -295,6 +292,34 @@ fn open_on(page: u8) {
         tr(T::BtnResetKeys),
         false,
         (X0 + CW - 150, note_y, 150, 34),
+        p.bg,
+        h,
+    );
+    s.label(
+        tr(T::HeadThaiKeyboard),
+        TextStyle::BodyStrong,
+        (X0, KEYBOARD_Y + 6, 200, 22),
+        p.bg,
+        h,
+    );
+    let kedmanee = s.segment(
+        "Kedmanee",
+        true,
+        (X0 + CW - 20 - 2 * 130, KEYBOARD_Y + 4, 130, 32),
+        p.inset,
+        h,
+    );
+    let pattachote = s.segment(
+        "Pattachote",
+        false,
+        (X0 + CW - 20 - 130, KEYBOARD_Y + 4, 130, 32),
+        p.inset,
+        h,
+    );
+    s.label(
+        tr(T::NoteKeyboards),
+        TextStyle::Small,
+        (X0, KEYBOARD_Y + 46, CW, 22),
         p.bg,
         h,
     );
@@ -499,6 +524,8 @@ fn open_on(page: u8) {
         key_buttons,
         keys_status,
         keys_reset,
+        kedmanee,
+        pattachote,
         save_learned,
         clear_learned,
         list,
@@ -580,6 +607,10 @@ fn sync(win: &SettingsWindow) {
     s.set_checked(ids.learn, learn::is_enabled());
     s.set_checked(ids.caret_hints, crate::caret::is_enabled());
     s.set_checked(ids.predict, crate::habits::is_enabled());
+    let pattachote =
+        righttype::layout::thai_variant() == righttype::layout::ThaiVariant::Pattachote;
+    s.set_checked(ids.kedmanee, !pattachote);
+    s.set_checked(ids.pattachote, pattachote);
     s.set_text(
         ids.folder_label,
         &match learn::folder() {
@@ -712,6 +743,13 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
             ids.keys_status,
             &trf(T::HkPress, &[("v", tr(action_label(action)))]),
         );
+    } else if id == ids.kedmanee || id == ids.pattachote {
+        righttype::layout::set_thai_variant(if id == ids.pattachote {
+            righttype::layout::ThaiVariant::Pattachote
+        } else {
+            righttype::layout::ThaiVariant::Kedmanee
+        });
+        config::persist();
     } else if id == ids.keys_reset {
         hook::cancel_capture();
         hook::set_hotkeys(Hotkeys::default());
@@ -855,8 +893,9 @@ fn export_learned(win: &SettingsWindow) {
 
 /// Put the current chords in the Hotkeys page's labels.
 fn show_hotkeys(win: &SettingsWindow) {
-    for ((_, keys), label) in hotkey_rows().iter().zip(&win.ids.key_labels) {
-        win.surface.set_text(*label, keys);
+    for ((action, keys), label) in hotkey_rows().iter().zip(&win.ids.key_labels) {
+        win.surface
+            .set_text(*label, &format!("{}\t{keys}", tr(*action)));
     }
 }
 
@@ -921,6 +960,7 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             }
         }
         PAGE_HOTKEYS => {
+            track(g, rect(X0 + CW - 24 - 2 * 130, KEYBOARD_Y, 2 * 130 + 8, 40));
             card(g, rect(X0, 68, CW, Action::ALL.len() as i32 * 52 + 8));
             for i in 1..Action::ALL.len() as i32 {
                 divider(hdc, X0 + 16, 74 + i * 52 - 1, CW - 32);

@@ -986,11 +986,14 @@ impl Surface {
         };
     }
 
-    /// `Ctrl + Shift + CapsLock` as right-aligned key caps.
+    /// `Ctrl + Shift + CapsLock` as right-aligned key caps. With a name
+    /// before a tab (`Undo\tCtrl + Z`), the name fills the space left of the
+    /// caps, cut short with an ellipsis rather than hidden under them.
     unsafe fn paint_keys(&self, hdc: HDC, s: &str, rc: RECT) {
         let Some(g) = Gfx::new(hdc) else { return };
         let p = pal();
         let font = self.fonts.borrow().small;
+        let (name, s) = s.split_once('\t').unwrap_or(("", s));
         let keys: Vec<&str> = s.split(" + ").collect();
         let cap_h = px(24);
         let pad = px(8);
@@ -1015,6 +1018,20 @@ impl Surface {
         let total: i32 =
             widths.iter().sum::<i32>() + (keys.len() as i32 - 1).max(0) * (gap * 2 + plus_w);
         let mut x = rc.right - total;
+        if !name.is_empty() {
+            let room = RECT {
+                right: x - px(12),
+                ..rc
+            };
+            text(
+                hdc,
+                name,
+                room,
+                self.fonts.borrow().body,
+                p.text,
+                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+            );
+        }
         let top = rc.top + ((rc.bottom - rc.top) - cap_h) / 2;
         for (i, (k, w)) in keys.iter().zip(&widths).enumerate() {
             if i > 0 {

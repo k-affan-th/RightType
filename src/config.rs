@@ -53,6 +53,9 @@ pub struct Config {
     /// Hotkeys changed from the defaults: action → `Ctrl + Alt + Space`.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub hotkeys: BTreeMap<String, String>,
+    /// `kedmanee` (default) or `pattachote`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thai_layout: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -99,6 +102,7 @@ impl Default for Config {
             keep_stats: false,
             learned_folder: None,
             hotkeys: BTreeMap::new(),
+            thai_layout: None,
         }
     }
 }
@@ -137,6 +141,10 @@ pub fn apply(cfg: &Config) {
     set_language(cfg.language.as_deref().and_then(Lang::from_code));
     crate::caret::set_enabled(cfg.caret_hints);
     crate::habits::set_enabled(cfg.predict_layout);
+    righttype::layout::set_thai_variant(match cfg.thai_layout.as_deref() {
+        Some("pattachote") => righttype::layout::ThaiVariant::Pattachote,
+        _ => righttype::layout::ThaiVariant::Kedmanee,
+    });
     hook::set_hotkeys(righttype::hotkeys::Hotkeys::from_config(
         cfg.hotkeys.iter().map(|(k, v)| (k.as_str(), v.as_str())),
     ));
@@ -214,6 +222,9 @@ pub fn persist() {
             .into_iter()
             .map(|(k, v)| (k.to_string(), v))
             .collect(),
+        thai_layout: (righttype::layout::thai_variant()
+            == righttype::layout::ThaiVariant::Pattachote)
+            .then(|| "pattachote".to_string()),
     };
     let Some(p) = config_path() else {
         return;

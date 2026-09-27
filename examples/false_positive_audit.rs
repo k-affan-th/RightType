@@ -13,6 +13,7 @@
 //!   dictionary cannot vouch for.
 //! - Fix text: 20,000 correct mixed Thai/English sentences through `repair`.
 //! - Numbers, dates, times, prices and symbols on the English layout: 0 may change.
+//! - The same dictionary checks with Thai Pattachote, and with the UK English keyboard.
 //! - Thai phrases: 200,000 random runs of 2–4 dictionary words, as Thai is
 //!   written (no spaces).
 //! - English words, every one in the bundled dictionary, typed on the English
@@ -29,6 +30,10 @@
 const MAX_UNKNOWN_THAI_CHANGED: usize = 120;
 /// Thai dictionary words typed on the English layout that must come back.
 const MIN_THAI_RECALL: usize = 60_550;
+/// Thai recall with the Pattachote table (2.0 M6), measured when it was added.
+const MIN_PATTACHOTE_THAI_RECALL: usize = 60_150;
+/// English recall with the Pattachote table (2.0 M6), measured 86,833.
+const MIN_PATTACHOTE_ENGLISH_RECALL: usize = 86_750;
 /// English dictionary words typed on the Thai layout that must come back.
 const MIN_ENGLISH_RECALL: usize = 86_600;
 
@@ -299,6 +304,69 @@ fn main() {
     if let Some(path) = dump {
         std::fs::write(path, dumped).expect("writing dump");
     }
+    // The same core checks with Thai Pattachote as the Thai layout (2.0 M6):
+    // no correctly typed Thai or English dictionary word may change, and
+    // recall has its own floor.
+    righttype::layout::set_thai_variant(righttype::layout::ThaiVariant::Pattachote);
+    let changed_thai = thai_words.iter().filter(|w| th_layout(w).is_some()).count();
+    let changed_english = english_words
+        .iter()
+        .filter(|w| us_layout(w).is_some())
+        .count();
+    let recall_thai = thai_words
+        .iter()
+        .filter(|w| us_layout(&righttype::layout::th_to_en(w)).as_deref() == Some(**w))
+        .count();
+    let recall_english = english_words
+        .iter()
+        .filter(|w| th_layout(&righttype::layout::en_to_th(w)).as_deref() == Some(**w))
+        .count();
+    righttype::layout::set_thai_variant(righttype::layout::ThaiVariant::Kedmanee);
+    println!(
+        "Pattachote: Thai dictionary words changed {changed_thai}, English dictionary words changed {changed_english}; recall Thai {recall_thai} of {}, English {recall_english} of {}",
+        thai_words.len(),
+        english_words.len()
+    );
+    if changed_thai + changed_english > 0 {
+        failures.push(format!(
+            "Pattachote: {} dictionary words changed (must be 0)",
+            changed_thai + changed_english
+        ));
+    }
+    if recall_thai < MIN_PATTACHOTE_THAI_RECALL {
+        failures.push(format!(
+            "Pattachote Thai recall {recall_thai} below floor {MIN_PATTACHOTE_THAI_RECALL}"
+        ));
+    }
+    if recall_english < MIN_PATTACHOTE_ENGLISH_RECALL {
+        failures.push(format!(
+            "Pattachote English recall {recall_english} below floor {MIN_PATTACHOTE_ENGLISH_RECALL}"
+        ));
+    }
+
+    // UK English keyboard (2.0 M6): English typed correctly must not change,
+    // with or without the punctuation the UK layout moves.
+    righttype::layout::set_english_variant(righttype::layout::EnglishVariant::Uk);
+    let changed_uk = english_words
+        .iter()
+        .flat_map(|w| {
+            [
+                w.to_string(),
+                format!("\"{w}\""),
+                format!("{w}@"),
+                format!("£{w}"),
+            ]
+        })
+        .filter(|t| us_layout(t).is_some())
+        .count();
+    righttype::layout::set_english_variant(righttype::layout::EnglishVariant::Us);
+    println!("UK English keyboard: English dictionary words changed {changed_uk}");
+    if changed_uk > 0 {
+        failures.push(format!(
+            "UK: {changed_uk} English words changed (must be 0)"
+        ));
+    }
+
     if check {
         if failures.is_empty() {
             println!("quality gate: PASS");
