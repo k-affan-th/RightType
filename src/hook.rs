@@ -1240,8 +1240,16 @@ fn note_english_variant(hkl: HKL) {
     }
 }
 
-/// At startup: the English keyboard among the installed layouts.
+/// At startup: the English keyboard among the installed layouts. Only once:
+/// `install` also runs on every hook reinstall (sleep, session change, hook
+/// loss), and by then the keyboard actually used is known.
 unsafe fn detect_english_variant() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    let mut first = false;
+    ONCE.call_once(|| first = true);
+    if !first {
+        return;
+    }
     let count = GetKeyboardLayoutList(None);
     if count <= 0 {
         return;
