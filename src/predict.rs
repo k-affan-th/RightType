@@ -80,6 +80,25 @@ impl Habits {
         }
     }
 
+    /// A word already counted in `field` as `from` was changed to `to` (a
+    /// flip, an accepted suggestion, an Undo): move it to the right count.
+    pub fn correct(&mut self, field: &str, from: InputLayout, to: InputLayout) {
+        if from == to {
+            return;
+        }
+        let Some(counts) = self.fields.get_mut(field) else {
+            return;
+        };
+        let (take, give) = match from {
+            InputLayout::ThaiKedmanee => (&mut counts.thai, &mut counts.english),
+            InputLayout::UsQwerty => (&mut counts.english, &mut counts.thai),
+        };
+        if *take > 0 {
+            *take -= 1;
+            *give += 1;
+        }
+    }
+
     /// The language to switch to when `field` gets focus, if any.
     pub fn preferred(&self, field: &str) -> Option<InputLayout> {
         self.fields.get(field).and_then(|c| c.preferred())
@@ -187,6 +206,28 @@ mod tests {
             h.record(&format!("app{i}.exe|edit"), InputLayout::UsQwerty);
         }
         assert_eq!(h.len(), MAX_FIELDS);
+    }
+
+    #[test]
+    fn a_corrected_word_moves_to_the_language_kept() {
+        let mut h = Habits::new();
+        for _ in 0..MIN_WORDS {
+            h.record(F, InputLayout::ThaiKedmanee);
+        }
+        for _ in 0..MIN_WORDS {
+            h.correct(F, InputLayout::ThaiKedmanee, InputLayout::UsQwerty);
+        }
+        assert_eq!(
+            h.counts(F),
+            Counts {
+                thai: 0,
+                english: MIN_WORDS
+            }
+        );
+        assert_eq!(h.preferred(F), Some(InputLayout::UsQwerty));
+        // Nothing to take from: no change.
+        h.correct(F, InputLayout::ThaiKedmanee, InputLayout::UsQwerty);
+        assert_eq!(h.counts(F).english, MIN_WORDS);
     }
 
     #[test]

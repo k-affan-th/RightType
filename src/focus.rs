@@ -80,6 +80,8 @@ pub unsafe fn arm() {
         WINEVENT_OUTOFCONTEXT,
     );
     HOOK.with(|h| *h.borrow_mut() = Some(hook));
+    // A field that already has focus at startup gets no focus event.
+    crate::habits::on_focus();
 }
 
 /// Remove the focus hook.

@@ -146,6 +146,30 @@ pub fn record_word(exe: &str, word: &str) {
     DIRTY.store(true, Ordering::Relaxed);
 }
 
+/// A finished word in `exe` changed language after it was counted (a flip,
+/// an accepted suggestion, an Undo): move it to the language kept, so the
+/// habit follows what the user meant, not what they first typed.
+pub fn correct_word(exe: &str, was_thai: bool, now_thai: bool) {
+    if !is_enabled() || was_thai == now_thai {
+        return;
+    }
+    let Some(class) = focused_class() else {
+        return;
+    };
+    let layout = |thai| {
+        if thai {
+            InputLayout::ThaiKedmanee
+        } else {
+            InputLayout::UsQwerty
+        }
+    };
+    HABITS.with(|h| {
+        h.borrow_mut()
+            .correct(&field_key(exe, &class), layout(was_thai), layout(now_thai))
+    });
+    DIRTY.store(true, Ordering::Relaxed);
+}
+
 /// Focus moved: if the new field has a clear habit, switch to its language.
 pub fn on_focus() {
     if !is_enabled() || !crate::hook::is_enabled() || crate::focus::is_password_field() {

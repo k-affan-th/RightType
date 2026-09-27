@@ -390,6 +390,8 @@ unsafe fn undo_last_correction() {
     e2e_trace(format!("undo apply len={} -> {ok}", rec.injected_len));
     if ok {
         let restored = rec.restore_text.trim_end_matches(['\r', '\t', ' ']);
+        // The word counted was the correction; the one kept is the original.
+        habit_correction(!has_thai(restored), has_thai(restored));
         match rec.kind {
             UndoKind::Manual => {}
             UndoKind::AutoWord => crate::learn::learn_now(restored),
@@ -1165,6 +1167,10 @@ unsafe fn accept_suggestion() {
     );
     restore.zeroize();
     crate::stats::record_manual();
+    habit_correction(
+        has_thai(&suggestion.original),
+        has_thai(&suggestion.corrected),
+    );
 
     let to_thai = suggestion
         .corrected
@@ -1177,6 +1183,17 @@ unsafe fn accept_suggestion() {
     });
     suggestion.original.zeroize();
     suggestion.corrected.zeroize();
+}
+
+/// A counted word in this app changed language (see `habits`).
+fn habit_correction(was_thai: bool, now_thai: bool) {
+    if let Some(exe) = STATE.with(|s| s.borrow().app_exe.clone()) {
+        crate::habits::correct_word(&exe, was_thai, now_thai);
+    }
+}
+
+fn has_thai(text: &str) -> bool {
+    text.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c))
 }
 
 /// Shift+Backspace with no word in progress: flip one more of the recent
@@ -1215,6 +1232,7 @@ unsafe fn flip_back_recent() {
     if let Some(word) = step.learn.as_deref() {
         crate::learn::learn_now(word);
     }
+    habit_correction(step.was_thai, step.now_thai);
     activate_layout(layout_of(&step.newest));
     if step.words > 1 {
         crate::overlay::show(&righttype::i18n::trf(
