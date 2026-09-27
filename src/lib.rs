@@ -21,6 +21,7 @@
 //! - [`render`] — reconciling on-screen text with the run's current best reading.
 //! - [`repair`] — fixing a whole piece of finished text (the Fix text window).
 //! - [`recent`] — the last few completed words, for flipping back several at once.
+//! - [`usage`] — daily correction counts for the opt-in weekly view.
 //! - [`sim`] — the hook's Auto pipeline replayed on a string, for benchmarks and tests.
 
 pub mod buffer;
@@ -38,3 +39,4 @@ pub mod repair;
 pub mod secret;
 pub mod segment;
 pub mod sim;
+pub mod usage;

@@ -48,6 +48,12 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 - A colon or question mark typed after a Thai phrase on the Thai layout (the
   keys give ซ and ฦ there) comes back as `:` / `?` when the phrase is known
   Thai (a dictionary word or three or more known words).
+- **Last 7 days** in Statistics (opt-in): a bar per day and the week's total
+  words fixed and time saved. Only two numbers per day are kept
+  (`stats.toml`); turning it off deletes them.
+- **Sync folder for learned words** (Settings → Learned words): keep the list
+  in a OneDrive / Google Drive / team folder; both lists are merged when you
+  choose it, and a change made on another PC is picked up within seconds.
 - **Check for updates** in Settings → Privacy & about: opens the Releases page
   in your browser; RightType itself still never goes online.
 

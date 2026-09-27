@@ -115,6 +115,9 @@ struct Ids {
     check_updates: u16,
     predict: u16,
     clear_habits: u16,
+    folder_label: u16,
+    sync_folder: u16,
+    this_pc: u16,
 }
 
 struct SettingsWindow {
@@ -303,7 +306,22 @@ fn open_on(page: u8) {
     let learned_list = s.edit(&learn::list().join("\r\n"), (X0 + 10, 150, CW - 20, 252), l);
     let import_learned = s.button(tr(T::BtnImport), false, (X0, 428, 100, 34), p.bg, l);
     let export_learned = s.button(tr(T::BtnExport), false, (X0 + 106, 428, 100, 34), p.bg, l);
-    let learned_status = s.label("", TextStyle::Small, (X0, 474, CW, 40), p.bg, l);
+    let learned_status = s.label("", TextStyle::Small, (X0, 470, CW, 36), p.bg, l);
+    let folder_label = s.label("", TextStyle::Small, (X0, 526, CW - 290, 40), p.bg, l);
+    let sync_folder = s.button(
+        tr(T::BtnSyncFolder),
+        false,
+        (X0 + CW - 284, 520, 150, 34),
+        p.bg,
+        l,
+    );
+    let this_pc = s.button(
+        tr(T::BtnThisPc),
+        false,
+        (X0 + CW - 126, 520, 126, 34),
+        p.bg,
+        l,
+    );
     let clear_learned = s.button(
         tr(T::BtnClearAll),
         false,
@@ -476,6 +494,9 @@ fn open_on(page: u8) {
         check_updates,
         predict,
         clear_habits,
+        folder_label,
+        sync_folder,
+        this_pc,
     };
 
     ui::size_and_center(surface.hwnd, W, H);
@@ -529,6 +550,13 @@ fn sync(win: &SettingsWindow) {
     s.set_checked(ids.learn, learn::is_enabled());
     s.set_checked(ids.caret_hints, crate::caret::is_enabled());
     s.set_checked(ids.predict, crate::habits::is_enabled());
+    s.set_text(
+        ids.folder_label,
+        &match learn::folder() {
+            Some(folder) => trf(T::LearnedInFolder, &[("v", &folder.to_string_lossy())]),
+            None => tr(T::LearnedHere).to_string(),
+        },
+    );
     s.set_text(
         ids.learned,
         &trf(T::LearnedCount, &[("n", &learn::count().to_string())]),
@@ -626,6 +654,27 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         );
         config::persist();
         overlay::show(tr(T::ToastSaved));
+    } else if id == ids.sync_folder || id == ids.this_pc {
+        let folder = if id == ids.sync_folder {
+            match pick_folder(win) {
+                Some(folder) => Some(folder),
+                None => return,
+            }
+        } else {
+            None
+        };
+        match learn::set_folder(folder) {
+            Some(n) => {
+                config::persist();
+                s.set_text(ids.learned_list, &learn::list().join("\r\n"));
+                s.set_text(
+                    ids.learned_status,
+                    &trf(T::LearnedMoved, &[("n", &n.to_string())]),
+                );
+            }
+            // The folder could not be written: nothing changed.
+            None => s.set_text(ids.learned_status, tr(T::ErrFile)),
+        }
     } else if id == ids.import_learned {
         import_learned(win);
     } else if id == ids.export_learned {
@@ -697,6 +746,19 @@ fn pick_file(win: &SettingsWindow, save: bool) -> Option<std::path::PathBuf> {
         path.set_extension("txt");
     }
     Some(path)
+}
+
+/// Ask for a folder (the sync folder for learned words).
+fn pick_folder(win: &SettingsWindow) -> Option<std::path::PathBuf> {
+    let mut dialog = nwg::FileDialog::default();
+    nwg::FileDialog::builder()
+        .action(nwg::FileDialogAction::OpenDirectory)
+        .build(&mut dialog)
+        .ok()?;
+    if !dialog.run(Some(&win.window)) {
+        return None;
+    }
+    Some(std::path::PathBuf::from(dialog.get_selected_item().ok()?))
 }
 
 /// Add the words in a file to the learned list (nothing already there is

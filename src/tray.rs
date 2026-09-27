@@ -461,6 +461,7 @@ pub fn run() {
 
     unsafe { focus::disarm() };
     crate::habits::save();
+    crate::stats::save();
     if let Some(hwnd) = hwnd {
         unsafe { session::disarm(hwnd) };
     }
