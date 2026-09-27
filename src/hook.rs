@@ -1252,6 +1252,13 @@ unsafe fn detect_keyboards() {
         return;
     }
     policy::set_thai_keyboards(thai_keyboards());
+    // The keyboard in use now, if it is an English one; otherwise the first
+    // English keyboard installed.
+    let active = foreground_layout();
+    if policy::english_variant_of(layout_id(active)).is_some() {
+        note_english_variant(active);
+        return;
+    }
     let count = GetKeyboardLayoutList(None);
     if count <= 0 {
         return;

@@ -2,6 +2,14 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- With both US and UK English keyboards installed, RightType starts with the
+  one in use rather than the first installed, so **Fix text** opened from the
+  tray before any typing uses the right punctuation (`"` `@` `£` `#`).
+
 ## [2.0.0] — 2026-09-27
 
 RightType 2.0 shows what it does where you are typing, lets you steer it from
