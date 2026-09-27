@@ -12,6 +12,7 @@
 //!   the result is neither a word nor segmentable — the names and typos the
 //!   dictionary cannot vouch for.
 //! - Fix text: 20,000 correct mixed Thai/English sentences through `repair`.
+//! - Numbers, dates, times, prices and symbols on the English layout: 0 may change.
 //! - Thai phrases: 200,000 random runs of 2–4 dictionary words, as Thai is
 //!   written (no spaces).
 //! - English words, every one in the bundled dictionary, typed on the English
@@ -27,7 +28,7 @@
 /// 90 of 50,800 at the time of writing (0.18 %).
 const MAX_UNKNOWN_THAI_CHANGED: usize = 120;
 /// Thai dictionary words typed on the English layout that must come back.
-const MIN_THAI_RECALL: usize = 60_400;
+const MIN_THAI_RECALL: usize = 60_550;
 /// English dictionary words typed on the Thai layout that must come back.
 const MIN_ENGLISH_RECALL: usize = 86_600;
 
@@ -178,6 +179,61 @@ fn main() {
     );
     if !hits.is_empty() {
         failures.push(format!("{} English words changed (must be 0)", hits.len()));
+    }
+
+    // Letter-less text typed on the English layout (numbers, dates, times,
+    // prices, emoticons, code punctuation) must stay as typed, even where its
+    // keys spell a Thai word on Kedmanee (`86` is คุ, `5,` is จม).
+    let mut hits = Vec::new();
+    let mut samples: Vec<String> = Vec::new();
+    for n in 0..100_000u32 {
+        for s in [
+            n.to_string(),
+            format!("{n}%"),
+            format!("{n}."),
+            format!("{n},"),
+            format!("${n}"),
+            format!("({n})"),
+            format!("#{n}"),
+        ] {
+            samples.push(s);
+        }
+    }
+    for a in 0..100u32 {
+        for b in 0..100u32 {
+            for s in [
+                format!("{a}.{b}"),
+                format!("{a}:{b:02}"),
+                format!("{a}/{b}"),
+                format!("{a}-{b}"),
+                format!("{a},{b:03}"),
+            ] {
+                samples.push(s);
+            }
+        }
+    }
+    for s in [
+        ":)", ":(", ";)", ":-)", ":-(", "<3", "^^", "^_^", "...", "..", "--", "!!", "??", "?!",
+        "->", "<-", "=>", "(:", "):", "//", "/*", "*/", "&&", "||", "==", "!=", "<=", ">=", "++",
+        "::", ";;", "[]", "{}", "()", "<>", "''", "\"\"", "``", "~~", "**", "__", "##", ".0",
+    ] {
+        samples.push(s.to_string());
+    }
+    for t in &samples {
+        if let Some(c) = us_layout(t) {
+            hits.push((t.clone(), c));
+        }
+    }
+    report(
+        "Numbers, dates and symbols on the English layout",
+        samples.len(),
+        &hits,
+    );
+    if !hits.is_empty() {
+        failures.push(format!(
+            "{} numbers/symbols changed (must be 0)",
+            hits.len()
+        ));
     }
 
     // Fix text (2.0): correctly typed mixed Thai/English sentences pasted into

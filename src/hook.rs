@@ -177,6 +177,7 @@ pub fn set_enabled(on: bool) {
             st.undo = None;
             st.recent.clear();
             st.suggestion = None;
+            st.live_hint = None;
         });
     }
 }
@@ -302,6 +303,16 @@ struct HookState {
     /// after a boundary (pressed again: the word before, and so on).
     recent: Recent,
     suggestion: Option<SuggestionRecord>,
+    /// A Suggest hint shown while the word is still being typed (Suggest
+    /// mode): Tab flips the word in progress. Only where it was shown.
+    live_hint: Option<LiveHint>,
+}
+
+#[derive(Clone, Copy)]
+struct LiveHint {
+    hwnd: isize,
+    focus_generation: u64,
+    created: Instant,
 }
 
 impl HookState {
@@ -320,6 +331,7 @@ impl HookState {
             mark: TokenMark::Plain,
             recent: Recent::new(),
             suggestion: None,
+            live_hint: None,
         }
     }
 }
@@ -619,6 +631,7 @@ fn caret_may_have_moved() {
         st.undo = None;
         st.recent.clear();
         st.suggestion = None;
+        st.live_hint = None;
     });
 }
 
@@ -752,6 +765,28 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         accept_suggestion();
         return true;
     }
+    // Tab while a hint is showing for the word still being typed: flip it now.
+    if vk == VK_TAB.0
+        && !is_down(VK_SHIFT)
+        && !is_down(VK_CONTROL)
+        && !is_down(VK_MENU)
+        && STATE.with(|s| {
+            let st = s.borrow();
+            !st.buf.current().is_empty()
+                && st.live_hint.is_some_and(|h| {
+                    h.created.elapsed() < SUGGEST_TAB_WINDOW
+                        && h.hwnd == GetForegroundWindow().0 as isize
+                        && h.focus_generation == crate::focus::generation()
+                })
+        })
+        && !safety::is_password_field()
+        && !crate::focus::is_password_field()
+    {
+        STATE.with(|s| s.borrow_mut().live_hint = None);
+        crate::overlay::dismiss();
+        convert_last_word();
+        return true;
+    }
 
     // The flip hotkey (Shift+Backspace by default) keeps the recent words.
     let is_flip = action == Some(Action::Flip);
@@ -767,6 +802,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                 st.recent.clear();
             }
             st.suggestion = None;
+            st.live_hint = None;
         });
     } else if (action.is_some() && !is_flip) || vk == VK_CAPITAL.0 {
         // Other hotkeys (convert selection, undo, ...) can rewrite text, and
@@ -854,6 +890,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             let mut st = s.borrow_mut();
             st.buf.clear();
             st.suggestion = None;
+            st.live_hint = None;
             st.recent.clear();
         });
         return false;
@@ -961,6 +998,14 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             Key::Backspace => STATE.with(|s| s.borrow().owned.is_some()),
             _ => false,
         };
+        if matches!(key, Key::Char(_))
+            && mode_now == Mode::Suggest
+            && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
+            && policy::supported_layout_id(layout_id(effective_layout()))
+                == Some(policy::InputLayout::UsQwerty)
+        {
+            show_live_hint();
+        }
         if may_reconcile
             && mode_now == Mode::Auto
             && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
@@ -1094,6 +1139,45 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     swallow
 }
 
+/// Suggest mode, mid-word: when the keys typed so far clearly read as Thai
+/// (the same bar Auto uses before it rewrites anything), show that reading
+/// next to the cursor; Tab then flips the word. Nothing changes on screen
+/// unless the typist asks.
+fn show_live_hint() {
+    let (run, guarding) = STATE.with(|s| {
+        let st = s.borrow();
+        (st.buf.current().to_string(), st.seed.guarding())
+    });
+    if guarding || run.is_empty() {
+        return;
+    }
+    let reading = policy::live_reading(&run, false, dict::english(), dict::thai());
+    if let policy::Reading::Thai(mut thai) = reading {
+        let mut hint = format!("{thai}  ·  Tab");
+        crate::overlay::show_at(&hint, crate::caret::hint_anchor());
+        hint.zeroize();
+        thai.zeroize();
+        let here = LiveHint {
+            hwnd: unsafe { GetForegroundWindow() }.0 as isize,
+            focus_generation: crate::focus::generation(),
+            created: Instant::now(),
+        };
+        STATE.with(|s| s.borrow_mut().live_hint = Some(here));
+        LIVE_HINT_SHOWN.with(|c| c.set(true));
+    } else if LIVE_HINT_SHOWN.with(|c| c.replace(false)) {
+        // The reading died: take the hint (and its "Tab") off the screen.
+        crate::overlay::dismiss();
+    }
+    let mut run = run;
+    run.zeroize();
+}
+
+thread_local! {
+    /// A live hint is on screen (so it can be taken down when it no longer
+    /// applies).
+    static LIVE_HINT_SHOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// A seed phrase was just recognised: drop every copy of recently typed text
 /// we still hold (Undo record, last word, pending Suggest hint), so the words
 /// that came before the threshold do not outlive it in this process.
@@ -1103,6 +1187,7 @@ fn forget_recent_text() {
         st.undo = None;
         st.recent.clear();
         st.suggestion = None;
+        st.live_hint = None;
     });
     crate::overlay::dismiss();
 }
@@ -1701,6 +1786,7 @@ unsafe fn sync_context() {
             st.seed.reset();
             st.recent.clear();
             st.suggestion = None;
+            st.live_hint = None;
             st.last_hwnd = hwnd_i;
             st.last_hkl = hkl_i;
             st.last_focus_generation = focus_generation;
