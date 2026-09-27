@@ -81,16 +81,13 @@ pub fn set_thai_keyboards(keyboards: Vec<(u16, ThaiVariant)>) {
 }
 
 /// Which table a Thai `HKL` follows: Kedmanee for the default keyboard, what
-/// `known` says for the others. With nothing known (the layout files could
-/// not be read), any other Thai keyboard is taken as Pattachote.
+/// `known` says for the others. A keyboard not in `known` (its layout file
+/// could not be read) is `None`: RightType stays off rather than guess.
 fn thai_table_of(hkl: u32, known: &[(u16, ThaiVariant)]) -> Option<ThaiVariant> {
     let language = hkl & 0xFFFF;
     let device = hkl >> 16;
     if device == 0 || device == language {
         return Some(ThaiVariant::Kedmanee);
-    }
-    if known.is_empty() {
-        return Some(ThaiVariant::Pattachote);
     }
     known
         .iter()
@@ -634,8 +631,9 @@ mod tests {
         assert_eq!(thai_table_of(0xF002_041E, &known), Some(Kedmanee));
         assert_eq!(thai_table_of(0xF003_041E, &known), Some(Pattachote));
         assert_eq!(thai_table_of(0xF00F_041E, &known), None);
-        // Layout files unreadable: any other Thai keyboard is Pattachote.
-        assert_eq!(thai_table_of(0xF002_041E, &[]), Some(Pattachote));
+        // Layout files unreadable: no guessing, RightType stays off.
+        assert_eq!(thai_table_of(0xF001_041E, &[]), None);
+        assert_eq!(thai_table_of(0x0000_041E, &[]), Some(Kedmanee));
     }
 
     #[test]
