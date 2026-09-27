@@ -315,6 +315,9 @@ struct SuggestionRecord {
     corrected: String,
     boundary_vk: u16,
     created: Instant,
+    /// Where it was made: Tab accepts it only in the same window and field.
+    hwnd: isize,
+    focus_generation: u64,
 }
 
 /// Tab takes a Suggest hint only this soon after it appeared; later, Tab is
@@ -387,6 +390,8 @@ unsafe fn undo_last_correction() {
     e2e_trace(format!("undo apply len={} -> {ok}", rec.injected_len));
     if ok {
         let restored = rec.restore_text.trim_end_matches(['\r', '\t', ' ']);
+        // The word counted was the correction; the one kept is the original.
+        habit_correction(!has_thai(restored), has_thai(restored));
         match rec.kind {
             UndoKind::Manual => {}
             UndoKind::AutoWord => crate::learn::learn_now(restored),
@@ -656,16 +661,25 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // Tab (alone) right after a Suggest hint takes it, like Alt+CapsLock. The
     // hint exists only until the next key, so Tab is otherwise untouched.
+    // This runs ahead of the context checks below, so it checks for itself
+    // that the caret is still where the hint was made: same window, same
+    // focused field (a Tab that ended the word may have moved focus, so a
+    // hint made at a Tab boundary is never taken by Tab), and not a password
+    // field.
     if vk == VK_TAB.0
         && !is_down(VK_SHIFT)
         && !is_down(VK_CONTROL)
         && !is_down(VK_MENU)
         && STATE.with(|s| {
-            s.borrow()
-                .suggestion
-                .as_ref()
-                .is_some_and(|x| x.created.elapsed() < SUGGEST_TAB_WINDOW)
+            s.borrow().suggestion.as_ref().is_some_and(|x| {
+                x.created.elapsed() < SUGGEST_TAB_WINDOW
+                    && x.boundary_vk != VK_TAB.0
+                    && x.hwnd == GetForegroundWindow().0 as isize
+                    && x.focus_generation == crate::focus::generation()
+            })
         })
+        && !safety::is_password_field()
+        && !crate::focus::is_password_field()
     {
         accept_suggestion();
         return true;
@@ -985,6 +999,8 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                     corrected: d.corrected,
                     boundary_vk: vk,
                     created: Instant::now(),
+                    hwnd: GetForegroundWindow().0 as isize,
+                    focus_generation: crate::focus::generation(),
                 });
             });
             crate::overlay::show_at(&hint, crate::caret::hint_anchor());
@@ -1016,11 +1032,28 @@ fn forget_recent_text() {
 /// Keep the word a boundary just completed (as it is on screen), for
 /// Shift+Backspace right after it.
 fn remember_completed(word: &str, boundary_vk: u16, converted: bool) {
-    STATE.with(|s| {
-        s.borrow_mut()
-            .recent
-            .push(word, boundary_literal(boundary_vk), converted)
+    let exe = STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        st.recent
+            .push(word, boundary_literal(boundary_vk), converted);
+        st.app_exe.clone()
     });
+    if let Some(exe) = exe {
+        crate::habits::record_word(&exe, word);
+    }
+}
+
+/// Switch the focused field to `layout` (the per-field habit, on focus).
+///
+/// # Safety
+/// UI (hook) thread only.
+pub unsafe fn switch_layout(layout: policy::InputLayout) {
+    // A focus event can be delivered while the keyboard path is running on
+    // this thread (it pumps messages while injecting); never re-enter it.
+    if STATE.with(|s| s.try_borrow_mut().is_err()) || INJECTING.load(Ordering::Relaxed) {
+        return;
+    }
+    activate_layout(layout);
 }
 
 /// Keys that move the caret or change text other than by typing after it.
@@ -1134,6 +1167,10 @@ unsafe fn accept_suggestion() {
     );
     restore.zeroize();
     crate::stats::record_manual();
+    habit_correction(
+        has_thai(&suggestion.original),
+        has_thai(&suggestion.corrected),
+    );
 
     let to_thai = suggestion
         .corrected
@@ -1146,6 +1183,17 @@ unsafe fn accept_suggestion() {
     });
     suggestion.original.zeroize();
     suggestion.corrected.zeroize();
+}
+
+/// A counted word in this app changed language (see `habits`).
+fn habit_correction(was_thai: bool, now_thai: bool) {
+    if let Some(exe) = STATE.with(|s| s.borrow().app_exe.clone()) {
+        crate::habits::correct_word(&exe, was_thai, now_thai);
+    }
+}
+
+fn has_thai(text: &str) -> bool {
+    text.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c))
 }
 
 /// Shift+Backspace with no word in progress: flip one more of the recent
@@ -1184,6 +1232,7 @@ unsafe fn flip_back_recent() {
     if let Some(word) = step.learn.as_deref() {
         crate::learn::learn_now(word);
     }
+    habit_correction(step.was_thai, step.now_thai);
     activate_layout(layout_of(&step.newest));
     if step.words > 1 {
         crate::overlay::show(&righttype::i18n::trf(

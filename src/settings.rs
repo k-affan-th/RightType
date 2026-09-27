@@ -52,6 +52,8 @@ const NAV: [T; 5] = [
 /// Toggle rows on the General page: y of each row inside the behaviour card.
 const ROW_H: i32 = 64;
 const CARD_B_Y: i32 = 282;
+/// The per-field language card on the Apps page.
+const PREDICT_Y: i32 = 548;
 
 pub struct Hotkey {
     pub action: T,
@@ -111,6 +113,8 @@ struct Ids {
     import_learned: u16,
     export_learned: u16,
     check_updates: u16,
+    predict: u16,
+    clear_habits: u16,
 }
 
 struct SettingsWindow {
@@ -373,8 +377,22 @@ fn open_on(page: u8) {
     s.label(
         tr(T::BlockedAlways),
         TextStyle::Small,
-        (X0, 496, CW, 40),
+        (X0, 492, CW, 40),
         p.bg,
+        b,
+    );
+    let predict = s.toggle(
+        tr(T::RowPredict),
+        tr(T::SubPredict),
+        (X0 + 4, PREDICT_Y + 4, CW - 136, 68),
+        p.surface,
+        b,
+    );
+    let clear_habits = s.button(
+        tr(T::BtnClearHabits),
+        false,
+        (X0 + CW - 116, PREDICT_Y + 21, 100, 34),
+        p.surface,
         b,
     );
 
@@ -456,6 +474,8 @@ fn open_on(page: u8) {
         import_learned,
         export_learned,
         check_updates,
+        predict,
+        clear_habits,
     };
 
     ui::size_and_center(surface.hwnd, W, H);
@@ -508,6 +528,7 @@ fn sync(win: &SettingsWindow) {
     s.set_checked(ids.startup, startup::is_enabled());
     s.set_checked(ids.learn, learn::is_enabled());
     s.set_checked(ids.caret_hints, crate::caret::is_enabled());
+    s.set_checked(ids.predict, crate::habits::is_enabled());
     s.set_text(
         ids.learned,
         &trf(T::LearnedCount, &[("n", &learn::count().to_string())]),
@@ -548,6 +569,12 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     } else if id == ids.learn {
         learn::set_enabled(s.checked(ids.learn));
         config::persist();
+    } else if id == ids.predict {
+        crate::habits::set_enabled(s.checked(ids.predict));
+        config::persist();
+    } else if id == ids.clear_habits {
+        crate::habits::clear();
+        overlay::show(tr(T::ToastHabitsCleared));
     } else if id == ids.caret_hints {
         crate::caret::set_enabled(s.checked(ids.caret_hints));
         config::persist();
@@ -764,6 +791,7 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
         PAGE_BLOCKED => {
             field(g, rect(X0, 138, CW, 112));
             field(g, rect(X0, 342, CW, 88));
+            card(g, rect(X0, PREDICT_Y, CW, 76));
         }
         PAGE_ABOUT => {
             card(g, rect(X0, 68, CW, 4 * 56 + 8));

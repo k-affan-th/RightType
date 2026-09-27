@@ -56,6 +56,9 @@ pub struct FlipStep {
     /// The newest word as it is on screen after this step, to switch the
     /// keyboard layout to.
     pub newest: String,
+    /// Whether the word this step flipped was Thai before, and is now.
+    pub was_thai: bool,
+    pub now_thai: bool,
 }
 
 impl Drop for FlipStep {
@@ -67,6 +70,10 @@ impl Drop for FlipStep {
             word.zeroize();
         }
     }
+}
+
+fn is_thai(word: &str) -> bool {
+    word.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c))
 }
 
 /// The recent words and how far the current run of flips has reached.
@@ -138,6 +145,7 @@ impl Recent {
         let mut insert = String::new();
         let mut backspaces = 0;
         let mut learn = None;
+        let (mut was_thai, mut now_thai) = (false, false);
         let last = self.words.len() - 1;
         for (i, entry) in span.enumerate() {
             let index = first + i;
@@ -149,6 +157,8 @@ impl Recent {
                 if entry.converted && flipped != entry.word {
                     learn = Some(flipped.clone());
                 }
+                was_thai = is_thai(&entry.word);
+                now_thai = is_thai(&flipped);
                 insert.push_str(&flipped);
                 flipped.zeroize();
             } else {
@@ -171,6 +181,8 @@ impl Recent {
             words: k,
             learn,
             newest,
+            was_thai,
+            now_thai,
         })
     }
 

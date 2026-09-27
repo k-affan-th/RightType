@@ -86,6 +86,7 @@ pub fn detect_token(
             detect::detect(token, en, th)
                 .or_else(|| thai_layout_compound(token, th))
                 .or_else(|| thai_layout_technical(token, en, th))
+                .or_else(|| thai_layout_trailing_mark(token, th))
         }
     }
 }
@@ -153,6 +154,40 @@ fn us_layout_thai_with_punctuation(
 /// `12,480`), acronyms, product names, derived and hyphenated terms — see
 /// [`english::is_technical`] — optionally wrapped in quotes or brackets.
 ///
+/// Punctuation typed right after a Thai word on the Thai layout, where its key
+/// gives a Thai letter instead: `:` (Shift+`;`) is ซ and `?` (Shift+`/`) is ฦ,
+/// so `คำสำคัญ:` arrives as `คำสำคัญซ`. Fixed only when the text before that
+/// letter is complete, known Thai and the whole token is not — so a real word
+/// ending in ซ (`ก๊าซ`) is left alone.
+fn thai_layout_trailing_mark(token: &str, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    let last = token.chars().last()?;
+    let mark = match last {
+        'ซ' => ':',
+        'ฦ' => '?',
+        _ => return None,
+    };
+    let head = &token[..token.len() - last.len_utf8()];
+    // Short heads are left alone: a two- or three-letter word plus ซ is as
+    // likely a slip of the finger as a colon.
+    // A long phrase needs at least three known words: a single misspelt
+    // word followed by a stray ซ must not read as a phrase and a colon.
+    let head_is_thai = th.contains(head)
+        || (segment::is_fully_known(head, th) && segment::segment(head, th).len() >= 3);
+    if head.chars().count() < 4
+        || !head_is_thai
+        || th.contains(token)
+        || segment::is_fully_known(token, th)
+    {
+        return None;
+    }
+    Some(Detection {
+        corrected: format!("{head}{mark}"),
+        confidence: Confidence::High,
+        evidence: Evidence::ExactDictionary,
+    })
+}
+
 /// The Thai text must not itself be Thai: not a dictionary word and not a
 /// complete segmentation, so a real Thai word whose keys happen to spell such
 /// a shape (`จุ` is `06`) is left alone.
@@ -390,6 +425,28 @@ mod tests {
             Dictionary::from_words(["correct", "hello"]),
             Dictionary::from_words(["สวัสดี"]),
         )
+    }
+
+    #[test]
+    fn a_colon_or_question_mark_after_a_thai_word_comes_back() {
+        let en = crate::dict::english();
+        let th = crate::dict::thai();
+        let fix = |t: &str| detect_token(t, InputLayout::ThaiKedmanee, en, th).map(|d| d.corrected);
+        assert_eq!(
+            fix("เพื่อการประมวลผลภาษาไทยซ").as_deref(),
+            Some("เพื่อการประมวลผลภาษาไทย:")
+        );
+        assert_eq!(
+            fix("เขาไปโรงเรียนหรือไม่ฦ").as_deref(),
+            Some("เขาไปโรงเรียนหรือไม่?")
+        );
+        // Two known words before the ซ are not enough: a misspelt word often
+        // splits that way too (the audit's unknown-Thai budget holds the line).
+        assert_eq!(fix("คำสำคัญซ"), None);
+        // Real words that end in ซ stay.
+        assert_eq!(fix("ก๊าซ"), None);
+        // Not a known word before the ซ: no guess.
+        assert_eq!(fix("กขฃซ"), None);
     }
 
     #[test]

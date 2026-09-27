@@ -920,7 +920,9 @@ impl Surface {
     unsafe fn rescale(&self, dpi: u32, suggested: &RECT) {
         self.dpi.set(dpi);
         DPI.store(dpi, Ordering::Relaxed);
-        *self.fonts.borrow_mut() = Fonts::new();
+        // The controls keep using the old fonts until each is given a new
+        // one, so the old set is freed only after the loop.
+        let old_fonts = self.fonts.replace(Fonts::new());
         for c in self.controls.borrow().iter() {
             let (x, y, w, h) = c.rc96;
             let _ = SetWindowPos(
@@ -935,6 +937,7 @@ impl Surface {
             let font = self.font_for(&c.kind);
             SendMessageW(c.hwnd, WM_SETFONT, WPARAM(font.0 as usize), LPARAM(0));
         }
+        drop(old_fonts);
         let _ = SetWindowPos(
             self.hwnd,
             None,

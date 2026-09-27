@@ -13,6 +13,7 @@
 //! - [`dict`] — word dictionaries for membership checks.
 //! - [`english`] — English beyond the dictionary: compounds and continuations.
 //! - [`i18n`] — interface strings in English and Thai.
+//! - [`predict`] — per-field language habits (opt-in) for switching before typing.
 //! - [`per_app`] — per-app correction modes and their text form.
 //! - [`detect`] — layout-mismatch detection over completed words.
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
@@ -30,6 +31,7 @@ pub mod i18n;
 pub mod layout;
 pub mod per_app;
 pub mod policy;
+pub mod predict;
 pub mod recent;
 pub mod render;
 pub mod repair;

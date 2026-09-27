@@ -31,8 +31,10 @@ The tooltip shows the current mode, and the icon turns grey while RightType is o
 
 **Settings** has five pages — General (mode, on/off, start with Windows, learning),
 Hotkeys, Learned words (see, add, remove, clear, import or export what RightType
-has learned), Apps (a mode per app, e.g. `code.exe = manual`, and apps to stay out
-of) and Privacy & about (with a **Check for updates** button that opens the
+has learned), Apps (a mode per app, e.g. `code.exe = manual`, apps to stay out
+of, and an opt-in **guess each field's language** that switches the keyboard as
+you click into a field you always use for one language — only word counts are
+kept) and Privacy & about (with a **Check for updates** button that opens the
 Releases page in your browser — RightType itself never goes online). Changes take effect the moment you make
 them. The interface is in **English or Thai** (it follows the Windows display
 language; switch it at the bottom of the Settings sidebar), follows the Windows
