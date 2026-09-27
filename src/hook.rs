@@ -1240,6 +1240,16 @@ fn note_english_variant(hkl: HKL) {
     }
 }
 
+/// The foreground window's keyboard when RightType started.
+static STARTUP_LAYOUT: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/// Note the keyboard of the window in use, first thing at startup, before
+/// any RightType window can take focus.
+pub fn remember_startup_layout() {
+    let hkl = unsafe { foreground_layout() };
+    STARTUP_LAYOUT.store(hkl.0 as isize, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// At startup: which table each Thai keyboard follows, and the English
 /// keyboard among the installed layouts. Only once: `install` also runs on
 /// every hook reinstall (sleep, session change, hook loss), and by then the
@@ -1252,10 +1262,11 @@ unsafe fn detect_keyboards() {
         return;
     }
     policy::set_thai_keyboards(thai_keyboards());
-    // The keyboard in use now, if it is an English one; otherwise the first
-    // English keyboard installed.
-    let active = foreground_layout();
-    if policy::english_variant_of(layout_id(active)).is_some() {
+    // The keyboard in use when RightType started (read before any of its
+    // windows, such as Welcome, could take focus), if it is an English one;
+    // otherwise the first English keyboard installed.
+    let active = HKL(STARTUP_LAYOUT.load(std::sync::atomic::Ordering::Relaxed) as _);
+    if !active.0.is_null() && policy::english_variant_of(layout_id(active)).is_some() {
         note_english_variant(active);
         return;
     }
