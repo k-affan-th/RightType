@@ -97,6 +97,7 @@ jobs:
       env:
         TEMP: ${{ runner.temp }}
         TMP: ${{ runner.temp }}
+        PYTHONIOENCODING: utf-8
       run: python ci_sweep.py
     - name: Upload trace
       if: failure()
