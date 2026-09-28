@@ -972,8 +972,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     let Some(key) = classify(vk, kb.scanCode as u16) else {
         // Something we cannot follow (a dead key, a function key): the text
-        // before the caret may not be what we recorded.
-        STATE.with(|s| s.borrow_mut().recent.clear());
+        // before the caret may not be what we recorded. A modifier pressed on
+        // its own types nothing — and Shift is how Shift+Backspace starts, so
+        // clearing here made it forget the word it was pressed to flip.
+        if !is_modifier(vk) {
+            STATE.with(|s| s.borrow_mut().recent.clear());
+        }
         return false;
     };
 

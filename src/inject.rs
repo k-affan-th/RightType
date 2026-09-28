@@ -20,7 +20,7 @@ use std::sync::atomic::Ordering;
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-    KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_BACK,
+    KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_BACK, VK_DELETE,
 };
 
 use crate::hook::{held_modifiers, INJECTING, INJECT_TAG};
@@ -41,6 +41,14 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     // 1. Release any modifier still physically held, so it can't taint the batch.
     release_held(&mut inputs);
     // 2. Delete the mistyped word (and the boundary key that triggered us).
+    //    A browser address bar may have selected a completion after the
+    //    caret: Delete clears it (and does nothing otherwise, since the word
+    //    being replaced always ends at the caret), so each Backspace then
+    //    removes a typed character.
+    if backspaces > 0 && crate::focus::completes_inline() {
+        inputs.push(key(VK_DELETE.0, false));
+        inputs.push(key(VK_DELETE.0, true));
+    }
     for _ in 0..backspaces {
         inputs.push(key(VK_BACK.0, false));
         inputs.push(key(VK_BACK.0, true));
