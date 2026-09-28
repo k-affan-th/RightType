@@ -95,6 +95,44 @@ class Omnibox(fs.Target):
         self.httpd.shutdown()
 
 
+class EdgeOmnibox(Omnibox):
+    """Edge's address bar as it comes: no history, but Bing's search
+    suggestions drop down (and arrive late) while you type."""
+
+    name = "edge"
+
+    def __init__(self):
+        self.app, self.httpd = lib.start_edge(lib.HERE / "target.html", lib.EDGE_EXE)
+        self.win = self.app.top_window()
+        self.hwnd = self.win.handle
+        self.box = next(
+            d for d in self.win.descendants(control_type="Edit")
+            if "address" in (d.element_info.name or "").lower()
+        )
+
+
+def fast_keys(s, pause=0.03):
+    """A quick typist: the keys land while the app is still busy."""
+    for ch in s:
+        fs.tap(ord(ch.upper()) if ch.isalpha() else fs.PUNCT[ch], pause=pause)
+
+
+def watch(t, name, keys, expect, typer=type_keys):
+    """Type, then read the field every 0.25 s for 2 s, to see what changes
+    after the keys (suggestions arriving late, say)."""
+    t.clear()
+    t.layout(HKL_EN)
+    typer(keys)
+    seen = []
+    for _ in range(8):
+        time.sleep(0.25)
+        v = t.read()
+        if not seen or seen[-1] != v:
+            seen.append(v)
+    print(f"  {t.name} {name}: {seen}", flush=True)
+    return fs.check(t.name, name, seen[-1], expect)
+
+
 class Notepad(fs.Target):
     name = "notepad"
 
@@ -144,8 +182,15 @@ def sweep(t):
         layout=HKL_TH, then=[flip])
 
 
+def edge_sweep(t):
+    watch(t, "EN->TH word, suggestions open", "l;ylfu", "สวัสดี")
+    watch(t, "EN->TH word, typed fast", "l;ylfu", "สวัสดี", typer=fast_keys)
+    watch(t, "letters-only Thai word", "giupo", "เรียน")
+    sweep(t)
+
+
 def main():
-    want = set(sys.argv[1:]) or {"page", "omnibox", "notepad"}
+    want = set(sys.argv[1:]) or {"page", "omnibox", "edge", "notepad"}
     # Thai must be loaded for this session (CI installs it just before).
     user32.LoadKeyboardLayoutW("0000041E", 0)
     user32.LoadKeyboardLayoutW("00000409", 0)
@@ -155,7 +200,7 @@ def main():
         raise SystemExit("US English and Thai Kedmanee must both be installed")
 
     fs.write_config(mode="auto", learn=False)
-    targets = [("page", Page), ("omnibox", Omnibox), ("notepad", Notepad)]
+    targets = [("page", Page), ("omnibox", Omnibox), ("edge", EdgeOmnibox), ("notepad", Notepad)]
     try:
         for key, make in targets:
             if key not in want:
@@ -171,7 +216,7 @@ def main():
                 fs.start_rt()
                 t = make()
             try:
-                sweep(t)
+                edge_sweep(t) if key == "edge" else sweep(t)
             finally:
                 t.close()
     finally:

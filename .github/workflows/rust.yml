@@ -80,6 +80,14 @@ jobs:
     - uses: actions/checkout@v4
     - name: Build (debug, accepts the test's injected keys)
       run: cargo build --features winos
+    # For diagnosing on a real PC: this build writes what it sees to stderr
+    # when RIGHTTYPE_E2E_ACCEPT_INJECTED is set.
+    - name: Upload diagnostic build
+      uses: actions/upload-artifact@v4
+      with:
+        name: righttype-diagnostic-${{ github.sha }}
+        path: target/debug/righttype.exe
+        retention-days: 7
     - name: Add the Thai keyboard
       shell: pwsh
       run: |
