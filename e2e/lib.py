@@ -176,7 +176,7 @@ CHROME_EXE = Path(os.environ.get("PROGRAMFILES", "")) / "Google" / "Chrome" / "A
 HERE = Path(__file__).resolve().parent
 
 
-def start_edge(html: Path, exe: Path = EDGE_EXE):
+def start_edge(html: Path, exe: Path = EDGE_EXE, host: str = "127.0.0.1"):
     import functools
     import http.server
     import socketserver
@@ -190,7 +190,9 @@ def start_edge(html: Path, exe: Path = EDGE_EXE):
     httpd = socketserver.TCPServer(("127.0.0.1", 0), handler)
     port = httpd.server_address[1]
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    url = f"http://127.0.0.1:{port}/{html.name}"
+    # `host` may be any *.localhost name: Chromium resolves those to the
+    # loopback address, which lets a test put a chosen URL in the history.
+    url = f"http://{host}:{port}/{html.name}"
 
     def browser_windows():
         out = {}

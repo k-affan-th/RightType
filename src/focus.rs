@@ -13,7 +13,7 @@
 //! explicitly reports a safe focus.
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{
@@ -30,6 +30,9 @@ const FIELD_PASSWORD: u8 = 2;
 
 /// Cached UIA result, read cheaply by the keyboard hook on every keystroke.
 static FIELD_STATUS: AtomicU8 = AtomicU8::new(FIELD_UNKNOWN);
+/// The focused field completes what is typed in place — a browser address
+/// bar, which selects its suggestion after the caret. See [`completes_inline`].
+static INLINE_COMPLETION: AtomicBool = AtomicBool::new(false);
 /// Changes whenever Windows reports that the focused UI element changed.  The
 /// keyboard hook uses this to invalidate text that belongs to an old caret,
 /// including two controls inside the same top-level window.
@@ -47,6 +50,20 @@ pub fn is_password_field() -> bool {
 
 fn status_is_protected(status: u8) -> bool {
     status != FIELD_SAFE
+}
+
+/// Does the focused field fill in the rest of what is typed and select it
+/// (a browser address bar with a matching history entry)? The first
+/// Backspace of a correction would then only remove that selection and leave
+/// one mistyped character behind, so [`crate::inject`] clears it first.
+pub fn completes_inline() -> bool {
+    INLINE_COMPLETION.load(Ordering::Relaxed)
+}
+
+/// Address bars that complete inline, by UI Automation class name
+/// (Chromium: Chrome, Edge, Brave, Opera, Vivaldi) or automation id (Firefox).
+fn is_inline_completing(class_name: &str, automation_id: &str) -> bool {
+    class_name == "OmniboxViewViews" || automation_id == "urlbar-input"
 }
 
 /// Monotonically increasing identity for the current focused UI element.
@@ -112,11 +129,21 @@ unsafe extern "system" fn on_focus(
 }
 
 unsafe fn refresh_status() {
+    let mut inline = false;
     let status = UIA.with(|u| {
         u.borrow()
             .as_ref()
             .and_then(|uia| {
                 let el = uia.GetFocusedElement().ok()?;
+                let class = el
+                    .CurrentClassName()
+                    .map(|b| b.to_string())
+                    .unwrap_or_default();
+                let id = el
+                    .CurrentAutomationId()
+                    .map(|b| b.to_string())
+                    .unwrap_or_default();
+                inline = is_inline_completing(&class, &id);
                 el.CurrentIsPassword().ok().map(|b| b.as_bool())
             })
             .map(|is_password| {
@@ -129,6 +156,7 @@ unsafe fn refresh_status() {
             .unwrap_or(FIELD_UNKNOWN)
     });
     FIELD_STATUS.store(status, Ordering::Relaxed);
+    INLINE_COMPLETION.store(inline, Ordering::Relaxed);
 }
 
 /// The text cursor of the focused element, from UI Automation, in screen
@@ -187,7 +215,18 @@ pub fn uia_caret_rect() -> Option<windows::Win32::Foundation::RECT> {
 
 #[cfg(test)]
 mod tests {
-    use super::{status_is_protected, FIELD_PASSWORD, FIELD_SAFE, FIELD_UNKNOWN};
+    use super::{
+        is_inline_completing, status_is_protected, FIELD_PASSWORD, FIELD_SAFE, FIELD_UNKNOWN,
+    };
+
+    #[test]
+    fn browser_address_bars_complete_inline() {
+        assert!(is_inline_completing("OmniboxViewViews", ""));
+        assert!(is_inline_completing("", "urlbar-input"));
+        assert!(!is_inline_completing("Chrome_RenderWidgetHostHWND", ""));
+        assert!(!is_inline_completing("RichEditD2DPT", ""));
+        assert!(!is_inline_completing("", ""));
+    }
 
     #[test]
     fn unknown_and_password_statuses_fail_closed() {

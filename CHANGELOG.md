@@ -6,6 +6,14 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 
+- **Shift+Backspace right after an automatic fix did nothing** (2.0.0): the
+  Shift key on its own made RightType forget the words it keeps for flipping
+  back, so the flip found nothing. It flips the fixed word back again.
+- **Corrections in the browser's address/search bar left a stray letter**
+  (`giupo` came out as `gเรียน`): when the bar completes what you type and
+  selects the rest, the first Backspace only removed that selection.
+  RightType now clears it first in Chrome, Edge and other Chromium browsers
+  and in Firefox.
 - With both US and UK English keyboards installed, RightType starts with the
   one in use rather than the first installed, so **Fix text** opened from the
   tray before any typing uses the right punctuation (`"` `@` `£` `#`).

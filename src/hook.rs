@@ -947,6 +947,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // when there's nothing to convert — so the key's auto-repeat can't fall
     // through to a destructive Backspace and delete the result we just injected.
     if is_flip {
+        e2e_trace(format!(
+            "flip: repeat={repeat} buf={} recent={}",
+            STATE.with(|s| s.borrow().buf.current().chars().count()),
+            STATE.with(|s| s.borrow().recent.len()),
+        ));
         // Holding the keys acts once: each flip reaches one word further back,
         // so auto-repeat would run through all of them in a blink.
         if repeat {
@@ -967,8 +972,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     let Some(key) = classify(vk, kb.scanCode as u16) else {
         // Something we cannot follow (a dead key, a function key): the text
-        // before the caret may not be what we recorded.
-        STATE.with(|s| s.borrow_mut().recent.clear());
+        // before the caret may not be what we recorded. A modifier pressed on
+        // its own types nothing — and Shift is how Shift+Backspace starts, so
+        // clearing here made it forget the word it was pressed to flip.
+        if !is_modifier(vk) {
+            STATE.with(|s| s.borrow_mut().recent.clear());
+        }
         return false;
     };
 
@@ -1483,6 +1492,7 @@ fn has_thai(text: &str) -> bool {
 /// word to the caret is retyped in one injection, and it is one Undo step.
 unsafe fn flip_back_recent() {
     let Some(step) = STATE.with(|s| s.borrow().recent.next_step(auto_convert)) else {
+        e2e_trace("flip back: no recent word".to_string());
         return;
     };
     if step.insert.chars().count() + 1 == step.backspaces
@@ -1891,6 +1901,10 @@ unsafe fn sync_context() {
         let lang_changed = st.last_hkl != hkl_i;
         let focus_changed = st.last_focus_generation != focus_generation;
         if changed || lang_changed || focus_changed {
+            e2e_trace(format!(
+                "context changed: window={changed} layout={lang_changed} ({:X} -> {hkl_i:X}) focus={focus_changed}",
+                st.last_hkl
+            ));
             // A layout switch alone must NOT drop the pending Undo: it is
             // usually our own correction switching the layout, and the very
             // next keypress (e.g. the Undo hotkey itself) would otherwise
