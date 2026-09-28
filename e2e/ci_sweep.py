@@ -31,13 +31,9 @@ user32 = ctypes.windll.user32
 ENTER = 0x0D
 
 # Cases known to fail, by "target: name". Reported, not fatal, until fixed.
-KNOWN_FAILING = {
-    # Windows 11 Notepad drops Thai characters injected as Unicode (E-024).
-    "notepad: EN->TH word",
-    "notepad: EN->TH then Thai typed natively",
-    "notepad: Shift+Backspace flips EN to TH",
-    "notepad: letters-only Thai word",
-}
+# (Windows 11 Notepad drops Thai injected as Unicode, E-024, but CI's
+# Notepad is the classic editor, so nothing is listed for it here.)
+KNOWN_FAILING: set[str] = set()
 
 flip = lambda: tap(BACK, SHIFT)  # noqa: E731
 
@@ -142,7 +138,8 @@ def sweep(t):
     run(t, "letters-only Thai word", "giupo ", "เรียน")
     run(t, "EN->TH then Thai typed natively", "l;ylfu giupo ", "สวัสดี เรียน")
     run(t, "TH->EN word", "correct ", "correct", layout=HKL_TH)
-    run(t, "Shift+Backspace flips EN to TH", "hello", "้ำสสน", then=[flip])
+    # A word Auto keeps as English (it spells Thai นา too); flipped by hand.
+    run(t, "Shift+Backspace flips EN to TH", "ok", "นา", then=[flip])
     run(t, "Shift+Backspace undoes an automatic fix", "correct ", "แนพพำแะ",
         layout=HKL_TH, then=[flip])
 
@@ -195,6 +192,9 @@ def main():
         print(f"  XPASS {label} — remove it from KNOWN_FAILING")
     for line in failed:
         print(f"  FAIL {line}")
+    if failed:
+        print("\n--- RightType trace ---")
+        print(fs.LOG.read_text(encoding="utf-8", errors="replace")[-20000:])
     sys.exit(1 if failed else 0)
 
 
