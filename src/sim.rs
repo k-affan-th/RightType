@@ -163,7 +163,7 @@ impl<'d> Engine<'d> {
                 .as_ref()
                 .map(|o| o.rendered.clone())
                 .unwrap_or_default();
-            if !policy::goes_back_to_keys(&word, &rendered) {
+            if !policy::run_goes_back(&word, &rendered, self.en, self.th) {
                 self.owned = None;
                 self.counters.live_anchors += 1;
                 self.request_layout(InputLayout::ThaiKedmanee);
@@ -177,7 +177,7 @@ impl<'d> Engine<'d> {
 
         let converted = mark == Mark::Converted;
         let mut detection = if converted {
-            policy::revise_converted(&word, self.en)
+            policy::revise_converted(&word, self.en, self.th)
         } else {
             policy::detect_token(&word, self.layout, self.en, self.th)
         };
@@ -370,6 +370,15 @@ mod tests {
     fn everyday_computer_words_stay_english() {
         assert_eq!(type_blind("relogin ", InputLayout::UsQwerty), "relogin ");
         assert_eq!(type_blind("logout ", InputLayout::UsQwerty), "logout ");
+    }
+
+    #[test]
+    fn english_prefix_or_suffix_on_a_known_word_stays_english() {
+        // Not in the dictionary, but a known word with a common prefix or
+        // suffix: re + rise, multi + holes, re + sit.
+        for word in ["rerise ", "multiholes ", "resit "] {
+            assert_eq!(type_blind(word, InputLayout::UsQwerty), word);
+        }
     }
 
     #[test]

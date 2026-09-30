@@ -672,7 +672,7 @@ fn auto_pipeline_screen(keys: &str) -> String {
             }
             if !word.is_empty() {
                 let detection = if was_converted {
-                    policy::revise_converted(&word, en)
+                    policy::revise_converted(&word, en, th)
                 } else {
                     policy::detect_token(&word, layout, en, th)
                 };
@@ -787,13 +787,13 @@ fn an_anchored_token_that_turns_out_english_is_revised_whole() {
     // English, so the whole token comes back — not just the tail typed after
     // the anchor, which is what used to produce `กรดดำrent`.
     assert_eq!(
-        policy::revise_converted("ทรกกสำไฟพำ", dict::english())
+        policy::revise_converted("ทรกกสำไฟพำ", dict::english(), dict::thai())
             .unwrap()
             .corrected,
         "middleware"
     );
     assert_eq!(
-        policy::revise_converted("ไนพาดสนไม", dict::english())
+        policy::revise_converted("ไนพาดสนไม", dict::english(), dict::thai())
             .unwrap()
             .corrected,
         "workflow,"
@@ -801,7 +801,7 @@ fn an_anchored_token_that_turns_out_english_is_revised_whole() {
     // Thai that is simply Thai stays.
     for thai in ["สวัสดีครับ", "บาทหลวง", "ลูกธนู"] {
         assert!(
-            policy::revise_converted(thai, dict::english()).is_none(),
+            policy::revise_converted(thai, dict::english(), dict::thai()).is_none(),
             "{thai}"
         );
     }

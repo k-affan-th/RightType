@@ -159,6 +159,10 @@ pub fn detect_token(
             detect::detect(token, en, th)
                 .or_else(|| us_layout_thai_with_punctuation(token, en, th))
                 .filter(|d| !only_short_thai_words(&d.corrected, th))
+                // A known English word with a prefix or suffix stays English,
+                // unless its Thai reading is itself a Thai word (กำหนด is
+                // `desof`, de + sof).
+                .filter(|d| !english::is_affixed(token, en) || th.contains(&d.corrected))
         }
         InputLayout::ThaiKedmanee => {
             if !has_thai || has_latin {
@@ -387,8 +391,10 @@ fn thai_layout_compound(token: &str, th: &Dictionary) -> Option<Detection> {
 /// whole token visible. If its keystrokes spell English — a dictionary word, a
 /// learned word or a compound — the early reading was wrong and the *whole*
 /// token goes back, not just the part typed after the anchor. So does a
-/// token that cannot end as Thai ([`is_unfinished_thai`]).
-pub fn revise_converted(token: &str, en: &Dictionary) -> Option<Detection> {
+/// token that cannot end as Thai ([`is_unfinished_thai`]), and one whose keys
+/// are a known English word with a prefix or suffix ([`english::is_affixed`])
+/// unless the Thai itself is a dictionary word.
+pub fn revise_converted(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
     let raw = th_to_en(token.trim());
     // Trailing sentence punctuation may follow a word (`middleware,`), but on
     // this layout most ASCII punctuation is a Thai letter (`[` is บ, `;` is น),
@@ -397,7 +403,9 @@ pub fn revise_converted(token: &str, en: &Dictionary) -> Option<Detection> {
     if raw.len() - core.len() > 2
         || core.chars().count() < 3
         || !core.chars().all(|c| c.is_ascii_alphabetic())
-        || !(english::is_word(core, en) || is_unfinished_thai(token.trim()))
+        || !(english::is_word(core, en)
+            || is_unfinished_thai(token.trim())
+            || (english::is_affixed(core, en) && !th.contains(token.trim())))
     {
         return None;
     }
@@ -538,6 +546,14 @@ pub fn is_unfinished_thai(text: &str) -> bool {
 /// which carry ง ว น บ ล ใ ม ฝ ฃ).
 pub fn goes_back_to_keys(keys: &str, reading: &str) -> bool {
     is_unfinished_thai(reading) && keys.chars().all(|c| c.is_ascii_alphabetic())
+}
+
+/// At a boundary, with the dictionaries: [`goes_back_to_keys`], or the keys
+/// make a known English word with a prefix or suffix ([`english::is_affixed`]:
+/// `rerise`, shown as Thai since `reris`) and the reading is not itself a Thai
+/// word.
+pub fn run_goes_back(keys: &str, reading: &str, en: &Dictionary, th: &Dictionary) -> bool {
+    goes_back_to_keys(keys, reading) || (english::is_affixed(keys, en) && !th.contains(reading))
 }
 
 pub fn live_reading(run: &str, holding_thai: bool, en: &Dictionary, th: &Dictionary) -> Reading {

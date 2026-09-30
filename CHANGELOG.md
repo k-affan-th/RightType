@@ -4,6 +4,15 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Changed
+
+- **English words with a prefix or suffix stay English**: a known word with
+  `re`, `un`, `pre`, `dis`, `multi` … in front or `ing`, `ed`, `ness`,
+  `able`, `s` … behind (`rerise`, `resit`, `multiholes`) is no longer
+  turned into Thai, even when it is not in the word list. Unknown English
+  words wrongly converted in the live study: 170 → 112 of 20,000; Thai is
+  unchanged (a Thai dictionary word always wins).
+
 ## [2.0.1] — 2026-09-30
 
 ### Changed

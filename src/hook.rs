@@ -1118,12 +1118,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // A boundary ends a run we own. If its reading cannot end as Thai and
     // the keys were all letters, they go back to what was typed and the word
-    // is judged like any other below (see `policy::goes_back_to_keys`).
+    // is judged like any other below (see `policy::run_goes_back`).
     let back = STATE.with(|s| {
-        s.borrow()
-            .owned
-            .as_ref()
-            .is_some_and(|o| policy::goes_back_to_keys(&word, &o.rendered))
+        s.borrow().owned.as_ref().is_some_and(|o| {
+            policy::run_goes_back(&word, &o.rendered, dict::english(), dict::thai())
+        })
     });
     if back {
         e2e_trace(format!("boundary: {word:?} cannot end as Thai, withdrawn"));
@@ -1158,7 +1157,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     let mut detection = if converted {
         // D-009: the whole token, including the part converted before the
         // anchor, gets its first complete look now.
-        policy::revise_converted(&word, dict::english())
+        policy::revise_converted(&word, dict::english(), dict::thai())
     } else {
         active_layout
             .and_then(|layout| policy::detect_token(&word, layout, dict::english(), dict::thai()))
