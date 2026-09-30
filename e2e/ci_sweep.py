@@ -11,6 +11,11 @@ debug build of RightType, and the text is read back through UI Automation:
              complete what is typed inline (the selected completion after the
              caret used to swallow the first Backspace of a correction).
   notepad  — Windows Notepad.
+  hang     — proof for the keyboard hook: a window that takes 3 s to answer
+             accessibility requests gets focus and a few keys; then the page
+             must still be corrected. RightType's focus check asks that window
+             on the thread that also runs the keyboard hook, and Windows drops
+             a hook that does not answer in time.
 
 Needs Thai Kedmanee and US English installed (CI adds Thai first). Exits 1 if
 any case fails, except those listed in KNOWN_FAILING, which are reported but
@@ -18,7 +23,9 @@ do not fail the run until they are fixed (and then say so, as XPASS).
 """
 
 import ctypes
+import ctypes.wintypes as wt
 import subprocess
+import threading
 import sys
 import time
 
@@ -50,6 +57,10 @@ def installed_layouts():
 
 class Page(fs.Chrome):
     name = "page"
+
+
+class HangPage(Page):
+    name = "hang"
 
 
 class Omnibox(fs.Target):
@@ -170,6 +181,71 @@ class Notepad(fs.Target):
 # --------------------------------------------------------------------------- cases
 
 
+class HangWindow:
+    """A top-level window whose thread takes `hang` seconds to answer
+    WM_GETOBJECT (an accessibility request), like an app busy with its own
+    work. Anyone asking it who has focus waits that long."""
+
+    def __init__(self, hang=3.0):
+        self.hang = hang
+        self.hwnd = None
+        ready = threading.Event()
+        threading.Thread(target=self._run, args=(ready,), daemon=True).start()
+        if not ready.wait(10):
+            raise SystemExit("hang window did not start")
+
+    def _run(self, ready):
+        LRESULT = ctypes.c_ssize_t
+        WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
+        user32.DefWindowProcW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
+        user32.DefWindowProcW.restype = LRESULT
+
+        def proc(h, m, w, l):
+            if m == 0x003D:  # WM_GETOBJECT
+                time.sleep(self.hang)
+            return user32.DefWindowProcW(h, m, w, l)
+
+        self._proc = WNDPROC(proc)
+
+        class WNDCLASSW(ctypes.Structure):
+            _fields_ = [("style", wt.UINT), ("lpfnWndProc", WNDPROC), ("cbClsExtra", ctypes.c_int),
+                        ("cbWndExtra", ctypes.c_int), ("hInstance", wt.HINSTANCE), ("hIcon", wt.HICON),
+                        ("hCursor", wt.HANDLE), ("hbrBackground", wt.HBRUSH),
+                        ("lpszMenuName", wt.LPCWSTR), ("lpszClassName", wt.LPCWSTR)]
+
+        hinst = ctypes.windll.kernel32.GetModuleHandleW(None)
+        wc = WNDCLASSW(lpfnWndProc=self._proc, hInstance=hinst, lpszClassName="RtHangWindow")
+        user32.RegisterClassW(ctypes.byref(wc))
+        user32.CreateWindowExW.restype = wt.HWND
+        self.hwnd = user32.CreateWindowExW(0, "RtHangWindow", "RightType hang test",
+                                           0x10CF0000, 100, 100, 400, 200, None, None, hinst, None)
+        ready.set()
+        msg = wt.MSG()
+        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+            user32.TranslateMessage(ctypes.byref(msg))
+            user32.DispatchMessageW(ctypes.byref(msg))
+
+    def focus(self):
+        tap(fs.ALT)  # an Alt press lets this process take the foreground
+        user32.SetForegroundWindow(self.hwnd)
+
+    def close(self):
+        user32.PostMessageW(self.hwnd, 0x0010, 0, 0)  # WM_CLOSE
+
+
+def hang_sweep(t):
+    """Keys while a focused app is slow to answer must not cost the hook."""
+    fs.run(t, "before the slow window", "l;ylfu ", "สวัสดี")
+    w = HangWindow(hang=3.0)
+    w.focus()
+    time.sleep(0.3)
+    for _ in range(6):  # typed while RightType's focus check waits on it
+        tap(ord("X"), pause=0.25)
+    time.sleep(3.5)
+    w.close()
+    fs.run(t, "after the slow window", "l;ylfu ", "สวัสดี")
+
+
 def sweep(t):
     run = fs.run
     run(t, "EN->TH word", "l;ylfu ", "สวัสดี")
@@ -178,6 +254,11 @@ def sweep(t):
     run(t, "TH->EN word", "correct ", "correct", layout=HKL_TH)
     # Not Thai: it only starts like three short Thai words (พำ สน เร).
     run(t, "English computer word stays English", "relogin ", "relogin")
+    # A wrong correction is undone with one Shift+Backspace, wherever it
+    # happened: in the middle of a word, after a long word was handed to the
+    # Thai layout, or at the space.
+    run(t, "Shift+Backspace takes back a mid-word conversion", "l;ylfu", "l;ylfu", then=[flip])
+    run(t, "Shift+Backspace takes back a long word", "l;ylfu8iy[", "l;ylfu8iy[", then=[flip])
     # A word Auto keeps as English (it spells Thai นา too); flipped by hand.
     run(t, "Shift+Backspace flips EN to TH", "ok", "นา", then=[flip])
     run(t, "Shift+Backspace undoes an automatic fix", "correct ", "แนพพำแะ",
@@ -192,7 +273,7 @@ def edge_sweep(t):
 
 
 def main():
-    want = set(sys.argv[1:]) or {"page", "omnibox", "edge", "notepad"}
+    want = set(sys.argv[1:]) or {"page", "omnibox", "edge", "notepad", "hang"}
     # Thai must be loaded for this session (CI installs it just before).
     user32.LoadKeyboardLayoutW("0000041E", 0)
     user32.LoadKeyboardLayoutW("00000409", 0)
@@ -202,7 +283,8 @@ def main():
         raise SystemExit("US English and Thai Kedmanee must both be installed")
 
     fs.write_config(mode="auto", learn=False)
-    targets = [("page", Page), ("omnibox", Omnibox), ("edge", EdgeOmnibox), ("notepad", Notepad)]
+    targets = [("page", Page), ("omnibox", Omnibox), ("edge", EdgeOmnibox), ("notepad", Notepad),
+               ("hang", HangPage)]
     try:
         for key, make in targets:
             if key not in want:
@@ -218,7 +300,7 @@ def main():
                 fs.start_rt()
                 t = make()
             try:
-                edge_sweep(t) if key == "edge" else sweep(t)
+                {"edge": edge_sweep, "hang": hang_sweep}.get(key, sweep)(t)
             finally:
                 t.close()
     finally:

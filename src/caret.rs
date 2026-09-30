@@ -77,7 +77,14 @@ pub fn caret_rect() -> Option<RECT> {
 /// The text cursor from the system caret or, failing that, UI Automation.
 /// UI thread, outside the keyboard hook.
 pub fn find_caret() -> Option<RECT> {
-    caret_rect().or_else(crate::focus::uia_caret_rect)
+    let started = std::time::Instant::now();
+    let found = caret_rect().or_else(crate::focus::uia_caret_rect);
+    crate::hook::e2e_trace(format!(
+        "caret lookup in {} ms (found={})",
+        started.elapsed().as_millis(),
+        found.is_some()
+    ));
+    found
 }
 
 /// RightType just switched the layout to `layout`: flash its tag at the caret

@@ -120,17 +120,29 @@ pub unsafe fn disarm() {
 unsafe extern "system" fn on_focus(
     _hook: HWINEVENTHOOK,
     _event: u32,
-    _hwnd: HWND,
-    _idobj: i32,
-    _idchild: i32,
+    hwnd: HWND,
+    idobj: i32,
+    idchild: i32,
     _thread: u32,
     _time: u32,
 ) {
-    if !moves_to_another_field() {
+    crate::hook::e2e_trace(format!(
+        "focus event from hwnd={:#x} obj={idobj} child={idchild}",
+        hwnd.0 as usize
+    ));
+    let started = std::time::Instant::now();
+    let moved = moves_to_another_field();
+    if moved {
+        FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
+        refresh_status();
+    }
+    crate::hook::e2e_trace(format!(
+        "focus event handled in {} ms (moved={moved})",
+        started.elapsed().as_millis()
+    ));
+    if !moved {
         return;
     }
-    FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
-    refresh_status();
     // After the password check above: the habit switch never runs in one.
     crate::habits::on_focus();
 }
