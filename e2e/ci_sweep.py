@@ -618,6 +618,8 @@ def human_keys(s):
 
 # Sentences as people type them, some from real bug reports.
 REAL_SENTENCES = [
+    # The first word alone, to tell which half of the next one goes wrong.
+    ("Thai word alone", ";yoouh ", "วันนี้"),
     ("Thai then English, one line", ";yoouh there is ", "วันนี้ there is"),
     ("Thai sentence", "lj'wa]N,k.shsojvp ", "ส่งไฟล์มาให้หน่อย"),
     ("English then Thai", "hello l;ylfu8iy[ ", "hello สวัสดีครับ"),

@@ -374,6 +374,23 @@ impl TextBox {
     /// edit the box can undo. Only with a bare caret (nothing selected) and
     /// enough text before it; checked afterwards by where the caret ended up.
     /// `Err` before anything changed means the caller may fall back to keys.
+    /// Debug e2e trace: the caret, and the text before it, as the box holds
+    /// them right before a replacement.
+    #[cfg(debug_assertions)]
+    fn trace_around(&self, caret: usize, delete: usize) {
+        use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
+        let len = self.ask(WM_GETTEXTLENGTH, 0, 0).unwrap_or(0).min(0xFFFF);
+        let mut units = vec![0u16; len + 1];
+        let got = self
+            .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)
+            .unwrap_or(0)
+            .min(len);
+        let before = String::from_utf16_lossy(&units[..caret.min(got)]);
+        crate::hook::e2e_trace(format!(
+            "text box: caret={caret} length={got} delete={delete} before caret={before:?}"
+        ));
+    }
+
     pub fn replace_before_caret(&self, delete: usize, text: &str) -> Result<(), ReplaceError> {
         const EM_SETSEL: u32 = 0x00B1;
         const EM_REPLACESEL: u32 = 0x00C2;
@@ -387,6 +404,8 @@ impl TextBox {
             return Err(ReplaceError::Untouched("caret position out of reach"));
         }
         let from = start - delete;
+        #[cfg(debug_assertions)]
+        self.trace_around(start, delete);
         self.ask(EM_SETSEL, from, start as isize)
             .ok_or(ReplaceError::Untouched("could not select"))?;
         if self.selection() != Some((from, start)) {
