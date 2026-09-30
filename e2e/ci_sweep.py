@@ -42,6 +42,7 @@ ENTER = 0x0D
 # (Windows 11 Notepad drops Thai injected as Unicode, E-024, but CI's
 # Notepad is the classic editor, so nothing is listed for it here.)
 KNOWN_FAILING: set[str] = set()
+EDGE_ROUNDS = 4
 
 flip = lambda: tap(BACK, SHIFT)  # noqa: E731
 
@@ -321,8 +322,11 @@ def main():
         raise SystemExit("US English and Thai Kedmanee must both be installed")
 
     fs.write_config(mode="auto", learn=False)
-    targets = [("page", Page), ("omnibox", Omnibox), ("edge", EdgeOmnibox), ("notepad", Notepad),
-               ("hang", HangPage)]
+    # Edge runs several rounds: RightType froze there in some runs and not
+    # others (after a word boundary handled inside a focus callback), and one
+    # clean round proves nothing.
+    targets = [("page", Page), ("omnibox", Omnibox)] + [("edge", EdgeOmnibox)] * EDGE_ROUNDS + [
+        ("notepad", Notepad), ("hang", HangPage)]
     sections = {}
     try:
         for key, make in targets:
@@ -344,7 +348,7 @@ def main():
             finally:
                 print(f"RightType after {key}: {rt_health(proc)}", flush=True)
                 t.close()
-                sections[key] = (start, fs.LOG.stat().st_size)
+                sections.setdefault(key, []).append((start, fs.LOG.stat().st_size))
     finally:
         subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
 
@@ -366,11 +370,12 @@ def main():
     # Each failing target's own part of the trace (the log is shared, so its
     # end belongs to whichever target ran last).
     data = fs.LOG.read_bytes() if failed else b""
-    for key, (start, end) in sections.items():
+    for key, spans in sections.items():
         if any(line.startswith(f"{key}:") for line in failed):
-            part = data[start:end].decode("utf-8", errors="replace")
-            print(f"\n--- RightType trace: {key} ---")
-            print(part[-60000:])
+            for n, (start, end) in enumerate(spans, 1):
+                part = data[start:end].decode("utf-8", errors="replace")
+                print(f"\n--- RightType trace: {key} (round {n}) ---")
+                print(part[-60000:])
     sys.exit(1 if failed else 0)
 
 
