@@ -34,7 +34,10 @@ from pywinauto import Desktop
 from pywinauto.application import Application
 
 REPO = Path(__file__).resolve().parents[1]
-EXE = REPO / "target" / "debug" / "righttype.exe"
+# RIGHTTYPE_EXE: a diagnostic build somewhere else (the one-click self-test
+# zip puts it next to these scripts).
+EXE = Path(os.environ["RIGHTTYPE_EXE"]) if os.environ.get("RIGHTTYPE_EXE") else (
+    REPO / "target" / "debug" / "righttype.exe")
 RELEASE_EXE = REPO / "target" / "release" / "righttype.exe"
 SHOTS = Path(__file__).resolve().parent / "shots"
 

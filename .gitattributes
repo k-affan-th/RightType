@@ -3,3 +3,6 @@
 
 # Vendored unmodified from Inno Setup; its comments carry trailing spaces.
 packaging/windows/Thai.isl -whitespace
+
+# cmd.exe misreads some batch files with LF line endings.
+*.bat text eol=crlf

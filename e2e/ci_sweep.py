@@ -3,6 +3,12 @@
     python ci_sweep.py            # all targets
     python ci_sweep.py page omnibox notepad
 
+On anyone's PC without a checkout: CI uploads RightType-selftest-<sha>, a zip
+with the diagnostic build, these scripts and test-on-my-pc.bat. Unzip it,
+double-click the .bat; it writes RightType-test-report.txt and
+RightType-test-trace.txt next to itself. Apps that are not installed are
+skipped.
+
 Physical virtual-key events (as a person types) go into real apps with the
 debug build of RightType, and the text is read back through UI Automation:
 
@@ -98,6 +104,11 @@ def rt_health(proc):
 class Page(fs.Chrome):
     name = "page"
 
+    def __init__(self):
+        if not lib.CHROME_EXE.exists():
+            raise SkipTarget("Google Chrome is not installed here")
+        super().__init__()
+
 
 class HangPage(Page):
     name = "hang"
@@ -110,6 +121,8 @@ class Omnibox(fs.Target):
     name = "omnibox"
 
     def __init__(self):
+        if not lib.CHROME_EXE.exists():
+            raise SkipTarget("Google Chrome is not installed here")
         self.app, self.httpd = lib.start_edge(lib.HERE / "target.html", lib.CHROME_EXE)
         self.win = self.app.top_window()
         self.hwnd = self.win.handle
@@ -153,6 +166,8 @@ class EdgeOmnibox(Omnibox):
     name = "edge"
 
     def __init__(self):
+        if not lib.EDGE_EXE.exists():
+            raise SkipTarget("Microsoft Edge is not installed here")
         self.app, self.httpd = lib.start_edge(lib.HERE / "target.html", lib.EDGE_EXE)
         self.win = self.app.top_window()
         self.hwnd = self.win.handle
@@ -534,6 +549,34 @@ def selection_leaves_clipboard_alone(t):
              f"seq+{after[0] - before[0]} {after[1]!r}", f"seq+0 {before[1]!r}")
 
 
+HUMAN = __import__("random").Random(20260930)  # same "typist" every run
+
+
+def human_keys(s):
+    """Keys at a person's uneven pace: mostly 60-160 ms apart, sometimes a
+    quick burst (25 ms), sometimes a pause (300 ms)."""
+    for ch in s:
+        roll = HUMAN.random()
+        pause = 0.025 if roll < 0.2 else 0.3 if roll > 0.95 else HUMAN.uniform(0.06, 0.16)
+        fast_keys(ch, pause=pause)
+
+
+# Sentences as people type them, some from real bug reports.
+REAL_SENTENCES = [
+    ("Thai then English, one line", ";yoouh there is ", "วันนี้ there is"),
+    ("Thai sentence", "lj'wa]N,k.shsojvp ", "ส่งไฟล์มาให้หน่อย"),
+    ("English then Thai", "hello l;ylfu8iy[ ", "hello สวัสดีครับ"),
+    ("Thai then an English tech word", "l;ylfu8iy[ middleware ", "สวัสดีครับ middleware"),
+    ("English computer words", "relogin logout ", "relogin logout"),
+]
+
+
+def realistic(t):
+    for name, keys, expect in REAL_SENTENCES:
+        fs.run(t, f"typed like a person: {name}", "", expect,
+               then=[lambda keys=keys: human_keys(keys)], settle=1.2)
+
+
 def sweep(t):
     run = fs.run
     run(t, "EN->TH word", "l;ylfu ", "สวัสดี")
@@ -558,6 +601,7 @@ def sweep(t):
     # were lost. A person typing ~30 ms per key, word ended by a space.
     fs.run(t, "fast typing through a correction", "", "สวัสดีครับ",
            then=[lambda: fast_keys("l;ylfu8iy["), lambda: tap(fs.SPACE)])
+    realistic(t)
     selection_leaves_clipboard_alone(t)
 
 
@@ -609,24 +653,20 @@ def main():
             start = fs.LOG.stat().st_size if fs.LOG.exists() else 0
             # The address bar is seeded before RightType runs, so the URL is
             # typed exactly as written.
-            if key == "omnibox":
-                subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
-                t = make()
-                proc = fs.start_rt()
-                t.focus()
-            elif key == "notepad11":
-                subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
-                try:
+            try:
+                if key in ("omnibox", "notepad11"):
+                    subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
                     t = make()
-                except SkipTarget as why:
-                    print(f"notepad11 skipped: {why}", flush=True)
-                    continue
-                notepad11_probe(t)
-                proc = fs.start_rt()
-                t.focus()
-            else:
-                proc = fs.start_rt()
-                t = make()
+                    if key == "notepad11":
+                        notepad11_probe(t)
+                    proc = fs.start_rt()
+                    t.focus()
+                else:
+                    proc = fs.start_rt()
+                    t = make()
+            except SkipTarget as why:
+                print(f"{key} skipped: {why}", flush=True)
+                continue
             CURRENT[0] = proc
             # A target where RightType died leaves CapsLock on (its
             # Shift+CapsLock then reached Windows); do not let that fail
@@ -669,6 +709,17 @@ def main():
                 part = data[start:end].decode("utf-8", errors="replace")
                 print(f"\n--- RightType trace: {key} (round {n}) ---")
                 print(part[-60000:])
+    report = lib.HERE / "RightType-test-report.txt"
+    lines = [f"SUMMARY {passed}/{len(fs.RESULTS)} passed"]
+    lines += [f"FAIL {line}" for line in failed] + [f"KNOWN FAILING {x}" for x in known]
+    lines += [f"{'PASS' if ok else 'FAIL'} {target}: {name}: got {got.strip()!r}"
+              for target, name, ok, got, _ in fs.RESULTS]
+    report.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        (lib.HERE / "RightType-test-trace.txt").write_bytes(fs.LOG.read_bytes())
+    except OSError:
+        pass
+    print(f"report: {report}", flush=True)
     sys.exit(1 if failed else 0)
 
 
