@@ -1049,9 +1049,22 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     };
     let mark = STATE.with(|s| std::mem::replace(&mut s.borrow_mut().mark, TokenMark::Plain));
 
-    // A boundary ends a run we own. Its reading has already been applied to the
-    // screen, so the boundary path must not correct it a second time — its
-    // backspace count assumes the screen still holds the raw keystrokes.
+    // A boundary ends a run we own. If its reading cannot end as Thai and
+    // the keys were all letters, they go back to what was typed and the word
+    // is judged like any other below (see `policy::goes_back_to_keys`).
+    let back = STATE.with(|s| {
+        s.borrow()
+            .owned
+            .as_ref()
+            .is_some_and(|o| policy::goes_back_to_keys(&word, &o.rendered))
+    });
+    if back {
+        e2e_trace(format!("boundary: {word:?} cannot end as Thai, withdrawn"));
+        withdraw_owned_run_to(&word);
+    }
+    // Otherwise its reading has already been applied to the screen, so the
+    // boundary path must not correct it a second time — its backspace count
+    // assumes the screen still holds the raw keystrokes.
     if let Some(mut rendered) = anchor_owned_run(&word, vk) {
         remember_completed(&rendered, vk, true);
         rendered.zeroize();
@@ -1585,11 +1598,16 @@ unsafe fn convert_last_word() {
 /// Put the raw keystrokes back and stop owning the run. Returns `true` if we
 /// were owning anything (and therefore handled the key).
 unsafe fn withdraw_owned_run() -> bool {
+    let run = STATE.with(|s| s.borrow().buf.current().to_string());
+    withdraw_owned_run_to(&run)
+}
+
+/// Put `run` (the keys as typed) back in place of the run we own.
+unsafe fn withdraw_owned_run_to(run: &str) -> bool {
     let Some(owned) = STATE.with(|s| s.borrow_mut().owned.take()) else {
         return false;
     };
-    let run = STATE.with(|s| s.borrow().buf.current().to_string());
-    let delta = render::delta(&owned.rendered, &run);
+    let delta = render::delta(&owned.rendered, run);
     if !delta.is_empty() && !inject::apply(delta.backspaces, &delta.insert, None) {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
     }

@@ -176,6 +176,8 @@ def sweep(t):
     run(t, "letters-only Thai word", "giupo ", "เรียน")
     run(t, "EN->TH then Thai typed natively", "l;ylfu giupo ", "สวัสดี เรียน")
     run(t, "TH->EN word", "correct ", "correct", layout=HKL_TH)
+    # Not Thai: it only starts like three short Thai words (พำ สน เร).
+    run(t, "English computer word stays English", "relogin ", "relogin")
     # A word Auto keeps as English (it spells Thai นา too); flipped by hand.
     run(t, "Shift+Backspace flips EN to TH", "ok", "นา", then=[flip])
     run(t, "Shift+Backspace undoes an automatic fix", "correct ", "แนพพำแะ",

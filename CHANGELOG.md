@@ -14,6 +14,16 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   selects the rest, the first Backspace only removed that selection.
   RightType now clears it first in Chrome, Edge and other Chromium browsers
   and in Firefox.
+- **Edge's address bar forgot the start of the word** (`l;ylfu` came out as
+  `l;ัสดี`): its suggestion list gives the highlighted row accessibility
+  focus on almost every keystroke, and RightType took each of those as a
+  move to another field. Focus on the same field or on a list/menu row no
+  longer counts (and leaves the password-field status as it was).
+- **An English word RightType does not know could turn Thai** (`relogin`
+  became `พำสนเรื`): its first letters read as short Thai words. At the
+  space, a reading that cannot end a Thai word goes back to the keys typed
+  (when they were all letters), and 24 everyday computer words (`relogin`,
+  `logout`, `signin`, `dropdown`, …) were added.
 - With both US and UK English keyboards installed, RightType starts with the
   one in use rather than the first installed, so **Fix text** opened from the
   tray before any typing uses the right punctuation (`"` `@` `£` `#`).

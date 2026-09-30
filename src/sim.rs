@@ -157,11 +157,22 @@ impl<'d> Engine<'d> {
         let mark = std::mem::replace(&mut self.mark, Mark::Plain);
 
         // A boundary ends a run we own: its reading is already on screen.
-        if self.owned.take().is_some() {
-            self.counters.live_anchors += 1;
-            self.request_layout(InputLayout::ThaiKedmanee);
-            self.screen.push(boundary);
-            return;
+        if self.owned.is_some() {
+            let rendered = self
+                .owned
+                .as_ref()
+                .map(|o| o.rendered.clone())
+                .unwrap_or_default();
+            if !policy::goes_back_to_keys(&word, &rendered) {
+                self.owned = None;
+                self.counters.live_anchors += 1;
+                self.request_layout(InputLayout::ThaiKedmanee);
+                self.screen.push(boundary);
+                return;
+            }
+            // The word cannot end as Thai after all: put the keys back and
+            // judge it like any other word.
+            self.withdraw_owned_run_to(&word);
         }
 
         let converted = mark == Mark::Converted;
@@ -269,11 +280,16 @@ impl<'d> Engine<'d> {
 
     /// `hook::withdraw_owned_run`: put the raw keystrokes back.
     fn withdraw_owned_run(&mut self) {
+        let run = self.buf.current().to_string();
+        self.withdraw_owned_run_to(&run);
+    }
+
+    /// Put `run` (the keys as typed) back in place of the run we own.
+    fn withdraw_owned_run_to(&mut self, run: &str) {
         let Some(owned) = self.owned.take() else {
             return;
         };
-        let run = self.buf.current().to_string();
-        let delta = render::delta(&owned.rendered, &run);
+        let delta = render::delta(&owned.rendered, run);
         for _ in 0..delta.backspaces {
             self.screen.pop();
         }
@@ -328,6 +344,32 @@ mod tests {
     #[test]
     fn a_thai_word_on_the_english_layout_arrives_as_thai() {
         assert_eq!(type_blind("สวัสดีครับ ", InputLayout::UsQwerty), "สวัสดีครับ ");
+    }
+
+    #[test]
+    fn a_word_that_only_starts_like_thai_goes_back_at_space() {
+        // `relogi` reads พำ + สน + เร, three known Thai words, so it turns
+        // Thai mid-word; with the `n` the reading ends in a stray vowel, and
+        // at the space the keys go back to what was typed.
+        let en = crate::dict::Dictionary::from_words(["log"]);
+        let th = crate::dict::Dictionary::from_words(["พำ", "สน", "เร", "เรือ"]);
+        let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
+        for c in "relogi".chars() {
+            e.key(c);
+        }
+        assert_eq!(e.screen, "พำสนเร");
+        // Still the start of a Thai word (เรือ), so it stays Thai while typed.
+        e.key('n');
+        assert_eq!(e.screen, "พำสนเรื");
+        e.boundary(' ');
+        assert_eq!(e.screen, "relogin ");
+        assert_eq!(e.layout(), InputLayout::UsQwerty);
+    }
+
+    #[test]
+    fn everyday_computer_words_stay_english() {
+        assert_eq!(type_blind("relogin ", InputLayout::UsQwerty), "relogin ");
+        assert_eq!(type_blind("logout ", InputLayout::UsQwerty), "logout ");
     }
 
     #[test]

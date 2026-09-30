@@ -309,3 +309,30 @@ OKR
 ROI
 B2B
 B2C
+
+# Everyday computer words the English list lacks (a user typed `relogin` and
+# got Thai back; 2.0.1)
+relogin
+logout
+signin
+signout
+signup
+usernames
+reupload
+reinstall
+uninstall
+unsubscribe
+hotkey
+hotkeys
+checkbox
+dropdown
+popup
+screenshots
+touchpad
+timestamps
+repost
+retweets
+livestream
+unfollow
+autofill
+autosave

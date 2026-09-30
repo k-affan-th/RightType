@@ -20,7 +20,9 @@ use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
 };
 use windows::Win32::UI::Accessibility::{
-    CUIAutomation, IUIAutomation, SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK,
+    CUIAutomation, IUIAutomation, IUIAutomationElement, SetWinEventHook, UIA_DataItemControlTypeId,
+    UIA_ListItemControlTypeId, UIA_MenuItemControlTypeId, UIA_TreeItemControlTypeId,
+    UnhookWinEvent, HWINEVENTHOOK, UIA_CONTROLTYPE_ID,
 };
 use windows::Win32::UI::WindowsAndMessaging::{EVENT_OBJECT_FOCUS, WINEVENT_OUTOFCONTEXT};
 
@@ -41,6 +43,8 @@ static FOCUS_GENERATION: AtomicU64 = AtomicU64::new(0);
 thread_local! {
     static UIA: RefCell<Option<IUIAutomation>> = const { RefCell::new(None) };
     static HOOK: RefCell<Option<HWINEVENTHOOK>> = const { RefCell::new(None) };
+    /// The element that last took focus as a field (see [`moves_to_another_field`]).
+    static FIELD: RefCell<Option<IUIAutomationElement>> = const { RefCell::new(None) };
 }
 
 /// Is the currently focused element a password field (per UIA)?
@@ -122,10 +126,59 @@ unsafe extern "system" fn on_focus(
     _thread: u32,
     _time: u32,
 ) {
+    if !moves_to_another_field() {
+        return;
+    }
     FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
     refresh_status();
     // After the password check above: the habit switch never runs in one.
     crate::habits::on_focus();
+}
+
+/// Whether a focus event means the caret went to another field.
+///
+/// Not when the element is the field that already had focus, nor when it is
+/// a row of a list or menu: a browser's address-bar suggestions give the
+/// highlighted row accessibility focus (so screen readers read it out) while
+/// the keys still go to the address bar. Edge does that on almost every
+/// keystroke, and counting it as a move made RightType forget the word being
+/// typed and convert only its end (`l;ylfu` became `l;ัสดี`). Such events
+/// also leave the password status alone: it still describes the field.
+unsafe fn moves_to_another_field() -> bool {
+    UIA.with(|u| {
+        let Some(uia) = u.borrow().clone() else {
+            return true;
+        };
+        let Ok(element) = uia.GetFocusedElement() else {
+            FIELD.with(|f| *f.borrow_mut() = None);
+            return true;
+        };
+        let same = FIELD.with(|f| {
+            f.borrow().as_ref().is_some_and(|last| {
+                uia.CompareElements(last, &element)
+                    .map(|b| b.as_bool())
+                    .unwrap_or(false)
+            })
+        });
+        let row = element.CurrentControlType().is_ok_and(is_list_row);
+        crate::hook::e2e_trace(format!("focus event: same={same} row={row}"));
+        if same || row {
+            return false;
+        }
+        FIELD.with(|f| *f.borrow_mut() = Some(element));
+        true
+    })
+}
+
+/// Rows of a list, menu, grid or tree: what a suggestion dropdown is made of.
+fn is_list_row(control_type: UIA_CONTROLTYPE_ID) -> bool {
+    [
+        UIA_ListItemControlTypeId,
+        UIA_MenuItemControlTypeId,
+        UIA_DataItemControlTypeId,
+        UIA_TreeItemControlTypeId,
+    ]
+    .contains(&control_type)
 }
 
 unsafe fn refresh_status() {
@@ -216,8 +269,21 @@ pub fn uia_caret_rect() -> Option<windows::Win32::Foundation::RECT> {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_inline_completing, status_is_protected, FIELD_PASSWORD, FIELD_SAFE, FIELD_UNKNOWN,
+        is_inline_completing, is_list_row, status_is_protected, FIELD_PASSWORD, FIELD_SAFE,
+        FIELD_UNKNOWN,
     };
+
+    #[test]
+    fn suggestion_rows_are_not_fields() {
+        use windows::Win32::UI::Accessibility::{
+            UIA_DocumentControlTypeId, UIA_EditControlTypeId, UIA_ListItemControlTypeId,
+            UIA_MenuItemControlTypeId,
+        };
+        assert!(is_list_row(UIA_ListItemControlTypeId));
+        assert!(is_list_row(UIA_MenuItemControlTypeId));
+        assert!(!is_list_row(UIA_EditControlTypeId));
+        assert!(!is_list_row(UIA_DocumentControlTypeId));
+    }
 
     #[test]
     fn browser_address_bars_complete_inline() {
