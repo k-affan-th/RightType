@@ -184,9 +184,16 @@ def fast_keys(s, pause=0.03):
             vk = fs.SPACE
         elif ch.isalpha() or ch.isdigit():
             vk = ord(ch.upper())
+        elif ch in fs.SHIFTED:
+            base = fs.SHIFTED[ch]
+            fs.tap(fs.PUNCT.get(base, ord(base)), fs.SHIFT, pause=pause)
+            continue
         else:
             vk = fs.PUNCT[ch]
-        fs.tap(vk, pause=pause)
+        if ch.isupper():
+            fs.tap(vk, fs.SHIFT, pause=pause)
+        else:
+            fs.tap(vk, pause=pause)
 
 
 def watch(t, name, keys, expect, typer=type_keys):
