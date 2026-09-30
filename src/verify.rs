@@ -49,7 +49,10 @@ fn mark_slow(exe: &str) {
 
 /// `expected` was just typed as keys into `exe`: check it on a worker thread.
 pub fn after_keys(expected: &str, exe: Option<String>) {
-    if expected.is_empty() {
+    // An address bar selects its completion after the caret and redraws what
+    // is typed as it goes: what is read back there says nothing (CI: Chrome's
+    // omnibox read back as 0 of 6, and the longer pause then hurt it).
+    if expected.is_empty() || crate::focus::completes_inline() {
         return;
     }
     let expected = Zeroizing::new(expected.to_string());

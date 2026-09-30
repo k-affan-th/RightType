@@ -804,8 +804,12 @@ def main():
             try:
                 {"edge": edge_sweep, "hang": hang_sweep, "notepad11": notepad11_sweep}.get(key, sweep)(t)
             finally:
-                print(f"RightType after {key}: {rt_health(proc)}", flush=True)
+                # A target may restart RightType (CURRENT holds the one running).
+                print(f"RightType after {key}: {rt_health(CURRENT[0])}", flush=True)
                 report_has_no_typed_text(key, fs.RESULTS[results_before:])
+                if key != "notepad11":  # garbled on purpose there
+                    alarms = fs.log_since(start).count("verify: app shows something else")
+                    fs.check(key, "check-after-write raises no false alarm", str(alarms), "0")
                 t.close()
                 sections.setdefault(key, []).append((start, fs.LOG.stat().st_size))
     finally:
