@@ -56,6 +56,12 @@ pub struct Config {
     /// `kedmanee` (default) or `pattachote`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thai_layout: Option<String>,
+    /// Convert a selection by copying it (Ctrl+C) in apps that do not share
+    /// it through UI Automation. Off: the copied text would enter Windows
+    /// clipboard history, cloud sync to other devices and every clipboard
+    /// monitor. Only settable by editing this file.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub selection_via_clipboard: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -103,6 +109,7 @@ impl Default for Config {
             learned_folder: None,
             hotkeys: BTreeMap::new(),
             thai_layout: None,
+            selection_via_clipboard: false,
         }
     }
 }
@@ -140,6 +147,7 @@ pub fn apply(cfg: &Config) {
     safety::set_custom_list(cfg.custom_blacklist.clone());
     set_language(cfg.language.as_deref().and_then(Lang::from_code));
     crate::caret::set_enabled(cfg.caret_hints);
+    crate::manual::set_clipboard_fallback(cfg.selection_via_clipboard);
     crate::habits::set_enabled(cfg.predict_layout);
     righttype::layout::set_thai_variant(match cfg.thai_layout.as_deref() {
         Some("pattachote") => righttype::layout::ThaiVariant::Pattachote,
@@ -214,6 +222,7 @@ pub fn persist() {
             .map(|(exe, mode)| (exe, mode.name().to_string()))
             .collect(),
         caret_hints: crate::caret::is_enabled(),
+        selection_via_clipboard: crate::manual::clipboard_fallback(),
         predict_layout: crate::habits::is_enabled(),
         keep_stats: crate::stats::keeps_daily(),
         learned_folder: learn::folder().map(|p| p.to_string_lossy().into_owned()),

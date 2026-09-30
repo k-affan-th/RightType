@@ -257,7 +257,7 @@ dependencies = [
 
 [[package]]
 name = "righttype"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "crossbeam-channel",
  "embed-resource",

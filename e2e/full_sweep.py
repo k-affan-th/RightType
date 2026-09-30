@@ -160,10 +160,16 @@ class Target:
         raise NotImplementedError
 
     def clear(self):
-        self.focus()
-        tap(ord("A"), CTRL)
-        tap(DELETE)
-        time.sleep(0.3)
+        # Checked: a clear that left text behind would be counted against
+        # the next case.
+        for _ in range(3):
+            self.focus()
+            tap(ord("A"), CTRL)
+            tap(DELETE)
+            time.sleep(0.3)
+            if not self.read().strip():
+                return
+        print(f"  {self.name}: could not clear the field ({self.read()!r})", flush=True)
 
     def layout(self, hkl):
         user32.PostMessageW(self.hwnd, 0x0050, 0, hkl)

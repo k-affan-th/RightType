@@ -51,8 +51,8 @@ with a hotkey:
 
 | Hotkey | Action |
 | --- | --- |
-| `Shift`+`Backspace` | Convert the last word in place — or, right after Auto changed a word, flip it back. Press it again to flip the word before as well (up to 8 words) |
-| `Shift`+`CapsLock` | Convert the current **selection** (v1 temporarily reads it with Copy, restores an empty/plain-Unicode clipboard, then injects Unicode; any non-text/app-specific clipboard format is refused) |
+| `Shift`+`Backspace` | Convert the last word in place — or, right after Auto changed a word, flip it back. Press it again to flip the word before as well (up to 8 words). Each press says what it did; see [`docs/UNDO.md`](docs/UNDO.md) |
+| `Shift`+`CapsLock` | Convert the current **selection**: read from the app through UI Automation (never through the clipboard, which Windows can keep in its history and sync to your phone), then typed back as Unicode. Apps that do not share their selection get a message; `selection_via_clipboard = true` in `config.toml` lets RightType copy it instead |
 | `Ctrl`+`CapsLock` | Cycle **Manual** → **Auto** → **Suggest** (works in every app, including ones RightType otherwise stays out of; in an app with its own mode, cycles that app's mode) |
 | `Tab` or `Alt`+`CapsLock` | Accept the current Suggest hint (Tab only right after it appears; otherwise Tab is Tab) |
 | `Ctrl`+`Shift`+`CapsLock` | Undo the last correction (selection undo requires the same focused context) |
@@ -167,12 +167,12 @@ rather than a blanket ban on every individual BIP39 word.
 (once winget has accepted the release).
 
 **Installer (recommended, per-user, no admin):** download
-`RightType-2.0.0-setup.exe` from the
+`RightType-2.0.1-setup.exe` from the
 [latest release](https://github.com/k-affan-th/RightType/releases/latest) and run it.
 It installs RightType, offers a desktop shortcut and start-at-login, and registers
 a normal Windows uninstaller (Settings -> Apps -> RightType).
 
-**Portable zip:** extract `RightType-2.0.0-x64.zip` and run `righttype.exe` where it
+**Portable zip:** extract `RightType-2.0.1-x64.zip` and run `righttype.exe` where it
 sits — or install it per-user from the extracted folder:
 
 ```powershell
@@ -186,7 +186,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -Autostart
 - Verify what you downloaded against `SHA256.txt` before running it:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\RightType-2.0.0-setup.exe
+Get-FileHash -Algorithm SHA256 .\RightType-2.0.1-setup.exe
 ```
 - Unsigned builds show a SmartScreen prompt — "More info → Run anyway".
   Code signing is planned for a later release.

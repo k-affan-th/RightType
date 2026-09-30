@@ -4,8 +4,46 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-09-30
+
+### Changed
+
+- **Settings, Statistics, Fix text and Welcome appear fully drawn**: they
+  used to show their frame first and fill in control by control; switching
+  a Settings page repainted it dozens of times.
+- **Convert selection no longer goes through the clipboard.** It pressed
+  Ctrl+C for you, so the selected text went into Windows clipboard history,
+  could be synced to your other devices (an Android phone) and was visible
+  to any program watching the clipboard — even though RightType put the old
+  clipboard back. It now asks the app for the selection through UI
+  Automation. Apps that do not share it say so; `selection_via_clipboard =
+  true` in `config.toml` brings back the copy for them.
+- What RightType puts on the clipboard (Fix text's **Copy**) is marked to
+  stay out of clipboard history and cloud sync.
+- **Every Shift+Backspace says what it did**: "Flipped 1 word · again for
+  the one before", "Flipped back 3 words", "Undone", or "Nothing to flip
+  here" when the cursor moved and RightType no longer knows the text before
+  it (a press that did nothing used to look like one that failed). What is
+  kept for this, and what each press does, is in `docs/UNDO.md`.
+- **Shift+Backspace pressed once too often puts things back**: after the
+  oldest word was flipped (or the only one — `reload` → `พำสนฟก`), the next
+  press restores every word the run changed, instead of saying there is
+  nothing to flip.
+
 ### Fixed
 
+- **Corrections in Notepad (Windows 11 and classic), WordPad and other
+  standard text boxes are made by the box itself**: RightType tells it to
+  replace the word in one edit (Ctrl+Z undoes it) instead of typing
+  Backspaces and characters. Typed corrections came out garbled in Windows
+  11 Notepad (`สวัสดี` became `ีีีีีี`) and keys typed while a word was being
+  rewritten were lost. Elsewhere, text typed after Backspaces now waits
+  40 ms for them to land.
+- **RightType could crash in Edge's address bar** (2.0.0), after which
+  nothing was corrected and Shift+Backspace was a plain Backspace until it
+  was restarted: the small TH/EN tag could be painted after its text had
+  been wiped, and drawing empty text read an invalid pointer. Found with
+  four Edge rounds per CI run and a crash report in the debug build.
 - **Shift+Backspace right after an automatic fix did nothing** (2.0.0): the
   Shift key on its own made RightType forget the words it keeps for flipping
   back, so the flip found nothing. It flips the fixed word back again.
@@ -14,6 +52,21 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   selects the rest, the first Backspace only removed that selection.
   RightType now clears it first in Chrome, Edge and other Chromium browsers
   and in Firefox.
+- **Edge's address bar forgot the start of the word** (`l;ylfu` came out as
+  `l;ัสดี`): its suggestion list gives the highlighted row accessibility
+  focus on almost every keystroke, and RightType took each of those as a
+  move to another field. Focus on the same field or on a list/menu row no
+  longer counts (and leaves the password-field status as it was).
+- **An English word RightType does not know could turn Thai** (`relogin`
+  became `พำสนเรื`): its first letters read as short Thai words. At the
+  space, a reading that cannot end a Thai word goes back to the keys typed
+  (when they were all letters), and 24 everyday computer words (`relogin`,
+  `logout`, `signin`, `dropdown`, …) were added.
+- **Fewer unknown English words turn Thai** (`reavik` became `พำฟอรา`):
+  a reading made of nothing but three or more one- and two-letter Thai
+  words (พำ + ฟ + อ + รา) is no longer enough to convert a word, mid-way or
+  at the space. On 20,000 unknown English words, wrong conversions fell
+  from 246 to 170; of 20,000 unknown Thai words, one fewer arrives as Thai.
 - With both US and UK English keyboards installed, RightType starts with the
   one in use rather than the first installed, so **Fix text** opened from the
   tray before any typing uses the right punctuation (`"` `@` `£` `#`).

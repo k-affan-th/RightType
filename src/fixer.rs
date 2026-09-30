@@ -71,6 +71,7 @@ fn open_with(initial: Option<&str>) {
         }
         return;
     }
+    let started = std::time::Instant::now();
     ui::refresh();
 
     let mut window = nwg::Window::default();
@@ -157,7 +158,11 @@ fn open_with(initial: Option<&str>) {
         win.surface.set_text(win.ids.input, text);
         fix_into_output(&win, text);
     }
-    win.window.set_visible(true);
+    if let Some(h) = win.window.handle.hwnd() {
+        crate::ui::present(HWND(h as _), "fix text", started);
+    } else {
+        win.window.set_visible(true);
+    }
     OPEN.store(hwnd_isize, Ordering::Release);
 
     let weak = Rc::downgrade(&win);

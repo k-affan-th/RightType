@@ -219,6 +219,7 @@ pub fn open() {
             );
         }
     }
+    let started = std::time::Instant::now();
     ui::refresh();
 
     let mut window = nwg::Window::default();
@@ -325,7 +326,11 @@ pub fn open() {
         surface,
         handler: RefCell::new(None),
     });
-    win.window.set_visible(true);
+    if let Some(h) = win.window.handle.hwnd() {
+        crate::ui::present(HWND(h as _), "stats", started);
+    } else {
+        win.window.set_visible(true);
+    }
     OPEN_STATS.store(win.surface.hwnd.0 as isize, Ordering::Release);
 
     let weak = Rc::downgrade(&win);

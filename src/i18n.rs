@@ -122,6 +122,10 @@ texts! {
     ToastLearnOff => "Not learning new words", "ปิดการเรียนรู้คำใหม่";
     ToastUndo => "Undone", "ย้อนกลับแล้ว";
     ToastFlippedWords => "Flipped back {n} words", "แก้ย้อน {n} คำแล้ว";
+    ToastFlippedOne => "Flipped 1 word", "แก้ 1 คำแล้ว";
+    ToastFlippedOneBack => "Flipped 1 word · again to put it back", "แก้ 1 คำแล้ว · กดอีกครั้งเพื่อคืนค่าเดิม";
+    ToastFlippedOneMore => "Flipped 1 word · again for the one before", "แก้ 1 คำแล้ว · กดอีกครั้งแก้คำก่อนหน้า";
+    ToastNothingToFlip => "Nothing to flip here (the cursor moved, or no more words)", "ไม่มีคำให้แก้ตรงนี้ (เคอร์เซอร์ย้ายแล้ว หรือไม่มีคำก่อนหน้า)";
     ToastPaused => "Paused for {n} minutes", "หยุดชั่วคราว {n} นาที";
     ToastAppMode => "{mode} in {app}", "{mode} ใน {app}";
     ToastHookLost => "RightType lost the keyboard — retrying…", "RightType ตรวจจับคีย์บอร์ดไม่ได้ — กำลังลองใหม่…";
@@ -133,6 +137,7 @@ texts! {
     ErrSuggestInject => "RightType: could not apply the suggestion", "RightType: ใช้คำแนะนำไม่สำเร็จ";
     ErrCorrectionInject => "RightType: could not fix the word", "RightType: แก้คำไม่สำเร็จ";
     ErrClipboardBusy => "RightType: the clipboard is busy — try again", "RightType: คลิปบอร์ดกำลังถูกใช้ ลองอีกครั้ง";
+    ErrSelectionNotShared => "RightType: this app does not share the selected text — use Fix text… in the tray", "RightType: แอปนี้ไม่ส่งข้อความที่เลือกให้ ใช้ ซ่อมข้อความ… ที่ถาดไอคอนแทน";
     ErrClipboardNotPlain => "RightType: converting a selection needs a plain-text clipboard", "RightType: การแปลงข้อความที่เลือกต้องใช้คลิปบอร์ดที่เป็นข้อความธรรมดา";
     ErrModifiers => "RightType: could not release held keys", "RightType: ปล่อยปุ่มที่กดค้างไม่สำเร็จ";
     ErrCopy => "RightType: could not copy the selection", "RightType: คัดลอกข้อความที่เลือกไม่สำเร็จ";

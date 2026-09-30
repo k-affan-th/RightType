@@ -18,9 +18,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+    COINIT_MULTITHREADED,
 };
 use windows::Win32::UI::Accessibility::{
-    CUIAutomation, IUIAutomation, SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK,
+    CUIAutomation, IUIAutomation, IUIAutomationElement, SetWinEventHook, UIA_DataItemControlTypeId,
+    UIA_ListItemControlTypeId, UIA_MenuItemControlTypeId, UIA_TreeItemControlTypeId,
+    UnhookWinEvent, HWINEVENTHOOK, UIA_CONTROLTYPE_ID,
 };
 use windows::Win32::UI::WindowsAndMessaging::{EVENT_OBJECT_FOCUS, WINEVENT_OUTOFCONTEXT};
 
@@ -41,6 +44,8 @@ static FOCUS_GENERATION: AtomicU64 = AtomicU64::new(0);
 thread_local! {
     static UIA: RefCell<Option<IUIAutomation>> = const { RefCell::new(None) };
     static HOOK: RefCell<Option<HWINEVENTHOOK>> = const { RefCell::new(None) };
+    /// The element that last took focus as a field (see [`moves_to_another_field`]).
+    static FIELD: RefCell<Option<IUIAutomationElement>> = const { RefCell::new(None) };
 }
 
 /// Is the currently focused element a password field (per UIA)?
@@ -116,16 +121,84 @@ pub unsafe fn disarm() {
 unsafe extern "system" fn on_focus(
     _hook: HWINEVENTHOOK,
     _event: u32,
-    _hwnd: HWND,
-    _idobj: i32,
-    _idchild: i32,
+    hwnd: HWND,
+    idobj: i32,
+    idchild: i32,
     _thread: u32,
     _time: u32,
 ) {
-    FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
-    refresh_status();
+    thread_local!(static DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) });
+    let depth = DEPTH.with(|d| d.replace(d.get() + 1));
+    crate::hook::e2e_trace(format!(
+        "focus event from hwnd={:#x} obj={idobj} child={idchild} depth={depth}",
+        hwnd.0 as usize
+    ));
+    on_focus_inner();
+    DEPTH.with(|d| d.set(depth));
+}
+
+unsafe fn on_focus_inner() {
+    let started = std::time::Instant::now();
+    let moved = moves_to_another_field();
+    if moved {
+        FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
+        refresh_status();
+    }
+    crate::hook::e2e_trace(format!(
+        "focus event handled in {} ms (moved={moved})",
+        started.elapsed().as_millis()
+    ));
+    if !moved {
+        return;
+    }
     // After the password check above: the habit switch never runs in one.
     crate::habits::on_focus();
+}
+
+/// Whether a focus event means the caret went to another field.
+///
+/// Not when the element is the field that already had focus, nor when it is
+/// a row of a list or menu: a browser's address-bar suggestions give the
+/// highlighted row accessibility focus (so screen readers read it out) while
+/// the keys still go to the address bar. Edge does that on almost every
+/// keystroke, and counting it as a move made RightType forget the word being
+/// typed and convert only its end (`l;ylfu` became `l;ัสดี`). Such events
+/// also leave the password status alone: it still describes the field.
+unsafe fn moves_to_another_field() -> bool {
+    UIA.with(|u| {
+        let Some(uia) = u.borrow().clone() else {
+            return true;
+        };
+        let Ok(element) = uia.GetFocusedElement() else {
+            FIELD.with(|f| *f.borrow_mut() = None);
+            return true;
+        };
+        let same = FIELD.with(|f| {
+            f.borrow().as_ref().is_some_and(|last| {
+                uia.CompareElements(last, &element)
+                    .map(|b| b.as_bool())
+                    .unwrap_or(false)
+            })
+        });
+        let row = element.CurrentControlType().is_ok_and(is_list_row);
+        crate::hook::e2e_trace(format!("focus event: same={same} row={row}"));
+        if same || row {
+            return false;
+        }
+        FIELD.with(|f| *f.borrow_mut() = Some(element));
+        true
+    })
+}
+
+/// Rows of a list, menu, grid or tree: what a suggestion dropdown is made of.
+fn is_list_row(control_type: UIA_CONTROLTYPE_ID) -> bool {
+    [
+        UIA_ListItemControlTypeId,
+        UIA_MenuItemControlTypeId,
+        UIA_DataItemControlTypeId,
+        UIA_TreeItemControlTypeId,
+    ]
+    .contains(&control_type)
 }
 
 unsafe fn refresh_status() {
@@ -155,8 +228,232 @@ unsafe fn refresh_status() {
             })
             .unwrap_or(FIELD_UNKNOWN)
     });
+    crate::hook::e2e_trace(format!("field status={status} inline={inline}"));
     FIELD_STATUS.store(status, Ordering::Relaxed);
     INLINE_COMPLETION.store(inline, Ordering::Relaxed);
+}
+
+/// This thread's UI Automation client, made on first use. The UI thread's
+/// is made by [`arm`]; the selection worker gets its own.
+fn uia_here() -> Option<IUIAutomation> {
+    UIA.with(|u| {
+        if u.borrow().is_none() {
+            unsafe {
+                let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+                if let Ok(uia) =
+                    CoCreateInstance::<_, IUIAutomation>(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
+                {
+                    *u.borrow_mut() = Some(uia);
+                }
+            }
+        }
+        u.borrow().clone()
+    })
+}
+
+/// The text selected in the focused field, asked of the app through UI
+/// Automation — without the clipboard, which Windows may keep in its
+/// history, sync to other devices, and show to every program watching it.
+/// `None` when the app does not say (no text pattern, nothing selected, a
+/// password field). Any thread.
+pub fn selected_text() -> Option<zeroize::Zeroizing<String>> {
+    uia_selected_text().or_else(edit_selected_text)
+}
+
+fn uia_selected_text() -> Option<zeroize::Zeroizing<String>> {
+    use windows::Win32::UI::Accessibility::{IUIAutomationTextPattern, UIA_TextPatternId};
+    let step = |what: &str| crate::hook::e2e_trace(format!("selection (UIA): {what}"));
+    let Some(uia) = uia_here() else {
+        step("no UI Automation client");
+        return None;
+    };
+    unsafe {
+        let Ok(element) = uia.GetFocusedElement() else {
+            step("no focused element");
+            return None;
+        };
+        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            step("password field (or unknown)");
+            return None;
+        }
+        let Ok(pattern) =
+            element.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+        else {
+            step("no text pattern");
+            return None;
+        };
+        let Ok(ranges) = pattern.GetSelection() else {
+            step("no selection ranges");
+            return None;
+        };
+        let mut text = zeroize::Zeroizing::new(String::new());
+        for i in 0..ranges.Length().unwrap_or(0) {
+            let range = ranges.GetElement(i).ok()?;
+            text.push_str(&range.GetText(-1).ok()?.to_string());
+        }
+        if text.is_empty() {
+            step("empty selection");
+            return None;
+        }
+        Some(text)
+    }
+}
+
+/// The focused standard Windows text box (Edit, RichEdit: classic and
+/// Windows 11 Notepad, WordPad, many dialogs), which can be asked and told
+/// things directly with its own messages — Windows copies their text
+/// between processes. Never a password box.
+pub struct TextBox {
+    hwnd: windows::Win32::Foundation::HWND,
+    rich: bool,
+}
+
+impl TextBox {
+    /// The focused window of the foreground app, when it is such a box.
+    pub fn focused() -> Result<TextBox, &'static str> {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetClassNameW, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongW,
+            GetWindowThreadProcessId, GUITHREADINFO, GWL_STYLE,
+        };
+        const ES_PASSWORD: i32 = 0x0020;
+        unsafe {
+            let thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
+            let mut gui = GUITHREADINFO {
+                cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+                ..Default::default()
+            };
+            if GetGUIThreadInfo(thread, &mut gui).is_err() || gui.hwndFocus.0.is_null() {
+                return Err("no focused window");
+            }
+            let hwnd = gui.hwndFocus;
+            let mut class = [0u16; 64];
+            let n = GetClassNameW(hwnd, &mut class) as usize;
+            let class = String::from_utf16_lossy(&class[..n]);
+            let rich = class.to_ascii_lowercase().starts_with("richedit");
+            if !(class.eq_ignore_ascii_case("Edit") || rich) {
+                return Err("not a text box");
+            }
+            if GetWindowLongW(hwnd, GWL_STYLE) & ES_PASSWORD != 0 {
+                return Err("password box");
+            }
+            Ok(TextBox { hwnd, rich })
+        }
+    }
+
+    /// Send `msg` and wait (bounded) for the answer.
+    fn ask(&self, msg: u32, w: usize, l: isize) -> Option<usize> {
+        use windows::Win32::Foundation::{LPARAM, WPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, SMTO_ABORTIFHUNG};
+        let mut result = 0usize;
+        let ok = unsafe {
+            SendMessageTimeoutW(
+                self.hwnd,
+                msg,
+                WPARAM(w),
+                LPARAM(l),
+                SMTO_ABORTIFHUNG,
+                300,
+                Some(&mut result),
+            )
+        };
+        (ok.0 != 0).then_some(result)
+    }
+
+    /// The selection, in UTF-16 positions (16 bits each: EM_GETSEL's limit).
+    fn selection(&self) -> Option<(usize, usize)> {
+        const EM_GETSEL: u32 = 0x00B0;
+        let sel = self.ask(EM_GETSEL, 0, 0)?;
+        Some((sel & 0xFFFF, (sel >> 16) & 0xFFFF))
+    }
+
+    /// Replace the `delete` UTF-16 units before the caret with `text`, as one
+    /// edit the box can undo. Only with a bare caret (nothing selected) and
+    /// enough text before it; checked afterwards by where the caret ended up.
+    /// `Err` before anything changed means the caller may fall back to keys.
+    pub fn replace_before_caret(&self, delete: usize, text: &str) -> Result<(), ReplaceError> {
+        const EM_SETSEL: u32 = 0x00B1;
+        const EM_REPLACESEL: u32 = 0x00C2;
+        let (start, end) = self
+            .selection()
+            .ok_or(ReplaceError::Untouched("no answer"))?;
+        if start != end {
+            return Err(ReplaceError::Untouched("text is selected"));
+        }
+        if start < delete || start >= 0xFFFF {
+            return Err(ReplaceError::Untouched("caret position out of reach"));
+        }
+        let from = start - delete;
+        self.ask(EM_SETSEL, from, start as isize)
+            .ok_or(ReplaceError::Untouched("could not select"))?;
+        if self.selection() != Some((from, start)) {
+            // Put the caret back where it was before giving the job to keys.
+            let _ = self.ask(EM_SETSEL, start, start as isize);
+            return Err(ReplaceError::Untouched("selection did not take"));
+        }
+        let mut units: zeroize::Zeroizing<Vec<u16>> =
+            zeroize::Zeroizing::new(text.encode_utf16().chain(std::iter::once(0)).collect());
+        // wParam 1: the replacement can be undone (Ctrl+Z in the app).
+        self.ask(EM_REPLACESEL, 1, units.as_mut_ptr() as isize)
+            .ok_or(ReplaceError::Unknown("no answer to the replacement"))?;
+        let expected = from + units.len() - 1;
+        match self.selection() {
+            Some((a, b)) if a == expected && b == expected => Ok(()),
+            _ => Err(ReplaceError::Unknown(
+                "caret not where the replacement should leave it",
+            )),
+        }
+    }
+}
+
+/// Why [`TextBox::replace_before_caret`] did not do the job.
+#[derive(Debug)]
+pub enum ReplaceError {
+    /// Nothing was changed: typing the correction as keys is safe.
+    Untouched(&'static str),
+    /// The box may have been changed: do not type the correction again.
+    Unknown(&'static str),
+}
+
+/// The selection of a standard Windows text box ([`TextBox`]): `EM_GETSEL`
+/// for where, `WM_GETTEXT` for the text. No clipboard. The whole text passes
+/// through this process for a moment and is wiped.
+fn edit_selected_text() -> Option<zeroize::Zeroizing<String>> {
+    use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
+    use zeroize::Zeroize;
+    let step = |what: &str| crate::hook::e2e_trace(format!("selection (edit control): {what}"));
+    let tb = match TextBox::focused() {
+        Ok(tb) => tb,
+        Err(why) => {
+            step(why);
+            return None;
+        }
+    };
+    let (start, end) = tb.selection()?;
+    if end <= start {
+        step("nothing selected");
+        return None;
+    }
+    // EM_GETSEL reports positions in 16 bits.
+    let len = tb.ask(WM_GETTEXTLENGTH, 0, 0)?;
+    if len > 0xFFFF {
+        step("text too long to locate the selection");
+        return None;
+    }
+    let mut units = vec![0u16; len + 1];
+    let got = tb
+        .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?
+        .min(len);
+    // RichEdit counts a line break as one position but WM_GETTEXT gives two
+    // characters, so past one the positions no longer line up: refuse rather
+    // than convert the wrong text.
+    let shifted = tb.rich && units[..end.min(got)].contains(&(b'\n' as u16));
+    let text = (end <= got && !shifted)
+        .then(|| zeroize::Zeroizing::new(String::from_utf16_lossy(&units[start..end])));
+    units.zeroize();
+    if text.is_none() {
+        step("selection cannot be located in the text");
+    }
+    text
 }
 
 /// The text cursor of the focused element, from UI Automation, in screen
@@ -216,8 +513,21 @@ pub fn uia_caret_rect() -> Option<windows::Win32::Foundation::RECT> {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_inline_completing, status_is_protected, FIELD_PASSWORD, FIELD_SAFE, FIELD_UNKNOWN,
+        is_inline_completing, is_list_row, status_is_protected, FIELD_PASSWORD, FIELD_SAFE,
+        FIELD_UNKNOWN,
     };
+
+    #[test]
+    fn suggestion_rows_are_not_fields() {
+        use windows::Win32::UI::Accessibility::{
+            UIA_DocumentControlTypeId, UIA_EditControlTypeId, UIA_ListItemControlTypeId,
+            UIA_MenuItemControlTypeId,
+        };
+        assert!(is_list_row(UIA_ListItemControlTypeId));
+        assert!(is_list_row(UIA_MenuItemControlTypeId));
+        assert!(!is_list_row(UIA_EditControlTypeId));
+        assert!(!is_list_row(UIA_DocumentControlTypeId));
+    }
 
     #[test]
     fn browser_address_bars_complete_inline() {

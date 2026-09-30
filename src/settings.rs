@@ -148,6 +148,7 @@ fn open_on(page: u8) {
         }
         return;
     }
+    let started = std::time::Instant::now();
     ui::refresh();
 
     let mut window = nwg::Window::default();
@@ -555,7 +556,11 @@ fn open_on(page: u8) {
     win.surface
         .set_checked(win.ids.nav[(page - 1) as usize], true);
     win.surface.show_page(page);
-    win.window.set_visible(true);
+    if let Some(h) = win.window.handle.hwnd() {
+        crate::ui::present(HWND(h as _), "settings", started);
+    } else {
+        win.window.set_visible(true);
+    }
     OPEN.store(hwnd_isize, Ordering::Release);
 
     let weak = Rc::downgrade(&win);

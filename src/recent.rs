@@ -29,11 +29,17 @@ struct Entry {
     /// RightType converted this word itself, so flipping it back teaches that
     /// the original was a real word.
     converted: bool,
+    /// What the word was before the current run of flips changed it, to put
+    /// back when a press finds nothing older to flip.
+    before: Option<String>,
 }
 
 impl Drop for Entry {
     fn drop(&mut self) {
         self.word.zeroize();
+        if let Some(before) = self.before.as_mut() {
+            before.zeroize();
+        }
     }
 }
 
@@ -59,6 +65,9 @@ pub struct FlipStep {
     /// Whether the word this step flipped was Thai before, and is now.
     pub was_thai: bool,
     pub now_thai: bool,
+    /// This step puts back every word the run of flips changed (the press
+    /// found nothing older to flip), rather than flipping one more.
+    pub reverts: bool,
 }
 
 impl Drop for FlipStep {
@@ -94,7 +103,7 @@ impl Recent {
 
     /// A word was completed by `boundary` and is now on screen before the caret.
     pub fn push(&mut self, word: &str, boundary: char, converted: bool) {
-        self.chain = 0;
+        self.end_chain();
         // Only words separated by single spaces form one run.
         if self.words.back().is_some_and(|e| e.boundary != ' ') {
             self.words.clear();
@@ -106,6 +115,7 @@ impl Recent {
             word: word.to_string(),
             boundary,
             converted,
+            before: None,
         });
     }
 
@@ -119,6 +129,13 @@ impl Recent {
     /// from the newest word.
     pub fn end_chain(&mut self) {
         self.chain = 0;
+        // What the words were before this run no longer matters: they are
+        // what the typist kept.
+        for entry in self.words.iter_mut() {
+            if let Some(mut before) = entry.before.take() {
+                before.zeroize();
+            }
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -137,7 +154,7 @@ impl Recent {
     pub fn next_step(&self, convert: impl Fn(&str) -> String) -> Option<FlipStep> {
         let k = self.chain + 1;
         if k > self.words.len() {
-            return None;
+            return self.revert_step();
         }
         let first = self.words.len() - k;
         let span = self.words.range(first..);
@@ -183,6 +200,44 @@ impl Recent {
             newest,
             was_thai,
             now_thai,
+            reverts: false,
+        })
+    }
+
+    /// Put back every word the current run of flips changed: the press after
+    /// the oldest word was flipped. `None` when nothing was flipped.
+    fn revert_step(&self) -> Option<FlipStep> {
+        if self.chain == 0 {
+            return None;
+        }
+        let first = self.words.len() - self.chain;
+        let last = self.words.len() - 1;
+        let mut restore = String::new();
+        let mut insert = String::new();
+        let mut backspaces = 0;
+        for (i, entry) in self.words.range(first..).enumerate() {
+            let original = entry.before.as_deref().unwrap_or(&entry.word);
+            restore.push_str(&entry.word);
+            restore.push(entry.boundary);
+            backspaces += entry.word.chars().count() + 1;
+            insert.push_str(original);
+            if first + i != last {
+                insert.push(entry.boundary);
+            }
+        }
+        let oldest = &self.words[first];
+        let newest = &self.words[last];
+        Some(FlipStep {
+            backspaces,
+            insert,
+            boundary: newest.boundary,
+            restore,
+            words: self.chain,
+            learn: None,
+            newest: newest.before.clone().unwrap_or_else(|| newest.word.clone()),
+            was_thai: is_thai(&oldest.word),
+            now_thai: is_thai(oldest.before.as_deref().unwrap_or(&oldest.word)),
+            reverts: true,
         })
     }
 
@@ -190,12 +245,28 @@ impl Recent {
     pub fn commit(&mut self, convert: impl Fn(&str) -> String) {
         let k = self.chain + 1;
         let Some(index) = self.words.len().checked_sub(k) else {
+            // The step put every flipped word back: the next press starts
+            // again from the newest word.
+            let first = self.words.len() - self.chain;
+            for entry in self.words.range_mut(first..) {
+                if let Some(before) = entry.before.take() {
+                    entry.word.zeroize();
+                    entry.word = before;
+                }
+            }
+            self.chain = 0;
             return;
         };
         let entry = &mut self.words[index];
-        let mut flipped = convert(&entry.word);
-        entry.word.zeroize();
-        entry.word = std::mem::take(&mut flipped);
+        let flipped = convert(&entry.word);
+        let old = std::mem::replace(&mut entry.word, flipped);
+        match entry.before {
+            Some(_) => {
+                let mut old = old;
+                old.zeroize();
+            }
+            None => entry.before = Some(old),
+        }
         // Flipped by the typist: it is theirs now.
         entry.converted = false;
         self.chain = k;
@@ -252,8 +323,34 @@ mod tests {
             .collect();
         assert_eq!(screen, format!("{} ", expected.join(" ")));
 
-        // Nothing older to flip.
-        assert!(recent.next_step(auto_convert).is_none());
+        // Nothing older to flip: the next press puts all three back.
+        let step = recent.next_step(auto_convert).unwrap();
+        assert!(step.reverts);
+        apply(&mut screen, &step);
+        assert_eq!(screen, "l;ylfu 8ib' ljdkIT ");
+    }
+
+    #[test]
+    fn pressing_again_with_nothing_older_puts_the_word_back() {
+        // Found in real use: `reload`, Shift+Backspace (พำสนฟก), and a
+        // second press said "nothing to flip" instead of bringing it back.
+        let (mut recent, mut screen) = typed(&["reload"]);
+        let step = recent.next_step(auto_convert).unwrap();
+        apply(&mut screen, &step);
+        recent.commit(auto_convert);
+        assert_eq!(screen, format!("{} ", auto_convert("reload")));
+
+        let step = recent.next_step(auto_convert).unwrap();
+        assert!(step.reverts);
+        assert_eq!(step.learn, None);
+        apply(&mut screen, &step);
+        recent.commit(auto_convert);
+        assert_eq!(screen, "reload ");
+
+        // And again flips it, like the first press.
+        let step = recent.next_step(auto_convert).unwrap();
+        assert!(!step.reverts);
+        assert_eq!(step.words, 1);
     }
 
     #[test]
@@ -305,6 +402,23 @@ mod tests {
         recent.end_chain();
         let step = recent.next_step(auto_convert).unwrap();
         assert_eq!(step.learn, None);
+    }
+
+    #[test]
+    fn another_key_ends_the_run_and_what_it_would_put_back() {
+        let (mut recent, _) = typed(&["reload"]);
+        let _ = recent.next_step(auto_convert).unwrap();
+        recent.commit(auto_convert);
+        recent.end_chain();
+        // A new run: flips the word as it is now (Thai), and the press after
+        // puts back that, not the `reload` of the run before.
+        let step = recent.next_step(auto_convert).unwrap();
+        assert!(!step.reverts);
+        assert_eq!(step.insert, "reload");
+        recent.commit(auto_convert);
+        let step = recent.next_step(auto_convert).unwrap();
+        assert!(step.reverts);
+        assert_eq!(step.insert, auto_convert("reload"));
     }
 
     #[test]

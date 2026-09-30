@@ -88,6 +88,8 @@ fn main() {
     // RAM hardening: exclude our heap from crash dumps, suppress the fault
     // dialog. Best-effort, before anything else touches secret-adjacent memory.
     unsafe { ram::harden_process() };
+    #[cfg(debug_assertions)]
+    hook::report_fatal_exceptions();
     // The clipboard "convert selection" worker runs off the hook thread.
     let _manual = manual::spawn();
     // Build the tray, install the hook, and run the message loop until Quit.

@@ -645,6 +645,14 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         let ours = kb.dwExtraInfo == INJECT_TAG
             || (externally_injected && !debug_e2e_accepts_injected())
             || INJECTING.load(Ordering::Relaxed);
+        if ours && wparam.0 as u32 == WM_KEYDOWN {
+            e2e_trace(format!(
+                "key vk={:#x} skipped (tag={} injecting={})",
+                kb.vkCode,
+                kb.dwExtraInfo == INJECT_TAG,
+                INJECTING.load(Ordering::Relaxed)
+            ));
+        }
         if !ours && process(wparam.0 as u32, kb) {
             // We handled this key as a hotkey/correction; swallow it.
             return LRESULT(1);
@@ -678,6 +686,54 @@ pub(crate) fn e2e_trace(msg: String) {
 
 #[cfg(not(debug_assertions))]
 pub(crate) fn e2e_trace(_: String) {}
+
+/// Debug e2e builds: report a fatal exception (code, address and the
+/// faulting thread's stack) to stderr before Windows ends the process, which
+/// otherwise dies with only an exit code (`0xC000041D` when it happens
+/// inside a callback Windows made into us). First-chance, so some reported
+/// access violations may be ones a system DLL catches itself; the last
+/// report before the process ends is the one that killed it.
+#[cfg(debug_assertions)]
+pub fn report_fatal_exceptions() {
+    use windows::Win32::System::Diagnostics::Debug::{
+        AddVectoredExceptionHandler, EXCEPTION_POINTERS,
+    };
+    unsafe extern "system" fn on_exception(info: *mut EXCEPTION_POINTERS) -> i32 {
+        static REPORTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
+        let Some(record) = info.as_ref().and_then(|i| i.ExceptionRecord.as_ref()) else {
+            return EXCEPTION_CONTINUE_SEARCH;
+        };
+        let code = record.ExceptionCode.0 as u32;
+        let fatal = matches!(
+            code,
+            0xC000_0005 // access violation
+                | 0xC000_001D // illegal instruction
+                | 0xC000_0096 // privileged instruction
+                | 0xC000_0374 // heap corruption
+                | 0xC000_0409 // stack buffer overrun / fail fast
+                | 0xC000_00FD // stack overflow
+        );
+        if !fatal || REPORTS.fetch_add(1, Ordering::Relaxed) >= 5 {
+            return EXCEPTION_CONTINUE_SEARCH;
+        }
+        eprintln!(
+            "[rt-e2e] EXCEPTION {code:#010x} at {:?} (info {:x?})",
+            record.ExceptionAddress,
+            &record.ExceptionInformation[..record.NumberParameters.min(3) as usize]
+        );
+        // Too little stack left to walk it after an overflow.
+        if code != 0xC000_00FD {
+            eprintln!("{}", std::backtrace::Backtrace::force_capture());
+        }
+        EXCEPTION_CONTINUE_SEARCH
+    }
+    if debug_e2e_accepts_injected() {
+        unsafe {
+            AddVectoredExceptionHandler(1, Some(on_exception));
+        }
+    }
+}
 
 fn is_modifier(vk: u16) -> bool {
     matches!(
@@ -736,6 +792,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     if !down {
         return false;
     }
+    e2e_trace(format!("key vk={vk:#x} repeat={repeat}"));
     if capture_key(vk) {
         return true;
     }
@@ -829,6 +886,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // Master switch: when disabled, pass everything through untouched.
     if !ENABLED.load(Ordering::Relaxed) {
+        e2e_trace("key passed through: disabled".to_string());
         return false;
     }
 
@@ -882,12 +940,19 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         || safety::is_password_field()
         || crate::focus::is_password_field()
     {
+        e2e_trace(format!(
+            "key passed through: sensitive_app={} native_password={} uia_protected={}",
+            STATE.with(|s| s.borrow().sensitive_app),
+            safety::is_password_field(),
+            crate::focus::is_password_field()
+        ));
         STATE.with(|s| s.borrow_mut().suggestion = None);
         return false;
     }
     // Switched off in this app (its per-app mode): touch nothing, like a
     // blocked app, but the hotkeys above (on/off, mode cycle) still work.
     let Some(mode_now) = mode_here() else {
+        e2e_trace("key passed through: off in this app".to_string());
         STATE.with(|s| {
             let mut st = s.borrow_mut();
             st.buf.clear();
@@ -964,6 +1029,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             // The typist rejected our reading mid-word. Leave the rest of this
             // token alone, and learn it once it is complete.
             STATE.with(|s| s.borrow_mut().mark = TokenMark::Decided { learn: true });
+            crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
             return true;
         }
         convert_last_word();
@@ -971,6 +1037,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
 
     let Some(key) = classify(vk, kb.scanCode as u16) else {
+        e2e_trace(format!("key vk={vk:#x} not classified"));
         // Something we cannot follow (a dead key, a function key): the text
         // before the caret may not be what we recorded. A modifier pressed on
         // its own types nothing — and Shift is how Shift+Backspace starts, so
@@ -1049,10 +1116,24 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     };
     let mark = STATE.with(|s| std::mem::replace(&mut s.borrow_mut().mark, TokenMark::Plain));
 
-    // A boundary ends a run we own. Its reading has already been applied to the
-    // screen, so the boundary path must not correct it a second time — its
-    // backspace count assumes the screen still holds the raw keystrokes.
+    // A boundary ends a run we own. If its reading cannot end as Thai and
+    // the keys were all letters, they go back to what was typed and the word
+    // is judged like any other below (see `policy::goes_back_to_keys`).
+    let back = STATE.with(|s| {
+        s.borrow()
+            .owned
+            .as_ref()
+            .is_some_and(|o| policy::goes_back_to_keys(&word, &o.rendered))
+    });
+    if back {
+        e2e_trace(format!("boundary: {word:?} cannot end as Thai, withdrawn"));
+        withdraw_owned_run_to(&word);
+    }
+    // Otherwise its reading has already been applied to the screen, so the
+    // boundary path must not correct it a second time — its backspace count
+    // assumes the screen still holds the raw keystrokes.
     if let Some(mut rendered) = anchor_owned_run(&word, vk) {
+        e2e_trace("boundary: owned run anchored".to_string());
         remember_completed(&rendered, vk, true);
         rendered.zeroize();
         word.zeroize();
@@ -1493,6 +1574,8 @@ fn has_thai(text: &str) -> bool {
 unsafe fn flip_back_recent() {
     let Some(step) = STATE.with(|s| s.borrow().recent.next_step(auto_convert)) else {
         e2e_trace("flip back: no recent word".to_string());
+        // Say so: a press that does nothing looks like one that failed.
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastNothingToFlip));
         return;
     };
     if step.insert.chars().count() + 1 == step.backspaces
@@ -1526,11 +1609,22 @@ unsafe fn flip_back_recent() {
     }
     habit_correction(step.was_thai, step.now_thai);
     activate_layout(layout_of(&step.newest));
-    if step.words > 1 {
+    // Every press says how far back it reached, so the next press is never
+    // a guess.
+    let more = STATE.with(|s| s.borrow().recent.len()) > step.words;
+    if step.reverts {
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
+    } else if step.words > 1 {
         crate::overlay::show(&righttype::i18n::trf(
             righttype::i18n::T::ToastFlippedWords,
             &[("n", &step.words.to_string())],
         ));
+    } else {
+        crate::overlay::show(righttype::i18n::tr(if more {
+            righttype::i18n::T::ToastFlippedOneMore
+        } else {
+            righttype::i18n::T::ToastFlippedOneBack
+        }));
     }
 }
 
@@ -1567,6 +1661,7 @@ unsafe fn convert_last_word() {
         });
         set_undo(converted.chars().count(), &word, UndoKind::Manual);
         crate::stats::record_manual();
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastFlippedOne));
 
         // Switch language layout to the one of the converted word
         let to_thai = converted
@@ -1585,11 +1680,16 @@ unsafe fn convert_last_word() {
 /// Put the raw keystrokes back and stop owning the run. Returns `true` if we
 /// were owning anything (and therefore handled the key).
 unsafe fn withdraw_owned_run() -> bool {
+    let run = STATE.with(|s| s.borrow().buf.current().to_string());
+    withdraw_owned_run_to(&run)
+}
+
+/// Put `run` (the keys as typed) back in place of the run we own.
+unsafe fn withdraw_owned_run_to(run: &str) -> bool {
     let Some(owned) = STATE.with(|s| s.borrow_mut().owned.take()) else {
         return false;
     };
-    let run = STATE.with(|s| s.borrow().buf.current().to_string());
-    let delta = render::delta(&owned.rendered, &run);
+    let delta = render::delta(&owned.rendered, run);
     if !delta.is_empty() && !inject::apply(delta.backspaces, &delta.insert, None) {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
     }

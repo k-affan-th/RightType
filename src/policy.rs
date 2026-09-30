@@ -156,7 +156,9 @@ pub fn detect_token(
             if !has_latin || has_thai || english::is_compound(token.trim()) {
                 return None;
             }
-            detect::detect(token, en, th).or_else(|| us_layout_thai_with_punctuation(token, en, th))
+            detect::detect(token, en, th)
+                .or_else(|| us_layout_thai_with_punctuation(token, en, th))
+                .filter(|d| !only_short_thai_words(&d.corrected, th))
         }
         InputLayout::ThaiKedmanee => {
             if !has_thai || has_latin {
@@ -384,7 +386,8 @@ fn thai_layout_compound(token: &str, th: &Dictionary) -> Option<Detection> {
 /// The typist started it on the English layout, though, and only now is the
 /// whole token visible. If its keystrokes spell English — a dictionary word, a
 /// learned word or a compound — the early reading was wrong and the *whole*
-/// token goes back, not just the part typed after the anchor.
+/// token goes back, not just the part typed after the anchor. So does a
+/// token that cannot end as Thai ([`is_unfinished_thai`]).
 pub fn revise_converted(token: &str, en: &Dictionary) -> Option<Detection> {
     let raw = th_to_en(token.trim());
     // Trailing sentence punctuation may follow a word (`middleware,`), but on
@@ -394,7 +397,7 @@ pub fn revise_converted(token: &str, en: &Dictionary) -> Option<Detection> {
     if raw.len() - core.len() > 2
         || core.chars().count() < 3
         || !core.chars().all(|c| c.is_ascii_alphabetic())
-        || !english::is_word(core, en)
+        || !(english::is_word(core, en) || is_unfinished_thai(token.trim()))
     {
         return None;
     }
@@ -470,6 +473,20 @@ pub fn live_decision(
     LiveDecision::Commit
 }
 
+/// Is `thai` nothing but three or more known words of one or two letters?
+///
+/// Thai has many such words (พำ, สน, ฟ, อ, ร, …), so almost any English
+/// letters read as a chain of them for a while: `reavi` is พำ + ฟ + อ + ร.
+/// That alone is too little evidence to rewrite a word, mid-way or at its
+/// boundary. Measured on 20,000 unknown
+/// English and 20,000 unknown Thai words (`examples/live_thai_study.rs`):
+/// English wrongly turned Thai drops from 246 to 170, Thai kept from 5,502
+/// to 5,501.
+pub fn only_short_thai_words(thai: &str, th: &Dictionary) -> bool {
+    let segs = segment::segment(thai, th);
+    segs.len() >= 3 && segs.iter().all(|s| s.known && s.text.chars().count() <= 2)
+}
+
 /// How an in-flight run should currently read on screen (D-008).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reading {
@@ -496,6 +513,33 @@ pub enum Reading {
 /// The asymmetry is the point: entering the Thai reading is hard, staying in it
 /// is easy, and leaving it is cheap and automatic. That is what lets a run be
 /// re-decided instead of committed.
+/// Thai that cannot be the end of a word: it ends in a leading vowel
+/// (เ แ โ ใ ไ) or in a vowel that must be followed by a consonant (ั ึ ื),
+/// tone marks aside.
+///
+/// While a word is typed its Thai reading only has to be a viable start of
+/// Thai, so an English word RightType does not know can pass for Thai until
+/// its last keys: `relogi` reads as three known Thai words (พำ + สน + เร),
+/// and `relogin` then ends in a bare ื (พำสนเรื). At the boundary such a
+/// reading goes back to the keys as typed. A Thai word that merely is not in
+/// the dictionary (a name, a typo) is still well formed and stays Thai.
+pub fn is_unfinished_thai(text: &str) -> bool {
+    let core = text.trim_end_matches(|c| ('\u{0E48}'..='\u{0E4B}').contains(&c));
+    matches!(
+        core.chars().last(),
+        Some('เ' | 'แ' | 'โ' | 'ใ' | 'ไ' | '\u{0E31}' | '\u{0E36}' | '\u{0E37}')
+    )
+}
+
+/// At a boundary: whether a run shown as Thai while it was typed goes back to
+/// the keys. Only when its reading cannot end as Thai
+/// ([`is_unfinished_thai`]) and every key was a letter, as in an English word
+/// (Thai typed on the English layout nearly always uses punctuation keys too,
+/// which carry ง ว น บ ล ใ ม ฝ ฃ).
+pub fn goes_back_to_keys(keys: &str, reading: &str) -> bool {
+    is_unfinished_thai(reading) && keys.chars().all(|c| c.is_ascii_alphabetic())
+}
+
 pub fn live_reading(run: &str, holding_thai: bool, en: &Dictionary, th: &Dictionary) -> Reading {
     if run.is_empty() {
         return Reading::AsTyped;
@@ -539,6 +583,25 @@ mod tests {
             Dictionary::from_words(["correct", "hello"]),
             Dictionary::from_words(["สวัสดี"]),
         )
+    }
+
+    #[test]
+    fn thai_that_cannot_end_a_word() {
+        // A bare ื, ึ or ั, or a leading vowel, cannot close a word.
+        assert!(is_unfinished_thai("พำสนเรื"));
+        assert!(is_unfinished_thai("กั"));
+        assert!(is_unfinished_thai("ขึ้"));
+        assert!(is_unfinished_thai("สวัสดีเ"));
+        // Well-formed words, known or not, can.
+        for word in ["สวัสดี", "เรือ", "ก็", "จันทร์", "ทำ", "ศุภวิชญ์"]
+        {
+            assert!(!is_unfinished_thai(word), "{word}");
+        }
+        // Only when every key was a letter: Thai typed on the English layout
+        // usually needs punctuation keys too.
+        assert!(goes_back_to_keys("relogin", "พำสนเรื"));
+        assert!(!goes_back_to_keys("l;ylf", "สวัสด"));
+        assert!(!goes_back_to_keys("relogin", "พำสนเรือ"));
     }
 
     #[test]

@@ -80,6 +80,14 @@ jobs:
     - uses: actions/checkout@v4
     - name: Build (debug, accepts the test's injected keys)
       run: cargo build --features winos
+    # For diagnosing on a real PC: this build writes what it sees to stderr
+    # when RIGHTTYPE_E2E_ACCEPT_INJECTED is set.
+    - name: Upload diagnostic build
+      uses: actions/upload-artifact@v4
+      with:
+        name: righttype-diagnostic-${{ github.sha }}
+        path: target/debug/righttype.exe
+        retention-days: 7
     - name: Add the Thai keyboard
       shell: pwsh
       run: |
@@ -87,6 +95,14 @@ jobs:
         $list.Add("th-TH")
         Set-WinUserLanguageList $list -Force
         Get-WinUserLanguageList | Format-Table LanguageTag, InputMethodTips
+    # Windows 11's Notepad (a Store app; the runner only has the classic
+    # one). Best effort: without it the notepad11 target is skipped.
+    - name: Windows 11 Notepad
+      continue-on-error: true
+      shell: pwsh
+      run: |
+        winget install --id 9MSMLRH6LZF3 --source msstore --accept-package-agreements --accept-source-agreements --silent --disable-interactivity
+        Get-AppxPackage *WindowsNotepad* | Format-Table Name, Version
     - uses: actions/setup-python@v5
       with:
         python-version: "3.12"

@@ -1,6 +1,6 @@
 [package]
 name = "righttype"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2021"
 rust-version = "1.75"
 description = "Fix wrong-keyboard-layout Thai/English typing — a modern, safe Rust successor to RightLang"
@@ -75,6 +75,7 @@ features = [
     "Win32_System_SystemInformation",
     "Win32_System_RemoteDesktop",
     "Win32_System_Diagnostics_Debug",
+    "Win32_System_Kernel",
     "Win32_Security",
 ]
 
