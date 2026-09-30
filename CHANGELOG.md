@@ -44,6 +44,8 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Changed
 
+- **A `CAPS` tag at the text cursor** when CapsLock is switched on (with
+  the TH/EN tags on), before a sentence comes out in capitals.
 - **CapsLock left on by accident is put right** (Auto): `hELLO` — Shift
   on the first letter, so capitals were not meant — becomes `Hello`, and a
   Thai word typed on the Thai layout with CapsLock on (every key comes out

@@ -1029,6 +1029,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // A word is kept as if CapsLock were off and shown with its state,
         // so one typed across a toggle is left alone.
         if vk == VK_CAPITAL.0 {
+            // Turning it on: say so where the eyes are, before a sentence
+            // comes out in capitals (the state flips after this key).
+            if !caps_on() && crate::caret::is_enabled() {
+                crate::overlay::badge_at_caret("CAPS");
+            }
             STATE.with(|s| {
                 let mut st = s.borrow_mut();
                 st.buf.clear();
