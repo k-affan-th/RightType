@@ -1612,7 +1612,9 @@ unsafe fn flip_back_recent() {
     // Every press says how far back it reached, so the next press is never
     // a guess.
     let more = STATE.with(|s| s.borrow().recent.len()) > step.words;
-    if step.words > 1 {
+    if step.reverts {
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
+    } else if step.words > 1 {
         crate::overlay::show(&righttype::i18n::trf(
             righttype::i18n::T::ToastFlippedWords,
             &[("n", &step.words.to_string())],
@@ -1621,7 +1623,7 @@ unsafe fn flip_back_recent() {
         crate::overlay::show(righttype::i18n::tr(if more {
             righttype::i18n::T::ToastFlippedOneMore
         } else {
-            righttype::i18n::T::ToastFlippedOne
+            righttype::i18n::T::ToastFlippedOneBack
         }));
     }
 }

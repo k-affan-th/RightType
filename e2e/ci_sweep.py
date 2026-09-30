@@ -372,6 +372,9 @@ def sweep(t):
     run(t, "Shift+Backspace flips EN to TH", "ok", "นา", then=[flip])
     run(t, "Shift+Backspace undoes an automatic fix", "correct ", "แนพพำแะ",
         layout=HKL_TH, then=[flip])
+    # Pressed once too often: with no older word to reach, the next press
+    # puts the word back (it used to say "nothing to flip").
+    run(t, "Shift+Backspace twice puts the word back", "reload ", "reload", then=[flip, flip])
     selection_leaves_clipboard_alone(t)
 
 

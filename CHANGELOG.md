@@ -20,6 +20,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   here" when the cursor moved and RightType no longer knows the text before
   it (a press that did nothing used to look like one that failed). What is
   kept for this, and what each press does, is in `docs/UNDO.md`.
+- **Shift+Backspace pressed once too often puts things back**: after the
+  oldest word was flipped (or the only one — `reload` → `พำสนฟก`), the next
+  press restores every word the run changed, instead of saying there is
+  nothing to flip.
 
 ### Fixed
 

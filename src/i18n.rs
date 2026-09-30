@@ -123,6 +123,7 @@ texts! {
     ToastUndo => "Undone", "ย้อนกลับแล้ว";
     ToastFlippedWords => "Flipped back {n} words", "แก้ย้อน {n} คำแล้ว";
     ToastFlippedOne => "Flipped 1 word", "แก้ 1 คำแล้ว";
+    ToastFlippedOneBack => "Flipped 1 word · again to put it back", "แก้ 1 คำแล้ว · กดอีกครั้งเพื่อคืนค่าเดิม";
     ToastFlippedOneMore => "Flipped 1 word · again for the one before", "แก้ 1 คำแล้ว · กดอีกครั้งแก้คำก่อนหน้า";
     ToastNothingToFlip => "Nothing to flip here (the cursor moved, or no more words)", "ไม่มีคำให้แก้ตรงนี้ (เคอร์เซอร์ย้ายแล้ว หรือไม่มีคำก่อนหน้า)";
     ToastPaused => "Paused for {n} minutes", "หยุดชั่วคราว {n} นาที";
