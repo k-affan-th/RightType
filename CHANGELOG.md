@@ -15,6 +15,12 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Changed
 
+- **Thai typed with CapsLock left on is still fixed**: the English layout
+  shows `L;YLFU`, but the keys are the ones for สวัสดี, and RightType now
+  reads them that way. English typed with CapsLock on stays as it is
+  (`HELLO`), and anything RightType puts back as typed — Shift+Backspace,
+  undo, a word that goes back at the space — comes back in capitals as it
+  was shown. Pressing CapsLock mid-word leaves that word alone.
 - **English words with a prefix or suffix stay English**: a known word with
   `re`, `un`, `pre`, `dis`, `multi` … in front or `ing`, `ed`, `ness`,
   `able`, `s` … behind (`rerise`, `resit`, `multiholes`) is no longer

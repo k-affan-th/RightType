@@ -65,6 +65,8 @@ pub struct Engine<'d> {
     /// The focused text box.
     pub screen: String,
     pub counters: Counters,
+    /// CapsLock is on: letters on the English layout show in the other case.
+    pub caps: bool,
 }
 
 impl<'d> Engine<'d> {
@@ -80,6 +82,7 @@ impl<'d> Engine<'d> {
             seed: SeedTracker::new(),
             screen: String::new(),
             counters: Counters::default(),
+            caps: false,
         }
     }
 
@@ -105,6 +108,14 @@ impl<'d> Engine<'d> {
     /// (upper case and symbols mean Shift is held).
     pub fn key(&mut self, key: char) {
         let produced = match self.layout {
+            // CapsLock swaps the case of letters on the English layout.
+            InputLayout::UsQwerty if self.caps && key.is_ascii_alphabetic() => {
+                if key.is_ascii_uppercase() {
+                    key.to_ascii_lowercase()
+                } else {
+                    key.to_ascii_uppercase()
+                }
+            }
             InputLayout::UsQwerty => key,
             InputLayout::ThaiKedmanee => en_to_th(&key.to_string()).chars().next().unwrap_or(key),
         };
@@ -112,7 +123,12 @@ impl<'d> Engine<'d> {
             self.screen.push(produced);
             return;
         }
-        self.buf.observe(Key::Char(produced));
+        // The hook keeps the key as if CapsLock were off: what was meant.
+        let meant = match self.layout {
+            InputLayout::UsQwerty => key,
+            InputLayout::ThaiKedmanee => produced,
+        };
+        self.buf.observe(Key::Char(meant));
         if self.mark == Mark::Plain && self.layout == InputLayout::UsQwerty && self.reconcile_run()
         {
             return;
@@ -121,6 +137,18 @@ impl<'d> Engine<'d> {
             self.mark = Mark::Plain;
         }
         self.screen.push(produced);
+    }
+
+    /// CapsLock pressed on its own: the hook drops the word in progress (it
+    /// keeps words as if CapsLock were off, so one typed across a toggle is
+    /// left alone).
+    pub fn toggle_caps(&mut self) {
+        if self.enabled {
+            self.buf.clear();
+            self.owned = None;
+            self.mark = Mark::Plain;
+        }
+        self.caps = !self.caps;
     }
 
     /// Backspace.
@@ -185,6 +213,9 @@ impl<'d> Engine<'d> {
         if self.seed.observe_candidate(&word, corrected) {
             detection = None;
         }
+        if let Some(d) = detection.as_mut() {
+            d.corrected = policy::shown_with_caps(&d.corrected, self.caps);
+        }
         match detection {
             Some(d) => {
                 // Every character of the token reached the app; the boundary
@@ -229,7 +260,7 @@ impl<'d> Engine<'d> {
             reading = Reading::AsTyped;
         }
         let target = match &reading {
-            Reading::AsTyped => run.clone(),
+            Reading::AsTyped => policy::shown_with_caps(&run, self.caps),
             Reading::Thai(thai) => thai.clone(),
         };
         // The hook's model of the screen: what it rendered, or — before it
@@ -289,7 +320,8 @@ impl<'d> Engine<'d> {
         let Some(owned) = self.owned.take() else {
             return;
         };
-        let delta = render::delta(&owned.rendered, run);
+        let shown = policy::shown_with_caps(run, self.caps);
+        let delta = render::delta(&owned.rendered, &shown);
         for _ in 0..delta.backspaces {
             self.screen.pop();
         }
@@ -370,6 +402,48 @@ mod tests {
     fn everyday_computer_words_stay_english() {
         assert_eq!(type_blind("relogin ", InputLayout::UsQwerty), "relogin ");
         assert_eq!(type_blind("logout ", InputLayout::UsQwerty), "logout ");
+    }
+
+    /// Keys typed with CapsLock on (the keys named as on US QWERTY; upper
+    /// case still means Shift).
+    fn type_with_caps(keys: &str) -> String {
+        let mut e = Engine::new(dict::english(), dict::thai(), InputLayout::UsQwerty);
+        e.caps = true;
+        for c in keys.chars() {
+            if c == ' ' {
+                e.boundary(c);
+            } else {
+                e.key(c);
+            }
+        }
+        e.screen
+    }
+
+    #[test]
+    fn thai_typed_with_capslock_on_arrives_as_thai() {
+        // CapsLock left on: the English layout shows `L;YLFU`, but the keys
+        // are the ones for สวัสดี.
+        assert_eq!(type_with_caps("l;ylfu "), "สวัสดี ");
+        assert_eq!(type_with_caps("l;ylfu8iy[ "), "สวัสดีครับ ");
+        assert_eq!(type_with_caps("giupo "), "เรียน ");
+    }
+
+    #[test]
+    fn english_typed_with_capslock_on_stays_as_shown() {
+        assert_eq!(type_with_caps("hello world "), "HELLO WORLD ");
+        assert_eq!(type_with_caps("select from "), "SELECT FROM ");
+        // Converted mid-word, then put back at the space: the keys come back
+        // as they were shown.
+        let en = crate::dict::Dictionary::from_words(["log"]);
+        let th = crate::dict::Dictionary::from_words(["พำ", "สน", "เร", "เรือ"]);
+        let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
+        e.caps = true;
+        for c in "relogin".chars() {
+            e.key(c);
+        }
+        assert_eq!(e.screen, "พำสนเรื");
+        e.boundary(' ');
+        assert_eq!(e.screen, "RELOGIN ");
     }
 
     #[test]

@@ -382,6 +382,25 @@ fn thai_layout_compound(token: &str, th: &Dictionary) -> Option<Detection> {
     })
 }
 
+/// `keys` as the English layout shows them with CapsLock on: letters in the
+/// other case. RightType keeps the keys as if CapsLock were off, so a Thai
+/// word typed with CapsLock left on still reads as Thai; text it puts back
+/// "as typed" is shown this way.
+pub fn shown_with_caps(keys: &str, caps: bool) -> String {
+    if !caps {
+        return keys.to_string();
+    }
+    keys.chars()
+        .map(|c| {
+            if c.is_ascii_uppercase() {
+                c.to_ascii_lowercase()
+            } else {
+                c.to_ascii_uppercase()
+            }
+        })
+        .collect()
+}
+
 /// The boundary decision for a token RightType itself converted to Thai while
 /// it was being typed (D-009).
 ///

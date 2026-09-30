@@ -1017,7 +1017,15 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             return true;
         }
         // CapsLock alone (or a chord that is not a hotkey) is a normal toggle.
+        // A word is kept as if CapsLock were off and shown with its state,
+        // so one typed across a toggle is left alone.
         if vk == VK_CAPITAL.0 {
+            STATE.with(|s| {
+                let mut st = s.borrow_mut();
+                st.buf.clear();
+                st.owned = None;
+                st.mark = TokenMark::Plain;
+            });
             return false;
         }
     }
@@ -1186,7 +1194,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         if learn && !seed_run {
             crate::learn::learn_now(&word);
         }
-        remember_completed(&word, vk, false);
+        remember_as_shown(&word, vk, false);
         word.zeroize();
         return false;
     }
@@ -1237,6 +1245,10 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         detection = None;
         forget_recent_text();
     }
+    // English put in place of the word is shown as CapsLock shows it.
+    if let Some(d) = detection.as_mut() {
+        d.corrected = policy::shown_with_caps(&d.corrected, caps_on());
+    }
 
     // Learning sees only ordinary US-QWERTY input for which the production
     // policy found no wrong-layout candidate. This keeps converted candidates
@@ -1280,7 +1292,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         _ => false,
     };
     if !swallow {
-        remember_completed(&word, vk, converted);
+        remember_as_shown(&word, vk, converted);
     }
     word.zeroize();
     swallow
@@ -1341,6 +1353,14 @@ fn forget_recent_text() {
 
 /// Keep the word a boundary just completed (as it is on screen), for
 /// Shift+Backspace right after it.
+/// [`remember_completed`] for a word the app shows as typed: with CapsLock
+/// on, its letters are in the other case from the keys kept for it.
+unsafe fn remember_as_shown(word: &str, boundary_vk: u16, converted: bool) {
+    let mut shown = policy::shown_with_caps(word, caps_on());
+    remember_completed(&shown, boundary_vk, converted);
+    shown.zeroize();
+}
+
 fn remember_completed(word: &str, boundary_vk: u16, converted: bool) {
     let exe = STATE.with(|s| {
         let mut st = s.borrow_mut();
@@ -1627,7 +1647,7 @@ fn has_thai(text: &str) -> bool {
 /// words back to the other layout (see [`Recent`]). The whole span from that
 /// word to the caret is retyped in one injection, and it is one Undo step.
 unsafe fn flip_back_recent() {
-    let Some(step) = STATE.with(|s| s.borrow().recent.next_step(auto_convert)) else {
+    let Some(step) = STATE.with(|s| s.borrow().recent.next_step(convert_shown)) else {
         e2e_trace("flip back: no recent word".to_string());
         diag::note("Shift+Backspace: nothing to flip", &[]);
         // Say so: a press that does nothing looks like one that failed.
@@ -1639,7 +1659,7 @@ unsafe fn flip_back_recent() {
     {
         // Nothing changes on screen (a number, say): just move on to the
         // word before it on the next press.
-        STATE.with(|s| s.borrow_mut().recent.commit(auto_convert));
+        STATE.with(|s| s.borrow_mut().recent.commit(convert_shown));
         return;
     }
     if !inject::apply(
@@ -1651,7 +1671,7 @@ unsafe fn flip_back_recent() {
         STATE.with(|s| s.borrow_mut().recent.clear());
         return;
     }
-    STATE.with(|s| s.borrow_mut().recent.commit(auto_convert));
+    STATE.with(|s| s.borrow_mut().recent.commit(convert_shown));
     set_undo(
         step.insert.chars().count() + 1,
         &step.restore,
@@ -1684,6 +1704,16 @@ unsafe fn flip_back_recent() {
     }
 }
 
+/// Flip a word as the app shows it. With CapsLock on, English on screen is in
+/// the other case from its keys (`L;YLFU` is สวัสดี), and English put back
+/// is shown that way too. CapsLock clears the recent words, so its state now
+/// is the one they were typed with.
+fn convert_shown(word: &str) -> String {
+    let caps = unsafe { caps_on() };
+    let keys = policy::shown_with_caps(word, caps);
+    policy::shown_with_caps(&auto_convert(&keys), caps)
+}
+
 /// Manual: flip the layout of the word currently in the buffer, in place. A no-op
 /// when the buffer is empty (e.g. an auto-repeat after the word was already
 /// converted) — the caller swallows the key either way.
@@ -1697,10 +1727,15 @@ unsafe fn convert_last_word() {
     }
 
     let backspaces = word.chars().count();
+    // The buffer keeps the keys as if CapsLock were off; the app shows them
+    // with it.
     let mut converted = auto_convert(&word);
     let changed = converted != word;
     if changed {
-        if !inject::apply(backspaces, &converted, None) {
+        let mut shown = policy::shown_with_caps(&converted, caps_on());
+        let injected = inject::apply(backspaces, &shown, None);
+        shown.zeroize();
+        if !injected {
             crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
             word.zeroize();
             converted.zeroize();
@@ -1715,7 +1750,9 @@ unsafe fn convert_last_word() {
             st.buf.replace(&converted);
             st.mark = TokenMark::Decided { learn };
         });
-        set_undo(converted.chars().count(), &word, UndoKind::Manual);
+        let mut shown = policy::shown_with_caps(&word, caps_on());
+        set_undo(converted.chars().count(), &shown, UndoKind::Manual);
+        shown.zeroize();
         crate::stats::record_manual();
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastFlippedOne));
 
@@ -1745,7 +1782,8 @@ unsafe fn withdraw_owned_run_to(run: &str) -> bool {
     let Some(owned) = STATE.with(|s| s.borrow_mut().owned.take()) else {
         return false;
     };
-    let delta = render::delta(&owned.rendered, run);
+    let shown = policy::shown_with_caps(run, caps_on());
+    let delta = render::delta(&owned.rendered, &shown);
     if !delta.is_empty() && !inject::apply(delta.backspaces, &delta.insert, None) {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
     }
@@ -1761,7 +1799,11 @@ unsafe fn withdraw_owned_run_to(run: &str) -> bool {
 /// last rendered character and leave the first one behind.
 unsafe fn anchor_owned_run(run: &str, boundary_vk: u16) -> Option<String> {
     let owned = STATE.with(|s| s.borrow_mut().owned.take())?;
-    let mut restore = format!("{run}{}", boundary_literal(boundary_vk));
+    let mut restore = format!(
+        "{}{}",
+        policy::shown_with_caps(run, caps_on()),
+        boundary_literal(boundary_vk)
+    );
     set_undo(
         owned.rendered.chars().count() + 1,
         &restore,
@@ -1842,7 +1884,7 @@ where
     }
 
     let target = match &reading {
-        policy::Reading::AsTyped => run.clone(),
+        policy::Reading::AsTyped => policy::shown_with_caps(&run, caps_on()),
         policy::Reading::Thai(thai) => thai.clone(),
     };
 
@@ -1898,7 +1940,9 @@ where
                 // keystrokes that follow extend it, so the boundary still sees
                 // the whole word. Clearing it here is what used to leave
                 // `กรดดำrent`: the boundary judged only the tail.
-                set_undo(target.chars().count(), &run, UndoKind::AutoMidToken);
+                let mut shown = policy::shown_with_caps(&run, caps_on());
+                set_undo(target.chars().count(), &shown, UndoKind::AutoMidToken);
+                shown.zeroize();
                 crate::stats::record_auto();
                 STATE.with(|s| {
                     let mut st = s.borrow_mut();
@@ -1950,10 +1994,13 @@ where
 
     // Undo target: retype the original word plus the boundary it would have
     // gotten anyway (the boundary keystroke itself never reached the app).
+    // With CapsLock on the app showed the keys in the other case.
+    let mut shown = policy::shown_with_caps(word, caps_on());
     let mut restore = match boundary_vk {
-        Some(vk) => format!("{word}{}", boundary_literal(vk)),
-        None => word.to_string(),
+        Some(vk) => format!("{shown}{}", boundary_literal(vk)),
+        None => shown.clone(),
     };
+    shown.zeroize();
     set_undo(
         corrected.chars().count() + usize::from(boundary_vk.is_some()),
         &restore,
@@ -2013,15 +2060,15 @@ unsafe fn classify(vk: u16, scan: u16) -> Option<Key> {
     translate(vk, scan).map(Key::Char)
 }
 
-/// Reproduce the character the keystroke produced, using the foreground layout
-/// and the live Shift/Caps state.
+/// The character the keystroke means, using the foreground layout and the
+/// live Shift state — as if CapsLock were off. With CapsLock left on the
+/// English layout shows `L;YLFU`, but the keys are the ones for สวัสดี; text
+/// put back "as typed" is shown with CapsLock again
+/// ([`policy::shown_with_caps`]).
 unsafe fn translate(vk: u16, scan: u16) -> Option<char> {
     let mut state = [0u8; 256];
     if is_down(VK_SHIFT) {
         state[VK_SHIFT.0 as usize] = 0x80;
-    }
-    if caps_on() {
-        state[VK_CAPITAL.0 as usize] = 0x01;
     }
 
     let hkl = effective_layout();

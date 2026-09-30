@@ -60,6 +60,48 @@ os.environ["RIGHTTYPE_E2E_REPORT"] = str(PROBLEM_REPORT)
 flip = lambda: tap(BACK, SHIFT)  # noqa: E731
 
 
+def set_capslock(on):
+    if bool(user32.GetKeyState(fs.CAPS) & 1) != on:
+        tap(fs.CAPS)
+        time.sleep(0.3)
+
+
+def capslock_left_on(t):
+    """CapsLock left on: the English layout shows L;YLFU for the keys of
+    สวัสดี. RightType keeps the keys as if it were off."""
+    for name, keys, expect in [
+        ("Thai typed with CapsLock on", "l;ylfu ", "สวัสดี"),
+        ("English typed with CapsLock on stays", "hello world ", "HELLO WORLD"),
+    ]:
+        t.clear()
+        t.layout(HKL_EN)
+        set_capslock(True)
+        try:
+            fs.type_keys(keys)
+            time.sleep(0.8)
+            fs.check(t.name, name, t.read(), expect)
+        finally:
+            set_capslock(False)
+
+
+def thai_capslock_probe():
+    """What the Thai Kedmanee layout types with CapsLock on (printed, not
+    judged): whether CapsLock changes Thai letters decides what a word typed
+    on the Thai layout with CapsLock on looks like."""
+    state = (ctypes.c_ubyte * 256)()
+    out = ctypes.create_unicode_buffer(8)
+    rows = []
+    for caps in (0, 1):
+        state[fs.CAPS] = caps
+        chars = ""
+        for key in "l;ylfu":
+            vk = ord(key.upper()) if key.isalpha() else fs.PUNCT[key]
+            n = user32.ToUnicodeEx(vk, 0, state, out, 8, 0, ctypes.c_void_p(HKL_TH))
+            chars += out.value[:n] if n > 0 else "?"
+        rows.append(f"caps={caps}: {chars}")
+    print("Thai layout, keys l;ylfu: " + " | ".join(rows), flush=True)
+
+
 def installed_layouts():
     n = user32.GetKeyboardLayoutList(0, None)
     buf = (ctypes.c_void_p * n)()
@@ -615,6 +657,7 @@ def sweep(t):
     fs.run(t, "fast typing through a correction", "", "สวัสดีครับ",
            then=[lambda: fast_keys("l;ylfu8iy["), lambda: tap(fs.SPACE)])
     realistic(t)
+    capslock_left_on(t)
     selection_leaves_clipboard_alone(t)
 
 
@@ -670,6 +713,7 @@ def main():
     if not {f"{HKL_EN:08X}", f"{HKL_TH:08X}"} <= set(layouts):
         raise SystemExit("US English and Thai Kedmanee must both be installed")
 
+    thai_capslock_probe()
     fs.write_config(mode="auto", learn=False)
     # Edge runs several rounds: RightType froze there in some runs and not
     # others (after a word boundary handled inside a focus callback), and one
