@@ -22,7 +22,7 @@ use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect,
     FrameRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor, SetWindowRgn, DT_CENTER,
-    DT_SINGLELINE, DT_VCENTER, HGDIOBJ, HMONITOR, PAINTSTRUCT, TRANSPARENT,
+    DT_SINGLELINE, DT_VCENTER, HDC, HGDIOBJ, HMONITOR, PAINTSTRUCT, TRANSPARENT,
 };
 use windows::Win32::Graphics::Gdi::{
     MonitorFromPoint, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
@@ -395,18 +395,18 @@ unsafe fn paint(hwnd: HWND) {
     SetTextColor(hdc, COLORREF(0x00FF_FFFF));
     let font = crate::ui::make_font_at(FONT_SIZE, FONT_WEIGHT, DPI.load(Ordering::Relaxed));
     let old = SelectObject(hdc, HGDIOBJ(font.0));
-    let mut text: Vec<u16> = TEXT.with(|t| t.borrow().encode_utf16().collect());
-    DrawTextW(
-        hdc,
-        &mut text,
-        &mut rc,
-        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
-    );
-    text.zeroize();
+    TEXT.with(|t| draw_centered(hdc, &t.borrow(), &mut rc));
     SelectObject(hdc, old);
     let _ = DeleteObject(HGDIOBJ(font.0));
 
     let _ = EndPaint(hwnd, &ps);
+}
+
+/// Draw `text` centred in `rc`.
+unsafe fn draw_centered(hdc: HDC, text: &str, rc: &mut RECT) {
+    let mut units: Vec<u16> = text.encode_utf16().collect();
+    DrawTextW(hdc, &mut units, rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    units.zeroize();
 }
 
 unsafe fn hide(hwnd: HWND) {
@@ -414,4 +414,30 @@ unsafe fn hide(hwnd: HWND) {
     let _ = ShowWindow(hwnd, SW_HIDE);
     // A suggestion preview is typed content: do not keep it past its display.
     TEXT.with(|t| t.borrow_mut().zeroize());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::Win32::Graphics::Gdi::{CreateCompatibleDC, DeleteDC};
+
+    /// The pill can be painted after its text was wiped (`hide` clears it
+    /// for privacy while a paint is still queued). Painting it then must not
+    /// crash: in Edge it did, with an access violation in DrawTextW reading
+    /// address 0x2 (0xC000041D).
+    #[test]
+    fn painting_after_the_text_was_wiped_does_not_crash() {
+        unsafe {
+            let hdc = CreateCompatibleDC(None);
+            let mut rc = RECT {
+                left: 0,
+                top: 0,
+                right: 100,
+                bottom: 30,
+            };
+            draw_centered(hdc, "", &mut rc);
+            draw_centered(hdc, "TH", &mut rc);
+            let _ = DeleteDC(hdc);
+        }
+    }
 }
