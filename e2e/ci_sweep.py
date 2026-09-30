@@ -165,7 +165,13 @@ class EdgeOmnibox(Omnibox):
 def fast_keys(s, pause=0.03):
     """A quick typist: the keys land while the app is still busy."""
     for ch in s:
-        fs.tap(ord(ch.upper()) if ch.isalpha() else fs.PUNCT[ch], pause=pause)
+        if ch == " ":
+            vk = fs.SPACE
+        elif ch.isalpha() or ch.isdigit():
+            vk = ord(ch.upper())
+        else:
+            vk = fs.PUNCT[ch]
+        fs.tap(vk, pause=pause)
 
 
 def watch(t, name, keys, expect, typer=type_keys):
