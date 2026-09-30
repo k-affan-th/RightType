@@ -346,6 +346,10 @@ impl TextBox {
 
     /// Send `msg` and wait (bounded) for the answer.
     fn ask(&self, msg: u32, w: usize, l: isize) -> Option<usize> {
+        self.ask_within(msg, w, l, 300)
+    }
+
+    fn ask_within(&self, msg: u32, w: usize, l: isize, ms: u32) -> Option<usize> {
         use windows::Win32::Foundation::{LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, SMTO_ABORTIFHUNG};
         let mut result = 0usize;
@@ -356,7 +360,7 @@ impl TextBox {
                 WPARAM(w),
                 LPARAM(l),
                 SMTO_ABORTIFHUNG,
-                300,
+                ms,
                 Some(&mut result),
             )
         };
@@ -425,6 +429,73 @@ impl TextBox {
         }
     }
 
+    /// The replacement was sent but not answered in time. Give the box up to
+    /// a second more, then read what is before the caret: the correction in
+    /// place is success; the old text unchanged means nothing happened (keys
+    /// may do it); anything else is unknown.
+    fn settle_after_slow_replace(
+        &self,
+        context: Option<&str>,
+        delete: usize,
+        text: &str,
+    ) -> Result<(), ReplaceError> {
+        use zeroize::Zeroize;
+        const WM_NULL: u32 = 0;
+        let unknown = ReplaceError::Unknown("no answer to the replacement");
+        let Some(context) = context else {
+            return Err(unknown);
+        };
+        if self.ask_within(WM_NULL, 0, 0, 1000).is_none() {
+            return Err(unknown);
+        }
+        let Some((a, b)) = self.selection() else {
+            return Err(unknown);
+        };
+        if a != b {
+            return Err(unknown);
+        }
+        let Some(mut before) = self.text_before(a) else {
+            return Err(unknown);
+        };
+        let kept: String = {
+            let n = context.chars().count().saturating_sub(delete);
+            context.chars().take(n).collect()
+        };
+        let mut done = format!("{kept}{text}");
+        let result = if before.ends_with(done.as_str()) {
+            Ok(())
+        } else if before.ends_with(context) {
+            Err(ReplaceError::Untouched("the replacement did not happen"))
+        } else {
+            Err(unknown)
+        };
+        before.zeroize();
+        done.zeroize();
+        crate::hook::e2e_trace(format!(
+            "text box: slow replacement settled: {}",
+            result.is_ok()
+        ));
+        result
+    }
+
+    /// The box's text before position `caret`, if it can be located.
+    fn text_before(&self, caret: usize) -> Option<String> {
+        use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
+        use zeroize::Zeroize;
+        let len = self.ask(WM_GETTEXTLENGTH, 0, 0)?;
+        if len > 0xFFFF || caret > len {
+            return None;
+        }
+        let mut units = vec![0u16; len + 1];
+        let got = self
+            .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?
+            .min(len);
+        let usable = caret <= got && !(self.rich && units[..caret].contains(&(b'\n' as u16)));
+        let text = usable.then(|| String::from_utf16_lossy(&units[..caret]));
+        units.zeroize();
+        text
+    }
+
     /// Debug e2e trace: the caret, and the text before it, as the box holds
     /// them right before a replacement.
     #[cfg(debug_assertions)]
@@ -476,8 +547,14 @@ impl TextBox {
         let mut units: zeroize::Zeroizing<Vec<u16>> =
             zeroize::Zeroizing::new(text.encode_utf16().chain(std::iter::once(0)).collect());
         // wParam 1: the replacement can be undone (Ctrl+Z in the app).
-        self.ask(EM_REPLACESEL, 1, units.as_mut_ptr() as isize)
-            .ok_or(ReplaceError::Unknown("no answer to the replacement"))?;
+        if self
+            .ask(EM_REPLACESEL, 1, units.as_mut_ptr() as isize)
+            .is_none()
+        {
+            // A slow box may still do it (Windows 11 Notepad, CI): wait for
+            // it, then see what it holds rather than guess.
+            return self.settle_after_slow_replace(context, delete, text);
+        }
         let expected = from + units.len() - 1;
         match self.selection() {
             Some((a, b)) if a == expected && b == expected => Ok(()),
