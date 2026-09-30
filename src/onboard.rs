@@ -62,6 +62,7 @@ fn layout(first_run: bool) -> Layout {
 /// Show the welcome/help window. `first_run` picks the introduction; closing
 /// it then records that onboarding is done.
 pub fn show(first_run: bool) {
+    let started = std::time::Instant::now();
     ui::refresh();
     let lay = layout(first_run);
     let mut window = nwg::Window::default();
@@ -158,7 +159,11 @@ pub fn show(first_run: bool) {
         surface,
         handler: RefCell::new(None),
     });
-    win.window.set_visible(true);
+    if let Some(h) = win.window.handle.hwnd() {
+        crate::ui::present(windows::Win32::Foundation::HWND(h as _), "welcome", started);
+    } else {
+        win.window.set_visible(true);
+    }
 
     let weak = Rc::downgrade(&win);
     win.surface.on_click(move |id| {

@@ -1,4 +1,10 @@
-//! Correction injection (`SendInput`) — Windows only. **The Bug 2 fix.**
+//! Correction injection — Windows only. **The Bug 2 fix.**
+//!
+//! In a standard Windows text box (Edit, RichEdit: Notepad, WordPad, dialogs)
+//! the box itself is told to replace the word (`EM_SETSEL` + `EM_REPLACESEL`,
+//! one undoable edit): no keys at all, so nothing the typist presses meanwhile
+//! can land in between and nothing depends on how fast the app reads keys.
+//! Everywhere else the correction is typed, as below.
 //!
 //! RightLang's manual switch sometimes emitted `ggg…` garbage because it replayed
 //! virtual keys while a physical key/modifier was still held, so the OS saw
@@ -21,10 +27,11 @@ use std::sync::atomic::Ordering;
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-    KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_BACK, VK_DELETE,
+    KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_BACK, VK_DELETE, VK_SPACE,
 };
 
 use crate::hook::{held_modifiers, INJECTING, INJECT_TAG};
+use zeroize::Zeroize;
 
 /// Replace the just-typed word with `text`.
 ///
@@ -37,6 +44,45 @@ use crate::hook::{held_modifiers, INJECTING, INJECT_TAG};
 /// Calls `SendInput`; must run while the keyboard hook is installed so its own
 /// events are recognised (via `LLKHF_INJECTED`) and ignored.
 pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> bool {
+    if backspaces == 0 && text.is_empty() && trailing_vk.is_none() {
+        return true;
+    }
+    // A standard Windows text box is told to replace the word itself, in one
+    // message: nothing the typist presses meanwhile can land between our
+    // keys, and nothing depends on how fast the app reads them (Windows 11
+    // Notepad garbled keys-typed corrections).
+    if let Ok(tb) = crate::focus::TextBox::focused() {
+        let mut whole = text.to_string();
+        let trailing = match trailing_vk {
+            Some(vk) if vk == VK_SPACE.0 => {
+                whole.push(' ');
+                None
+            }
+            other => other,
+        };
+        let replaced = tb.replace_before_caret(backspaces, &whole);
+        whole.zeroize();
+        match replaced {
+            Ok(()) => {
+                crate::hook::e2e_trace(format!("inject: text box replaced {backspaces}"));
+                let Some(vk) = trailing else {
+                    return true;
+                };
+                let mut inputs = Vec::with_capacity(6);
+                release_held(&mut inputs);
+                inputs.push(key(vk, false));
+                inputs.push(key(vk, true));
+                return send(&inputs);
+            }
+            Err(crate::focus::ReplaceError::Untouched(why)) => {
+                crate::hook::e2e_trace(format!("inject: text box not used ({why}), keys instead"));
+            }
+            Err(crate::focus::ReplaceError::Unknown(why)) => {
+                crate::hook::e2e_trace(format!("inject: text box replace unclear ({why})"));
+                return false;
+            }
+        }
+    }
     let mut inputs: Vec<INPUT> = Vec::with_capacity(backspaces * 2 + text.len() * 2 + 4);
 
     // 1. Release any modifier still physically held, so it can't taint the batch.
@@ -103,6 +149,14 @@ const DELETE_GAP: std::time::Duration = std::time::Duration::from_millis(40);
 /// for.
 fn needs_gap(backspaces: usize, text: &str) -> bool {
     backspaces > 0 && !text.is_empty()
+}
+
+/// Send `inputs` as one batch, guarded so the hook skips them.
+unsafe fn send(inputs: &[INPUT]) -> bool {
+    INJECTING.store(true, Ordering::SeqCst);
+    let sent = SendInput(inputs, size_of::<INPUT>() as i32);
+    INJECTING.store(false, Ordering::SeqCst);
+    sent as usize == inputs.len()
 }
 
 /// An unassigned virtual key, pressed to "mask" an Alt release (the same trick

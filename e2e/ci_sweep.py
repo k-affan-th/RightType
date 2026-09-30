@@ -261,6 +261,20 @@ class Notepad11(Notepad):
         self.hwnd = self.win.handle
         kinds = sorted({d.element_info.class_name for d in self.win.descendants()})
         print(f"notepad11 window classes: {kinds}", flush=True)
+        self.focus()
+
+        class GUITHREADINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wt.DWORD), ("flags", wt.DWORD), ("hwndActive", wt.HWND),
+                        ("hwndFocus", wt.HWND), ("hwndCapture", wt.HWND),
+                        ("hwndMenuOwner", wt.HWND), ("hwndMoveSize", wt.HWND),
+                        ("hwndCaret", wt.HWND), ("rcCaret", wt.RECT)]
+
+        gui = GUITHREADINFO(cbSize=ctypes.sizeof(GUITHREADINFO))
+        tid = user32.GetWindowThreadProcessId(self.hwnd, None)
+        user32.GetGUIThreadInfo(tid, ctypes.byref(gui))
+        cls = ctypes.create_unicode_buffer(64)
+        user32.GetClassNameW(gui.hwndFocus, cls, 64)
+        print(f"notepad11 keyboard focus window class: {cls.value!r}", flush=True)
         if "RichEditD2DPT" not in kinds:
             self.close()
             raise SkipTarget("the Notepad that opened is not the Windows 11 one")
@@ -534,6 +548,10 @@ def sweep(t):
     # Pressed once too often: with no older word to reach, the next press
     # puts the word back (it used to say "nothing to flip").
     run(t, "Shift+Backspace twice puts the word back", "reload ", "reload", then=[flip, flip])
+    # Found on a real PC: keys typed quickly while a word was being rewritten
+    # were lost. A person typing ~30 ms per key, word ended by a space.
+    fs.run(t, "fast typing through a correction", "", "สวัสดีครับ",
+           then=[lambda: fast_keys("l;ylfu8iy["), lambda: tap(fs.SPACE)])
     selection_leaves_clipboard_alone(t)
 
 
@@ -542,6 +560,23 @@ def edge_sweep(t):
     watch(t, "EN->TH word, typed fast", "l;ylfu", "สวัสดี", typer=fast_keys)
     watch(t, "letters-only Thai word", "giupo", "เรียน")
     sweep(t)
+
+
+def ui_timing():
+    """How long each RightType window takes to build and to appear painted
+    (the debug build traces it). Printed, not judged."""
+    import re
+    for what in ["settings", "stats", "fixer", "welcome"]:
+        start = fs.LOG.stat().st_size if fs.LOG.exists() else 0
+        proc = fs.start_rt({"RIGHTTYPE_SHOW": what})
+        time.sleep(4)
+        with open(fs.LOG, encoding="utf-8", errors="replace") as f:
+            f.seek(start)
+            lines = [m.group(0) for m in re.finditer(r"window [^:]+: built in \d+ ms, shown painted at \d+ ms", f.read())]
+        print(f"  ui {what}: {lines or 'no timing line'}", flush=True)
+        proc.kill()
+        subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
+        time.sleep(0.5)
 
 
 def main():
@@ -601,6 +636,8 @@ def main():
                 sections.setdefault(key, []).append((start, fs.LOG.stat().st_size))
     finally:
         subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
+
+    ui_timing()
 
     failed, known, fixed = [], [], []
     for target, name, ok, got, expect in fs.RESULTS:

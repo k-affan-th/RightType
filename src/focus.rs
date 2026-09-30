@@ -299,84 +299,161 @@ fn uia_selected_text() -> Option<zeroize::Zeroizing<String>> {
     }
 }
 
-/// The selection of a standard Windows text box (Edit, RichEdit — classic
-/// and Windows 11 Notepad, WordPad, many dialogs), asked of the control
-/// itself: `EM_GETSEL` for where, `WM_GETTEXT` for the text, which Windows
-/// copies between processes. No clipboard. The whole text passes through
-/// this process for a moment and is wiped.
-fn edit_selected_text() -> Option<zeroize::Zeroizing<String>> {
-    use windows::Win32::Foundation::{LPARAM, WPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetClassNameW, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongW,
-        GetWindowThreadProcessId, SendMessageTimeoutW, GUITHREADINFO, GWL_STYLE, SMTO_ABORTIFHUNG,
-        WM_GETTEXT, WM_GETTEXTLENGTH,
-    };
-    use zeroize::Zeroize;
-    const EM_GETSEL: u32 = 0x00B0;
-    const ES_PASSWORD: i32 = 0x0020;
-    let step = |what: &str| crate::hook::e2e_trace(format!("selection (edit control): {what}"));
-    unsafe {
-        let thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
-        let mut gui = GUITHREADINFO {
-            cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
-            ..Default::default()
+/// The focused standard Windows text box (Edit, RichEdit: classic and
+/// Windows 11 Notepad, WordPad, many dialogs), which can be asked and told
+/// things directly with its own messages — Windows copies their text
+/// between processes. Never a password box.
+pub struct TextBox {
+    hwnd: windows::Win32::Foundation::HWND,
+    rich: bool,
+}
+
+impl TextBox {
+    /// The focused window of the foreground app, when it is such a box.
+    pub fn focused() -> Result<TextBox, &'static str> {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetClassNameW, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongW,
+            GetWindowThreadProcessId, GUITHREADINFO, GWL_STYLE,
         };
-        if GetGUIThreadInfo(thread, &mut gui).is_err() || gui.hwndFocus.0.is_null() {
-            step("no focused window");
-            return None;
+        const ES_PASSWORD: i32 = 0x0020;
+        unsafe {
+            let thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
+            let mut gui = GUITHREADINFO {
+                cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+                ..Default::default()
+            };
+            if GetGUIThreadInfo(thread, &mut gui).is_err() || gui.hwndFocus.0.is_null() {
+                return Err("no focused window");
+            }
+            let hwnd = gui.hwndFocus;
+            let mut class = [0u16; 64];
+            let n = GetClassNameW(hwnd, &mut class) as usize;
+            let class = String::from_utf16_lossy(&class[..n]);
+            let rich = class.to_ascii_lowercase().starts_with("richedit");
+            if !(class.eq_ignore_ascii_case("Edit") || rich) {
+                return Err("not a text box");
+            }
+            if GetWindowLongW(hwnd, GWL_STYLE) & ES_PASSWORD != 0 {
+                return Err("password box");
+            }
+            Ok(TextBox { hwnd, rich })
         }
-        let edit = gui.hwndFocus;
-        let mut class = [0u16; 64];
-        let n = GetClassNameW(edit, &mut class) as usize;
-        let class = String::from_utf16_lossy(&class[..n]);
-        let rich = class.to_ascii_lowercase().starts_with("richedit");
-        if !(class.eq_ignore_ascii_case("Edit") || rich) {
-            step("not a text box");
-            return None;
-        }
-        if GetWindowLongW(edit, GWL_STYLE) & ES_PASSWORD != 0 {
-            step("password box");
-            return None;
-        }
-        let ask = |msg: u32, w: usize, l: isize| {
-            let mut result = 0usize;
-            let ok = SendMessageTimeoutW(
-                edit,
+    }
+
+    /// Send `msg` and wait (bounded) for the answer.
+    fn ask(&self, msg: u32, w: usize, l: isize) -> Option<usize> {
+        use windows::Win32::Foundation::{LPARAM, WPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, SMTO_ABORTIFHUNG};
+        let mut result = 0usize;
+        let ok = unsafe {
+            SendMessageTimeoutW(
+                self.hwnd,
                 msg,
                 WPARAM(w),
                 LPARAM(l),
                 SMTO_ABORTIFHUNG,
-                500,
+                300,
                 Some(&mut result),
-            );
-            (ok.0 != 0).then_some(result)
+            )
         };
-        let sel = ask(EM_GETSEL, 0, 0)?;
-        let (start, end) = ((sel & 0xFFFF), ((sel >> 16) & 0xFFFF));
-        if end <= start {
-            step("nothing selected");
-            return None;
-        }
-        // EM_GETSEL reports positions in 16 bits.
-        let len = ask(WM_GETTEXTLENGTH, 0, 0)?;
-        if len > 0xFFFF {
-            step("text too long to locate the selection");
-            return None;
-        }
-        let mut units = vec![0u16; len + 1];
-        let got = ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?.min(len);
-        // RichEdit counts a line break as one position but WM_GETTEXT gives
-        // two characters, so past one the positions no longer line up: refuse
-        // rather than convert the wrong text.
-        let shifted = rich && units[..end.min(got)].contains(&(b'\n' as u16));
-        let text = (end <= got && !shifted)
-            .then(|| zeroize::Zeroizing::new(String::from_utf16_lossy(&units[start..end])));
-        units.zeroize();
-        if text.is_none() {
-            step("selection cannot be located in the text");
-        }
-        text
+        (ok.0 != 0).then_some(result)
     }
+
+    /// The selection, in UTF-16 positions (16 bits each: EM_GETSEL's limit).
+    fn selection(&self) -> Option<(usize, usize)> {
+        const EM_GETSEL: u32 = 0x00B0;
+        let sel = self.ask(EM_GETSEL, 0, 0)?;
+        Some((sel & 0xFFFF, (sel >> 16) & 0xFFFF))
+    }
+
+    /// Replace the `delete` UTF-16 units before the caret with `text`, as one
+    /// edit the box can undo. Only with a bare caret (nothing selected) and
+    /// enough text before it; checked afterwards by where the caret ended up.
+    /// `Err` before anything changed means the caller may fall back to keys.
+    pub fn replace_before_caret(&self, delete: usize, text: &str) -> Result<(), ReplaceError> {
+        const EM_SETSEL: u32 = 0x00B1;
+        const EM_REPLACESEL: u32 = 0x00C2;
+        let (start, end) = self
+            .selection()
+            .ok_or(ReplaceError::Untouched("no answer"))?;
+        if start != end {
+            return Err(ReplaceError::Untouched("text is selected"));
+        }
+        if start < delete || start >= 0xFFFF {
+            return Err(ReplaceError::Untouched("caret position out of reach"));
+        }
+        let from = start - delete;
+        self.ask(EM_SETSEL, from, start as isize)
+            .ok_or(ReplaceError::Untouched("could not select"))?;
+        if self.selection() != Some((from, start)) {
+            // Put the caret back where it was before giving the job to keys.
+            let _ = self.ask(EM_SETSEL, start, start as isize);
+            return Err(ReplaceError::Untouched("selection did not take"));
+        }
+        let mut units: zeroize::Zeroizing<Vec<u16>> =
+            zeroize::Zeroizing::new(text.encode_utf16().chain(std::iter::once(0)).collect());
+        // wParam 1: the replacement can be undone (Ctrl+Z in the app).
+        self.ask(EM_REPLACESEL, 1, units.as_mut_ptr() as isize)
+            .ok_or(ReplaceError::Unknown("no answer to the replacement"))?;
+        let expected = from + units.len() - 1;
+        match self.selection() {
+            Some((a, b)) if a == expected && b == expected => Ok(()),
+            _ => Err(ReplaceError::Unknown(
+                "caret not where the replacement should leave it",
+            )),
+        }
+    }
+}
+
+/// Why [`TextBox::replace_before_caret`] did not do the job.
+#[derive(Debug)]
+pub enum ReplaceError {
+    /// Nothing was changed: typing the correction as keys is safe.
+    Untouched(&'static str),
+    /// The box may have been changed: do not type the correction again.
+    Unknown(&'static str),
+}
+
+/// The selection of a standard Windows text box ([`TextBox`]): `EM_GETSEL`
+/// for where, `WM_GETTEXT` for the text. No clipboard. The whole text passes
+/// through this process for a moment and is wiped.
+fn edit_selected_text() -> Option<zeroize::Zeroizing<String>> {
+    use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
+    use zeroize::Zeroize;
+    let step = |what: &str| crate::hook::e2e_trace(format!("selection (edit control): {what}"));
+    let tb = match TextBox::focused() {
+        Ok(tb) => tb,
+        Err(why) => {
+            step(why);
+            return None;
+        }
+    };
+    let (start, end) = tb.selection()?;
+    if end <= start {
+        step("nothing selected");
+        return None;
+    }
+    // EM_GETSEL reports positions in 16 bits.
+    let len = tb.ask(WM_GETTEXTLENGTH, 0, 0)?;
+    if len > 0xFFFF {
+        step("text too long to locate the selection");
+        return None;
+    }
+    let mut units = vec![0u16; len + 1];
+    let got = tb
+        .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?
+        .min(len);
+    // RichEdit counts a line break as one position but WM_GETTEXT gives two
+    // characters, so past one the positions no longer line up: refuse rather
+    // than convert the wrong text.
+    let shifted = tb.rich && units[..end.min(got)].contains(&(b'\n' as u16));
+    let text = (end <= got && !shifted)
+        .then(|| zeroize::Zeroizing::new(String::from_utf16_lossy(&units[start..end])));
+    units.zeroize();
+    if text.is_none() {
+        step("selection cannot be located in the text");
+    }
+    text
 }
 
 /// The text cursor of the focused element, from UI Automation, in screen

@@ -364,6 +364,54 @@ pub fn make_font_at(size: i32, weight: i32, dpi: u32) -> HFONT {
     }
 }
 
+// ------------------------------------------------------------------ show
+
+/// Show a window that has just been built, whole. Every label and button is
+/// its own child window that paints separately, so a plain show let the
+/// frame appear first and the controls fill in one by one. The window is
+/// cloaked (DWM keeps it off screen), painted completely, then uncloaked.
+/// `started` is when building it began: the debug trace reports how long
+/// building and painting took.
+pub fn present(hwnd: HWND, name: &str, started: std::time::Instant) {
+    const DWMWA_CLOAK: i32 = 13;
+    let built = started.elapsed();
+    unsafe {
+        let on: i32 = 1;
+        let cloaked = DwmSetWindowAttribute(
+            hwnd,
+            DWMWINDOWATTRIBUTE(DWMWA_CLOAK),
+            &on as *const i32 as _,
+            4,
+        )
+        .is_ok();
+        let _ = ShowWindow(hwnd, SW_SHOW);
+        let _ = windows::Win32::Graphics::Gdi::RedrawWindow(
+            hwnd,
+            None,
+            None,
+            windows::Win32::Graphics::Gdi::RDW_ERASE
+                | windows::Win32::Graphics::Gdi::RDW_INVALIDATE
+                | windows::Win32::Graphics::Gdi::RDW_ALLCHILDREN
+                | windows::Win32::Graphics::Gdi::RDW_UPDATENOW,
+        );
+        if cloaked {
+            let off: i32 = 0;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWINDOWATTRIBUTE(DWMWA_CLOAK),
+                &off as *const i32 as _,
+                4,
+            );
+        }
+        let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd);
+    }
+    crate::hook::e2e_trace(format!(
+        "window {name}: built in {} ms, shown painted at {} ms",
+        built.as_millis(),
+        started.elapsed().as_millis()
+    ));
+}
+
 // ------------------------------------------------------------------ frame
 
 /// Title bar matching the theme, rounded corners on Windows 11.
@@ -1460,6 +1508,12 @@ impl Surface {
     /// Show the controls of `page` (and the always-visible ones).
     pub fn show_page(&self, page: u8) {
         self.page.set(page);
+        // Swap the pages' controls with drawing off, then paint once: showing
+        // them one by one repainted the window dozens of times.
+        const WM_SETREDRAW: u32 = 0x000B;
+        unsafe {
+            SendMessageW(self.hwnd, WM_SETREDRAW, WPARAM(0), LPARAM(0));
+        }
         for c in self.controls.borrow().iter() {
             let show = c.page == 0 || c.page == page;
             unsafe {
@@ -1467,7 +1521,15 @@ impl Surface {
             }
         }
         unsafe {
-            let _ = InvalidateRect(self.hwnd, None, true);
+            SendMessageW(self.hwnd, WM_SETREDRAW, WPARAM(1), LPARAM(0));
+            let _ = windows::Win32::Graphics::Gdi::RedrawWindow(
+                self.hwnd,
+                None,
+                None,
+                windows::Win32::Graphics::Gdi::RDW_ERASE
+                    | windows::Win32::Graphics::Gdi::RDW_INVALIDATE
+                    | windows::Win32::Graphics::Gdi::RDW_ALLCHILDREN,
+            );
         }
     }
 

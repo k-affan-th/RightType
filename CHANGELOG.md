@@ -6,6 +6,9 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Changed
 
+- **Settings, Statistics, Fix text and Welcome appear fully drawn**: they
+  used to show their frame first and fill in control by control; switching
+  a Settings page repainted it dozens of times.
 - **Convert selection no longer goes through the clipboard.** It pressed
   Ctrl+C for you, so the selected text went into Windows clipboard history,
   could be synced to your other devices (an Android phone) and was visible
@@ -27,12 +30,13 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 
-- **Thai came out garbled in Windows 11 Notepad** (`สวัสดี` became
-  `ีีีีีี`): Notepad reads Unicode characters that arrive
-  while it is still handling the Backspaces before them as the last one sent
-  (English put back over Thai too). Text now follows the deletions 40 ms
-  later. Tested on CI with the Store
-  Notepad: the old way kept 0 of 3, the new 3 of 3.
+- **Corrections in Notepad (Windows 11 and classic), WordPad and other
+  standard text boxes are made by the box itself**: RightType tells it to
+  replace the word in one edit (Ctrl+Z undoes it) instead of typing
+  Backspaces and characters. Typed corrections came out garbled in Windows
+  11 Notepad (`สวัสดี` became `ีีีีีี`) and keys typed while a word was being
+  rewritten were lost. Elsewhere, text typed after Backspaces now waits
+  40 ms for them to land.
 - **RightType could crash in Edge's address bar** (2.0.0), after which
   nothing was corrected and Shift+Backspace was a plain Backspace until it
   was restarted: the small TH/EN tag could be painted after its text had
