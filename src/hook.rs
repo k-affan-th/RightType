@@ -2213,7 +2213,6 @@ unsafe fn sync_context() {
         if blacklisted {
             diag::note("app is protected: RightType stays out", &[]);
         }
-        safety::refresh_full_screen();
         STATE.with(|s| {
             let mut st = s.borrow_mut();
             st.sensitive_app = blacklisted;

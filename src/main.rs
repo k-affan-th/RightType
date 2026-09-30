@@ -96,6 +96,7 @@ fn main() {
     hook::report_fatal_exceptions();
     // The clipboard "convert selection" worker runs off the hook thread.
     let _manual = manual::spawn();
+    safety::watch_full_screen();
     // Build the tray, install the hook, and run the message loop until Quit.
     tray::run();
 }

@@ -66,19 +66,30 @@ pub const BLACKLIST: &[&str] = &[
 
 /// A full-screen game (or a slide show) is in front: RightType stays out, as
 /// in a blocked app. Movement keys spell Thai (`wasd` is ไฟหก), and a
-/// correction would send Backspaces into the game. Updated when the window
-/// changes and on the 1.5 s timer.
+/// correction would send Backspaces into the game. Kept up to date by
+/// [`watch_full_screen`] on a thread of its own: the shell call may wait on
+/// the window in front, and neither the keyboard hook nor the UI thread may.
 static FULL_SCREEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub fn is_full_screen() -> bool {
     FULL_SCREEN.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Start the thread that keeps [`is_full_screen`] current (every 0.5 s).
+pub fn watch_full_screen() {
+    let _ = std::thread::Builder::new()
+        .name("full-screen".into())
+        .spawn(|| loop {
+            unsafe { refresh_full_screen() };
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        });
+}
+
 /// Ask Windows whether a full-screen program without a text cursor is in
 /// front: an exclusive-mode game or a presentation always; any other
 /// full-screen window only when its thread shows no caret (a borderless
 /// game does not; a full-screen browser or editor does).
-pub unsafe fn refresh_full_screen() -> bool {
+unsafe fn refresh_full_screen() -> bool {
     use windows::Win32::UI::Shell::{
         SHQueryUserNotificationState, QUNS_BUSY, QUNS_PRESENTATION_MODE,
         QUNS_RUNNING_D3D_FULL_SCREEN,
@@ -91,6 +102,8 @@ pub unsafe fn refresh_full_screen() -> bool {
                 cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
                 ..Default::default()
             };
+            // The foreground thread's caret (idThread 0), read from the
+            // system's own record: it does not wait on the app.
             GetGUIThreadInfo(0, &mut gui).is_ok() && gui.hwndCaret.0.is_null()
         }
         _ => false,

@@ -210,7 +210,6 @@ pub unsafe fn on_message(msg: u32, wparam: usize) {
             crate::habits::tick();
             crate::stats::tick();
             crate::learn::tick();
-            crate::safety::refresh_full_screen();
             #[cfg(debug_assertions)]
             crate::report::e2e_write();
             if NEEDS_REINSTALL.swap(false, Ordering::Relaxed) {
