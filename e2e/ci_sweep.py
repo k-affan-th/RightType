@@ -693,7 +693,10 @@ def verify_catches_garbling(t):
     proc = fs.start_rt({"RIGHTTYPE_E2E_NO_TEXTBOX": "1", "RIGHTTYPE_E2E_NO_GAP": "1"})
     CURRENT[0] = proc
     t.focus()
-    for attempt in (1, 2):
+    # Notepad garbles most of the time, not every time: type until the check
+    # has caught one, then the next must arrive intact.
+    caught = False
+    for attempt in range(1, 6):
         start = fs.LOG.stat().st_size
         t.clear()
         t.layout(HKL_EN)
@@ -707,7 +710,12 @@ def verify_catches_garbling(t):
         truth = "same" if got.strip() == "สวัสดี" else "differs"
         print(f"  garbling attempt {attempt}: got {got!r}, check said {verdict}", flush=True)
         fs.check(t.name, f"check-after-write tells the truth (attempt {attempt})", verdict, truth)
-    fs.check(t.name, "after a garbled word the next arrives intact", t.read().strip(), "สวัสดี")
+        if caught:
+            fs.check(t.name, "after a garbled word the next arrives intact", got.strip(), "สวัสดี")
+            break
+        caught = verdict == "differs"
+    else:
+        print("  Notepad never garbled in 5 attempts", flush=True)
     # End the word, so this RightType's problem report has a word end too.
     tap(fs.SPACE)
     time.sleep(0.5)
