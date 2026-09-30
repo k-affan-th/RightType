@@ -693,15 +693,10 @@ def main():
         elif not ok:
             failed.append(f"{label} — got {got.strip()!r}, expected {expect.strip()!r}")
     passed = sum(r[2] for r in fs.RESULTS)
-    print(f"\nSUMMARY {passed}/{len(fs.RESULTS)} passed; trace: {fs.LOG}")
-    for label in known:
-        print(f"  KNOWN FAILING {label}")
-    for label in fixed:
-        print(f"  XPASS {label} — remove it from KNOWN_FAILING")
-    for line in failed:
-        print(f"  FAIL {line}")
     # Each failing target's own part of the trace (the log is shared, so its
-    # end belongs to whichever target ran last).
+    # end belongs to whichever target ran last). Printed before the summary:
+    # log viewers and the API return only the end of a long log, and the
+    # summary is what has to be in it.
     data = fs.LOG.read_bytes() if failed else b""
     for key, spans in sections.items():
         if any(line.startswith(f"{key}:") for line in failed):
@@ -709,6 +704,13 @@ def main():
                 part = data[start:end].decode("utf-8", errors="replace")
                 print(f"\n--- RightType trace: {key} (round {n}) ---")
                 print(part[-60000:])
+    print(f"\nSUMMARY {passed}/{len(fs.RESULTS)} passed; trace: {fs.LOG}")
+    for label in known:
+        print(f"  KNOWN FAILING {label}")
+    for label in fixed:
+        print(f"  XPASS {label} — remove it from KNOWN_FAILING")
+    for line in failed:
+        print(f"  FAIL {line}")
     report = lib.HERE / "RightType-test-report.txt"
     lines = [f"SUMMARY {passed}/{len(fs.RESULTS)} passed"]
     lines += [f"FAIL {line}" for line in failed] + [f"KNOWN FAILING {x}" for x in known]
