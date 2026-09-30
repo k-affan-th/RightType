@@ -4,6 +4,8 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-09-30
+
 ### Changed
 
 - **Settings, Statistics, Fix text and Welcome appear fully drawn**: they

@@ -9,8 +9,8 @@
 | --- | --- |
 | Overall status | `IN_PROGRESS — 1.1.0 ready to build; signing + remaining E2E need the product owner` |
 | Active section | `S8 — RightType 2.0 (M7)` |
-| Next action | S8 M7: merge แล้วรัน Release workflow (v2.0.0) |
-| Current release target | `v2.0.0` — แผนใน S8, ไอเดียทั้งหมดใน `IDEAS.md` (1.1.0 = 2026-09-26, 1.0.0 = 2026-08-31) |
+| Next action | หลัง 2.0.1: ทดสอบคลิกเดียวบนเครื่องเจ้าของ + CI พิมพ์แบบคน, prefix/suffix |
+| Current release target | `v2.0.1` (2.0.0 = 2026-09-27, 1.1.0 = 2026-09-26, 1.0.0 = 2026-08-31) — ไอเดียทั้งหมดใน `IDEAS.md` |
 | Last updated | `2026-09-26` |
 | Last verified baseline | Linux: 102 tests (69 lib + 30 comprehensive + 3 release-metadata), clippy `-D warnings`, fmt, latency gate ~1.5 µs worst batch; `--features winos` cross-checked clean ด้วย clippy `-D warnings` บน target `x86_64-pc-windows-msvc` (ยังไม่ได้รัน test บน Windows ใน session นี้ — CI job `windows` ทำแทน) |
 | Worktree note | ไม่ commit release artifact (`dist/`) และ E2E log (`e2e/*.log`) อีกต่อไป — artifact ไปอยู่ที่ GitHub Releases; ไฟล์ 1.0.0 เดิมยังอยู่ใน git history ที่ `69a54e9` |

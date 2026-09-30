@@ -167,12 +167,12 @@ rather than a blanket ban on every individual BIP39 word.
 (once winget has accepted the release).
 
 **Installer (recommended, per-user, no admin):** download
-`RightType-2.0.0-setup.exe` from the
+`RightType-2.0.1-setup.exe` from the
 [latest release](https://github.com/k-affan-th/RightType/releases/latest) and run it.
 It installs RightType, offers a desktop shortcut and start-at-login, and registers
 a normal Windows uninstaller (Settings -> Apps -> RightType).
 
-**Portable zip:** extract `RightType-2.0.0-x64.zip` and run `righttype.exe` where it
+**Portable zip:** extract `RightType-2.0.1-x64.zip` and run `righttype.exe` where it
 sits — or install it per-user from the extracted folder:
 
 ```powershell
@@ -186,7 +186,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -Autostart
 - Verify what you downloaded against `SHA256.txt` before running it:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\RightType-2.0.0-setup.exe
+Get-FileHash -Algorithm SHA256 .\RightType-2.0.1-setup.exe
 ```
 - Unsigned builds show a SmartScreen prompt — "More info → Run anyway".
   Code signing is planned for a later release.
