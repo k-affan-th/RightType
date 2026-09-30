@@ -1029,6 +1029,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             // The typist rejected our reading mid-word. Leave the rest of this
             // token alone, and learn it once it is complete.
             STATE.with(|s| s.borrow_mut().mark = TokenMark::Decided { learn: true });
+            crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
             return true;
         }
         convert_last_word();
@@ -1573,6 +1574,8 @@ fn has_thai(text: &str) -> bool {
 unsafe fn flip_back_recent() {
     let Some(step) = STATE.with(|s| s.borrow().recent.next_step(auto_convert)) else {
         e2e_trace("flip back: no recent word".to_string());
+        // Say so: a press that does nothing looks like one that failed.
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastNothingToFlip));
         return;
     };
     if step.insert.chars().count() + 1 == step.backspaces
@@ -1606,11 +1609,20 @@ unsafe fn flip_back_recent() {
     }
     habit_correction(step.was_thai, step.now_thai);
     activate_layout(layout_of(&step.newest));
+    // Every press says how far back it reached, so the next press is never
+    // a guess.
+    let more = STATE.with(|s| s.borrow().recent.len()) > step.words;
     if step.words > 1 {
         crate::overlay::show(&righttype::i18n::trf(
             righttype::i18n::T::ToastFlippedWords,
             &[("n", &step.words.to_string())],
         ));
+    } else {
+        crate::overlay::show(righttype::i18n::tr(if more {
+            righttype::i18n::T::ToastFlippedOneMore
+        } else {
+            righttype::i18n::T::ToastFlippedOne
+        }));
     }
 }
 
@@ -1647,6 +1659,7 @@ unsafe fn convert_last_word() {
         });
         set_undo(converted.chars().count(), &word, UndoKind::Manual);
         crate::stats::record_manual();
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastFlippedOne));
 
         // Switch language layout to the one of the converted word
         let to_thai = converted

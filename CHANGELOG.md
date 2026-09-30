@@ -15,6 +15,11 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   true` in `config.toml` brings back the copy for them.
 - What RightType puts on the clipboard (Fix text's **Copy**) is marked to
   stay out of clipboard history and cloud sync.
+- **Every Shift+Backspace says what it did**: "Flipped 1 word · again for
+  the one before", "Flipped back 3 words", "Undone", or "Nothing to flip
+  here" when the cursor moved and RightType no longer knows the text before
+  it (a press that did nothing used to look like one that failed). What is
+  kept for this, and what each press does, is in `docs/UNDO.md`.
 
 ### Fixed
 
