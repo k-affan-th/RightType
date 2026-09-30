@@ -52,7 +52,7 @@ with a hotkey:
 | Hotkey | Action |
 | --- | --- |
 | `Shift`+`Backspace` | Convert the last word in place — or, right after Auto changed a word, flip it back. Press it again to flip the word before as well (up to 8 words) |
-| `Shift`+`CapsLock` | Convert the current **selection** (v1 temporarily reads it with Copy, restores an empty/plain-Unicode clipboard, then injects Unicode; any non-text/app-specific clipboard format is refused) |
+| `Shift`+`CapsLock` | Convert the current **selection**: read from the app through UI Automation (never through the clipboard, which Windows can keep in its history and sync to your phone), then typed back as Unicode. Apps that do not share their selection get a message; `selection_via_clipboard = true` in `config.toml` lets RightType copy it instead |
 | `Ctrl`+`CapsLock` | Cycle **Manual** → **Auto** → **Suggest** (works in every app, including ones RightType otherwise stays out of; in an app with its own mode, cycles that app's mode) |
 | `Tab` or `Alt`+`CapsLock` | Accept the current Suggest hint (Tab only right after it appears; otherwise Tab is Tab) |
 | `Ctrl`+`Shift`+`CapsLock` | Undo the last correction (selection undo requires the same focused context) |

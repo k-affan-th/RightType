@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+    COINIT_MULTITHREADED,
 };
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationElement, SetWinEventHook, UIA_DataItemControlTypeId,
@@ -230,6 +231,49 @@ unsafe fn refresh_status() {
     crate::hook::e2e_trace(format!("field status={status} inline={inline}"));
     FIELD_STATUS.store(status, Ordering::Relaxed);
     INLINE_COMPLETION.store(inline, Ordering::Relaxed);
+}
+
+/// This thread's UI Automation client, made on first use. The UI thread's
+/// is made by [`arm`]; the selection worker gets its own.
+fn uia_here() -> Option<IUIAutomation> {
+    UIA.with(|u| {
+        if u.borrow().is_none() {
+            unsafe {
+                let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+                if let Ok(uia) =
+                    CoCreateInstance::<_, IUIAutomation>(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
+                {
+                    *u.borrow_mut() = Some(uia);
+                }
+            }
+        }
+        u.borrow().clone()
+    })
+}
+
+/// The text selected in the focused field, asked of the app through UI
+/// Automation — without the clipboard, which Windows may keep in its
+/// history, sync to other devices, and show to every program watching it.
+/// `None` when the app does not say (no text pattern, nothing selected, a
+/// password field). Any thread.
+pub fn selected_text() -> Option<zeroize::Zeroizing<String>> {
+    use windows::Win32::UI::Accessibility::{IUIAutomationTextPattern, UIA_TextPatternId};
+    let uia = uia_here()?;
+    unsafe {
+        let element = uia.GetFocusedElement().ok()?;
+        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            return None;
+        }
+        let pattern: IUIAutomationTextPattern =
+            element.GetCurrentPatternAs(UIA_TextPatternId).ok()?;
+        let ranges = pattern.GetSelection().ok()?;
+        let mut text = zeroize::Zeroizing::new(String::new());
+        for i in 0..ranges.Length().ok()? {
+            let range = ranges.GetElement(i).ok()?;
+            text.push_str(&range.GetText(-1).ok()?.to_string());
+        }
+        (!text.is_empty()).then_some(text)
+    }
 }
 
 /// The text cursor of the focused element, from UI Automation, in screen

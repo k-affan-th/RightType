@@ -4,6 +4,18 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Changed
+
+- **Convert selection no longer goes through the clipboard.** It pressed
+  Ctrl+C for you, so the selected text went into Windows clipboard history,
+  could be synced to your other devices (an Android phone) and was visible
+  to any program watching the clipboard — even though RightType put the old
+  clipboard back. It now asks the app for the selection through UI
+  Automation. Apps that do not share it say so; `selection_via_clipboard =
+  true` in `config.toml` brings back the copy for them.
+- What RightType puts on the clipboard (Fix text's **Copy**) is marked to
+  stay out of clipboard history and cloud sync.
+
 ### Fixed
 
 - **Shift+Backspace right after an automatic fix did nothing** (2.0.0): the

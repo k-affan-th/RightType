@@ -5,10 +5,18 @@
 //! auto path it needs no word boundaries and no Thai segmentation, because a
 //! layout flip is a reversible per-character remap of exactly the bytes selected.
 //!
-//! It runs on its own thread because it is inherently asynchronous: we inject
-//! Ctrl+C, wait for the focused app to populate the clipboard, read/restore it,
-//! then inject the converted selection as Unicode. The per-keystroke hook just
-//! posts a [`Command`] and returns, so nothing blocks the hot path.
+//! The selection is read from the app through UI Automation, never through
+//! the clipboard: Windows may keep what is copied in its clipboard history,
+//! sync it to the user's other devices (an Android phone), and any program
+//! can watch the clipboard. Only when the app does not share its selection
+//! that way, and the user has turned `selection_via_clipboard` on, does it
+//! fall back to Ctrl+C: wait for the app to fill the clipboard, read it,
+//! restore it. Either way the converted text is typed over the selection as
+//! Unicode.
+//!
+//! It runs on its own thread because it is inherently asynchronous; the
+//! per-keystroke hook just posts a [`Command`] and returns, so nothing
+//! blocks the hot path.
 
 use std::mem::size_of;
 use std::sync::{Mutex, OnceLock};
@@ -32,7 +40,7 @@ use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
 /// A one-shot manual action requested by the hook.
 pub enum Command {
-    /// Flip the layout of the current selection via the clipboard.
+    /// Flip the layout of the current selection.
     ConvertSelection {
         hwnd: isize,
         focus_generation: u64,
@@ -46,6 +54,19 @@ pub enum Command {
 }
 
 static SENDER: OnceLock<Sender<Command>> = OnceLock::new();
+/// See [`set_clipboard_fallback`].
+static CLIPBOARD_FALLBACK: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Let "convert selection" copy the selection (Ctrl+C) in apps that do not
+/// share it through UI Automation. Off by default; see the module docs.
+pub fn set_clipboard_fallback(on: bool) {
+    CLIPBOARD_FALLBACK.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn clipboard_fallback() -> bool {
+    CLIPBOARD_FALLBACK.load(std::sync::atomic::Ordering::Relaxed)
+}
 static SELECTION_UNDO: Mutex<Option<SelectionUndo>> = Mutex::new(None);
 
 const MAX_COMMAND_AGE: Duration = Duration::from_secs(1);
@@ -133,6 +154,26 @@ fn run(rx: Receiver<Command>) {
 
 unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     if !same_context(hwnd, focus_generation) {
+        return;
+    }
+
+    if let Some(selection) = focus::selected_text() {
+        crate::hook::e2e_trace("selection: read through UI Automation".to_string());
+        let mut converted = auto_convert(&selection);
+        if converted == *selection {
+            crate::hook::e2e_trace("selection: conversion was a no-op".to_string());
+        } else if !release_modifiers() {
+            crate::hook::e2e_trace("selection: could not release held modifiers".to_string());
+            overlay::show(tr(T::ErrModifiers));
+        } else if same_context(hwnd, focus_generation) {
+            type_over_selection(hwnd, focus_generation, &converted);
+        }
+        converted.zeroize();
+        return;
+    }
+    if !clipboard_fallback() {
+        crate::hook::e2e_trace("selection: not shared by the app; clipboard not used".to_string());
+        overlay::show(tr(T::ErrSelectionNotShared));
         return;
     }
 
@@ -237,10 +278,16 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
         converted.zeroize();
         return;
     }
-    if !crate::inject::apply(0, &converted, None) {
+    type_over_selection(hwnd, focus_generation, &converted);
+    selection.zeroize();
+    converted.zeroize();
+}
+
+/// Type `converted` over the active selection, which replaces it, and keep
+/// the app's own Undo (Ctrl+Z) for it.
+unsafe fn type_over_selection(hwnd: isize, focus_generation: u64, converted: &str) {
+    if !crate::inject::apply(0, converted, None) {
         overlay::show(tr(T::ErrInjectConversion));
-        selection.zeroize();
-        converted.zeroize();
         return;
     }
     crate::stats::record_manual();
@@ -249,8 +296,6 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
         focus_generation,
         completed_at: Instant::now(),
     });
-    selection.zeroize();
-    converted.zeroize();
 }
 
 unsafe fn undo_selection(hwnd: isize, focus_generation: u64) {

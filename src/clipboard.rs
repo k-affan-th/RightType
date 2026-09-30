@@ -4,6 +4,12 @@
 //! convert it, restore the previous clipboard, and inject Unicode into the active
 //! selection. Only `CF_UNICODETEXT` is handled (all we need), and reads never log
 //! or persist the text.
+//!
+//! Everything RightType writes is marked with the formats Windows defines for
+//! it ([`PRIVATE_FORMATS`]): not kept in clipboard history (Win+V), not
+//! synced to the user's other devices, and skipped by clipboard monitors that
+//! honour the convention. Programs that ignore it can still read it, like
+//! anything else on the clipboard.
 
 use std::slice;
 use std::thread;
@@ -13,7 +19,7 @@ use zeroize::{Zeroize, Zeroizing};
 use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL, HWND};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData,
-    GetClipboardSequenceNumber, OpenClipboard, SetClipboardData,
+    GetClipboardSequenceNumber, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
 };
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 
@@ -51,8 +57,51 @@ pub enum SnapshotError {
     NotPlainText,
 }
 
+/// Registered formats that ask Windows (and well-behaved clipboard tools) to
+/// leave the text alone: <https://learn.microsoft.com/windows/win32/dataxchg/clipboard-formats#cloud-clipboard-and-clipboard-history-formats>
+const PRIVATE_FORMATS: [&str; 3] = [
+    "ExcludeClipboardContentFromMonitorProcessing",
+    "CanIncludeInClipboardHistory",
+    "CanUploadToCloudClipboard",
+];
+
+/// The ids Windows gave [`PRIVATE_FORMATS`] in this session.
+fn private_format_ids() -> &'static [u32; 3] {
+    static IDS: std::sync::OnceLock<[u32; 3]> = std::sync::OnceLock::new();
+    IDS.get_or_init(|| {
+        PRIVATE_FORMATS.map(|name| {
+            let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+            unsafe { RegisterClipboardFormatW(windows::core::PCWSTR(wide.as_ptr())) }
+        })
+    })
+}
+
 fn is_plain_text_format(format: u32) -> bool {
     matches!(format, CF_TEXT | CF_OEMTEXT | CF_UNICODETEXT | CF_LOCALE)
+        || (format != 0 && private_format_ids().contains(&format))
+}
+
+/// Add [`PRIVATE_FORMATS`] to the clipboard this thread has open, each as a
+/// DWORD 0 ("no"). Best-effort.
+unsafe fn mark_private() {
+    for &id in private_format_ids() {
+        if id == 0 {
+            continue;
+        }
+        let Ok(hmem) = GlobalAlloc(GMEM_MOVEABLE, std::mem::size_of::<u32>()) else {
+            continue;
+        };
+        let dst = GlobalLock(hmem) as *mut u32;
+        if dst.is_null() {
+            let _ = GlobalFree(hmem);
+            continue;
+        }
+        *dst = 0;
+        let _ = GlobalUnlock(hmem);
+        if SetClipboardData(id, HANDLE(hmem.0)).is_err() {
+            let _ = GlobalFree(hmem);
+        }
+    }
 }
 
 /// A clipboard value that can be restored without silently discarding a rich
@@ -179,10 +228,12 @@ pub unsafe fn set_text(text: &str) -> bool {
     let _ = EmptyClipboard();
     // On success the system takes ownership of `hmem`, so we must not free it.
     let ok = SetClipboardData(CF_UNICODETEXT, HANDLE(hmem.0)).is_ok();
-    let _ = CloseClipboard();
-    if !ok {
+    if ok {
+        mark_private();
+    } else {
         let _ = GlobalFree(hmem);
     }
+    let _ = CloseClipboard();
     ok
 }
 
