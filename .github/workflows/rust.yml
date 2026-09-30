@@ -95,6 +95,14 @@ jobs:
         $list.Add("th-TH")
         Set-WinUserLanguageList $list -Force
         Get-WinUserLanguageList | Format-Table LanguageTag, InputMethodTips
+    # Windows 11's Notepad (a Store app; the runner only has the classic
+    # one). Best effort: without it the notepad11 target is skipped.
+    - name: Windows 11 Notepad
+      continue-on-error: true
+      shell: pwsh
+      run: |
+        winget install --id 9MSMLRH6LZF3 --source msstore --accept-package-agreements --accept-source-agreements --silent --disable-interactivity
+        Get-AppxPackage *WindowsNotepad* | Format-Table Name, Version
     - uses: actions/setup-python@v5
       with:
         python-version: "3.12"

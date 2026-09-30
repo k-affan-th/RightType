@@ -218,6 +218,110 @@ class Notepad(fs.Target):
             pass
 
 
+class SkipTarget(Exception):
+    """The app this target needs is not on this machine."""
+
+
+class Notepad11(Notepad):
+    """Windows 11's Notepad (the Store app: a RichEdit box in a WinUI
+    window), not the classic one CI has in System32. Thai typed there by
+    RightType arrived with characters missing on a real PC."""
+
+    name = "notepad11"
+    APP = r"shell:AppsFolder\Microsoft.WindowsNotepad_8wekyb3d8bbwe!App"
+
+    def __init__(self):
+        from pywinauto import Application, Desktop
+        subprocess.run(["taskkill", "/IM", "notepad.exe", "/F"], capture_output=True)
+        time.sleep(1)
+
+        def windows():
+            out = {}
+            for w in Desktop(backend="uia").windows(top_level_only=True):
+                try:
+                    if w.class_name() == "Notepad":
+                        out[w.handle] = w
+                except Exception:
+                    pass
+            return out
+
+        before = set(windows())
+        subprocess.Popen(["explorer.exe", self.APP])
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            fresh = [h for h in windows() if h not in before]
+            if fresh:
+                break
+            time.sleep(0.5)
+        else:
+            raise SkipTarget("Windows 11 Notepad is not installed here")
+        time.sleep(2.0)
+        self.app = Application(backend="uia").connect(handle=fresh[0], timeout=10)
+        self.win = self.app.top_window()
+        self.hwnd = self.win.handle
+        kinds = sorted({d.element_info.class_name for d in self.win.descendants()})
+        print(f"notepad11 window classes: {kinds}", flush=True)
+        if "RichEditD2DPT" not in kinds:
+            self.close()
+            raise SkipTarget("the Notepad that opened is not the Windows 11 one")
+
+    def focus(self):
+        self.win.set_focus()
+        for d in self.win.descendants():
+            if d.element_info.class_name == "RichEditD2DPT":
+                d.set_focus()
+                break
+        time.sleep(0.2)
+
+
+def packets(text, pause=0.0):
+    """Send `text` as KEYEVENTF_UNICODE key events (what RightType's
+    injector sends): all at once when `pause` is 0, else one by one."""
+    events = []
+    for ch in text:
+        for up in (False, True):
+            i = fs.INPUT(type=1)
+            i.u.ki = fs.KEYBDINPUT(0, ord(ch), 0x4 | (0x2 if up else 0), 0, 0)
+            events.append(i)
+    if pause:
+        for i in range(0, len(events), 2):
+            arr = (fs.INPUT * 2)(*events[i:i + 2])
+            user32.SendInput(2, arr, ctypes.sizeof(fs.INPUT))
+            time.sleep(pause)
+    else:
+        arr = (fs.INPUT * len(events))(*events)
+        user32.SendInput(len(events), arr, ctypes.sizeof(fs.INPUT))
+    time.sleep(0.8)
+
+
+def notepad11_probe(t):
+    """Evidence, with RightType not running: what does Windows 11 Notepad
+    keep of Thai sent the way RightType sends it? Printed, not judged."""
+    word = "วันนี้"
+    variants = [
+        ("ASCII burst, English layout", HKL_EN, lambda: packets("hello"), "hello"),
+        ("Thai burst, English layout", HKL_EN, lambda: packets(word), word),
+        ("Thai one by one, English layout", HKL_EN, lambda: packets(word, 0.15), word),
+        ("Thai burst, Thai layout", HKL_TH, lambda: packets(word), word),
+        ("Thai one by one, Thai layout", HKL_TH, lambda: packets(word, 0.15), word),
+        # What RightType does at the anchor: the last mark right as it asks
+        # the window to switch to the Thai layout.
+        ("last mark sent with a layout switch", HKL_EN,
+         lambda: (packets(word[:-1]), user32.PostMessageW(t.hwnd, 0x0050, 0, HKL_TH),
+                  packets(word[-1])), word),
+        ("Thai typed on the Thai keyboard", HKL_TH, lambda: type_keys(";yoouh"), word),
+    ]
+    for name, hkl, send, expect in variants:
+        got = []
+        for _ in range(3):
+            t.clear()
+            t.layout(hkl)
+            send()
+            got.append(t.read().strip())
+        kept = sum(g == expect for g in got)
+        print(f"  probe notepad11 {name}: {kept}/3 intact {got}", flush=True)
+
+
 # --------------------------------------------------------------------------- cases
 
 
@@ -386,7 +490,7 @@ def edge_sweep(t):
 
 
 def main():
-    want = set(sys.argv[1:]) or {"page", "omnibox", "edge", "notepad", "hang"}
+    want = set(sys.argv[1:]) or {"page", "omnibox", "edge", "notepad", "notepad11", "hang"}
     # Thai must be loaded for this session (CI installs it just before).
     user32.LoadKeyboardLayoutW("0000041E", 0)
     user32.LoadKeyboardLayoutW("00000409", 0)
@@ -400,7 +504,7 @@ def main():
     # others (after a word boundary handled inside a focus callback), and one
     # clean round proves nothing.
     targets = [("page", Page), ("omnibox", Omnibox)] + [("edge", EdgeOmnibox)] * EDGE_ROUNDS + [
-        ("notepad", Notepad), ("hang", HangPage)]
+        ("notepad", Notepad), ("notepad11", Notepad11), ("hang", HangPage)]
     sections = {}
     try:
         for key, make in targets:
@@ -412,6 +516,16 @@ def main():
             if key == "omnibox":
                 subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
                 t = make()
+                proc = fs.start_rt()
+                t.focus()
+            elif key == "notepad11":
+                subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
+                try:
+                    t = make()
+                except SkipTarget as why:
+                    print(f"notepad11 skipped: {why}", flush=True)
+                    continue
+                notepad11_probe(t)
                 proc = fs.start_rt()
                 t.focus()
             else:
