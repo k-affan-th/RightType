@@ -403,7 +403,15 @@ unsafe fn paint(hwnd: HWND) {
 }
 
 /// Draw `text` centred in `rc`.
+///
+/// Nothing for empty text: DrawTextW reads the first character even when told
+/// the text is 0 long, and an empty `Vec`'s pointer is a dangling 0x2. That
+/// crashed RightType (0xC000041D) when a paint arrived after [`hide`] had
+/// wiped the text, which Edge's timing made happen.
 unsafe fn draw_centered(hdc: HDC, text: &str, rc: &mut RECT) {
+    if text.is_empty() {
+        return;
+    }
     let mut units: Vec<u16> = text.encode_utf16().collect();
     DrawTextW(hdc, &mut units, rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     units.zeroize();

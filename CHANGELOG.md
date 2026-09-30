@@ -23,6 +23,11 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 
+- **RightType could crash in Edge's address bar** (2.0.0), after which
+  nothing was corrected and Shift+Backspace was a plain Backspace until it
+  was restarted: the small TH/EN tag could be painted after its text had
+  been wiped, and drawing empty text read an invalid pointer. Found with
+  four Edge rounds per CI run and a crash report in the debug build.
 - **Shift+Backspace right after an automatic fix did nothing** (2.0.0): the
   Shift key on its own made RightType forget the words it keeps for flipping
   back, so the flip found nothing. It flips the fixed word back again.
