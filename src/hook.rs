@@ -1741,6 +1741,7 @@ unsafe fn convert_last_word() {
     let changed = converted != word;
     if changed {
         let mut shown = policy::shown_with_caps(&converted, caps_on());
+        inject::expect_before_caret(&policy::shown_with_caps(&word, caps_on()));
         let injected = inject::apply(backspaces, &shown, None);
         shown.zeroize();
         if !injected {
@@ -1792,6 +1793,7 @@ unsafe fn withdraw_owned_run_to(run: &str) -> bool {
     };
     let shown = policy::shown_with_caps(run, caps_on());
     let delta = render::delta(&owned.rendered, &shown);
+    inject::expect_before_caret(&owned.rendered);
     if !delta.is_empty() && !inject::apply(delta.backspaces, &delta.insert, None) {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
     }
@@ -1917,6 +1919,12 @@ where
     };
 
     let delta = render::delta(&on_screen, &target);
+    // Before we own the run the app shows the keys as CapsLock shows them.
+    inject::expect_before_caret(&if holding {
+        on_screen.clone()
+    } else {
+        policy::shown_with_caps(&on_screen, caps_on())
+    });
     if !delta.is_empty() && !apply(delta.backspaces, &delta.insert, None) {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
         STATE.with(|s| s.borrow_mut().owned = None);
@@ -1994,6 +2002,9 @@ where
     // callers that swallowed the triggering character before it landed.
     let backspaces = word.chars().count() - usize::from(boundary_vk.is_none());
     let mut corrected = d.corrected;
+    if boundary_vk.is_some() {
+        inject::expect_before_caret(&policy::shown_with_caps(word, caps_on()));
+    }
     if !apply(backspaces, &corrected, boundary_vk) {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
         corrected.zeroize();

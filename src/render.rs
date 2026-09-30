@@ -59,6 +59,36 @@ pub fn delta(rendered: &str, target: &str) -> Delta {
     }
 }
 
+/// How many characters before the caret are the `expected` text, given what
+/// a standard Windows text box actually holds there (`before_caret`).
+///
+/// Two things make them differ. A text box applies Thai input sequence
+/// checking to typed keys and drops a vowel or tone mark that cannot follow
+/// the character before it (English typed on the Thai layout: `there` gives
+/// `ะ้ำพำ`, the box keeps `ะพำ`) — the marks that are missing are skipped, and
+/// the answer is what is really there. And a slow app may not have handled
+/// the latest keys yet when it is asked (they wait in its queue behind the
+/// question) — then `None`: the text is not there yet, and a replacement
+/// must go in as keys, which queue up behind the rest.
+pub fn chars_on_screen(expected: &str, before_caret: &str) -> Option<usize> {
+    let e: Vec<char> = expected.chars().collect();
+    let b: Vec<char> = before_caret.chars().collect();
+    let droppable = |c: char| ('\u{0E30}'..='\u{0E4E}').contains(&c);
+    let (mut i, mut j) = (e.len(), b.len());
+    while i > 0 {
+        if j > 0 && e[i - 1] == b[j - 1] {
+            i -= 1;
+            j -= 1;
+        } else if droppable(e[i - 1]) && i > 1 {
+            // Never the first character: something must have landed.
+            i -= 1;
+        } else {
+            return None;
+        }
+    }
+    Some(b.len() - j)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,5 +136,21 @@ mod tests {
         let delta = delta("กขค", "ก");
         assert_eq!(delta.backspaces, 2);
         assert!(delta.insert.is_empty());
+    }
+
+    #[test]
+    fn what_a_text_box_really_holds() {
+        use super::chars_on_screen;
+        // All there.
+        assert_eq!(chars_on_screen("l;ylf", "hello l;ylf"), Some(5));
+        assert_eq!(chars_on_screen("", "abc"), Some(0));
+        // Thai input sequence checking dropped ้ and ำ from ะ้ำพำ.
+        assert_eq!(chars_on_screen("ะ้ำพำ", "วันนี้ ะพำ"), Some(3));
+        // The box has not handled the latest keys yet.
+        assert_eq!(chars_on_screen("l;ylf", "relogin "), None);
+        assert_eq!(chars_on_screen("l;ylf", "l;y"), None);
+        // Only vowels and marks can be missing, never a letter.
+        assert_eq!(chars_on_screen("ab", "b"), None);
+        assert_eq!(chars_on_screen("ำ", ""), None);
     }
 }

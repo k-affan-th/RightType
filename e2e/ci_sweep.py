@@ -691,6 +691,9 @@ def verify_catches_garbling(t):
         print(f"  garbling attempt {attempt}: got {got!r}, check said {verdict}", flush=True)
         fs.check(t.name, f"check-after-write tells the truth (attempt {attempt})", verdict, truth)
     fs.check(t.name, "after a garbled word the next arrives intact", t.read().strip(), "สวัสดี")
+    # End the word, so this RightType's problem report has a word end too.
+    tap(fs.SPACE)
+    time.sleep(0.5)
 
 
 def edge_sweep(t):
@@ -729,7 +732,10 @@ def report_has_no_typed_text(target, results):
         return
     words = {w for _, _, _, got, expect in results for w in (got + " " + expect).split()
              if len(w) >= 3}
-    leaked = sorted(w for w in words if w in report)
+    # Whole words: "correct" is part of the report's own word "correction".
+    import re
+    leaked = sorted(w for w in words
+                    if re.search(rf"(?<![\w\u0E00-\u0E7F]){re.escape(w)}(?![\w\u0E00-\u0E7F])", report))
     fs.check(target, "problem report has no typed text", " ".join(leaked), "")
     fs.check(target, "problem report records word ends",
              "yes" if "word end" in report else "no", "yes")

@@ -4,6 +4,20 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Fixed
+
+- **Notepad, WordPad and other standard text boxes: English typed on the
+  Thai layout could take two more characters with it when fixed**
+  (`;yoouh there` came out as `วันนีthere`). These boxes drop Thai vowels
+  and tone marks that cannot follow the letter before (`there` on the Thai
+  layout is `ะ้ำพำ`; the box keeps `ะพำ`), so there were fewer characters to
+  delete than were typed. RightType now looks at what the box really holds
+  before replacing.
+- **A slow text box could get a correction in the wrong place**: Windows 11
+  Notepad sometimes answers before it has handled the latest keys. If what
+  is before the caret is not what RightType expects yet, the correction is
+  typed as keys instead, which arrive after them.
+
 ### Added
 
 - **Tray → "Save a problem report…"** writes what RightType did lately (the

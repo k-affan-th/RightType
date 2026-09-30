@@ -374,6 +374,57 @@ impl TextBox {
     /// edit the box can undo. Only with a bare caret (nothing selected) and
     /// enough text before it; checked afterwards by where the caret ended up.
     /// `Err` before anything changed means the caller may fall back to keys.
+    /// How many characters before `caret` to replace, when the last `delete`
+    /// characters of `context` are what the correction replaces (see
+    /// [`righttype::render::chars_on_screen`]).
+    fn chars_to_replace(
+        &self,
+        caret: usize,
+        context: &str,
+        delete: usize,
+    ) -> Result<usize, ReplaceError> {
+        use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
+        use zeroize::Zeroize;
+        let len = self
+            .ask(WM_GETTEXTLENGTH, 0, 0)
+            .ok_or(ReplaceError::Untouched("no answer"))?;
+        if len > 0xFFFF || caret > len {
+            return Err(ReplaceError::Untouched("caret position out of reach"));
+        }
+        let mut units = vec![0u16; len + 1];
+        let got = self
+            .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)
+            .ok_or(ReplaceError::Untouched("no answer"))?
+            .min(len);
+        // RichEdit counts a line break as one position and WM_GETTEXT as two.
+        let usable = caret <= got && !(self.rich && units[..caret].contains(&(b'\n' as u16)));
+        let mut before = if usable {
+            String::from_utf16_lossy(&units[..caret])
+        } else {
+            String::new()
+        };
+        units.zeroize();
+        if !usable {
+            return Err(ReplaceError::Untouched(
+                "text before the caret out of reach",
+            ));
+        }
+        let keep: String = {
+            let n = context.chars().count().saturating_sub(delete);
+            context.chars().take(n).collect()
+        };
+        let replaced: String = context.chars().skip(keep.chars().count()).collect();
+        let whole = righttype::render::chars_on_screen(context, &before);
+        let part = righttype::render::chars_on_screen(&replaced, &before);
+        before.zeroize();
+        match (whole, part) {
+            (Some(_), Some(n)) => Ok(n),
+            _ => Err(ReplaceError::Untouched(
+                "the box has not caught up with the keys",
+            )),
+        }
+    }
+
     /// Debug e2e trace: the caret, and the text before it, as the box holds
     /// them right before a replacement.
     #[cfg(debug_assertions)]
@@ -391,7 +442,12 @@ impl TextBox {
         ));
     }
 
-    pub fn replace_before_caret(&self, delete: usize, text: &str) -> Result<(), ReplaceError> {
+    pub fn replace_before_caret(
+        &self,
+        delete: usize,
+        text: &str,
+        context: Option<&str>,
+    ) -> Result<(), ReplaceError> {
         const EM_SETSEL: u32 = 0x00B1;
         const EM_REPLACESEL: u32 = 0x00C2;
         let (start, end) = self
@@ -400,6 +456,10 @@ impl TextBox {
         if start != end {
             return Err(ReplaceError::Untouched("text is selected"));
         }
+        let delete = match context {
+            Some(context) => self.chars_to_replace(start, context, delete)?,
+            None => delete,
+        };
         if start < delete || start >= 0xFFFF {
             return Err(ReplaceError::Untouched("caret position out of reach"));
         }

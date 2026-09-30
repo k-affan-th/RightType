@@ -44,6 +44,7 @@ use zeroize::Zeroize;
 /// Calls `SendInput`; must run while the keyboard hook is installed so its own
 /// events are recognised (via `LLKHF_INJECTED`) and ignored.
 pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> bool {
+    let context = CONTEXT.with(|c| c.borrow_mut().take());
     if backspaces == 0 && text.is_empty() && trailing_vk.is_none() {
         return true;
     }
@@ -65,7 +66,8 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
             }
             other => other,
         };
-        let replaced = tb.replace_before_caret(backspaces, &whole);
+        let replaced =
+            tb.replace_before_caret(backspaces, &whole, context.as_deref().map(|s| s.as_str()));
         whole.zeroize();
         match replaced {
             Ok(()) => {
@@ -185,6 +187,22 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
         }
     }
     sent == inputs.len()
+}
+
+thread_local! {
+    /// What the next [`apply`] expects just before the caret; see
+    /// [`expect_before_caret`].
+    static CONTEXT: std::cell::RefCell<Option<zeroize::Zeroizing<String>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Tell the next [`apply`] (on this thread) what the app should be showing
+/// just before the caret, the deleted characters last. A standard text box is
+/// then checked first: if it has not handled the latest keys yet, the
+/// correction goes in as keys (they queue behind them); if it dropped Thai
+/// marks it would not accept, only what is there is deleted.
+pub fn expect_before_caret(text: &str) {
+    CONTEXT.with(|c| *c.borrow_mut() = Some(zeroize::Zeroizing::new(text.to_string())));
 }
 
 /// Debug e2e builds: a switch the test harness sets. Always off in release.
