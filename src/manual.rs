@@ -158,12 +158,12 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     }
 
     if let Some(selection) = focus::selected_text() {
-        crate::hook::e2e_trace("selection: read through UI Automation".to_string());
+        crate::hook::trace_note("selection: read through UI Automation");
         let mut converted = auto_convert(&selection);
         if converted == *selection {
-            crate::hook::e2e_trace("selection: conversion was a no-op".to_string());
+            crate::hook::trace_note("selection: conversion was a no-op");
         } else if !release_modifiers() {
-            crate::hook::e2e_trace("selection: could not release held modifiers".to_string());
+            crate::hook::trace_note("selection: could not release held modifiers");
             overlay::show(tr(T::ErrModifiers));
         } else if same_context(hwnd, focus_generation) {
             type_over_selection(hwnd, focus_generation, &converted);
@@ -172,7 +172,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
         return;
     }
     if !clipboard_fallback() {
-        crate::hook::e2e_trace("selection: not shared by the app; clipboard not used".to_string());
+        crate::hook::trace_note("selection: not shared by the app; clipboard not used");
         overlay::show(tr(T::ErrSelectionNotShared));
         return;
     }
@@ -180,14 +180,12 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     let original = match clipboard::snapshot_plain_text() {
         Ok(snapshot) => snapshot,
         Err(clipboard::SnapshotError::Busy) => {
-            crate::hook::e2e_trace("selection: clipboard is busy".to_string());
+            crate::hook::trace_note("selection: clipboard is busy");
             overlay::show(tr(T::ErrClipboardBusy));
             return;
         }
         Err(clipboard::SnapshotError::NotPlainText) => {
-            crate::hook::e2e_trace(
-                "selection: selection conversion needs a plain-text clipboard".to_string(),
-            );
+            crate::hook::trace_note("selection: selection conversion needs a plain-text clipboard");
             overlay::show(tr(T::ErrClipboardNotPlain));
             return;
         }
@@ -196,7 +194,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     // The hotkey chord (Shift+CapsLock) may still be physically held; release any
     // modifiers so the injected Ctrl+C/V isn't polluted by them.
     if !release_modifiers() {
-        crate::hook::e2e_trace("selection: could not release held modifiers".to_string());
+        crate::hook::trace_note("selection: could not release held modifiers");
         overlay::show(tr(T::ErrModifiers));
         return;
     }
@@ -207,7 +205,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     let before = clipboard::sequence();
     if !send_chord(VK_C.0) {
         let _ = clipboard::restore_snapshot(&original);
-        crate::hook::e2e_trace("selection: could not copy the selection".to_string());
+        crate::hook::trace_note("selection: could not copy the selection");
         overlay::show(tr(T::ErrCopy));
         return;
     }
@@ -219,7 +217,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
 
     if clipboard::sequence() == before {
         let _ = clipboard::restore_snapshot(&original);
-        crate::hook::e2e_trace("selection: no text selection was copied".to_string());
+        crate::hook::trace_note("selection: no text selection was copied");
         overlay::show(tr(T::ErrNothingCopied));
         return;
     }
@@ -238,19 +236,19 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     }
     let Some(mut selection) = copied_text else {
         let _ = clipboard::restore_snapshot(&original);
-        crate::hook::e2e_trace("selection: selection is not Unicode text".to_string());
+        crate::hook::trace_note("selection: selection is not Unicode text");
         overlay::show(tr(T::ErrNotUnicode));
         return;
     };
     if selection.is_empty() {
-        crate::hook::e2e_trace("selection: copied selection was empty".to_string());
+        crate::hook::trace_note("selection: copied selection was empty");
         let _ = clipboard::restore_snapshot(&original);
         return;
     }
 
     let mut converted = auto_convert(&selection);
     if converted == selection {
-        crate::hook::e2e_trace("selection: conversion was a no-op".to_string());
+        crate::hook::trace_note("selection: conversion was a no-op");
         // Nothing to flip (e.g. selection already in the right script).
         let _ = clipboard::restore_snapshot(&original);
         selection.zeroize();
@@ -267,7 +265,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     // replaces the active selection directly, so there is no asynchronous paste
     // racing a fixed-delay clipboard restore (notably in Word and browsers).
     if !clipboard::restore_snapshot(&original) {
-        crate::hook::e2e_trace("selection: could not restore the clipboard".to_string());
+        crate::hook::trace_note("selection: could not restore the clipboard");
         overlay::show(tr(T::ErrRestoreClipboard));
         selection.zeroize();
         converted.zeroize();

@@ -65,6 +65,13 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
         match replaced {
             Ok(()) => {
                 crate::hook::e2e_trace(format!("inject: text box replaced {backspaces}"));
+                righttype::diag::note(
+                    "replaced by the text box",
+                    &[
+                        ("deleted", backspaces.into()),
+                        ("typed", text.chars().count().into()),
+                    ],
+                );
                 let Some(vk) = trailing else {
                     return true;
                 };
@@ -76,9 +83,14 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
             }
             Err(crate::focus::ReplaceError::Untouched(why)) => {
                 crate::hook::e2e_trace(format!("inject: text box not used ({why}), keys instead"));
+                righttype::diag::note("text box not used", &[("why", why.into())]);
             }
             Err(crate::focus::ReplaceError::Unknown(why)) => {
                 crate::hook::e2e_trace(format!("inject: text box replace unclear ({why})"));
+                righttype::diag::note(
+                    "text box result unclear, not retyped",
+                    &[("why", why.into())],
+                );
                 return false;
             }
         }
@@ -135,6 +147,15 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
         sent += SendInput(rest, size_of::<INPUT>() as i32) as usize;
     }
     INJECTING.store(false, Ordering::SeqCst);
+    righttype::diag::note(
+        "typed as keys",
+        &[
+            ("deleted", backspaces.into()),
+            ("typed", text.chars().count().into()),
+            ("waited", split.is_some().into()),
+            ("all_sent", (sent == inputs.len()).into()),
+        ],
+    );
     sent == inputs.len()
 }
 

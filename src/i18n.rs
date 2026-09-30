@@ -91,6 +91,7 @@ texts! {
     TraySettings => "Settings…", "ตั้งค่า…";
     TrayStats => "Statistics…", "สถิติ…";
     TrayHelp => "Hotkeys && help…", "ปุ่มลัดและวิธีใช้…";
+    TrayReport => "Save a problem report…", "บันทึกรายงานปัญหา…";
     TrayQuit => "Quit", "ออกจากโปรแกรม";
     TrayPause => "Pause", "หยุดชั่วคราว";
     TrayPause10 => "For 10 minutes", "10 นาที";

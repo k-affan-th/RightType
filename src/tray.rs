@@ -55,6 +55,7 @@ struct Tray {
     m_settings: nwg::MenuItem,
     m_stats: nwg::MenuItem,
     m_help: nwg::MenuItem,
+    m_report: nwg::MenuItem,
     _sep: nwg::MenuSeparator,
     m_quit: nwg::MenuItem,
 }
@@ -242,6 +243,13 @@ pub fn run() {
         .build(&mut m_help)
         .expect("help item");
 
+    let mut m_report = nwg::MenuItem::default();
+    nwg::MenuItem::builder()
+        .text(tr(T::TrayReport))
+        .parent(&menu)
+        .build(&mut m_report)
+        .expect("report item");
+
     let mut sep = nwg::MenuSeparator::default();
     nwg::MenuSeparator::builder()
         .parent(&menu)
@@ -286,6 +294,7 @@ pub fn run() {
         m_settings,
         m_stats,
         m_help,
+        m_report,
         _sep: sep,
         m_quit,
     });
@@ -384,6 +393,8 @@ pub fn run() {
                     stats::open();
                 } else if handle == ui_h.m_help.handle {
                     crate::onboard::show(false);
+                } else if handle == ui_h.m_report.handle {
+                    crate::report::save();
                 }
                 sync_state(&ui_h);
             }
@@ -521,6 +532,7 @@ fn sync_state(ui: &Rc<Tray>) {
             (&ui.m_settings, T::TraySettings),
             (&ui.m_stats, T::TrayStats),
             (&ui.m_help, T::TrayHelp),
+            (&ui.m_report, T::TrayReport),
             (&ui.m_quit, T::TrayQuit),
             (&ui.m_pause[0], T::TrayPause10),
             (&ui.m_pause[1], T::TrayPause30),

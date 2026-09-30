@@ -4,6 +4,15 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+
+- **Tray → "Save a problem report…"** writes what RightType did lately (the
+  last 400 steps: a word ended and was or wasn't fixed, how the correction
+  was typed, Shift+Backspace, which program the caret moved to) to a file
+  you choose, to attach to a bug report. There is no typed text in it:
+  a word appears only as how many Thai and English letters it had. It is
+  kept in memory only and written only when you save it.
+
 ### Changed
 
 - **English words with a prefix or suffix stay English**: a known word with

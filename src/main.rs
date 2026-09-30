@@ -43,6 +43,8 @@ mod palette;
 #[cfg(feature = "winos")]
 mod ram;
 #[cfg(feature = "winos")]
+mod report;
+#[cfg(feature = "winos")]
 mod safety;
 #[cfg(feature = "winos")]
 mod session;

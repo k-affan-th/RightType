@@ -17,6 +17,7 @@
 //! - [`predict`] — per-field language habits (opt-in) for switching before typing.
 //! - [`per_app`] — per-app correction modes and their text form.
 //! - [`detect`] — layout-mismatch detection over completed words.
+//! - [`diag`] — recent decisions, with no typed text, for a problem report.
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
 //! - [`segment`] — Thai word segmentation (maximal matching) for space-less Thai.
 //! - [`render`] — reconciling on-screen text with the run's current best reading.
@@ -27,6 +28,7 @@
 
 pub mod buffer;
 pub mod detect;
+pub mod diag;
 pub mod dict;
 pub mod english;
 pub mod hotkeys;

@@ -30,6 +30,7 @@ do not fail the run until they are fixed (and then say so, as XPASS).
 
 import ctypes
 import ctypes.wintypes as wt
+import os
 import subprocess
 import threading
 import sys
@@ -50,6 +51,11 @@ ENTER = 0x0D
 KNOWN_FAILING: set[str] = set()
 EDGE_ROUNDS = 4
 CURRENT = [None]  # the running RightType process
+# The debug build writes its problem report here every 1.5 s (tray → "Save a
+# problem report…" in a release build), so the sweep can prove it holds no
+# typed text.
+PROBLEM_REPORT = Path(os.environ.get("TEMP", ".")) / "rt-e2e-problem-report.txt"
+os.environ["RIGHTTYPE_E2E_REPORT"] = str(PROBLEM_REPORT)
 
 flip = lambda: tap(BACK, SHIFT)  # noqa: E731
 
@@ -636,6 +642,24 @@ def ui_timing():
         time.sleep(0.5)
 
 
+def report_has_no_typed_text(target, results):
+    """The problem report RightType kept while this target was typed in
+    names what it did, never the words: none of the text the checks saw may
+    be in it."""
+    time.sleep(2)  # one more report tick
+    try:
+        report = PROBLEM_REPORT.read_text(encoding="utf-8")
+    except OSError:
+        fs.check(target, "problem report was written", "", "a report")
+        return
+    words = {w for _, _, _, got, expect in results for w in (got + " " + expect).split()
+             if len(w) >= 3}
+    leaked = sorted(w for w in words if w in report)
+    fs.check(target, "problem report has no typed text", " ".join(leaked), "")
+    fs.check(target, "problem report records word ends",
+             "yes" if "word end" in report else "no", "yes")
+
+
 def main():
     want = set(sys.argv[1:]) or {"page", "omnibox", "edge", "notepad", "notepad11", "hang"}
     # Thai must be loaded for this session (CI installs it just before).
@@ -681,10 +705,12 @@ def main():
             if user32.GetKeyState(fs.CAPS) & 1:
                 print("CapsLock was left on; turning it off", flush=True)
                 tap(fs.CAPS)
+            results_before = len(fs.RESULTS)
             try:
                 {"edge": edge_sweep, "hang": hang_sweep}.get(key, sweep)(t)
             finally:
                 print(f"RightType after {key}: {rt_health(proc)}", flush=True)
+                report_has_no_typed_text(key, fs.RESULTS[results_before:])
                 t.close()
                 sections.setdefault(key, []).append((start, fs.LOG.stat().st_size))
     finally:

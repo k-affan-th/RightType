@@ -32,7 +32,9 @@ RightType lives in the **system tray** (no window, no console). Click the tray i
 it switches itself back on), **Manual/Auto/Suggest** mode, **In this app** (a mode
 of its own, or off, for the app you were just typing in), **Learn new words**,
 **Start with Windows**, **Fix text** (paste a paragraph typed in the wrong layout and
-copy it back fixed), **Settings**, **Statistics**, **Hotkeys & help**, and **Quit**.
+copy it back fixed), **Settings**, **Statistics**, **Hotkeys & help**, **Save a problem report**
+(what RightType did lately, to attach to a bug report — words appear only as
+letter counts, never as text), and **Quit**.
 The tooltip shows the current mode, and the icon turns grey while RightType is off.
 
 **Settings** has five pages — General (mode, on/off, start with Windows, learning),

@@ -31,6 +31,7 @@ use std::time::{Duration, Instant};
 use zeroize::Zeroize;
 
 use righttype::buffer::{Key, WordBuffer};
+use righttype::diag::{self, Shape};
 use righttype::hotkeys::{Action, Chord, Hotkeys};
 use righttype::layout::auto_convert;
 use righttype::per_app::AppMode;
@@ -451,14 +452,20 @@ fn set_undo(injected_len: usize, restore_text: &str, kind: UndoKind) {
 unsafe fn undo_last_correction() {
     let Some(rec) = STATE.with(|s| s.borrow_mut().undo.take()) else {
         e2e_trace("undo: no record".to_string());
+        diag::note("undo: nothing to undo", &[]);
         return;
     };
     if rec.created_at.elapsed() > Duration::from_secs(30) {
         e2e_trace("undo: record expired".to_string());
+        diag::note("undo: older than 30 s", &[]);
         return;
     }
     let ok = inject::apply(rec.injected_len, &rec.restore_text, None);
     e2e_trace(format!("undo apply len={} -> {ok}", rec.injected_len));
+    diag::note(
+        "undo",
+        &[("deleted", rec.injected_len.into()), ("ok", ok.into())],
+    );
     if ok {
         let restored = rec.restore_text.trim_end_matches(['\r', '\t', ' ']);
         // The word counted was the correction; the one kept is the original.
@@ -686,6 +693,13 @@ pub(crate) fn e2e_trace(msg: String) {
 
 #[cfg(not(debug_assertions))]
 pub(crate) fn e2e_trace(_: String) {}
+
+/// A fixed message for both the debug trace and the problem report
+/// ([`diag`]); `'static`, so it cannot carry typed text.
+pub(crate) fn trace_note(msg: &'static str) {
+    e2e_trace(msg.to_string());
+    diag::note(msg, &[]);
+}
 
 /// Debug e2e builds: report a fatal exception (code, address and the
 /// faulting thread's stack) to stderr before Windows ends the process, which
@@ -1017,6 +1031,23 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             STATE.with(|s| s.borrow().buf.current().chars().count()),
             STATE.with(|s| s.borrow().recent.len()),
         ));
+        if !repeat {
+            diag::note(
+                "Shift+Backspace",
+                &[
+                    (
+                        "word_in_progress",
+                        STATE
+                            .with(|s| s.borrow().buf.current().chars().count())
+                            .into(),
+                    ),
+                    (
+                        "recent_words",
+                        STATE.with(|s| s.borrow().recent.len()).into(),
+                    ),
+                ],
+            );
+        }
         // Holding the keys acts once: each flip reaches one word further back,
         // so auto-repeat would run through all of them in a blink.
         if repeat {
@@ -1126,6 +1157,10 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     });
     if back {
         e2e_trace(format!("boundary: {word:?} cannot end as Thai, withdrawn"));
+        diag::note(
+            "word end: live Thai put back to the keys",
+            &[("keys", Shape::of(&word).into())],
+        );
         withdraw_owned_run_to(&word);
     }
     // Otherwise its reading has already been applied to the screen, so the
@@ -1133,6 +1168,10 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // assumes the screen still holds the raw keystrokes.
     if let Some(mut rendered) = anchor_owned_run(&word, vk) {
         e2e_trace("boundary: owned run anchored".to_string());
+        diag::note(
+            "word end: live Thai kept",
+            &[("shown", Shape::of(&rendered).into())],
+        );
         remember_completed(&rendered, vk, true);
         rendered.zeroize();
         word.zeroize();
@@ -1167,6 +1206,23 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         detection.as_ref().map(|d| d.corrected.clone()),
         mode_now
     ));
+    diag::note(
+        "word end",
+        &[
+            ("typed", Shape::of(&word).into()),
+            (
+                "layout",
+                match active_layout {
+                    Some(policy::InputLayout::UsQwerty) => "English",
+                    Some(policy::InputLayout::ThaiKedmanee) => "Thai",
+                    None => "other",
+                }
+                .into(),
+            ),
+            ("switched_mid_word", converted.into()),
+            ("wrong_layout", detection.is_some().into()),
+        ],
+    );
 
     // Track the meaningful English stream, including a wrong-layout candidate.
     // This cannot retroactively protect the first words of a phrase (ordinary
@@ -1573,6 +1629,7 @@ fn has_thai(text: &str) -> bool {
 unsafe fn flip_back_recent() {
     let Some(step) = STATE.with(|s| s.borrow().recent.next_step(auto_convert)) else {
         e2e_trace("flip back: no recent word".to_string());
+        diag::note("Shift+Backspace: nothing to flip", &[]);
         // Say so: a press that does nothing looks like one that failed.
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastNothingToFlip));
         return;
@@ -1772,6 +1829,17 @@ where
     e2e_trace(format!(
         "reconcile run={run:?} holding={holding} -> {reading:?}"
     ));
+    match (&reading, holding) {
+        (policy::Reading::Thai(_), false) => diag::note(
+            "mid-word: shown as Thai",
+            &[("typed", Shape::of(&run).into())],
+        ),
+        (policy::Reading::AsTyped, true) => diag::note(
+            "mid-word: back to the keys",
+            &[("typed", Shape::of(&run).into())],
+        ),
+        _ => {}
+    }
 
     let target = match &reading {
         policy::Reading::AsTyped => run.clone(),
@@ -2009,6 +2077,15 @@ unsafe fn sync_context() {
             // next keypress (e.g. the Undo hotkey itself) would otherwise
             // erase the record it is about to use. Window/focus changes are
             // genuine context loss.
+            diag::note(
+                "context changed",
+                &[
+                    ("window", changed.into()),
+                    ("layout", lang_changed.into()),
+                    ("layout_id", ((hkl_i as u64 & 0xFFFF) as i64).into()),
+                    ("field", focus_changed.into()),
+                ],
+            );
             if changed || focus_changed {
                 st.undo = None;
             }
@@ -2032,6 +2109,13 @@ unsafe fn sync_context() {
         let blacklisted = exe.as_deref().map_or(true, safety::is_blacklisted_name);
         if let Some(exe) = exe.as_deref() {
             crate::apps::note_typing_in(exe);
+        }
+        diag::note_app(
+            exe.as_deref().unwrap_or("?"),
+            crate::habits::focused_class().as_deref().unwrap_or("?"),
+        );
+        if blacklisted {
+            diag::note("app is protected: RightType stays out", &[]);
         }
         STATE.with(|s| {
             let mut st = s.borrow_mut();

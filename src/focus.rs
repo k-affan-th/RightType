@@ -151,6 +151,10 @@ unsafe fn on_focus_inner() {
     if !moved {
         return;
     }
+    righttype::diag::note(
+        "caret moved to another field",
+        &[("password", is_password_field().into())],
+    );
     // After the password check above: the habit switch never runs in one.
     crate::habits::on_focus();
 }
