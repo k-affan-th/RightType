@@ -294,6 +294,54 @@ def packets(text, pause=0.0):
     time.sleep(0.8)
 
 
+def unicode_events(text):
+    out = []
+    for ch in text:
+        for up in (False, True):
+            i = fs.INPUT(type=1)
+            i.u.ki = fs.KEYBDINPUT(0, ord(ch), 0x4 | (0x2 if up else 0), 0, 0)
+            out.append(i)
+    return out
+
+
+def backspace_events(n):
+    out = []
+    for _ in range(n):
+        for up in (False, True):
+            i = fs.INPUT(type=1)
+            i.u.ki = fs.KEYBDINPUT(0x08, 0, 0x2 if up else 0, 0, 0)
+            out.append(i)
+    return out
+
+
+def send(events):
+    if events:
+        arr = (fs.INPUT * len(events))(*events)
+        user32.SendInput(len(events), arr, ctypes.sizeof(fs.INPUT))
+
+
+def replace_typed(keys, thai, how):
+    """Type `keys` for real, then replace them with `thai` the way `how`
+    says: RightType's single batch, or a variant of it."""
+    type_keys(keys)
+    time.sleep(0.3)
+    n = len(keys)
+    if how == "one batch (RightType)":
+        send(backspace_events(n) + unicode_events(thai))
+    elif how == "two calls":
+        send(backspace_events(n))
+        send(unicode_events(thai))
+    elif how == "two calls, 30 ms apart":
+        send(backspace_events(n))
+        time.sleep(0.03)
+        send(unicode_events(thai))
+    elif how == "one call per character":
+        send(backspace_events(n))
+        for ch in thai:
+            send(unicode_events(ch))
+    time.sleep(0.8)
+
+
 def notepad11_probe(t):
     """Evidence, with RightType not running: what does Windows 11 Notepad
     keep of Thai sent the way RightType sends it? Printed, not judged."""
@@ -311,12 +359,16 @@ def notepad11_probe(t):
                   packets(word[-1])), word),
         ("Thai typed on the Thai keyboard", HKL_TH, lambda: type_keys(";yoouh"), word),
     ]
-    for name, hkl, send, expect in variants:
+    for how in ["one batch (RightType)", "two calls", "two calls, 30 ms apart",
+                "one call per character"]:
+        variants.append((f"typed keys replaced: {how}", HKL_EN,
+                         lambda how=how: replace_typed("l;ylf", "สวัสดี", how), "สวัสดี"))
+    for name, hkl, act, expect in variants:
         got = []
         for _ in range(3):
             t.clear()
             t.layout(hkl)
-            send()
+            act()
             got.append(t.read().strip())
         kept = sum(g == expect for g in got)
         print(f"  probe notepad11 {name}: {kept}/3 intact {got}", flush=True)
