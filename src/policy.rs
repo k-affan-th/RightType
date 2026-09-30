@@ -382,6 +382,36 @@ fn thai_layout_compound(token: &str, th: &Dictionary) -> Option<Detection> {
     })
 }
 
+/// A word typed with CapsLock left on by accident, as the typist meant it
+/// (`intended` is the word as if CapsLock were off), or `None`.
+///
+/// - English: Shift on the first letter and lower case after it (`Hello`,
+///   shown as `hELLO`) — nobody means that; `HELLO` in capitals may be meant
+///   and is left alone.
+/// - Thai has no capitals: on the Thai layout CapsLock shifts every key
+///   (`สวัสดี` comes out `ศซํศโ๊`), so a word whose keys spell known Thai is
+///   put right.
+pub fn caps_accident(intended: &str, layout: InputLayout, th: &Dictionary) -> Option<String> {
+    let mut chars = intended.chars();
+    let ok = match layout {
+        InputLayout::UsQwerty => {
+            chars.next().is_some_and(|c| c.is_ascii_uppercase())
+                && intended.chars().count() >= 2
+                && chars.all(|c| c.is_ascii_lowercase())
+        }
+        InputLayout::ThaiKedmanee => {
+            !intended.is_empty()
+                && intended
+                    .chars()
+                    .all(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c))
+                && crate::segment::segment(intended, th)
+                    .iter()
+                    .all(|s| s.known)
+        }
+    };
+    ok.then(|| intended.to_string())
+}
+
 /// `keys` as the English layout shows them with CapsLock on: letters in the
 /// other case. RightType keeps the keys as if CapsLock were off, so a Thai
 /// word typed with CapsLock left on still reads as Thai; text it puts back

@@ -44,6 +44,12 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Changed
 
+- **CapsLock left on by accident is put right** (Auto): `hELLO` — Shift
+  on the first letter, so capitals were not meant — becomes `Hello`, and a
+  Thai word typed on the Thai layout with CapsLock on (every key comes out
+  shifted: สวัสดี as `ศซํศโ๊`) becomes the word meant. CapsLock is turned
+  off and a note says so; Ctrl+Shift+CapsLock undoes it. Words in capitals
+  (`NASA`) are left alone.
 - **Thai typed with CapsLock left on is still fixed**: the English layout
   shows `L;YLFU`, but the keys are the ones for สวัสดี, and RightType now
   reads them that way. English typed with CapsLock on stays as it is

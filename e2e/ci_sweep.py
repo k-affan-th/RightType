@@ -80,12 +80,16 @@ def full_screen_browser_still_works(t):
 def capslock_left_on(t):
     """CapsLock left on: the English layout shows L;YLFU for the keys of
     สวัสดี. RightType keeps the keys as if it were off."""
-    for name, keys, expect in [
-        ("Thai typed with CapsLock on", "l;ylfu ", "สวัสดี"),
-        ("English typed with CapsLock on stays", "hello world ", "HELLO WORLD"),
+    for name, keys, expect, layout in [
+        ("Thai typed with CapsLock on", "l;ylfu ", "สวัสดี", HKL_EN),
+        ("English typed with CapsLock on stays", "hello world ", "HELLO WORLD", HKL_EN),
+        # Left on by accident: Shift on the first letter shows hELLO.
+        ("CapsLock on by accident, English", "Hello ", "Hello", HKL_EN),
+        # Thai layout: CapsLock shifts every key (l;ylfu gives ศซํศโ๊).
+        ("CapsLock on by accident, Thai layout", "l;ylfu ", "สวัสดี", HKL_TH),
     ]:
         t.clear()
-        t.layout(HKL_EN)
+        t.layout(layout)
         set_capslock(True)
         try:
             fs.type_keys(keys)

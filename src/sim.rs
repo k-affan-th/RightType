@@ -117,6 +117,12 @@ impl<'d> Engine<'d> {
                 }
             }
             InputLayout::UsQwerty => key,
+            // On the Thai layout CapsLock acts as Shift on every key (CI:
+            // l;ylfu with CapsLock on types ศซํศโ๊).
+            InputLayout::ThaiKedmanee if self.caps => en_to_th(&toggle_shift(key).to_string())
+                .chars()
+                .next()
+                .unwrap_or(key),
             InputLayout::ThaiKedmanee => en_to_th(&key.to_string()).chars().next().unwrap_or(key),
         };
         if !self.enabled {
@@ -126,7 +132,7 @@ impl<'d> Engine<'d> {
         // The hook keeps the key as if CapsLock were off: what was meant.
         let meant = match self.layout {
             InputLayout::UsQwerty => key,
-            InputLayout::ThaiKedmanee => produced,
+            InputLayout::ThaiKedmanee => en_to_th(&key.to_string()).chars().next().unwrap_or(key),
         };
         self.buf.observe(Key::Char(meant));
         if self.mark == Mark::Plain && self.layout == InputLayout::UsQwerty && self.reconcile_run()
@@ -215,6 +221,19 @@ impl<'d> Engine<'d> {
         }
         if let Some(d) = detection.as_mut() {
             d.corrected = policy::shown_with_caps(&d.corrected, self.caps);
+        }
+        // CapsLock left on by accident: the word as meant, and CapsLock off.
+        if detection.is_none() && self.caps {
+            if let Some(meant) = policy::caps_accident(&word, self.layout, self.th) {
+                let n = word.chars().count();
+                for _ in 0..n {
+                    self.screen.pop();
+                }
+                self.screen.push_str(&meant);
+                self.screen.push(boundary);
+                self.caps = false;
+                return;
+            }
         }
         match detection {
             Some(d) => {
@@ -337,6 +356,44 @@ impl<'d> Engine<'d> {
     }
 }
 
+/// The same key with Shift toggled, named as on US QWERTY.
+fn toggle_shift(key: char) -> char {
+    const PAIRS: &[(char, char)] = &[
+        ('`', '~'),
+        ('1', '!'),
+        ('2', '@'),
+        ('3', '#'),
+        ('4', '$'),
+        ('5', '%'),
+        ('6', '^'),
+        ('7', '&'),
+        ('8', '*'),
+        ('9', '('),
+        ('0', ')'),
+        ('-', '_'),
+        ('=', '+'),
+        ('[', '{'),
+        (']', '}'),
+        ('\\', '|'),
+        (';', ':'),
+        ('\'', '"'),
+        (',', '<'),
+        ('.', '>'),
+        ('/', '?'),
+    ];
+    if key.is_ascii_alphabetic() {
+        return if key.is_ascii_uppercase() {
+            key.to_ascii_lowercase()
+        } else {
+            key.to_ascii_uppercase()
+        };
+    }
+    PAIRS
+        .iter()
+        .find_map(|&(a, b)| (key == a).then_some(b).or((key == b).then_some(a)))
+        .unwrap_or(key)
+}
+
 fn is_thai(c: char) -> bool {
     ('\u{0E00}'..='\u{0E7F}').contains(&c)
 }
@@ -417,6 +474,37 @@ mod tests {
             }
         }
         e.screen
+    }
+
+    #[test]
+    fn capslock_left_on_by_accident_is_undone() {
+        // Shift on the first letter means the typist wanted lower case after
+        // it: CapsLock was on by accident. The word is fixed and CapsLock
+        // turned off.
+        let mut e = Engine::new(dict::english(), dict::thai(), InputLayout::UsQwerty);
+        e.caps = true;
+        for c in "Hello".chars() {
+            e.key(c);
+        }
+        assert_eq!(e.screen, "hELLO");
+        e.boundary(' ');
+        assert_eq!(e.screen, "Hello ");
+        assert!(!e.caps);
+
+        // Thai has no capitals: CapsLock on the Thai layout is always an
+        // accident, and every key comes out shifted.
+        let mut e = Engine::new(dict::english(), dict::thai(), InputLayout::ThaiKedmanee);
+        e.caps = true;
+        for c in "l;ylfu".chars() {
+            e.key(c);
+        }
+        assert_eq!(e.screen, "ศซํศโ๊");
+        e.boundary(' ');
+        assert_eq!(e.screen, "สวัสดี ");
+        assert!(!e.caps);
+
+        // Capitals typed on purpose stay.
+        assert_eq!(type_with_caps("nasa "), "NASA ");
     }
 
     #[test]

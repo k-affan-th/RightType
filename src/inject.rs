@@ -205,6 +205,11 @@ pub fn expect_before_caret(text: &str) {
     CONTEXT.with(|c| *c.borrow_mut() = Some(zeroize::Zeroizing::new(text.to_string())));
 }
 
+/// Press CapsLock once (ours: the hook lets it through untouched).
+pub unsafe fn toggle_capslock() {
+    let _ = send(&[key(0x14, false), key(0x14, true)]);
+}
+
 /// Debug e2e builds: a switch the test harness sets. Always off in release.
 fn e2e_env(name: &str) -> bool {
     cfg!(debug_assertions) && std::env::var_os(name).is_some()

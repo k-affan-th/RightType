@@ -1266,12 +1266,36 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         crate::learn::observe(&word);
     }
 
+    // CapsLock left on by accident (`hELLO`, or Thai typed with every key
+    // shifted): in Auto the word is put as meant and CapsLock turned off.
+    let mut caps_accident = false;
+    if detection.is_none() && !seed_run && mode_now == Mode::Auto && caps_on() {
+        let layout_now = policy::supported_layout_id(layout_id(effective_layout()));
+        if let Some(meant) = layout_now.and_then(|l| policy::caps_accident(&word, l, dict::thai()))
+        {
+            detection = Some(righttype::detect::Detection {
+                corrected: meant,
+                confidence: righttype::detect::Confidence::High,
+                evidence: righttype::detect::Evidence::ExactDictionary,
+            });
+            caps_accident = true;
+        }
+    }
+
     // Auto mode commits only at this boundary; Manual mode retains the token for
     // Shift+Backspace.
     let swallow = match (mode_now, detection) {
         (Mode::Auto, Some(d)) => {
             let mut corrected = d.corrected.clone();
             let done = maybe_correct(&word, Some(vk), d);
+            if done && caps_accident {
+                inject::toggle_capslock();
+                diag::note(
+                    "CapsLock left on by accident: word put right, CapsLock off",
+                    &[],
+                );
+                crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastCapsOff));
+            }
             if done {
                 // Shift+Backspace right after an automatic correction flips it
                 // back — the undo gesture people reach for first.
