@@ -257,22 +257,125 @@ fn uia_here() -> Option<IUIAutomation> {
 /// `None` when the app does not say (no text pattern, nothing selected, a
 /// password field). Any thread.
 pub fn selected_text() -> Option<zeroize::Zeroizing<String>> {
+    uia_selected_text().or_else(edit_selected_text)
+}
+
+fn uia_selected_text() -> Option<zeroize::Zeroizing<String>> {
     use windows::Win32::UI::Accessibility::{IUIAutomationTextPattern, UIA_TextPatternId};
-    let uia = uia_here()?;
+    let step = |what: &str| crate::hook::e2e_trace(format!("selection (UIA): {what}"));
+    let Some(uia) = uia_here() else {
+        step("no UI Automation client");
+        return None;
+    };
     unsafe {
-        let element = uia.GetFocusedElement().ok()?;
+        let Ok(element) = uia.GetFocusedElement() else {
+            step("no focused element");
+            return None;
+        };
         if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            step("password field (or unknown)");
             return None;
         }
-        let pattern: IUIAutomationTextPattern =
-            element.GetCurrentPatternAs(UIA_TextPatternId).ok()?;
-        let ranges = pattern.GetSelection().ok()?;
+        let Ok(pattern) =
+            element.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+        else {
+            step("no text pattern");
+            return None;
+        };
+        let Ok(ranges) = pattern.GetSelection() else {
+            step("no selection ranges");
+            return None;
+        };
         let mut text = zeroize::Zeroizing::new(String::new());
-        for i in 0..ranges.Length().ok()? {
+        for i in 0..ranges.Length().unwrap_or(0) {
             let range = ranges.GetElement(i).ok()?;
             text.push_str(&range.GetText(-1).ok()?.to_string());
         }
-        (!text.is_empty()).then_some(text)
+        if text.is_empty() {
+            step("empty selection");
+            return None;
+        }
+        Some(text)
+    }
+}
+
+/// The selection of a standard Windows text box (Edit, RichEdit — classic
+/// and Windows 11 Notepad, WordPad, many dialogs), asked of the control
+/// itself: `EM_GETSEL` for where, `WM_GETTEXT` for the text, which Windows
+/// copies between processes. No clipboard. The whole text passes through
+/// this process for a moment and is wiped.
+fn edit_selected_text() -> Option<zeroize::Zeroizing<String>> {
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetClassNameW, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongW,
+        GetWindowThreadProcessId, SendMessageTimeoutW, GUITHREADINFO, GWL_STYLE, SMTO_ABORTIFHUNG,
+        WM_GETTEXT, WM_GETTEXTLENGTH,
+    };
+    use zeroize::Zeroize;
+    const EM_GETSEL: u32 = 0x00B0;
+    const ES_PASSWORD: i32 = 0x0020;
+    let step = |what: &str| crate::hook::e2e_trace(format!("selection (edit control): {what}"));
+    unsafe {
+        let thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
+        let mut gui = GUITHREADINFO {
+            cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+            ..Default::default()
+        };
+        if GetGUIThreadInfo(thread, &mut gui).is_err() || gui.hwndFocus.0.is_null() {
+            step("no focused window");
+            return None;
+        }
+        let edit = gui.hwndFocus;
+        let mut class = [0u16; 64];
+        let n = GetClassNameW(edit, &mut class) as usize;
+        let class = String::from_utf16_lossy(&class[..n]);
+        let rich = class.to_ascii_lowercase().starts_with("richedit");
+        if !(class.eq_ignore_ascii_case("Edit") || rich) {
+            step("not a text box");
+            return None;
+        }
+        if GetWindowLongW(edit, GWL_STYLE) & ES_PASSWORD != 0 {
+            step("password box");
+            return None;
+        }
+        let ask = |msg: u32, w: usize, l: isize| {
+            let mut result = 0usize;
+            let ok = SendMessageTimeoutW(
+                edit,
+                msg,
+                WPARAM(w),
+                LPARAM(l),
+                SMTO_ABORTIFHUNG,
+                500,
+                Some(&mut result),
+            );
+            (ok.0 != 0).then_some(result)
+        };
+        let sel = ask(EM_GETSEL, 0, 0)?;
+        let (start, end) = ((sel & 0xFFFF), ((sel >> 16) & 0xFFFF));
+        if end <= start {
+            step("nothing selected");
+            return None;
+        }
+        // EM_GETSEL reports positions in 16 bits.
+        let len = ask(WM_GETTEXTLENGTH, 0, 0)?;
+        if len > 0xFFFF {
+            step("text too long to locate the selection");
+            return None;
+        }
+        let mut units = vec![0u16; len + 1];
+        let got = ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?.min(len);
+        // RichEdit counts a line break as one position but WM_GETTEXT gives
+        // two characters, so past one the positions no longer line up: refuse
+        // rather than convert the wrong text.
+        let shifted = rich && units[..end.min(got)].contains(&(b'\n' as u16));
+        let text = (end <= got && !shifted)
+            .then(|| zeroize::Zeroizing::new(String::from_utf16_lossy(&units[start..end])));
+        units.zeroize();
+        if text.is_none() {
+            step("selection cannot be located in the text");
+        }
+        text
     }
 }
 
