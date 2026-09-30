@@ -43,6 +43,7 @@ ENTER = 0x0D
 # Notepad is the classic editor, so nothing is listed for it here.)
 KNOWN_FAILING: set[str] = set()
 EDGE_ROUNDS = 4
+CURRENT = [None]  # the running RightType process
 
 flip = lambda: tap(BACK, SHIFT)  # noqa: E731
 
@@ -281,6 +282,20 @@ def hang_sweep(t):
     for _ in range(6):  # typed while RightType's focus check waits on it
         tap(ord("X"), pause=0.25)
     time.sleep(3.5)
+    # Edge's crash, forced: a word RightType converts mid-word is finished by
+    # a space while RightType is still waiting inside an accessibility call
+    # (its focus check on the slow window), so the space is handled inside
+    # that call. In Edge this happened only now and then, and then RightType
+    # died (0xC000041D). Here every word lands inside the wait.
+    for _ in range(3):
+        user32.SetForegroundWindow(t.hwnd)
+        time.sleep(0.5)
+        w.focus()
+        time.sleep(0.3)
+        type_keys("l;ylfu ")
+        time.sleep(3.5)
+    fs.check(t.name, "a converted word finished inside a slow accessibility call",
+             rt_health(CURRENT[0]), "running and responsive")
     w.close()
     fs.run(t, "after the slow window", "l;ylfu ", "สวัสดี")
 
@@ -343,6 +358,7 @@ def main():
             else:
                 proc = fs.start_rt()
                 t = make()
+            CURRENT[0] = proc
             try:
                 {"edge": edge_sweep, "hang": hang_sweep}.get(key, sweep)(t)
             finally:
