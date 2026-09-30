@@ -300,6 +300,61 @@ def hang_sweep(t):
     fs.run(t, "after the slow window", "l;ylfu ", "สวัสดี")
 
 
+def clipboard_state():
+    """The clipboard's sequence number and its text, to see whether
+    anything wrote to it."""
+    seq = user32.GetClipboardSequenceNumber()
+    text = None
+    k32 = ctypes.windll.kernel32
+    k32.GlobalLock.restype = ctypes.c_void_p
+    k32.GlobalLock.argtypes = [ctypes.c_void_p]
+    user32.GetClipboardData.restype = ctypes.c_void_p
+    for _ in range(20):
+        if user32.OpenClipboard(None):
+            h = user32.GetClipboardData(13)  # CF_UNICODETEXT
+            if h:
+                p = k32.GlobalLock(h)
+                text = ctypes.wstring_at(p) if p else None
+                k32.GlobalUnlock(ctypes.c_void_p(h))
+            user32.CloseClipboard()
+            break
+        time.sleep(0.05)
+    return seq, text
+
+
+def put_on_clipboard(text):
+    k32 = ctypes.windll.kernel32
+    k32.GlobalAlloc.restype = ctypes.c_void_p
+    k32.GlobalLock.restype = ctypes.c_void_p
+    k32.GlobalLock.argtypes = [ctypes.c_void_p]
+    data = (text + "\0").encode("utf-16-le")
+    h = k32.GlobalAlloc(0x0002, len(data))
+    ctypes.memmove(k32.GlobalLock(h), data, len(data))
+    k32.GlobalUnlock(ctypes.c_void_p(h))
+    for _ in range(20):
+        if user32.OpenClipboard(None):
+            user32.EmptyClipboard()
+            user32.SetClipboardData.argtypes = [wt.UINT, ctypes.c_void_p]
+            user32.SetClipboardData(13, h)
+            user32.CloseClipboard()
+            return
+        time.sleep(0.05)
+    raise SystemExit("could not open the clipboard")
+
+
+def selection_leaves_clipboard_alone(t):
+    """Converting a selection must not pass it through the clipboard:
+    Windows keeps clipboard history, can sync it to other devices (an
+    Android phone), and any program may watch it."""
+    put_on_clipboard("rt-e2e clipboard sentinel")
+    before = clipboard_state()
+    fs.run(t, "convert selection", "ok", "นา",
+           then=[fs.select_word, fs.convert_sel], settle=1.5)
+    after = clipboard_state()
+    fs.check(t.name, "convert selection leaves the clipboard alone",
+             f"seq+{after[0] - before[0]} {after[1]!r}", f"seq+0 {before[1]!r}")
+
+
 def sweep(t):
     run = fs.run
     run(t, "EN->TH word", "l;ylfu ", "สวัสดี")
@@ -317,6 +372,7 @@ def sweep(t):
     run(t, "Shift+Backspace flips EN to TH", "ok", "นา", then=[flip])
     run(t, "Shift+Backspace undoes an automatic fix", "correct ", "แนพพำแะ",
         layout=HKL_TH, then=[flip])
+    selection_leaves_clipboard_alone(t)
 
 
 def edge_sweep(t):
