@@ -12,7 +12,8 @@
 //!    layout switch, no race, and Thai combining order is preserved.
 //!
 //! The whole batch is sent in one `SendInput` call so no other input can
-//! interleave, and the [`INJECTING`](crate::hook::INJECTING) guard plus the
+//! interleave (non-ASCII text after deletions goes in a second call 40 ms
+//! later: see [`needs_gap`]), and the [`INJECTING`](crate::hook::INJECTING) guard plus the
 //! `LLKHF_INJECTED` flag keep the hook from reprocessing our own events.
 
 use std::mem::size_of;
@@ -53,6 +54,10 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
         inputs.push(key(VK_BACK.0, false));
         inputs.push(key(VK_BACK.0, true));
     }
+    // Windows 11 Notepad reads Unicode characters that arrive while it is
+    // still handling the Backspaces as the last one sent (`สวัสดี` became
+    // `ีีีีีี`), so non-ASCII text waits until the deletions have landed.
+    let split = needs_gap(backspaces, text).then_some(inputs.len());
     // 3. Inject the correction as raw Unicode code units (handles non-BMP too).
     let mut units = [0u16; 2];
     for ch in text.chars() {
@@ -71,11 +76,31 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
         return true;
     }
 
-    // One atomic batch, guarded so the hook skips every event we generate.
+    // One atomic batch (two when the text must wait for the deletions),
+    // guarded so the hook skips every event we generate. `SendInput` returns
+    // once every event has passed the low-level hooks, so the pause is a
+    // real gap in what the app receives.
     INJECTING.store(true, Ordering::SeqCst);
-    let sent = SendInput(&inputs, size_of::<INPUT>() as i32);
+    let (first, rest) = inputs.split_at(split.unwrap_or(inputs.len()));
+    let mut sent = SendInput(first, size_of::<INPUT>() as i32) as usize;
+    if sent == first.len() && !rest.is_empty() {
+        std::thread::sleep(DELETE_GAP);
+        sent += SendInput(rest, size_of::<INPUT>() as i32) as usize;
+    }
     INJECTING.store(false, Ordering::SeqCst);
-    sent as usize == inputs.len()
+    sent == inputs.len()
+}
+
+/// How long non-ASCII text waits after the Backspaces that precede it. The
+/// CI probe on Windows 11 Notepad: text sent at once or right after, 0 of 3
+/// intact; 30 ms later, 3 of 3.
+const DELETE_GAP: std::time::Duration = std::time::Duration::from_millis(40);
+
+/// Does `text` have to wait for `backspaces` deletions to land first? Only
+/// non-ASCII text after deletions: ASCII arrived intact either way, and
+/// text with nothing to delete has nothing to wait for.
+fn needs_gap(backspaces: usize, text: &str) -> bool {
+    backspaces > 0 && !text.is_ascii()
 }
 
 /// An unassigned virtual key, pressed to "mask" an Alt release (the same trick
@@ -138,5 +163,17 @@ fn unicode(unit: u16, up: bool) -> INPUT {
                 dwExtraInfo: INJECT_TAG,
             },
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::needs_gap;
+
+    #[test]
+    fn thai_after_deletions_waits_for_them() {
+        assert!(needs_gap(5, "สวัสดี"));
+        assert!(!needs_gap(0, "สวัสดี")); // a mid-word append deletes nothing
+        assert!(!needs_gap(7, "correct")); // ASCII arrived intact at once
     }
 }

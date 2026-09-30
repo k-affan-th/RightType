@@ -7,9 +7,11 @@ Hard-won constraints for anyone extending this harness:
 - pywinauto type_keys sends characters as VK_PACKET unicode events; the hook
   classifies those as Char even for spaces, so token boundaries must be sent
   as a real virtual key via "{SPACE}".
-- Win11 Notepad (WinUI box) intermittently drops non-ASCII KEYEVENTF_UNICODE
-  bursts from ANY sender (~40-60% here); Edge/Chromium is lossless (16/16).
-  Use --app edge for automated runs; treat Notepad results as manual-only.
+- Win11 Notepad (RichEdit in a WinUI window) takes non-ASCII KEYEVENTF_UNICODE
+  characters that arrive while it is still handling preceding Backspaces as the
+  last one sent (`สวัสดี` -> `ีีีีีี`); on their own they arrive intact. RightType
+  waits 40 ms after the deletions (inject.rs). ci_sweep.py's notepad11 target
+  installs it from the Store and probes this.
 - Each run targets a dedicated temp document so Notepad session-restore cannot
   leak previous-run content into assertions.
 - Browsers are launched additively, never force-killed: these scripts run on
