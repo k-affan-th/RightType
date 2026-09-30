@@ -220,6 +220,7 @@ unsafe fn refresh_status() {
             })
             .unwrap_or(FIELD_UNKNOWN)
     });
+    crate::hook::e2e_trace(format!("field status={status} inline={inline}"));
     FIELD_STATUS.store(status, Ordering::Relaxed);
     INLINE_COMPLETION.store(inline, Ordering::Relaxed);
 }

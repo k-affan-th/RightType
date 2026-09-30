@@ -645,6 +645,14 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         let ours = kb.dwExtraInfo == INJECT_TAG
             || (externally_injected && !debug_e2e_accepts_injected())
             || INJECTING.load(Ordering::Relaxed);
+        if ours && wparam.0 as u32 == WM_KEYDOWN {
+            e2e_trace(format!(
+                "key vk={:#x} skipped (tag={} injecting={})",
+                kb.vkCode,
+                kb.dwExtraInfo == INJECT_TAG,
+                INJECTING.load(Ordering::Relaxed)
+            ));
+        }
         if !ours && process(wparam.0 as u32, kb) {
             // We handled this key as a hotkey/correction; swallow it.
             return LRESULT(1);
@@ -736,6 +744,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     if !down {
         return false;
     }
+    e2e_trace(format!("key vk={vk:#x} repeat={repeat}"));
     if capture_key(vk) {
         return true;
     }
@@ -829,6 +838,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // Master switch: when disabled, pass everything through untouched.
     if !ENABLED.load(Ordering::Relaxed) {
+        e2e_trace("key passed through: disabled".to_string());
         return false;
     }
 
@@ -882,12 +892,19 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         || safety::is_password_field()
         || crate::focus::is_password_field()
     {
+        e2e_trace(format!(
+            "key passed through: sensitive_app={} native_password={} uia_protected={}",
+            STATE.with(|s| s.borrow().sensitive_app),
+            safety::is_password_field(),
+            crate::focus::is_password_field()
+        ));
         STATE.with(|s| s.borrow_mut().suggestion = None);
         return false;
     }
     // Switched off in this app (its per-app mode): touch nothing, like a
     // blocked app, but the hotkeys above (on/off, mode cycle) still work.
     let Some(mode_now) = mode_here() else {
+        e2e_trace("key passed through: off in this app".to_string());
         STATE.with(|s| {
             let mut st = s.borrow_mut();
             st.buf.clear();
@@ -971,6 +988,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
 
     let Some(key) = classify(vk, kb.scanCode as u16) else {
+        e2e_trace(format!("key vk={vk:#x} not classified"));
         // Something we cannot follow (a dead key, a function key): the text
         // before the caret may not be what we recorded. A modifier pressed on
         // its own types nothing — and Shift is how Shift+Backspace starts, so

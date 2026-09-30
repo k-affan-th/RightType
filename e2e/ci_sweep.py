@@ -285,10 +285,12 @@ def main():
     fs.write_config(mode="auto", learn=False)
     targets = [("page", Page), ("omnibox", Omnibox), ("edge", EdgeOmnibox), ("notepad", Notepad),
                ("hang", HangPage)]
+    sections = {}
     try:
         for key, make in targets:
             if key not in want:
                 continue
+            start = fs.LOG.stat().st_size if fs.LOG.exists() else 0
             # The address bar is seeded before RightType runs, so the URL is
             # typed exactly as written.
             if key == "omnibox":
@@ -303,6 +305,7 @@ def main():
                 {"edge": edge_sweep, "hang": hang_sweep}.get(key, sweep)(t)
             finally:
                 t.close()
+                sections[key] = (start, fs.LOG.stat().st_size)
     finally:
         subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
 
@@ -321,9 +324,14 @@ def main():
         print(f"  XPASS {label} — remove it from KNOWN_FAILING")
     for line in failed:
         print(f"  FAIL {line}")
-    if failed:
-        print("\n--- RightType trace ---")
-        print(fs.LOG.read_text(encoding="utf-8", errors="replace")[-20000:])
+    # Each failing target's own part of the trace (the log is shared, so its
+    # end belongs to whichever target ran last).
+    data = fs.LOG.read_bytes() if failed else b""
+    for key, (start, end) in sections.items():
+        if any(line.startswith(f"{key}:") for line in failed):
+            part = data[start:end].decode("utf-8", errors="replace")
+            print(f"\n--- RightType trace: {key} ---")
+            print(part[-60000:])
     sys.exit(1 if failed else 0)
 
 
