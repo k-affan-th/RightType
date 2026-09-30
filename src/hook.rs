@@ -687,6 +687,54 @@ pub(crate) fn e2e_trace(msg: String) {
 #[cfg(not(debug_assertions))]
 pub(crate) fn e2e_trace(_: String) {}
 
+/// Debug e2e builds: report a fatal exception (code, address and the
+/// faulting thread's stack) to stderr before Windows ends the process, which
+/// otherwise dies with only an exit code (`0xC000041D` when it happens
+/// inside a callback Windows made into us). First-chance, so some reported
+/// access violations may be ones a system DLL catches itself; the last
+/// report before the process ends is the one that killed it.
+#[cfg(debug_assertions)]
+pub fn report_fatal_exceptions() {
+    use windows::Win32::System::Diagnostics::Debug::{
+        AddVectoredExceptionHandler, EXCEPTION_POINTERS,
+    };
+    unsafe extern "system" fn on_exception(info: *mut EXCEPTION_POINTERS) -> i32 {
+        static REPORTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
+        let Some(record) = info.as_ref().and_then(|i| i.ExceptionRecord.as_ref()) else {
+            return EXCEPTION_CONTINUE_SEARCH;
+        };
+        let code = record.ExceptionCode.0 as u32;
+        let fatal = matches!(
+            code,
+            0xC000_0005 // access violation
+                | 0xC000_001D // illegal instruction
+                | 0xC000_0096 // privileged instruction
+                | 0xC000_0374 // heap corruption
+                | 0xC000_0409 // stack buffer overrun / fail fast
+                | 0xC000_00FD // stack overflow
+        );
+        if !fatal || REPORTS.fetch_add(1, Ordering::Relaxed) >= 5 {
+            return EXCEPTION_CONTINUE_SEARCH;
+        }
+        eprintln!(
+            "[rt-e2e] EXCEPTION {code:#010x} at {:?} (info {:x?})",
+            record.ExceptionAddress,
+            &record.ExceptionInformation[..record.NumberParameters.min(3) as usize]
+        );
+        // Too little stack left to walk it after an overflow.
+        if code != 0xC000_00FD {
+            eprintln!("{}", std::backtrace::Backtrace::force_capture());
+        }
+        EXCEPTION_CONTINUE_SEARCH
+    }
+    if debug_e2e_accepts_injected() {
+        unsafe {
+            AddVectoredExceptionHandler(1, Some(on_exception));
+        }
+    }
+}
+
 fn is_modifier(vk: u16) -> bool {
     matches!(
         vk,
