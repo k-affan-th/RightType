@@ -415,6 +415,12 @@ def main():
                 proc = fs.start_rt()
                 t = make()
             CURRENT[0] = proc
+            # A target where RightType died leaves CapsLock on (its
+            # Shift+CapsLock then reached Windows); do not let that fail
+            # every target after it.
+            if user32.GetKeyState(fs.CAPS) & 1:
+                print("CapsLock was left on; turning it off", flush=True)
+                tap(fs.CAPS)
             try:
                 {"edge": edge_sweep, "hang": hang_sweep}.get(key, sweep)(t)
             finally:
