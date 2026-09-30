@@ -363,6 +363,9 @@ def notepad11_probe(t):
                 "one call per character"]:
         variants.append((f"typed keys replaced: {how}", HKL_EN,
                          lambda how=how: replace_typed("l;ylf", "สวัสดี", how), "สวัสดี"))
+    for how in ["one batch (RightType)", "two calls, 30 ms apart"]:
+        variants.append((f"typed keys replaced by English: {how}", HKL_EN,
+                         lambda how=how: replace_typed("l;ylf", "hello", how), "hello"))
     for name, hkl, act, expect in variants:
         got = []
         for _ in range(3):

@@ -29,8 +29,9 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 - **Thai came out garbled in Windows 11 Notepad** (`สวัสดี` became
   `ีีีีีี`): Notepad reads Unicode characters that arrive
-  while it is still handling the Backspaces before them as the last one sent.
-  Thai now follows the deletions 40 ms later. Tested on CI with the Store
+  while it is still handling the Backspaces before them as the last one sent
+  (English put back over Thai too). Text now follows the deletions 40 ms
+  later. Tested on CI with the Store
   Notepad: the old way kept 0 of 3, the new 3 of 3.
 - **RightType could crash in Edge's address bar** (2.0.0), after which
   nothing was corrected and Shift+Backspace was a plain Backspace until it
