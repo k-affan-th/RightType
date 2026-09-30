@@ -54,7 +54,9 @@
 
 ## Deny policy
 
-- Native password controls, UIA password controls, fixed/custom blacklisted processes,
+- Native password controls, UIA password controls, fixed/custom blacklisted processes
+  (including remote-desktop and VM clients, whose keys go to another computer),
+  a full-screen program without a text cursor (games: `wasd` spells ไฟหก),
   and process/focus-query failures deny buffering, correction, Suggest and learning.
 - Hex private-key shapes, WIF/Base58 keys, Bech32 addresses and extended keys are hard
   token denies even if their converted text looks valid.

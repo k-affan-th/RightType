@@ -125,7 +125,9 @@ A keyboard tool sees everything you type. RightType is designed so secrets never
 
 - **Sensitive-context guards** — it disables itself entirely in **password fields**
   (native `ES_PASSWORD`, and browser/Electron/UWP fields via UI Automation) and in a
-  default blacklist of **wallets, password managers, and terminals**.
+  default blacklist of **wallets, password managers, terminals, remote
+  desktops and virtual machines** (the keys belong to another computer), and
+  it stays out of **full-screen games** (`wasd` spells Thai ไฟหก).
 - **Secret-shaped bail-out** — even elsewhere, identifiable private keys and addresses
   are always ignored. Consecutive BIP39 words trigger a phrase-level stream guard.
   Password-like/long ASCII can be wrong-layout Thai;

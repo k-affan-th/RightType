@@ -33,6 +33,15 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   Notepad turned สวัสดี into `ีีีีีี` — it tells you, notes it in the problem
   report, and from then on waits longer before typing in that app.
 
+- **Stays out of full-screen games, Remote Desktop and virtual machines.**
+  Movement keys spell Thai (`wasd` is ไฟหก), so a game could get
+  Backspaces; and in a remote session or VM the keys belong to the other
+  computer. Games in exclusive full screen, slide shows, and any full-screen
+  window without a text cursor are left alone (a full-screen browser or
+  editor still works); Remote Desktop, the Windows App, Hyper-V, VirtualBox,
+  VMware, AnyDesk, TeamViewer, RustDesk, Parsec and VNC viewers are on the
+  built-in list.
+
 ### Changed
 
 - **Thai typed with CapsLock left on is still fixed**: the English layout

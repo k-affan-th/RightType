@@ -218,7 +218,7 @@ texts! {
     BtnClearHabits => "Clear", "ล้าง";
     ToastHabitsCleared => "Field habits cleared", "ล้างข้อมูลการเดาภาษาแล้ว";
     AppsSkipped => "Saved. Skipped {k} lines that are not name.exe = mode.", "บันทึกแล้ว ข้าม {k} บรรทัดที่ไม่ใช่รูปแบบ ชื่อ.exe = โหมด";
-    BlockedAlways => "RightType always stays out of password fields, terminals, password managers and crypto wallets.", "RightType ไม่ทำงานในช่องรหัสผ่าน เทอร์มินัล โปรแกรมจัดการรหัสผ่าน และกระเป๋าคริปโตเสมอ";
+    BlockedAlways => "RightType always stays out of password fields, terminals, password managers, crypto wallets, remote desktops and virtual machines, and full-screen games.", "RightType ไม่ทำงานในช่องรหัสผ่าน เทอร์มินัล โปรแกรมจัดการรหัสผ่าน กระเป๋าคริปโต รีโมตเดสก์ท็อปและเครื่องเสมือน และเกมเต็มจอเสมอ";
     BlockedAdd => "Also stay out of these apps — one program name per line, for example notepad.exe:", "ไม่ทำงานในแอปเหล่านี้ด้วย — หนึ่งชื่อโปรแกรมต่อบรรทัด เช่น notepad.exe:";
     BtnSaveList => "Save list", "บันทึกรายการ";
     HeadPrivacy => "Privacy", "ความเป็นส่วนตัว";

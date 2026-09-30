@@ -46,7 +46,64 @@ pub const BLACKLIST: &[&str] = &[
     "bitcoin-qt.exe",
     "ledger live.exe",
     "trezor suite.exe",
+    // remote desktops and virtual machines: the keys belong to another
+    // computer, which may have a different layout (and RightType of its own)
+    "mstsc.exe",
+    "msrdc.exe",
+    "windows365.exe",
+    "vmconnect.exe",
+    "virtualboxvm.exe",
+    "vmware.exe",
+    "vmplayer.exe",
+    "vmware-remotemks.exe",
+    "anydesk.exe",
+    "teamviewer.exe",
+    "rustdesk.exe",
+    "parsecd.exe",
+    "vncviewer.exe",
+    "tvnviewer.exe",
 ];
+
+/// A full-screen game (or a slide show) is in front: RightType stays out, as
+/// in a blocked app. Movement keys spell Thai (`wasd` is ไฟหก), and a
+/// correction would send Backspaces into the game. Updated when the window
+/// changes and on the 1.5 s timer.
+static FULL_SCREEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn is_full_screen() -> bool {
+    FULL_SCREEN.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Ask Windows whether a full-screen program without a text cursor is in
+/// front: an exclusive-mode game or a presentation always; any other
+/// full-screen window only when its thread shows no caret (a borderless
+/// game does not; a full-screen browser or editor does).
+pub unsafe fn refresh_full_screen() -> bool {
+    use windows::Win32::UI::Shell::{
+        SHQueryUserNotificationState, QUNS_BUSY, QUNS_PRESENTATION_MODE,
+        QUNS_RUNNING_D3D_FULL_SCREEN,
+    };
+    let state = SHQueryUserNotificationState().ok();
+    let now = match state {
+        Some(s) if s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE => true,
+        Some(s) if s == QUNS_BUSY => {
+            let mut gui = GUITHREADINFO {
+                cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+                ..Default::default()
+            };
+            GetGUIThreadInfo(0, &mut gui).is_ok() && gui.hwndCaret.0.is_null()
+        }
+        _ => false,
+    };
+    let was = FULL_SCREEN.swap(now, std::sync::atomic::Ordering::Relaxed);
+    if was != now {
+        righttype::diag::note(
+            "full-screen program without a text cursor",
+            &[("now", now.into())],
+        );
+    }
+    now
+}
 
 /// User-added blacklist entries (lowercased exe names), layered on top of the
 /// fixed [`BLACKLIST`]. Edited via the settings window, persisted in config.

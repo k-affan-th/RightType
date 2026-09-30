@@ -959,6 +959,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // Never run where secrets are typed: blacklisted apps, or password fields
     // (native ES_PASSWORD, or UIA-detected ones in browsers/Electron/UWP).
     if STATE.with(|s| s.borrow().sensitive_app)
+        || safety::is_full_screen()
         || safety::is_password_field()
         || crate::focus::is_password_field()
     {
@@ -2183,6 +2184,7 @@ unsafe fn sync_context() {
         if blacklisted {
             diag::note("app is protected: RightType stays out", &[]);
         }
+        safety::refresh_full_screen();
         STATE.with(|s| {
             let mut st = s.borrow_mut();
             st.sensitive_app = blacklisted;

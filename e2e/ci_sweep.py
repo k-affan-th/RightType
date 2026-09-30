@@ -66,6 +66,17 @@ def set_capslock(on):
         time.sleep(0.3)
 
 
+def full_screen_browser_still_works(t):
+    """Full screen (F11) with a text cursor is not a game: still corrected."""
+    tap(0x7A)  # F11
+    time.sleep(1.5)
+    try:
+        fs.run(t, "full-screen browser still corrected", "l;ylfu ", "สวัสดี")
+    finally:
+        tap(0x7A)
+        time.sleep(1.5)
+
+
 def capslock_left_on(t):
     """CapsLock left on: the English layout shows L;YLFU for the keys of
     สวัสดี. RightType keeps the keys as if it were off."""
@@ -660,6 +671,8 @@ def sweep(t):
            then=[lambda: fast_keys("l;ylfu8iy["), lambda: tap(fs.SPACE)])
     realistic(t)
     capslock_left_on(t)
+    if t.name == "page":
+        full_screen_browser_still_works(t)
     selection_leaves_clipboard_alone(t)
 
 
