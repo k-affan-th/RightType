@@ -661,6 +661,36 @@ def sweep(t):
     selection_leaves_clipboard_alone(t)
 
 
+def notepad11_sweep(t):
+    sweep(t)
+    verify_catches_garbling(t)
+
+
+def verify_catches_garbling(t):
+    """Windows 11 Notepad garbles Thai typed as keys right after Backspaces.
+    With the text-box path and the pause turned off (debug switches), the
+    check-after-write must say what really happened, and once it has seen a
+    garbled word the next one must arrive intact (it waits longer there)."""
+    proc = fs.start_rt({"RIGHTTYPE_E2E_NO_TEXTBOX": "1", "RIGHTTYPE_E2E_NO_GAP": "1"})
+    CURRENT[0] = proc
+    t.focus()
+    for attempt in (1, 2):
+        start = fs.LOG.stat().st_size
+        t.clear()
+        t.layout(HKL_EN)
+        # No space after it: the check waits for a pause in typing.
+        fs.type_keys("l;ylfu")
+        time.sleep(1.2)
+        got = t.read()
+        trace = fs.log_since(start)
+        verdict = ("differs" if "verify: app shows something else" in trace
+                   else "same" if "verify: correction shown as sent" in trace else "none")
+        truth = "same" if got.strip() == "สวัสดี" else "differs"
+        print(f"  garbling attempt {attempt}: got {got!r}, check said {verdict}", flush=True)
+        fs.check(t.name, f"check-after-write tells the truth (attempt {attempt})", verdict, truth)
+    fs.check(t.name, "after a garbled word the next arrives intact", t.read().strip(), "สวัสดี")
+
+
 def edge_sweep(t):
     watch(t, "EN->TH word, suggestions open", "l;ylfu", "สวัสดี")
     watch(t, "EN->TH word, typed fast", "l;ylfu", "สวัสดี", typer=fast_keys)
@@ -751,7 +781,7 @@ def main():
                 tap(fs.CAPS)
             results_before = len(fs.RESULTS)
             try:
-                {"edge": edge_sweep, "hang": hang_sweep}.get(key, sweep)(t)
+                {"edge": edge_sweep, "hang": hang_sweep, "notepad11": notepad11_sweep}.get(key, sweep)(t)
             finally:
                 print(f"RightType after {key}: {rt_health(proc)}", flush=True)
                 report_has_no_typed_text(key, fs.RESULTS[results_before:])

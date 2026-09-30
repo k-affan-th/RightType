@@ -660,6 +660,9 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
                 INJECTING.load(Ordering::Relaxed)
             ));
         }
+        if !ours && wparam.0 as u32 == WM_KEYDOWN {
+            crate::verify::TYPED.fetch_add(1, Ordering::SeqCst);
+        }
         if !ours && process(wparam.0 as u32, kb) {
             // We handled this key as a hotkey/correction; swallow it.
             return LRESULT(1);
@@ -693,6 +696,11 @@ pub(crate) fn e2e_trace(msg: String) {
 
 #[cfg(not(debug_assertions))]
 pub(crate) fn e2e_trace(_: String) {}
+
+/// The program the typist is typing in (its file name), as last seen.
+pub(crate) fn current_app() -> Option<String> {
+    STATE.with(|s| s.borrow().app_exe.clone())
+}
 
 /// A fixed message for both the debug trace and the problem report
 /// ([`diag`]); `'static`, so it cannot carry typed text.

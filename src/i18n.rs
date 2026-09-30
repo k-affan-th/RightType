@@ -132,6 +132,7 @@ texts! {
     ToastHookLost => "RightType lost the keyboard — retrying…", "RightType ตรวจจับคีย์บอร์ดไม่ได้ — กำลังลองใหม่…";
     ToastHookBack => "RightType is working again", "RightType กลับมาทำงานแล้ว";
     ToastSaved => "Saved", "บันทึกแล้ว";
+    ToastVerifyDiffers => "This app showed the fix differently — check the last word (Ctrl+Z undoes it). RightType will type slower here.", "แอปนี้แสดงคำที่แก้ไม่ตรง ลองดูคำล่าสุด (Ctrl+Z ย้อนได้) ต่อไป RightType จะพิมพ์ช้าลงในแอปนี้";
     ToastLearnedCleared => "Learned words cleared", "ล้างคำที่เรียนรู้แล้ว";
     ToastSuggestAccept => "Alt+CapsLock", "Alt+CapsLock";
     ErrUndoInject => "RightType: could not undo", "RightType: ย้อนกลับไม่สำเร็จ";

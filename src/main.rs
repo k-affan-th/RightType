@@ -58,6 +58,8 @@ mod stats;
 mod tray;
 #[cfg(feature = "winos")]
 mod ui;
+#[cfg(feature = "winos")]
+mod verify;
 
 #[cfg(not(feature = "winos"))]
 fn main() {

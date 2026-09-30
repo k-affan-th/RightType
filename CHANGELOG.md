@@ -13,6 +13,12 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   a word appears only as how many Thai and English letters it had. It is
   kept in memory only and written only when you save it.
 
+- **Check-after-write**: after RightType types a correction, it reads back
+  the word before the cursor (when the app shares its text) and compares.
+  If an app shows something other than what was sent — the way Windows 11
+  Notepad turned สวัสดี into `ีีีีีี` — it tells you, notes it in the problem
+  report, and from then on waits longer before typing in that app.
+
 ### Changed
 
 - **Thai typed with CapsLock left on is still fixed**: the English layout

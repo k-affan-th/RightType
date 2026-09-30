@@ -460,6 +460,78 @@ fn edit_selected_text() -> Option<zeroize::Zeroizing<String>> {
     text
 }
 
+/// The last `n` characters before the caret in the focused field, asked of
+/// the app (UI Automation, or a standard text box's own messages) — for
+/// checking a correction just typed ([`crate::verify`]). `None` when the app
+/// does not say, text is selected, or the field is a password field. Worker
+/// threads only (cross-process calls).
+pub fn text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
+    uia_text_before_caret(n).or_else(|| edit_text_before_caret(n))
+}
+
+fn uia_text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationTextPattern, TextPatternRangeEndpoint_Start, TextUnit_Character,
+        UIA_TextPatternId,
+    };
+    let uia = uia_here()?;
+    unsafe {
+        let element = uia.GetFocusedElement().ok()?;
+        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            return None;
+        }
+        let pattern: IUIAutomationTextPattern =
+            element.GetCurrentPatternAs(UIA_TextPatternId).ok()?;
+        let selection = pattern.GetSelection().ok()?;
+        if selection.Length().ok()? != 1 {
+            return None;
+        }
+        let range = selection.GetElement(0).ok()?;
+        // Only a caret: with text selected there is nothing to compare.
+        if !range.GetText(1).ok()?.is_empty() {
+            return None;
+        }
+        let back = i32::try_from(n).ok()?;
+        let moved = range
+            .MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Character, -back)
+            .ok()?;
+        if moved != -back {
+            return None;
+        }
+        let text = zeroize::Zeroizing::new(range.GetText(-1).ok()?.to_string());
+        Some(text)
+    }
+}
+
+fn edit_text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
+    use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
+    use zeroize::Zeroize;
+    let tb = TextBox::focused().ok()?;
+    let (start, end) = tb.selection()?;
+    if start != end {
+        return None;
+    }
+    let len = tb.ask(WM_GETTEXTLENGTH, 0, 0)?;
+    if len > 0xFFFF || end > len {
+        return None;
+    }
+    let mut units = vec![0u16; len + 1];
+    let got = tb
+        .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?
+        .min(len);
+    // RichEdit counts a line break as one position and WM_GETTEXT as two.
+    let usable = end <= got && !(tb.rich && units[..end].contains(&(b'\n' as u16)));
+    let text = usable.then(|| {
+        let mut before = String::from_utf16_lossy(&units[..end]);
+        let skip = before.chars().count().saturating_sub(n);
+        let tail = zeroize::Zeroizing::new(before.chars().skip(skip).collect::<String>());
+        before.zeroize();
+        tail
+    });
+    units.zeroize();
+    text.filter(|t| t.chars().count() == n)
+}
+
 /// The text cursor of the focused element, from UI Automation, in screen
 /// pixels — for apps that draw their own cursor and keep no system caret
 /// (many Chromium/Electron editors). Slow (a cross-process call), so never
