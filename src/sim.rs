@@ -373,6 +373,16 @@ mod tests {
     }
 
     #[test]
+    fn english_that_only_reads_as_short_thai_words_stays_english() {
+        // Each of these reads, at some point mid-word, as nothing but known
+        // Thai words of one or two letters (`reavi` = พำ + ฟ + อ + ร), and
+        // used to be rewritten to Thai before the typist could see why.
+        for word in ["reavik ", "demerest "] {
+            assert_eq!(type_blind(word, InputLayout::UsQwerty), word);
+        }
+    }
+
+    #[test]
     fn english_on_the_thai_layout_comes_back_at_space() {
         assert_eq!(
             type_blind("correct ", InputLayout::ThaiKedmanee),

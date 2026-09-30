@@ -24,6 +24,11 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   space, a reading that cannot end a Thai word goes back to the keys typed
   (when they were all letters), and 24 everyday computer words (`relogin`,
   `logout`, `signin`, `dropdown`, …) were added.
+- **Fewer unknown English words turn Thai** (`reavik` became `พำฟอรา`):
+  a reading made of nothing but three or more one- and two-letter Thai
+  words (พำ + ฟ + อ + รา) is no longer enough to convert a word, mid-way or
+  at the space. On 20,000 unknown English words, wrong conversions fell
+  from 246 to 170; of 20,000 unknown Thai words, one fewer arrives as Thai.
 - With both US and UK English keyboards installed, RightType starts with the
   one in use rather than the first installed, so **Fix text** opened from the
   tray before any typing uses the right punctuation (`"` `@` `£` `#`).

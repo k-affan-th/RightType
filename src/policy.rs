@@ -156,7 +156,9 @@ pub fn detect_token(
             if !has_latin || has_thai || english::is_compound(token.trim()) {
                 return None;
             }
-            detect::detect(token, en, th).or_else(|| us_layout_thai_with_punctuation(token, en, th))
+            detect::detect(token, en, th)
+                .or_else(|| us_layout_thai_with_punctuation(token, en, th))
+                .filter(|d| !only_short_thai_words(&d.corrected, th))
         }
         InputLayout::ThaiKedmanee => {
             if !has_thai || has_latin {
@@ -469,6 +471,20 @@ pub fn live_decision(
         return LiveDecision::Ambiguous;
     }
     LiveDecision::Commit
+}
+
+/// Is `thai` nothing but three or more known words of one or two letters?
+///
+/// Thai has many such words (พำ, สน, ฟ, อ, ร, …), so almost any English
+/// letters read as a chain of them for a while: `reavi` is พำ + ฟ + อ + ร.
+/// That alone is too little evidence to rewrite a word, mid-way or at its
+/// boundary. Measured on 20,000 unknown
+/// English and 20,000 unknown Thai words (`examples/live_thai_study.rs`):
+/// English wrongly turned Thai drops from 246 to 170, Thai kept from 5,502
+/// to 5,501.
+pub fn only_short_thai_words(thai: &str, th: &Dictionary) -> bool {
+    let segs = segment::segment(thai, th);
+    segs.len() >= 3 && segs.iter().all(|s| s.known && s.text.chars().count() <= 2)
 }
 
 /// How an in-flight run should currently read on screen (D-008).
