@@ -194,6 +194,12 @@ def start_edge(html: Path, exe: Path = EDGE_EXE, host: str = "127.0.0.1"):
     # loopback address, which lets a test put a chosen URL in the history.
     url = f"http://{host}:{port}/{html.name}"
 
+    def _title(w):
+        try:
+            return w.window_text() or ""
+        except Exception:
+            return ""
+
     def browser_windows():
         out = {}
         for w in Desktop(backend="uia").windows(top_level_only=True):
@@ -217,11 +223,16 @@ def start_edge(html: Path, exe: Path = EDGE_EXE, host: str = "127.0.0.1"):
             "--window-size=900,600",
         ]
     )
-    deadline = time.time() + 25
+    # A cold start on a CI runner can take longer than 25 s, and the browser
+    # may open a second top-level window (a first-run bubble): take the new
+    # window showing our page, or else the first new one.
+    deadline = time.time() + 60
     while time.time() < deadline:
-        fresh = [h for h in browser_windows() if h not in before]
-        if len(fresh) == 1:
-            app = Application(backend="uia").connect(handle=fresh[0], timeout=5)
+        fresh = [w for h, w in browser_windows().items() if h not in before]
+        if fresh:
+            time.sleep(1.0)
+            ours = [w for w in fresh if "rt-e2e" in _title(w).lower()] or fresh
+            app = Application(backend="uia").connect(handle=ours[0].handle, timeout=5)
             break
         time.sleep(0.5)
     else:
