@@ -1084,6 +1084,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // boundary path must not correct it a second time — its backspace count
     // assumes the screen still holds the raw keystrokes.
     if let Some(mut rendered) = anchor_owned_run(&word, vk) {
+        e2e_trace("boundary: owned run anchored".to_string());
         remember_completed(&rendered, vk, true);
         rendered.zeroize();
         word.zeroize();

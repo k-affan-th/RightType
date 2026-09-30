@@ -28,6 +28,7 @@ import subprocess
 import threading
 import sys
 import time
+from pathlib import Path
 
 import full_sweep as fs
 import lib
@@ -50,6 +51,43 @@ def installed_layouts():
     buf = (ctypes.c_void_p * n)()
     user32.GetKeyboardLayoutList(n, buf)
     return [(b or 0) & 0xFFFFFFFF for b in buf]
+
+
+def rt_health(proc):
+    """Is RightType still running, and does its UI thread (which also runs
+    the keyboard hook) still answer? If it hangs, print every thread's stack
+    with the Windows debugger when the runner has one."""
+    code = proc.poll()
+    if code is not None:
+        return f"exited with code {code & 0xFFFFFFFF:#010x}"
+    found = []
+    proto = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+
+    def each(hwnd, _):
+        pid = wt.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value == proc.pid:
+            found.append(hwnd)
+        return True
+
+    user32.EnumWindows(proto(each), 0)
+    if not found:
+        return "running, no window found"
+    result = ctypes.c_size_t()
+    ok = user32.SendMessageTimeoutW(found[0], 0, 0, 0, 0x0002, 3000, ctypes.byref(result))
+    if ok:
+        return "running and responsive"
+    cdb = next((p for p in [
+        r"C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe",
+        r"C:\Program Files\Windows Kits\10\Debuggers\x64\cdb.exe",
+    ] if Path(p).exists()), None)
+    if cdb is None:
+        return "running but NOT responding (no cdb on this machine for stacks)"
+    out = subprocess.run(
+        [cdb, "-pv", "-p", str(proc.pid), "-y", str(Path(str(fs.EXE)).parent),
+         "-c", "~*kn 60; qd"],
+        capture_output=True, text=True, errors="replace", timeout=180)
+    return "running but NOT responding; thread stacks:\n" + out.stdout[-30000:]
 
 
 # --------------------------------------------------------------------------- targets
@@ -296,14 +334,15 @@ def main():
             if key == "omnibox":
                 subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
                 t = make()
-                fs.start_rt()
+                proc = fs.start_rt()
                 t.focus()
             else:
-                fs.start_rt()
+                proc = fs.start_rt()
                 t = make()
             try:
                 {"edge": edge_sweep, "hang": hang_sweep}.get(key, sweep)(t)
             finally:
+                print(f"RightType after {key}: {rt_health(proc)}", flush=True)
                 t.close()
                 sections[key] = (start, fs.LOG.stat().st_size)
     finally:

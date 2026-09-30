@@ -126,10 +126,17 @@ unsafe extern "system" fn on_focus(
     _thread: u32,
     _time: u32,
 ) {
+    thread_local!(static DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) });
+    let depth = DEPTH.with(|d| d.replace(d.get() + 1));
     crate::hook::e2e_trace(format!(
-        "focus event from hwnd={:#x} obj={idobj} child={idchild}",
+        "focus event from hwnd={:#x} obj={idobj} child={idchild} depth={depth}",
         hwnd.0 as usize
     ));
+    on_focus_inner();
+    DEPTH.with(|d| d.set(depth));
+}
+
+unsafe fn on_focus_inner() {
     let started = std::time::Instant::now();
     let moved = moves_to_another_field();
     if moved {
