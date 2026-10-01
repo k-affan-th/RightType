@@ -675,6 +675,8 @@ def sweep(t):
            then=[lambda: fast_keys("l;ylfu8iy["), lambda: tap(fs.SPACE)])
     realistic(t)
     capslock_left_on(t)
+    # Thai typed in a wrong order that looks right: two เ for แ (keys g g).
+    fs.run(t, "two เ typed for แ is put right", "gg,; ", "แมว", layout=HKL_TH)
     if t.name == "page":
         full_screen_browser_still_works(t)
     selection_leaves_clipboard_alone(t)

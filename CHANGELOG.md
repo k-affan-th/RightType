@@ -4,21 +4,31 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
-### Fixed
-
-- **Notepad, WordPad and other standard text boxes: English typed on the
-  Thai layout could take two more characters with it when fixed**
-  (`;yoouh there` came out as `วันนีthere`). These boxes drop Thai vowels
-  and tone marks that cannot follow the letter before (`there` on the Thai
-  layout is `ะ้ำพำ`; the box keeps `ะพำ`), so there were fewer characters to
-  delete than were typed. RightType now looks at what the box really holds
-  before replacing.
-- **A slow text box could get a correction in the wrong place**: Windows 11
-  Notepad sometimes answers before it has handled the latest keys. If what
-  is before the caret is not what RightType expects yet, the correction is
-  typed as keys instead, which arrive after them.
-
 ### Added
+
+- **A preview while you type (Auto)**: before Auto is sure enough to fix a
+  word, the cursor tag shows where the keys are heading — `l;yl` shows
+  `→ สวัส` — so you can see a fix is coming without anything changing yet.
+- **Command palette** (`Ctrl`+`Alt`+`Space`) gains:
+  - **Fix this field**: every wrong-layout word in the field, fixed in one
+    go (read from the app, never through the clipboard; Ctrl+Z undoes it).
+  - **Never convert “word”**: for words you took back lately while learning
+    is off — one click and RightType leaves that word alone from then on.
+  - **Thai digits ↔ 0–9 in the selection**.
+  - **CapsLock switches Thai/English** (off by default): tap CapsLock to
+    switch, hold it half a second for CAPS.
+  - **Tray icon shows TH / EN** (off by default).
+- **Thai typed in a wrong order that looks right is put right** (Auto):
+  `เเ` (two เ) for `แ`, `ํา` for `ำ`, a tone mark typed before the vowel
+  above it, the same mark twice — when the result is a Thai word.
+- **Tags and hints stay off shared screens**: Teams, Zoom, recordings and
+  screenshots do not show them (a Suggest hint or preview is what you
+  typed); you still see them.
+- **Portable mode**: an empty file named `portable` next to
+  `righttype.exe` keeps settings and learned words in a `data` folder beside
+  it instead of `%APPDATA%`.
+- **The first three fixes of a session show `↶ Shift+Backspace`** at the
+  cursor, and the Welcome window has a box to try a fix in.
 
 - **Tray → "Save a problem report…"** writes what RightType did lately (the
   last 400 steps: a word ended and was or wasn't fixed, how the correction
@@ -41,6 +51,21 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   editor still works); Remote Desktop, the Windows App, Hyper-V, VirtualBox,
   VMware, AnyDesk, TeamViewer, RustDesk, Parsec and VNC viewers are on the
   built-in list.
+
+
+### Fixed
+
+- **Notepad, WordPad and other standard text boxes: English typed on the
+  Thai layout could take two more characters with it when fixed**
+  (`;yoouh there` came out as `วันนีthere`). These boxes drop Thai vowels
+  and tone marks that cannot follow the letter before (`there` on the Thai
+  layout is `ะ้ำพำ`; the box keeps `ะพำ`), so there were fewer characters to
+  delete than were typed. RightType now looks at what the box really holds
+  before replacing.
+- **A slow text box could get a correction in the wrong place**: Windows 11
+  Notepad sometimes answers before it has handled the latest keys. If what
+  is before the caret is not what RightType expects yet, the correction is
+  typed as keys instead, which arrive after them.
 
 ### Changed
 
