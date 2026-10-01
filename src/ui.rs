@@ -67,6 +67,7 @@ use zeroize::Zeroize;
 pub type Rgb = u32;
 
 /// Every colour the windows use.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Palette {
     /// Window background.
     pub bg: Rgb,
@@ -137,12 +138,32 @@ const LIGHT: Palette = Palette {
 };
 
 static DARK_MODE: AtomicBool = AtomicBool::new(true);
+/// Windows' High Contrast is on: every colour comes from the system's
+/// contrast theme instead (see [`contrast_palette`]).
+static HIGH_CONTRAST: AtomicBool = AtomicBool::new(false);
+/// The palette built from the contrast theme last time it was read. Kept
+/// (leaked) for the `'static` borrows of [`pal`]; a new one is made only when
+/// the theme's colours change.
+static CONTRAST_PAL: std::sync::atomic::AtomicPtr<Palette> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 static DPI: AtomicU32 = AtomicU32::new(96);
 
 /// Re-read the Windows theme and DPI. Call when a window opens: it will open
 /// on the monitor under the mouse (see [`size_and_center`]), at that monitor's
 /// DPI.
 pub fn refresh() {
+    let contrast = high_contrast();
+    HIGH_CONTRAST.store(contrast, Ordering::Relaxed);
+    if contrast {
+        let fresh = contrast_palette();
+        let old = CONTRAST_PAL.load(Ordering::Acquire);
+        if old.is_null() || unsafe { &*old } != &fresh {
+            CONTRAST_PAL.store(Box::into_raw(Box::new(fresh)), Ordering::Release);
+        }
+        DARK_MODE.store(luminance(pal().bg) < 0x80, Ordering::Relaxed);
+        DPI.store(monitor_dpi(cursor_monitor()), Ordering::Relaxed);
+        return;
+    }
     DARK_MODE.store(windows_prefers_dark(), Ordering::Relaxed);
     DPI.store(monitor_dpi(cursor_monitor()), Ordering::Relaxed);
 }
@@ -194,8 +215,77 @@ pub fn work_area(monitor: HMONITOR) -> RECT {
     wa
 }
 
+/// Is Windows' High Contrast on? Read live (cheap).
+pub fn high_contrast() -> bool {
+    use windows::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW};
+    use windows::Win32::UI::WindowsAndMessaging::SPI_GETHIGHCONTRAST;
+    let mut hc = HIGHCONTRASTW {
+        cbSize: std::mem::size_of::<HIGHCONTRASTW>() as u32,
+        ..Default::default()
+    };
+    unsafe {
+        SystemParametersInfoW(
+            SPI_GETHIGHCONTRAST,
+            hc.cbSize,
+            Some(&mut hc as *mut HIGHCONTRASTW as *mut c_void),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+        .is_ok()
+            && hc.dwFlags.contains(HCF_HIGHCONTRASTON)
+    }
+}
+
+/// A system colour as `0xRRGGBB`.
+pub fn sys_rgb(index: windows::Win32::Graphics::Gdi::SYS_COLOR_INDEX) -> Rgb {
+    let c = unsafe { windows::Win32::Graphics::Gdi::GetSysColor(index) };
+    ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF)
+}
+
+fn luminance(rgb: Rgb) -> u32 {
+    let (r, g, b) = ((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+    (r * 299 + g * 587 + b * 114) / 1000
+}
+
+/// The contrast theme's own colours, used as they are: text on window
+/// colour, the selection colours for anything picked or primary, and plain
+/// outlines instead of subtle fills (which a contrast theme does not have).
+fn contrast_palette() -> Palette {
+    use windows::Win32::Graphics::Gdi::{
+        COLOR_BTNFACE, COLOR_HIGHLIGHT, COLOR_HIGHLIGHTTEXT, COLOR_WINDOW,
+        COLOR_WINDOWTEXT,
+    };
+    let window = sys_rgb(COLOR_WINDOW);
+    let text = sys_rgb(COLOR_WINDOWTEXT);
+    let hi = sys_rgb(COLOR_HIGHLIGHT);
+    Palette {
+        bg: window,
+        surface: window,
+        surface_hover: window,
+        inset: window,
+        border: text,
+        text,
+        text_dim: text,
+        accent: hi,
+        accent_hover: hi,
+        accent_pressed: hi,
+        on_accent: sys_rgb(COLOR_HIGHLIGHTTEXT),
+        button: sys_rgb(COLOR_BTNFACE),
+        button_hover: sys_rgb(COLOR_BTNFACE),
+        button_pressed: sys_rgb(COLOR_BTNFACE),
+        toggle_off: text,
+        keycap: window,
+        keycap_border: text,
+    }
+}
+
 /// The palette for the current theme.
 pub fn pal() -> &'static Palette {
+    if HIGH_CONTRAST.load(Ordering::Relaxed) {
+        let p = CONTRAST_PAL.load(Ordering::Acquire);
+        if !p.is_null() {
+            return unsafe { &*p };
+        }
+    }
     if is_dark() {
         &DARK
     } else {

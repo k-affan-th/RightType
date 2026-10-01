@@ -455,7 +455,13 @@ unsafe fn paint(hwnd: HWND) {
 
     // Dark pill; the TH / EN / CAPS tags each in a colour of their own, so
     // the language reads at a glance (COLORREF is 0x00BBGGRR).
-    let (fill, edge) = TEXT.with(|t| tag_colours(&t.borrow(), STYLE.load(Ordering::Relaxed)));
+    let (fill, edge, ink) = if crate::ui::high_contrast() {
+        contrast_colours(STYLE.load(Ordering::Relaxed))
+    } else {
+        let (fill, edge) =
+            TEXT.with(|t| tag_colours(&t.borrow(), STYLE.load(Ordering::Relaxed)));
+        (fill, edge, 0x00FF_FFFF)
+    };
     let brush = CreateSolidBrush(COLORREF(fill));
     FillRect(hdc, &rc, brush);
     let _ = DeleteObject(HGDIOBJ(brush.0));
@@ -465,7 +471,7 @@ unsafe fn paint(hwnd: HWND) {
 
     // White, centred text in the interface typeface.
     SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, COLORREF(0x00FF_FFFF));
+    SetTextColor(hdc, COLORREF(ink));
     let font = crate::ui::make_font_at(FONT_SIZE, FONT_WEIGHT, DPI.load(Ordering::Relaxed));
     let old = SelectObject(hdc, HGDIOBJ(font.0));
     TEXT.with(|t| draw_centered(hdc, &t.borrow(), &mut rc));
@@ -497,6 +503,26 @@ fn tag_colours(text: &str, badge: bool) -> (u32, u32) {
         (true, "EN") => (0x0097_572B, 0x00B3_7040),   // blue
         (true, "CAPS") => (0x0000_5A8A, 0x0010_74AA), // amber
         _ => (0x002A_2A2A, 0x0045_4545),
+    }
+}
+
+/// Fill, border and text of the pill under Windows' High Contrast: the
+/// theme's own colours (selection colours for a tag), as COLORREFs.
+fn contrast_colours(badge: bool) -> (u32, u32, u32) {
+    use windows::Win32::Graphics::Gdi::{
+        GetSysColor, COLOR_HIGHLIGHT, COLOR_HIGHLIGHTTEXT, COLOR_WINDOW, COLOR_WINDOWTEXT,
+    };
+    unsafe {
+        let edge = GetSysColor(COLOR_WINDOWTEXT);
+        if badge {
+            (
+                GetSysColor(COLOR_HIGHLIGHT),
+                edge,
+                GetSysColor(COLOR_HIGHLIGHTTEXT),
+            )
+        } else {
+            (GetSysColor(COLOR_WINDOW), edge, edge)
+        }
     }
 }
 
