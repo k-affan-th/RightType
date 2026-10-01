@@ -135,6 +135,35 @@ pub fn th_to_en(input: &str) -> String {
 /// meant to be English (`th_to_en`); otherwise it's ASCII meant to be Thai
 /// (`en_to_th`). Characters the chosen direction doesn't remap pass through, so a
 /// mixed selection only flips the part that belongs to that layout.
+/// Thai digits to 0–9 when the text has any, otherwise 0–9 to Thai digits
+/// (๐–๙): for documents that want one or the other.
+pub fn swap_digits(input: &str) -> String {
+    let thai = |c: char| ('\u{0E50}'..='\u{0E59}').contains(&c);
+    let to_arabic = input.chars().any(thai);
+    input
+        .chars()
+        .map(|c| {
+            if to_arabic && thai(c) {
+                char::from(b'0' + (c as u32 - 0x0E50) as u8)
+            } else if !to_arabic && c.is_ascii_digit() {
+                char::from_u32(0x0E50 + (c as u32 - '0' as u32)).unwrap_or(c)
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod digit_tests {
+    #[test]
+    fn digits_swap_both_ways() {
+        assert_eq!(super::swap_digits("ปี 2569 ข้อ 3"), "ปี ๒๕๖๙ ข้อ ๓");
+        assert_eq!(super::swap_digits("ปี ๒๕๖๙ ข้อ 3"), "ปี 2569 ข้อ 3");
+        assert_eq!(super::swap_digits("ไม่มีเลข"), "ไม่มีเลข");
+    }
+}
+
 pub fn auto_convert(input: &str) -> String {
     let has_thai = input
         .chars()

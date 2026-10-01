@@ -50,6 +50,8 @@ enum Command {
     Settings,
     /// Fix every wrong-layout word in the field that had focus.
     FixField,
+    /// Thai digits ↔ 0–9 in the selection.
+    SwapDigits,
     /// Keep a word the typist reversed lately as typed (by its place in
     /// `learn::reversed_words`).
     KeepAsTyped(usize),
@@ -86,6 +88,7 @@ fn commands(app: Option<&str>) -> Vec<(String, Command)> {
     let mut list = vec![(tr(T::TrayFix).to_string(), Command::FixText)];
     if app.is_some() {
         list.push((tr(T::PaletteFixField).to_string(), Command::FixField));
+        list.push((tr(T::PaletteSwapDigits).to_string(), Command::SwapDigits));
     }
     if session::is_paused() {
         list.push((tr(T::TrayResume).to_string(), Command::Resume));
@@ -269,6 +272,7 @@ fn run(command: Command, app: Option<&str>) {
         Command::FixText => crate::fixer::open(),
         Command::Settings => crate::settings::open(),
         Command::FixField => crate::manual::request_fix_field(PREVIOUS.load(Ordering::Acquire)),
+        Command::SwapDigits => crate::manual::request_swap_digits(PREVIOUS.load(Ordering::Acquire)),
         Command::KeepAsTyped(i) => {
             if let Some(mut word) = crate::learn::reversed_words().into_iter().nth(i) {
                 crate::learn::keep_as_typed(&word);

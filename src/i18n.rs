@@ -132,6 +132,7 @@ texts! {
     ToastHookLost => "RightType lost the keyboard — retrying…", "RightType ตรวจจับคีย์บอร์ดไม่ได้ — กำลังลองใหม่…";
     ToastHookBack => "RightType is working again", "RightType กลับมาทำงานแล้ว";
     ToastSaved => "Saved", "บันทึกแล้ว";
+    PaletteSwapDigits => "Thai digits ↔ 0–9 in the selection", "เลขไทย ↔ เลขอารบิก ในข้อความที่เลือก";
     PaletteFixField => "Fix this field", "ซ่อมทั้งช่องนี้";
     ErrFieldTooLong => "This field is too long to fix here — use Fix text", "ช่องนี้ยาวเกินไป ใช้หน้าต่างซ่อมข้อความแทน";
     ToastNothingToFix => "Nothing to fix in this field", "ไม่มีคำที่ต้องแก้ในช่องนี้";

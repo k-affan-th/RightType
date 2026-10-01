@@ -48,6 +48,8 @@ pub enum Command {
     },
     /// Fix every wrong-layout word in the focused field (from the palette).
     FixField { hwnd: isize, requested_at: Instant },
+    /// Thai digits ↔ 0–9 in the selection (from the palette).
+    SwapDigits { hwnd: isize, requested_at: Instant },
     UndoSelection {
         hwnd: isize,
         focus_generation: u64,
@@ -105,6 +107,16 @@ pub fn request_convert_selection(hwnd: isize, focus_generation: u64) {
 pub fn request_fix_field(hwnd: isize) {
     if let Some(tx) = SENDER.get() {
         let _ = tx.try_send(Command::FixField {
+            hwnd,
+            requested_at: Instant::now(),
+        });
+    }
+}
+
+/// Ask the worker to swap Thai digits and 0–9 in the selection of `hwnd`.
+pub fn request_swap_digits(hwnd: isize) {
+    if let Some(tx) = SENDER.get() {
+        let _ = tx.try_send(Command::SwapDigits {
             hwnd,
             requested_at: Instant::now(),
         });
@@ -199,7 +211,7 @@ fn run(rx: Receiver<Command>) {
                 focus_generation,
                 requested_at,
             } if requested_at.elapsed() <= MAX_COMMAND_AGE => unsafe {
-                convert_selection(hwnd, focus_generation)
+                convert_selection(hwnd, focus_generation, auto_convert)
             },
             Command::UndoSelection {
                 hwnd,
@@ -211,19 +223,28 @@ fn run(rx: Receiver<Command>) {
             Command::FixField { hwnd, requested_at }
                 if requested_at.elapsed() <= Duration::from_secs(3) =>
             unsafe { fix_field(hwnd) },
+            Command::SwapDigits { hwnd, requested_at }
+                if requested_at.elapsed() <= Duration::from_secs(3) =>
+            unsafe {
+                // The palette has just closed: let focus land back first.
+                thread::sleep(Duration::from_millis(200));
+                if GetForegroundWindow().0 as isize == hwnd {
+                    convert_selection(hwnd, focus::generation(), righttype::layout::swap_digits)
+                }
+            },
             _ => {}
         }
     }
 }
 
-unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
+unsafe fn convert_selection(hwnd: isize, focus_generation: u64, convert: fn(&str) -> String) {
     if !same_context(hwnd, focus_generation) {
         return;
     }
 
     if let Some(selection) = focus::selected_text() {
         crate::hook::trace_note("selection: read through UI Automation");
-        let mut converted = auto_convert(&selection);
+        let mut converted = convert(&selection);
         if converted == *selection {
             crate::hook::trace_note("selection: conversion was a no-op");
         } else if !release_modifiers() {
@@ -310,7 +331,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
         return;
     }
 
-    let mut converted = auto_convert(&selection);
+    let mut converted = convert(&selection);
     if converted == selection {
         crate::hook::trace_note("selection: conversion was a no-op");
         // Nothing to flip (e.g. selection already in the right script).
