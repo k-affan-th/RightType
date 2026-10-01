@@ -202,6 +202,9 @@ unsafe fn caps_released(down_at: Instant) {
     }
 }
 
+/// How many more automatic fixes this session show the Shift+Backspace tip.
+static UNDO_TIPS_LEFT: AtomicU32 = AtomicU32::new(3);
+
 /// Is RightType currently enabled?
 pub fn is_enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
@@ -1372,6 +1375,17 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         (Mode::Auto, Some(d)) => {
             let mut corrected = d.corrected.clone();
             let done = maybe_correct(&word, Some(vk), d);
+            if done && !caps_accident && crate::caret::is_enabled() {
+                // The first few fixes of a session show how to take one back.
+                if UNDO_TIPS_LEFT
+                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
+                    .is_ok()
+                {
+                    crate::overlay::badge_at_caret(righttype::i18n::tr(
+                        righttype::i18n::T::TipShiftBackspace,
+                    ));
+                }
+            }
             if done && caps_accident {
                 inject::toggle_capslock();
                 diag::note(

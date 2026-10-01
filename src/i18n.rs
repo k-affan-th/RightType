@@ -136,6 +136,7 @@ texts! {
     PaletteCapsSwitch => "CapsLock switches Thai/English", "CapsLock สลับภาษาไทย/อังกฤษ";
     ToastCapsSwitchOn => "Tap CapsLock to switch language · hold it for CAPS", "แตะ CapsLock เพื่อสลับภาษา · กดค้างเพื่อพิมพ์ตัวใหญ่";
     ToastCapsSwitchOff => "CapsLock is CapsLock again", "CapsLock กลับมาเป็นปุ่มตัวพิมพ์ใหญ่ตามเดิม";
+    TipShiftBackspace => "↶ Shift+Backspace", "↶ Shift+Backspace ย้อนได้";
     PaletteFixField => "Fix this field", "ซ่อมทั้งช่องนี้";
     ErrFieldTooLong => "This field is too long to fix here — use Fix text", "ช่องนี้ยาวเกินไป ใช้หน้าต่างซ่อมข้อความแทน";
     ToastNothingToFix => "Nothing to fix in this field", "ไม่มีคำที่ต้องแก้ในช่องนี้";
