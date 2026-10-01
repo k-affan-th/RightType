@@ -66,6 +66,21 @@ def set_capslock(on):
         time.sleep(0.3)
 
 
+def palette_by_keyboard(t):
+    """The command palette without a mouse: select a word, open it, type to
+    search, Enter."""
+    def steps():
+        fs.select_word()
+        time.sleep(0.3)
+        tap(fs.SPACE, fs.CTRL, fs.ALT)  # the palette's hotkey
+        time.sleep(1.0)
+        fs.type_keys("upper")
+        time.sleep(0.4)
+        tap(ENTER)
+        time.sleep(1.2)
+    fs.run(t, "palette by keyboard: search, Enter", "hello", "HELLO", then=[steps])
+
+
 def full_screen_browser_still_works(t):
     """Full screen (F11) with a text cursor is not a game: still corrected."""
     tap(0x7A)  # F11
@@ -87,12 +102,19 @@ def capslock_left_on(t):
         ("CapsLock on by accident, English", "Hello ", "Hello", HKL_EN),
         # Thai layout: CapsLock shifts every key (l;ylfu gives ศซํศโ๊).
         ("CapsLock on by accident, Thai layout", "l;ylfu ", "สวัสดี", HKL_TH),
+        # Capitals were meant after all: one Shift+Backspace puts them back
+        # (and CapsLock on again).
+        ("CapsLock fix taken back with Shift+Backspace", "Hello |flip", "hELLO", HKL_EN),
     ]:
         t.clear()
         t.layout(layout)
         set_capslock(True)
         try:
-            fs.type_keys(keys)
+            typed, _, then = keys.partition("|")
+            fs.type_keys(typed)
+            if then == "flip":
+                time.sleep(0.5)
+                flip()
             time.sleep(0.8)
             fs.check(t.name, name, t.read(), expect)
         finally:
@@ -679,6 +701,7 @@ def sweep(t):
     fs.run(t, "two เ typed for แ is put right", "gg,; ", "แมว", layout=HKL_TH)
     if t.name == "page":
         full_screen_browser_still_works(t)
+        palette_by_keyboard(t)
     selection_leaves_clipboard_alone(t)
 
 

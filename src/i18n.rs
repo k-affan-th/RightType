@@ -132,6 +132,10 @@ texts! {
     ToastHookLost => "RightType lost the keyboard — retrying…", "RightType ตรวจจับคีย์บอร์ดไม่ได้ — กำลังลองใหม่…";
     ToastHookBack => "RightType is working again", "RightType กลับมาทำงานแล้ว";
     ToastSaved => "Saved", "บันทึกแล้ว";
+    PaletteUpper => "UPPER CASE (selection)", "ตัวพิมพ์ใหญ่ทั้งหมด (ข้อความที่เลือก)";
+    PaletteLower => "lower case (selection)", "ตัวพิมพ์เล็กทั้งหมด (ข้อความที่เลือก)";
+    PaletteTitle => "Title Case (selection)", "ขึ้นต้นคำด้วยตัวใหญ่ (ข้อความที่เลือก)";
+    PaletteSwapCase => "sWAP cASE — undo CapsLock (selection)", "สลับตัวเล็ก/ใหญ่ — แก้ CapsLock ค้าง (ข้อความที่เลือก)";
     PaletteSwapDigits => "Thai digits ↔ 0–9 in the selection", "เลขไทย ↔ เลขอารบิก ในข้อความที่เลือก";
     PaletteTrayLanguage => "Tray icon shows TH / EN", "ไอคอนถาดระบบแสดง TH / EN";
     PaletteCapsSwitch => "CapsLock switches Thai/English", "CapsLock สลับภาษาไทย/อังกฤษ";
@@ -143,7 +147,8 @@ texts! {
     ToastNothingToFix => "Nothing to fix in this field", "ไม่มีคำที่ต้องแก้ในช่องนี้";
     ToastFixedWords => "Fixed {n} words · Ctrl+Z undoes it", "แก้ {n} คำ · Ctrl+Z ย้อนได้";
     PaletteKeepAsTyped => "Never convert “{word}”", "ไม่ต้องแปลง “{word}” อีก";
-    ToastCapsOff => "CapsLock was on — fixed the word and turned it off", "CapsLock ค้างอยู่ — แก้คำให้และปิด CapsLock แล้ว";
+    ToastCapsOff => "CapsLock was on — word fixed, CapsLock off · Shift+Backspace if you meant capitals", "CapsLock ค้าง — แก้คำและปิด CapsLock แล้ว · ตั้งใจพิมพ์ตัวใหญ่? กด Shift+Backspace";
+    ToastCapsKept => "Capitals kept, CapsLock on again", "คืนตัวพิมพ์ใหญ่และเปิด CapsLock ให้แล้ว";
     ToastVerifyDiffers => "This app showed the fix differently — check the last word (Ctrl+Z undoes it). RightType will type slower here.", "แอปนี้แสดงคำที่แก้ไม่ตรง ลองดูคำล่าสุด (Ctrl+Z ย้อนได้) ต่อไป RightType จะพิมพ์ช้าลงในแอปนี้";
     ToastLearnedCleared => "Learned words cleared", "ล้างคำที่เรียนรู้แล้ว";
     ToastSuggestAccept => "Alt+CapsLock", "Alt+CapsLock";
@@ -195,7 +200,8 @@ texts! {
     HkUnusable => "That would get in the way of typing — use Ctrl or Alt with it.", "ปุ่มนี้จะรบกวนการพิมพ์ — ใช้ร่วมกับ Ctrl หรือ Alt";
     HkTaken => "Already used for: {v}", "ใช้กับ: {v} อยู่แล้ว";
     HkReset => "All hotkeys are back to the defaults.", "คืนปุ่มลัดทั้งหมดเป็นค่าเดิมแล้ว";
-    PaletteHead => "RightType", "RightType";
+    PaletteHead => "↑↓ Enter · 1–9 · type to search · Esc", "↑↓ Enter · 1–9 · พิมพ์เพื่อค้นหา · Esc";
+    PaletteFiltering => "Search: {text}", "ค้นหา: {text}";
     PalettePause => "Pause for 30 minutes", "หยุดชั่วคราว 30 นาที";
     PaletteAppOff => "Turn off in {app}", "ปิดใน {app}";
     PaletteAppOn => "Turn back on in {app}", "เปิดกลับใน {app}";

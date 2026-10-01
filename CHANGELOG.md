@@ -14,7 +14,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
     go (read from the app, never through the clipboard; Ctrl+Z undoes it).
   - **Never convert “word”**: for words you took back lately while learning
     is off — one click and RightType leaves that word alone from then on.
-  - **Thai digits ↔ 0–9 in the selection**.
+  - **Thai digits ↔ 0–9**, **UPPER CASE**, **lower case**, **Title Case**
+    and **sWAP cASE** (CapsLock undone) for the selection.
+  - **Works without a mouse**: ↑↓ (or Tab) and Enter, 1–9 to run a line,
+    type to search (on either keyboard: `fxw` finds ซ่อม), Esc to close.
   - **CapsLock switches Thai/English** (off by default): tap CapsLock to
     switch, hold it half a second for CAPS.
   - **Tray icon shows TH / EN** (off by default).
@@ -77,12 +80,14 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   TH, EN and CAPS tags each have a colour of their own (teal, blue, amber).
 - **A `CAPS` tag at the text cursor** when CapsLock is switched on (with
   the TH/EN tags on), before a sentence comes out in capitals.
-- **CapsLock left on by accident is put right** (Auto): `hELLO` — Shift
-  on the first letter, so capitals were not meant — becomes `Hello`, and a
-  Thai word typed on the Thai layout with CapsLock on (every key comes out
-  shifted: สวัสดี as `ศซํศโ๊`) becomes the word meant. CapsLock is turned
-  off and a note says so; Ctrl+Shift+CapsLock undoes it. Words in capitals
-  (`NASA`) are left alone.
+- **CapsLock left on by accident is put right, with a way back**: in Auto,
+  `hELLO` — Shift on the first letter, so capitals were not meant — becomes
+  `Hello`, and a Thai word typed on the Thai layout with CapsLock on (every
+  key comes out shifted: สวัสดี as `ศซํศโ๊`) becomes the word meant;
+  CapsLock is turned off and a note says so. Meant the capitals? One
+  Shift+Backspace (or Ctrl+Shift+CapsLock) puts them back and CapsLock on
+  again. In Manual and Suggest it is only offered (`⇪ Hello · Tab`). Words
+  in capitals (`VARIABLE`, `NASA`) are never touched.
 - **Thai typed with CapsLock left on is still fixed**: the English layout
   shows `L;YLFU`, but the keys are the ones for สวัสดี, and RightType now
   reads them that way. English typed with CapsLock on stays as it is

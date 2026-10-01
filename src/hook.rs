@@ -427,6 +427,9 @@ impl Drop for OwnedRun {
 }
 
 struct SuggestionRecord {
+    /// A word typed with CapsLock on by accident: taking it also turns
+    /// CapsLock off.
+    caps: bool,
     original: String,
     corrected: String,
     boundary_vk: u16,
@@ -469,6 +472,11 @@ enum UndoKind {
     /// RightType anchored a run mid-word. Undoing it hands the token back to
     /// the typist; it is learned once they finish it.
     AutoMidToken,
+    /// RightType put right a word typed with CapsLock on by accident and
+    /// turned CapsLock off. Undoing it (Ctrl+Shift+CapsLock, or the next
+    /// Shift+Backspace) puts the capitals back and turns CapsLock on again:
+    /// they were meant (code, acronyms).
+    CapsAccident,
 }
 
 impl Drop for UndoRecord {
@@ -516,6 +524,12 @@ unsafe fn undo_last_correction() {
         habit_correction(!has_thai(restored), has_thai(restored));
         match rec.kind {
             UndoKind::Manual => {}
+            UndoKind::CapsAccident => {
+                if !caps_on() {
+                    inject::toggle_capslock();
+                }
+                crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastCapsKept));
+            }
             UndoKind::AutoWord => crate::learn::learn_now(restored),
             UndoKind::AutoMidToken => STATE.with(|s| {
                 let mut st = s.borrow_mut();
@@ -875,6 +889,20 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return true;
     }
     let action = hotkeys().action_for(vk, is_down(VK_CONTROL), is_down(VK_SHIFT), is_down(VK_MENU));
+
+    // The command palette is open and in front: its keys are its own
+    // (arrows, Enter, 1–9, typing to search, Esc), so it works without a
+    // mouse. Its own hotkey still closes it.
+    if action != Some(Action::Palette)
+        && !is_down(VK_CONTROL)
+        && !is_down(VK_MENU)
+        && crate::palette::is_open()
+    {
+        let ch = translate(vk, kb.scanCode as u16);
+        if crate::palette::key(vk, ch) {
+            return true;
+        }
+    }
 
     // Tab (alone) right after a Suggest hint takes it, like Alt+CapsLock. The
     // hint exists only until the next key, so Tab is otherwise untouched.
@@ -1363,8 +1391,13 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             });
         }
     }
+    // CapsLock left on by accident (`hELLO`, or Thai typed with every key
+    // shifted). Auto puts it right and turns CapsLock off, with a way back:
+    // capitals may be meant (code, acronyms), and one Shift+Backspace (or
+    // Ctrl+Shift+CapsLock) restores them and CapsLock. Manual and Suggest
+    // offer it as a hint that Tab takes.
     let mut caps_accident = false;
-    if detection.is_none() && !seed_run && mode_now == Mode::Auto && caps_on() {
+    if detection.is_none() && !seed_run && caps_on() {
         let layout_now = policy::supported_layout_id(layout_id(effective_layout()));
         if let Some(meant) = layout_now.and_then(|l| policy::caps_accident(&word, l, dict::thai()))
         {
@@ -1379,7 +1412,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // Auto mode commits only at this boundary; Manual mode retains the token for
     // Shift+Backspace.
-    let swallow = match (mode_now, detection) {
+    let mode_for_word = if caps_accident && mode_now != Mode::Auto {
+        Mode::Suggest
+    } else {
+        mode_now
+    };
+    let swallow = match (mode_for_word, detection) {
         (Mode::Auto, Some(d)) => {
             let mut corrected = d.corrected.clone();
             let done = maybe_correct(&word, Some(vk), d);
@@ -1396,13 +1434,14 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             }
             if done && caps_accident {
                 inject::toggle_capslock();
-                diag::note(
-                    "CapsLock left on by accident: word put right, CapsLock off",
-                    &[],
-                );
+                STATE.with(|s| {
+                    if let Some(u) = s.borrow_mut().undo.as_mut() {
+                        u.kind = UndoKind::CapsAccident;
+                    }
+                });
+                diag::note("CapsLock on by accident: word put right, CapsLock off", &[]);
                 crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastCapsOff));
-            }
-            if done {
+            } else if done {
                 // Shift+Backspace right after an automatic correction flips it
                 // back — the undo gesture people reach for first.
                 remember_completed(&corrected, vk, true);
@@ -1413,10 +1452,16 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         (Mode::Suggest, Some(d)) => {
             // Show *what* would be written, not just that something would:
             // a hint you cannot read is a hint you cannot judge.
-            let mut hint = format!("{}  ·  Tab", d.corrected);
+            let mut hint = if caps_accident {
+                diag::note("CapsLock on by accident? offered the word as meant", &[]);
+                format!("⇪ {}  ·  Tab", d.corrected)
+            } else {
+                format!("{}  ·  Tab", d.corrected)
+            };
             STATE.with(|s| {
                 s.borrow_mut().suggestion = Some(SuggestionRecord {
-                    original: word.clone(),
+                    caps: caps_accident,
+                    original: policy::shown_with_caps(&word, caps_on()),
                     corrected: d.corrected,
                     boundary_vk: vk,
                     created: Instant::now(),
@@ -1799,6 +1844,10 @@ unsafe fn accept_suggestion() {
         UndoKind::Manual,
     );
     restore.zeroize();
+    if suggestion.caps && caps_on() {
+        inject::toggle_capslock();
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastCapsOff));
+    }
     crate::stats::record_manual();
     habit_correction(
         has_thai(&suggestion.original),
@@ -1833,6 +1882,17 @@ fn has_thai(text: &str) -> bool {
 /// words back to the other layout (see [`Recent`]). The whole span from that
 /// word to the caret is retyped in one injection, and it is one Undo step.
 unsafe fn flip_back_recent() {
+    // Right after a CapsLock fix, Shift+Backspace is its way back (flipping
+    // `Hello` to Thai would be no use).
+    if STATE.with(|s| {
+        s.borrow()
+            .undo
+            .as_ref()
+            .is_some_and(|u| u.kind == UndoKind::CapsAccident)
+    }) {
+        undo_last_correction();
+        return;
+    }
     let Some(step) = STATE.with(|s| s.borrow().recent.next_step(convert_shown)) else {
         e2e_trace("flip back: no recent word".to_string());
         diag::note("Shift+Backspace: nothing to flip", &[]);

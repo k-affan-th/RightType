@@ -39,6 +39,16 @@ const WM_COMMAND: u32 = 0x0111;
 const WM_ACTIVATE: u32 = 0x0006;
 const IDCANCEL: usize = 2;
 
+/// What a "selection" command does to the text.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TransformKind {
+    Digits,
+    Upper,
+    Lower,
+    Title,
+    SwapCase,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Command {
     FixText,
@@ -54,8 +64,8 @@ enum Command {
     TrayLanguage,
     /// CapsLock as a language key, on or off.
     CapsSwitch,
-    /// Thai digits ↔ 0–9 in the selection.
-    SwapDigits,
+    /// Rewrite the selection (digits, letter case).
+    Transform(TransformKind),
     /// Keep a word the typist reversed lately as typed (by its place in
     /// `learn::reversed_words`).
     KeepAsTyped(usize),
@@ -65,10 +75,186 @@ struct Palette {
     window: nwg::Window,
     surface: Rc<Surface>,
     items: Vec<(u16, Command)>,
+    /// Each item's text, for filtering and numbering.
+    labels: Vec<String>,
+    /// The line above the list: how to use it, or what has been typed.
+    header: u16,
+    /// Items shown (indices into `items`), in order, after filtering.
+    visible: RefCell<Vec<usize>>,
+    /// Which shown item Enter runs.
+    selected: std::cell::Cell<usize>,
+    /// What has been typed to filter the list.
+    filter: RefCell<String>,
     /// The window that had focus, to return to.
     previous: isize,
     app: Option<String>,
     handler: RefCell<Option<nwg::RawEventHandler>>,
+}
+
+/// A key for the open palette, posted by the keyboard hook (wParam: virtual
+/// key, lParam: the character it types, 0 for none).
+const WM_PALETTE_KEY: u32 = 0x8000 + 0x560;
+
+/// Is the palette open and in front (so its keys are its own)?
+pub fn is_open() -> bool {
+    let open = OPEN.load(Ordering::Acquire);
+    open != 0 && unsafe { GetForegroundWindow() }.0 as isize == open
+}
+
+/// The keyboard hook hands the open palette its keys: arrows move, Enter
+/// runs, 1–9 run that line, typing filters, Backspace un-types, Esc closes.
+/// Returns whether the palette takes `vk` (the hook then swallows it).
+pub fn key(vk: u16, ch: Option<char>) -> bool {
+    const NAV: [u16; 8] = [0x26, 0x28, 0x0D, 0x1B, 0x08, 0x24, 0x23, 0x09];
+    let printable = ch.is_some_and(|c| !c.is_control());
+    if !NAV.contains(&vk) && !printable {
+        return false;
+    }
+    let open = OPEN.load(Ordering::Acquire);
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+            HWND(open as *mut _),
+            WM_PALETTE_KEY,
+            windows::Win32::Foundation::WPARAM(vk as usize),
+            windows::Win32::Foundation::LPARAM(ch.map_or(0, |c| c as isize)),
+        );
+    }
+    true
+}
+
+/// Show the items that match the filter, numbered, packed from the top, and
+/// select the first.
+fn refilter(p: &Palette) {
+    let filter = p.filter.borrow().to_lowercase();
+    // Typed on the wrong keyboard still finds it (`fxw` and `ซ่อม` alike).
+    let other = righttype::layout::auto_convert(&filter).to_lowercase();
+    let visible: Vec<usize> = (0..p.items.len())
+        .filter(|&i| {
+            let label = p.labels[i].to_lowercase();
+            filter.is_empty() || label.contains(&filter) || label.contains(&other)
+        })
+        .collect();
+    for (i, (id, _)) in p.items.iter().enumerate() {
+        let hwnd = p.surface.hwnd_of(*id);
+        match visible.iter().position(|&v| v == i) {
+            Some(k) => {
+                let label = if k < 9 {
+                    format!("{}   {}", k + 1, p.labels[i])
+                } else {
+                    format!("    {}", p.labels[i])
+                };
+                p.surface.set_text(*id, &label);
+                unsafe {
+                    let _ = SetWindowPos(
+                        hwnd,
+                        None,
+                        ui::px(PAD),
+                        ui::px(PAD + 28 + k as i32 * ROW),
+                        0,
+                        0,
+                        SWP_NOSIZE | windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER,
+                    );
+                    let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                        hwnd,
+                        windows::Win32::UI::WindowsAndMessaging::SW_SHOW,
+                    );
+                }
+            }
+            None => unsafe {
+                let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                    hwnd,
+                    windows::Win32::UI::WindowsAndMessaging::SW_HIDE,
+                );
+            },
+        }
+    }
+    let rows = visible.len().max(1) as i32;
+    unsafe {
+        let _ = SetWindowPos(
+            p.surface.hwnd,
+            None,
+            0,
+            0,
+            ui::px(W),
+            ui::px(PAD * 2 + 28 + rows * ROW),
+            windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE
+                | windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER,
+        );
+    }
+    let typed = p.filter.borrow();
+    p.surface.set_text(
+        p.header,
+        &if typed.is_empty() {
+            tr(T::PaletteHead).to_string()
+        } else {
+            trf(T::PaletteFiltering, &[("text", &typed)])
+        },
+    );
+    drop(typed);
+    *p.visible.borrow_mut() = visible;
+    select(p, 0);
+}
+
+/// Select the `k`-th shown item (keyboard focus on it).
+fn select(p: &Palette, k: usize) {
+    let visible = p.visible.borrow();
+    if visible.is_empty() {
+        return;
+    }
+    let k = k.min(visible.len() - 1);
+    p.selected.set(k);
+    let id = p.items[visible[k]].0;
+    unsafe {
+        let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(p.surface.hwnd_of(id));
+    }
+}
+
+/// One key from the hook (see [`key`]).
+fn on_key(p: &Rc<Palette>, vk: u16, ch: Option<char>) {
+    let n = p.visible.borrow().len();
+    let at = p.selected.get();
+    match vk {
+        // Tab moves like Down (Shift+Tab like Up), so Enter runs what is
+        // highlighted whichever way the typist moved.
+        0x09 if n > 0 && unsafe { hook_shift_down() } => select(p, (at + n - 1) % n),
+        0x09 if n > 0 => select(p, (at + 1) % n),
+        0x26 if n > 0 => select(p, (at + n - 1) % n), // Up
+        0x28 if n > 0 => select(p, (at + 1) % n),     // Down
+        0x24 => select(p, 0),                         // Home
+        0x23 if n > 0 => select(p, n - 1),            // End
+        0x1B => close(p, true),                       // Esc
+        0x08 => {
+            // Backspace: un-type, or close when nothing is typed.
+            if p.filter.borrow_mut().pop().is_some() {
+                refilter(p);
+            }
+        }
+        0x0D => run_shown(p, at),
+        _ => match ch {
+            // 1–9 run that line, unless a filter is being typed.
+            Some(d @ '1'..='9') if p.filter.borrow().is_empty() => {
+                run_shown(p, d as usize - '1' as usize)
+            }
+            Some(c) => {
+                p.filter.borrow_mut().push(c);
+                refilter(p);
+            }
+            None => {}
+        },
+    }
+}
+
+unsafe fn hook_shift_down() -> bool {
+    windows::Win32::UI::Input::KeyboardAndMouse::GetKeyState(0x10) < 0
+}
+
+fn run_shown(p: &Rc<Palette>, k: usize) {
+    let Some(&i) = p.visible.borrow().get(k) else {
+        return;
+    };
+    let command = p.items[i].1;
+    close(p, true);
+    run(command, p.app.as_deref());
 }
 
 thread_local! {
@@ -92,7 +278,18 @@ fn commands(app: Option<&str>) -> Vec<(String, Command)> {
     let mut list = vec![(tr(T::TrayFix).to_string(), Command::FixText)];
     if app.is_some() {
         list.push((tr(T::PaletteFixField).to_string(), Command::FixField));
-        list.push((tr(T::PaletteSwapDigits).to_string(), Command::SwapDigits));
+        list.push((
+            tr(T::PaletteSwapDigits).to_string(),
+            Command::Transform(TransformKind::Digits),
+        ));
+        for (key, kind) in [
+            (T::PaletteUpper, TransformKind::Upper),
+            (T::PaletteLower, TransformKind::Lower),
+            (T::PaletteTitle, TransformKind::Title),
+            (T::PaletteSwapCase, TransformKind::SwapCase),
+        ] {
+            list.push((tr(key).to_string(), Command::Transform(kind)));
+        }
     }
     if session::is_paused() {
         list.push((tr(T::TrayResume).to_string(), Command::Resume));
@@ -169,7 +366,7 @@ fn open() {
     }
     let surface = Surface::attach(&window, 0x5254_0014, Box::new(paint));
     let p = pal();
-    surface.label(
+    let header = surface.label(
         tr(T::PaletteHead),
         TextStyle::Small,
         (PAD + 6, PAD, W - 2 * PAD, 22),
@@ -215,11 +412,15 @@ fn open() {
             let _ = SetWindowPos(surface.hwnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE);
         }
     }
-    let first = items.first().map(|(id, _)| *id);
     let palette = Rc::new(Palette {
         window,
         surface,
         items,
+        labels: list.iter().map(|(label, _)| label.clone()).collect(),
+        header,
+        visible: RefCell::new(Vec::new()),
+        selected: std::cell::Cell::new(0),
+        filter: RefCell::new(String::new()),
         previous: previous.0 as isize,
         app,
         handler: RefCell::new(None),
@@ -227,12 +428,8 @@ fn open() {
     palette.window.set_visible(true);
     unsafe {
         let _ = SetForegroundWindow(palette.surface.hwnd);
-        if let Some(first) = first {
-            let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(
-                palette.surface.hwnd_of(first),
-            );
-        }
     }
+    refilter(&palette);
     OPEN.store(palette.surface.hwnd.0 as isize, Ordering::Release);
 
     let weak = Rc::downgrade(&palette);
@@ -252,6 +449,14 @@ fn open() {
         0x5254_0015,
         move |_h, msg, w, _l| {
             let p = weak.upgrade()?;
+            if msg == WM_PALETTE_KEY {
+                on_key(
+                    &p,
+                    w as u16,
+                    char::from_u32(_l as u32).filter(|c| *c != '\0'),
+                );
+                return Some(0);
+            }
             let cancel = msg == WM_COMMAND && w & 0xFFFF == IDCANCEL;
             let deactivated = msg == WM_ACTIVATE && w & 0xFFFF == 0;
             if cancel || deactivated {
@@ -294,7 +499,17 @@ fn run(command: Command, app: Option<&str>) {
         Command::FixText => crate::fixer::open(),
         Command::Settings => crate::settings::open(),
         Command::FixField => crate::manual::request_fix_field(PREVIOUS.load(Ordering::Acquire)),
-        Command::SwapDigits => crate::manual::request_swap_digits(PREVIOUS.load(Ordering::Acquire)),
+        Command::Transform(kind) => {
+            use righttype::layout as l;
+            let f: fn(&str) -> String = match kind {
+                TransformKind::Digits => l::swap_digits,
+                TransformKind::Upper => l::upper_case,
+                TransformKind::Lower => l::lower_case,
+                TransformKind::Title => l::title_case,
+                TransformKind::SwapCase => l::swap_case,
+            };
+            crate::manual::request_transform(PREVIOUS.load(Ordering::Acquire), f)
+        }
         Command::KeepAsTyped(i) => {
             if let Some(mut word) = crate::learn::reversed_words().into_iter().nth(i) {
                 crate::learn::keep_as_typed(&word);

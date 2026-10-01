@@ -154,6 +154,66 @@ pub fn swap_digits(input: &str) -> String {
         .collect()
 }
 
+/// UPPER CASE.
+pub fn upper_case(input: &str) -> String {
+    input.to_uppercase()
+}
+
+/// lower case.
+pub fn lower_case(input: &str) -> String {
+    input.to_lowercase()
+}
+
+/// Title Case: the first letter of each word up, the rest down.
+pub fn title_case(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut start = true;
+    for c in input.chars() {
+        if c.is_alphabetic() {
+            if start {
+                out.extend(c.to_uppercase());
+            } else {
+                out.extend(c.to_lowercase());
+            }
+            start = false;
+        } else {
+            out.push(c);
+            start = c.is_whitespace() || c == '-' || c == '_';
+        }
+    }
+    out
+}
+
+/// sWAP cASE: what CapsLock left on did, undone (`hELLO wORLD` → `Hello World`).
+pub fn swap_case(input: &str) -> String {
+    input
+        .chars()
+        .flat_map(|c| -> Vec<char> {
+            if c.is_uppercase() {
+                c.to_lowercase().collect()
+            } else if c.is_lowercase() {
+                c.to_uppercase().collect()
+            } else {
+                vec![c]
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod case_tests {
+    #[test]
+    fn cases() {
+        assert_eq!(super::upper_case("let x = 1"), "LET X = 1");
+        assert_eq!(super::lower_case("MAX_VALUE"), "max_value");
+        assert_eq!(
+            super::title_case("hELLO wORLD-wide สวัสดี"),
+            "Hello World-Wide สวัสดี"
+        );
+        assert_eq!(super::swap_case("hELLO wORLD"), "Hello World");
+    }
+}
+
 #[cfg(test)]
 mod digit_tests {
     #[test]

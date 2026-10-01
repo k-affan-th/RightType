@@ -48,8 +48,13 @@ pub enum Command {
     },
     /// Fix every wrong-layout word in the focused field (from the palette).
     FixField { hwnd: isize, requested_at: Instant },
-    /// Thai digits ↔ 0–9 in the selection (from the palette).
-    SwapDigits { hwnd: isize, requested_at: Instant },
+    /// Rewrite the selection with `transform` (from the palette: Thai
+    /// digits, letter case).
+    Transform {
+        hwnd: isize,
+        requested_at: Instant,
+        transform: fn(&str) -> String,
+    },
     UndoSelection {
         hwnd: isize,
         focus_generation: u64,
@@ -113,12 +118,13 @@ pub fn request_fix_field(hwnd: isize) {
     }
 }
 
-/// Ask the worker to swap Thai digits and 0–9 in the selection of `hwnd`.
-pub fn request_swap_digits(hwnd: isize) {
+/// Ask the worker to rewrite the selection of `hwnd` with `transform`.
+pub fn request_transform(hwnd: isize, transform: fn(&str) -> String) {
     if let Some(tx) = SENDER.get() {
-        let _ = tx.try_send(Command::SwapDigits {
+        let _ = tx.try_send(Command::Transform {
             hwnd,
             requested_at: Instant::now(),
+            transform,
         });
     }
 }
@@ -223,13 +229,15 @@ fn run(rx: Receiver<Command>) {
             Command::FixField { hwnd, requested_at }
                 if requested_at.elapsed() <= Duration::from_secs(3) =>
             unsafe { fix_field(hwnd) },
-            Command::SwapDigits { hwnd, requested_at }
-                if requested_at.elapsed() <= Duration::from_secs(3) =>
-            unsafe {
+            Command::Transform {
+                hwnd,
+                requested_at,
+                transform,
+            } if requested_at.elapsed() <= Duration::from_secs(3) => unsafe {
                 // The palette has just closed: let focus land back first.
                 thread::sleep(Duration::from_millis(200));
                 if GetForegroundWindow().0 as isize == hwnd {
-                    convert_selection(hwnd, focus::generation(), righttype::layout::swap_digits)
+                    convert_selection(hwnd, focus::generation(), transform)
                 }
             },
             _ => {}
