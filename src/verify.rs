@@ -30,6 +30,9 @@ static SLOW_APPS: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
 /// How long the app gets to show the keys before they are read back.
 const SETTLE: Duration = Duration::from_millis(120);
+/// The read-back must have come in by this long after the correction to
+/// count: later, it may describe a screen changed since.
+const READ_LIMIT: Duration = Duration::from_millis(600);
 
 /// The pause between deletions and text in an app that garbled one.
 pub const SLOW_GAP: Duration = Duration::from_millis(150);
@@ -75,6 +78,7 @@ pub fn after_keys(expected: &str, exe: Option<String>) {
         return;
     }
     let expected = Zeroizing::new(expected.to_string());
+    let sent_at = std::time::Instant::now();
     let typed = TYPED.load(Ordering::SeqCst);
     let generation = crate::focus::generation();
     let foreground =
@@ -104,6 +108,19 @@ pub fn after_keys(expected: &str, exe: Option<String>) {
                 crate::hook::trace_note("verify: app does not share its text");
                 return;
             };
+            // An answer that came late, or after anything else happened,
+            // describes a later screen (CI: read back a second later, after
+            // the test had moved on, and taken for garbling).
+            let still = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() }.0
+                as isize;
+            if sent_at.elapsed() > READ_LIMIT
+                || TYPED.load(Ordering::SeqCst) != typed
+                || crate::focus::generation() != generation
+                || still != foreground
+            {
+                crate::hook::e2e_trace("verify: answer too late to tell".to_string());
+                return;
+            }
             if *shown == *expected {
                 crate::hook::trace_note("verify: correction shown as sent");
                 return;
