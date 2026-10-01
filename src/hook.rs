@@ -848,7 +848,21 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
             // passing those through turned a Shift+Backspace into a plain
             // Backspace — CI, Edge.)
             let nested = PROCESSING.with(|p| p.get());
+            // The key being handled (or one already passed through) handed
+            // to the hook again: Windows does that when the hook is slow to
+            // return. It is the same key press (same time stamp), and was
+            // passed on or is being decided already (CI: `เรียนo`, the `o`
+            // that finished `giupo` typed after the fix).
+            let event = (kb.vkCode, kb.time, wparam.0 as u32);
+            if nested && SEEN.with(|s| s.borrow().contains(&event)) {
+                e2e_trace(format!(
+                    "key vk={:#x} handed to the hook again: dropped",
+                    kb.vkCode
+                ));
+                return LRESULT(1);
+            }
             if nested && crate::focus::waiting_on_app() {
+                SEEN.with(|s| s.borrow_mut().push(event));
                 NESTED_KEY.with(|n| n.set(true));
                 e2e_trace(format!(
                     "key vk={:#x} arrived while busy: passed through",
@@ -864,6 +878,13 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
                 }
             }
             PROCESSING.with(|p| p.set(true));
+            if !nested {
+                SEEN.with(|s| {
+                    let mut s = s.borrow_mut();
+                    s.clear();
+                    s.push(event);
+                });
+            }
             let done = Done(nested);
             let swallow = process(wparam.0 as u32, kb);
             drop(done);
@@ -890,6 +911,9 @@ thread_local! {
     static PROCESSING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// A key arrived while one was being handled.
     static NESTED_KEY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The key being handled and those passed through while it was:
+    /// `(virtual key, time stamp, message)`.
+    static SEEN: RefCell<Vec<(u32, u32, u32)>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Computer-driven Windows E2E necessarily uses `SendInput`, which Windows marks

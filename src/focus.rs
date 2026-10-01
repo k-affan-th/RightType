@@ -200,6 +200,10 @@ static WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<()>> = std::sync:
 /// Focus events seen, and how many of them the worker has answered.
 static ASKED: AtomicU64 = AtomicU64::new(0);
 static ANSWERED: AtomicU64 = AtomicU64::new(0);
+/// When the oldest unanswered focus question was asked.
+static ASKED_AT: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+/// How long after a focus change keys may wait for the focus answer.
+const SETTLE_LIMIT: std::time::Duration = std::time::Duration::from_millis(150);
 
 /// Before the keyboard hook handles a key: let the focus worker finish with
 /// the focus events that came before it, for at most `max`. The answers (a
@@ -212,7 +216,19 @@ pub fn settle(max: std::time::Duration) {
     if ANSWERED.load(Ordering::Acquire) >= asked {
         return;
     }
-    let until = std::time::Instant::now() + max;
+    // A question open longer than this is an app slow to answer (CI: 3.7 s
+    // for a Notepad just started). Waiting for it on every key then made
+    // keys queue up until Windows skipped the hook for some (`l;ylfu` seen
+    // as `l;yu`): wait only while the question is fresh.
+    let open_for = ASKED_AT
+        .lock()
+        .ok()
+        .and_then(|at| *at)
+        .map_or(std::time::Duration::ZERO, |at| at.elapsed());
+    if open_for > SETTLE_LIMIT {
+        return;
+    }
+    let until = std::time::Instant::now() + max.min(SETTLE_LIMIT - open_for);
     while ANSWERED.load(Ordering::Acquire) < asked && std::time::Instant::now() < until {
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
@@ -244,6 +260,12 @@ fn start_worker() {
 
 /// Ask the focus worker to look again (never waits; a pending ask covers it).
 fn wake_worker() {
+    // The oldest question still open is the one `settle` measures from.
+    if ANSWERED.load(Ordering::Acquire) >= ASKED.load(Ordering::Acquire) {
+        if let Ok(mut at) = ASKED_AT.lock() {
+            *at = Some(std::time::Instant::now());
+        }
+    }
     ASKED.fetch_add(1, Ordering::AcqRel);
     if let Some(tx) = WORKER.get() {
         let _ = tx.try_send(());
@@ -674,9 +696,10 @@ impl TextBox {
         }
         let mut units: zeroize::Zeroizing<Vec<u16>> =
             zeroize::Zeroizing::new(text.encode_utf16().chain(std::iter::once(0)).collect());
-        // wParam 1: the replacement can be undone (Ctrl+Z in the app).
+        // wParam 1: the replacement can be undone (Ctrl+Z in the app). A
+        // short wait: an answer only confirms what the box will do anyway.
         if self
-            .ask(EM_REPLACESEL, 1, units.as_mut_ptr() as isize)
+            .ask_within(EM_REPLACESEL, 1, units.as_mut_ptr() as isize, 100)
             .is_none()
         {
             // Sent, not yet answered: a slow box (a Notepad just opened,
