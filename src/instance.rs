@@ -58,7 +58,7 @@ const HELLO: PCWSTR = w!("Local\\RightType.Hello");
 const QUIT: PCWSTR = w!("Local\\RightType.Quit");
 
 /// Posted to the tray window; `wparam` is [`HELLO_MSG`] or [`QUIT_MSG`].
-pub const WM_INSTANCE: u32 = 0x8000 + 0x560;
+pub const WM_INSTANCE: u32 = 0x8000 + 0x570;
 pub const HELLO_MSG: usize = 1;
 pub const QUIT_MSG: usize = 2;
 

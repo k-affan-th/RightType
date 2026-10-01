@@ -149,6 +149,10 @@ texts! {
     PaletteKeepAsTyped => "Never convert “{word}”", "ไม่ต้องแปลง “{word}” อีก";
     ToastCapsOff => "CapsLock was on — word fixed, CapsLock off · Shift+Backspace if you meant capitals", "CapsLock ค้าง — แก้คำและปิด CapsLock แล้ว · ตั้งใจพิมพ์ตัวใหญ่? กด Shift+Backspace";
     ToastCapsKept => "Capitals kept, CapsLock on again", "คืนตัวพิมพ์ใหญ่และเปิด CapsLock ให้แล้ว";
+    PaletteFieldOff => "Off in this field", "ปิดเฉพาะช่องนี้";
+    PaletteFieldOn => "On again in this field", "เปิดในช่องนี้อีกครั้ง";
+    ToastFieldOff => "Off in this field until RightType restarts — the rest of the app still works", "ปิดในช่องนี้แล้ว (จนกว่าจะปิด RightType) ช่องอื่นในแอปยังทำงานตามปกติ";
+    ToastFieldOn => "On again in this field", "เปิดในช่องนี้แล้ว";
     ToastAlreadyRunning => "RightType is already running — it's in the tray (bottom right)", "RightType เปิดอยู่แล้ว อยู่ที่ tray มุมขวาล่าง";
     ToastReplaced => "Now running RightType {v} (closed {old})", "เปลี่ยนเป็น RightType {v} แล้ว (ปิดตัว {old})";
     ToastReplacedUnknown => "Now running RightType {v} (closed the copy that was running)", "เปลี่ยนเป็น RightType {v} แล้ว (ปิดตัวที่เปิดอยู่ก่อน)";

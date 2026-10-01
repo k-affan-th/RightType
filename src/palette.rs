@@ -66,6 +66,9 @@ enum Command {
     CapsSwitch,
     /// Rewrite the selection (digits, letter case).
     Transform(TransformKind),
+    /// Off (or back on) in the field that had focus.
+    FieldOff,
+    FieldOn,
     /// Keep a word the typist reversed lately as typed (by its place in
     /// `learn::reversed_words`).
     KeepAsTyped(usize),
@@ -90,6 +93,10 @@ struct Palette {
     app: Option<String>,
     handler: RefCell<Option<nwg::RawEventHandler>>,
 }
+
+/// The field that had focus when the palette was asked for (its UI
+/// Automation identity; 0 = unknown). Taken before the palette takes focus.
+static FIELD: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// The palette was asked for and is not open yet: its keys are kept for it.
 static OPENING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -303,6 +310,7 @@ pub fn request_open() {
     // Keys typed right after the hotkey belong to the palette, though it is
     // not open yet (CI: 'up' of 'upper' went into the page).
     OPENING.store(true, Ordering::Release);
+    FIELD.store(crate::focus::field_key(), Ordering::Release);
     unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
         let _ = KillTimer(None, id);
         open();
@@ -334,6 +342,14 @@ fn commands(app: Option<&str>) -> Vec<(String, Command)> {
         list.push((tr(T::TrayResume).to_string(), Command::Resume));
     } else if hook::is_enabled() {
         list.push((tr(T::PalettePause).to_string(), Command::Pause));
+    }
+    let field = FIELD.load(Ordering::Acquire);
+    if app.is_some() && field != 0 {
+        if crate::focus::is_off(field) {
+            list.push((tr(T::PaletteFieldOn).to_string(), Command::FieldOn));
+        } else {
+            list.push((tr(T::PaletteFieldOff).to_string(), Command::FieldOff));
+        }
     }
     if let Some(app) = app {
         if apps::lookup(app) == Some(AppMode::Off) {
@@ -601,6 +617,15 @@ fn run(command: Command, app: Option<&str>) {
                 };
                 overlay::show(&trf(T::ToastAppMode, &[("mode", label), ("app", app)]));
             }
+        }
+        Command::FieldOff | Command::FieldOn => {
+            let off = command == Command::FieldOff;
+            crate::focus::set_field_off(FIELD.load(Ordering::Acquire), off);
+            overlay::show(tr(if off {
+                T::ToastFieldOff
+            } else {
+                T::ToastFieldOn
+            }));
         }
         Command::TrayLanguage => {
             crate::tray::set_shows_language(!crate::tray::shows_language());

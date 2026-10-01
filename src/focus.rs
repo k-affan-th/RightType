@@ -41,6 +41,74 @@ static INLINE_COMPLETION: AtomicBool = AtomicBool::new(false);
 /// including two controls inside the same top-level window.
 static FOCUS_GENERATION: AtomicU64 = AtomicU64::new(0);
 
+/// The focused field's identity (a hash of its UI Automation runtime id; 0
+/// when unknown), for "Off in this field".
+static FIELD_KEY: AtomicU64 = AtomicU64::new(0);
+/// Fields RightType was switched off in (palette → "Off in this field").
+/// Identities only, in memory: gone when RightType exits.
+static FIELDS_OFF: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+/// At most this many fields are remembered as off; the oldest goes first.
+const MAX_FIELDS_OFF: usize = 32;
+
+/// The focused field's identity, or 0 when UI Automation does not say.
+pub fn field_key() -> u64 {
+    FIELD_KEY.load(Ordering::Relaxed)
+}
+
+/// Is RightType switched off in the focused field?
+pub fn field_is_off() -> bool {
+    is_off(field_key())
+}
+
+/// Is RightType switched off in the field `key`?
+pub fn is_off(key: u64) -> bool {
+    key != 0 && FIELDS_OFF.lock().is_ok_and(|f| f.contains(&key))
+}
+
+/// Switch RightType off (or back on) in the field `key`.
+pub fn set_field_off(key: u64, off: bool) {
+    if key == 0 {
+        return;
+    }
+    let Ok(mut fields) = FIELDS_OFF.lock() else {
+        return;
+    };
+    fields.retain(|&k| k != key);
+    if off {
+        if fields.len() == MAX_FIELDS_OFF {
+            fields.remove(0);
+        }
+        fields.push(key);
+    }
+}
+
+/// A field's identity: its runtime id, hashed (FNV-1a). Unique while the
+/// element exists; a page that rebuilds its fields gives them new ones.
+unsafe fn runtime_key(element: &IUIAutomationElement) -> u64 {
+    use windows::Win32::System::Ole::{
+        SafeArrayDestroy, SafeArrayGetElement, SafeArrayGetLBound, SafeArrayGetUBound,
+    };
+    let Ok(sa) = element.GetRuntimeId() else {
+        return 0;
+    };
+    if sa.is_null() {
+        return 0;
+    }
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    if let (Ok(lo), Ok(hi)) = (SafeArrayGetLBound(sa, 1), SafeArrayGetUBound(sa, 1)) {
+        for i in lo..=hi {
+            let mut v = 0i32;
+            if SafeArrayGetElement(sa, &i, &mut v as *mut i32 as *mut _).is_ok() {
+                for b in v.to_le_bytes() {
+                    hash = (hash ^ u64::from(b)).wrapping_mul(0x100_0000_01b3);
+                }
+            }
+        }
+    }
+    let _ = SafeArrayDestroy(sa);
+    hash.max(1)
+}
+
 thread_local! {
     static UIA: RefCell<Option<IUIAutomation>> = const { RefCell::new(None) };
     static HOOK: RefCell<Option<HWINEVENTHOOK>> = const { RefCell::new(None) };
@@ -251,6 +319,7 @@ unsafe fn moves_to_another_field() -> bool {
         };
         let Ok(element) = uia.GetFocusedElement() else {
             FIELD.with(|f| *f.borrow_mut() = None);
+            FIELD_KEY.store(0, Ordering::Relaxed);
             return true;
         };
         let same = FIELD.with(|f| {
@@ -265,6 +334,7 @@ unsafe fn moves_to_another_field() -> bool {
         if same || row {
             return false;
         }
+        FIELD_KEY.store(runtime_key(&element), Ordering::Relaxed);
         FIELD.with(|f| *f.borrow_mut() = Some(element));
         true
     })

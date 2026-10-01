@@ -236,8 +236,12 @@ pub fn mode() -> Mode {
 }
 
 /// The mode that applies in the app being typed in: its own per-app mode, or
-/// the global one. `None` when RightType is switched off in this app.
+/// the global one. `None` when RightType is switched off in this app or in
+/// this field.
 fn mode_here() -> Option<Mode> {
+    if crate::focus::field_is_off() {
+        return None;
+    }
     let own = STATE.with(|s| s.borrow().app_exe.as_deref().and_then(crate::apps::lookup));
     match own {
         Some(AppMode::Off) => None,
