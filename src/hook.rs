@@ -74,6 +74,8 @@ pub enum Mode {
     Manual = 0,
     Auto = 1,
     Suggest = 2,
+    /// Per-app only: code editors (see `righttype::code`).
+    Code = 3,
 }
 
 impl Mode {
@@ -81,7 +83,7 @@ impl Mode {
         match self {
             Self::Manual => Self::Auto,
             Self::Auto => Self::Suggest,
-            Self::Suggest => Self::Manual,
+            Self::Suggest | Self::Code => Self::Manual,
         }
     }
 
@@ -92,6 +94,7 @@ impl Mode {
             Self::Manual => T::ToastModeManual,
             Self::Auto => T::ToastModeAuto,
             Self::Suggest => T::ToastModeSuggest,
+            Self::Code => T::ToastModeCode,
         })
     }
 }
@@ -248,6 +251,7 @@ fn mode_here() -> Option<Mode> {
         Some(AppMode::Auto) => Some(Mode::Auto),
         Some(AppMode::Suggest) => Some(Mode::Suggest),
         Some(AppMode::Manual) => Some(Mode::Manual),
+        Some(AppMode::Code) => Some(Mode::Code),
         None => Some(mode()),
     }
 }
@@ -258,6 +262,7 @@ impl From<Mode> for AppMode {
             Mode::Auto => AppMode::Auto,
             Mode::Suggest => AppMode::Suggest,
             Mode::Manual => AppMode::Manual,
+            Mode::Code => AppMode::Code,
         }
     }
 }
@@ -287,6 +292,7 @@ unsafe fn cycle_mode() {
                             Mode::Auto => T::ModeAuto,
                             Mode::Suggest => T::ModeSuggest,
                             Mode::Manual => T::ModeManual,
+                            Mode::Code => T::ModeCode,
                         }),
                     ),
                     ("app", &exe),
@@ -503,6 +509,30 @@ fn set_undo(injected_len: usize, restore_text: &str, kind: UndoKind) {
     STATE.with(|s| s.borrow_mut().undo = record);
 }
 
+/// A fix RightType made here was taken back. Enough of them in one app
+/// offer a calmer mode there (see `apps::note_rejection`).
+fn note_rejection() {
+    use righttype::i18n::{tr, trf, T};
+    let Some(exe) = STATE.with(|s| s.borrow().app_exe.clone()) else {
+        return;
+    };
+    let Some(mode) = mode_here() else {
+        return;
+    };
+    if let Some(calmer) = crate::apps::note_rejection(&exe, mode.into()) {
+        diag::note("fixes taken back three times in one app: calmer mode offered", &[]);
+        let keys = hotkeys().chord(Action::Palette).format();
+        crate::overlay::show(&trf(
+            T::ToastOfferMode,
+            &[
+                ("app", &exe),
+                ("mode", tr(crate::tray::app_mode_name(calmer))),
+                ("keys", &keys),
+            ],
+        ));
+    }
+}
+
 /// Ctrl+Shift+CapsLock: revert the most recent correction, if any. One-shot —
 /// the record is consumed whether or not this call finds one.
 unsafe fn undo_last_correction() {
@@ -526,6 +556,9 @@ unsafe fn undo_last_correction() {
         let restored = rec.restore_text.trim_end_matches(['\r', '\t', ' ']);
         // The word counted was the correction; the one kept is the original.
         habit_correction(!has_thai(restored), has_thai(restored));
+        if rec.kind != UndoKind::Manual {
+            note_rejection();
+        }
         match rec.kind {
             UndoKind::Manual => {}
             UndoKind::CapsAccident => {
@@ -1132,6 +1165,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             // has no Undo record yet (that is written when the run anchors), so
             // withdrawing our rendering *is* the undo.
             if withdraw_owned_run() {
+                note_rejection();
                 STATE.with(|s| {
                     let mut st = s.borrow_mut();
                     // Keep the token but mark it decided: without this the very
@@ -1229,6 +1263,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // manual path's backspace count would be wrong. Withdraw our rendering
         // first; the typist asked for the raw keystrokes back.
         if withdraw_owned_run() {
+            note_rejection();
             // The typist rejected our reading mid-word. Leave the rest of this
             // token alone, and learn it once it is complete.
             STATE.with(|s| s.borrow_mut().mark = TokenMark::Decided { learn: true });
@@ -1424,6 +1459,69 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         crate::learn::observe(&word);
     }
 
+    // Code mode (code editors): names stay, Thai only in comments and
+    // strings, and Thai keys typed for code come back as the English typed.
+    let mut code_hint = false;
+    if mode_now == Mode::Code && !seed_run {
+        if let Some(layout) = active_layout {
+            let line_matters = match layout {
+                policy::InputLayout::UsQwerty => {
+                    detection.is_some() && !righttype::code::looks_like_identifier(&word)
+                }
+                policy::InputLayout::ThaiKedmanee => detection.is_none(),
+            };
+            let prose = if line_matters {
+                crate::focus::text_before_caret_within(160, Duration::from_millis(40))
+                    .map(|t| righttype::code::line_is_prose(&t))
+            } else {
+                None
+            };
+            let verdict = righttype::code::verdict(
+                &word,
+                layout,
+                detection.as_ref().map(|d| d.corrected.as_str()),
+                prose,
+                dict::thai(),
+            );
+            diag::note(
+                "code mode",
+                &[
+                    (
+                        "line",
+                        match prose {
+                            Some(true) => "comment or string",
+                            Some(false) => "code",
+                            None => "unknown",
+                        }
+                        .into(),
+                    ),
+                    (
+                        "verdict",
+                        match &verdict {
+                            righttype::code::Verdict::Fix(_) => "fix",
+                            righttype::code::Verdict::Hint(_) => "hint",
+                            righttype::code::Verdict::Leave => "leave",
+                        }
+                        .into(),
+                    ),
+                ],
+            );
+            let corrected = match verdict {
+                righttype::code::Verdict::Fix(c) => Some(c),
+                righttype::code::Verdict::Hint(c) => {
+                    code_hint = true;
+                    Some(c)
+                }
+                righttype::code::Verdict::Leave => None,
+            };
+            detection = corrected.map(|corrected| righttype::detect::Detection {
+                corrected,
+                confidence: righttype::detect::Confidence::High,
+                evidence: righttype::detect::Evidence::ExactDictionary,
+            });
+        }
+    }
+
     // CapsLock left on by accident (`hELLO`, or Thai typed with every key
     // shifted): in Auto the word is put as meant and CapsLock turned off.
     // Thai typed in a wrong order that looks right (เเ for แ, ํา for ำ, a
@@ -1448,7 +1546,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // Ctrl+Shift+CapsLock) restores them and CapsLock. Manual and Suggest
     // offer it as a hint that Tab takes.
     let mut caps_accident = false;
-    if detection.is_none() && !seed_run && caps_on() {
+    if detection.is_none() && !seed_run && caps_on() && mode_now != Mode::Code {
         let layout_now = policy::supported_layout_id(layout_id(effective_layout()));
         if let Some(meant) = layout_now.and_then(|l| policy::caps_accident(&word, l, dict::thai()))
         {
@@ -1465,6 +1563,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // Shift+Backspace.
     let mode_for_word = if caps_accident && mode_now != Mode::Auto {
         Mode::Suggest
+    } else if mode_now == Mode::Code {
+        if code_hint {
+            Mode::Suggest
+        } else {
+            Mode::Auto
+        }
     } else {
         mode_now
     };
@@ -1987,6 +2091,7 @@ unsafe fn flip_back_recent() {
     // "that was a real word" there is.
     if let Some(word) = step.learn.as_deref() {
         crate::learn::learn_now(word);
+        note_rejection();
     }
     habit_correction(step.was_thai, step.now_thai);
     activate_layout(layout_of(&step.newest));

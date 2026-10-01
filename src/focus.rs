@@ -805,6 +805,39 @@ fn edit_selected_text() -> Option<zeroize::Zeroizing<String>> {
     text
 }
 
+/// A question for the context worker: how many characters, and where to
+/// answer.
+type ContextAsk = (
+    usize,
+    std::sync::mpsc::SyncSender<Option<zeroize::Zeroizing<String>>>,
+);
+static CONTEXT_WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<ContextAsk>> =
+    std::sync::OnceLock::new();
+
+/// [`text_before_caret`] for the keyboard hook, which must not make the
+/// cross-process calls itself: asked of a worker, waiting at most `max`
+/// (`None` past that — the caller treats it as "cannot tell"). Code mode
+/// asks this at a word's end, only for a word it would otherwise fix.
+pub fn text_before_caret_within(
+    n: usize,
+    max: std::time::Duration,
+) -> Option<zeroize::Zeroizing<String>> {
+    let tx = CONTEXT_WORKER.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<ContextAsk>(1);
+        let _ = std::thread::Builder::new()
+            .name("context".into())
+            .spawn(move || {
+                while let Ok((n, reply)) = rx.recv() {
+                    let _ = reply.try_send(text_before_caret(n));
+                }
+            });
+        tx
+    });
+    let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+    tx.try_send((n, reply_tx)).ok()?;
+    reply_rx.recv_timeout(max).ok().flatten()
+}
+
 /// The last `n` characters before the caret in the focused field, asked of
 /// the app (UI Automation, or a standard text box's own messages) — for
 /// checking a correction just typed ([`crate::verify`]). `None` when the app

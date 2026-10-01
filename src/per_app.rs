@@ -22,6 +22,8 @@ pub enum AppMode {
     Auto,
     Suggest,
     Manual,
+    /// For code editors: see [`crate::code`].
+    Code,
     /// Stay out of this app entirely (like the blocked-apps list).
     Off,
 }
@@ -33,6 +35,7 @@ impl AppMode {
             AppMode::Auto => "auto",
             AppMode::Suggest => "suggest",
             AppMode::Manual => "manual",
+            AppMode::Code => "code",
             AppMode::Off => "off",
         }
     }
@@ -43,9 +46,38 @@ impl AppMode {
             "auto" | "อัตโนมัติ" => Some(AppMode::Auto),
             "suggest" | "แนะนำ" => Some(AppMode::Suggest),
             "manual" | "กดแก้เอง" => Some(AppMode::Manual),
+            "code" | "โค้ด" | "developer" => Some(AppMode::Code),
             "off" | "ปิด" => Some(AppMode::Off),
             _ => None,
         }
+    }
+}
+
+/// Fixes taken back in one app before RightType offers a calmer mode there.
+pub const REJECTIONS_FOR_OFFER: usize = 3;
+/// …within this long.
+pub const REJECTION_WINDOW: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// A fix was taken back at `now`: record it in `times` (kept to the last
+/// [`REJECTION_WINDOW`]) and say whether that makes enough to offer a calmer
+/// mode. The count starts again after an offer.
+pub fn rejection_offers(times: &mut Vec<std::time::Instant>, now: std::time::Instant) -> bool {
+    times.retain(|t| now.saturating_duration_since(*t) < REJECTION_WINDOW);
+    times.push(now);
+    if times.len() >= REJECTIONS_FOR_OFFER {
+        times.clear();
+        return true;
+    }
+    false
+}
+
+/// The calmer mode to offer where fixes keep being taken back: Auto and Code
+/// become Suggest (still offered, never written), Suggest becomes Manual.
+pub fn calmer(mode: AppMode) -> Option<AppMode> {
+    match mode {
+        AppMode::Auto | AppMode::Code => Some(AppMode::Suggest),
+        AppMode::Suggest => Some(AppMode::Manual),
+        AppMode::Manual | AppMode::Off => None,
     }
 }
 
@@ -113,9 +145,28 @@ mod tests {
 
     #[test]
     fn thai_mode_names_are_understood() {
-        let (modes, _) = parse_list("winword.exe = แนะนำ\nchrome.exe = ปิด");
+        let (modes, _) = parse_list("winword.exe = แนะนำ\nchrome.exe = ปิด\ncode = โค้ด");
+        assert_eq!(modes.get("code.exe"), Some(&AppMode::Code));
         assert_eq!(modes.get("winword.exe"), Some(&AppMode::Suggest));
         assert_eq!(modes.get("chrome.exe"), Some(&AppMode::Off));
+    }
+
+    #[test]
+    fn three_fixes_taken_back_in_ten_minutes_offer_a_calmer_mode() {
+        use std::time::{Duration, Instant};
+        let t0 = Instant::now();
+        let mut times = Vec::new();
+        assert!(!rejection_offers(&mut times, t0));
+        assert!(!rejection_offers(&mut times, t0 + Duration::from_secs(60)));
+        // The first one is too old by now: two in the window.
+        assert!(!rejection_offers(&mut times, t0 + Duration::from_secs(620)));
+        assert!(rejection_offers(&mut times, t0 + Duration::from_secs(650)));
+        // Counted again from nothing after an offer.
+        assert!(times.is_empty());
+        assert_eq!(calmer(AppMode::Auto), Some(AppMode::Suggest));
+        assert_eq!(calmer(AppMode::Code), Some(AppMode::Suggest));
+        assert_eq!(calmer(AppMode::Suggest), Some(AppMode::Manual));
+        assert_eq!(calmer(AppMode::Manual), None);
     }
 
     #[test]

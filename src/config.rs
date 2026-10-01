@@ -94,7 +94,8 @@ impl From<hook::Mode> for ConfigMode {
     fn from(value: hook::Mode) -> Self {
         match value {
             hook::Mode::Manual => ConfigMode::Manual,
-            hook::Mode::Auto => ConfigMode::Auto,
+            // Code is a per-app mode only.
+            hook::Mode::Auto | hook::Mode::Code => ConfigMode::Auto,
             hook::Mode::Suggest => ConfigMode::Suggest,
         }
     }

@@ -66,6 +66,10 @@ enum Command {
     CapsSwitch,
     /// Rewrite the selection (digits, letter case).
     Transform(TransformKind),
+    /// The calmer mode on offer (see `apps::note_rejection`): for now, or
+    /// for good.
+    OfferForNow(AppMode),
+    OfferKeep(AppMode),
     /// Off (or back on) in the field that had focus.
     FieldOff,
     FieldOn,
@@ -322,7 +326,22 @@ pub fn request_open() {
 
 /// The commands, in order, for the current state.
 fn commands(app: Option<&str>) -> Vec<(String, Command)> {
-    let mut list = vec![(tr(T::TrayFix).to_string(), Command::FixText)];
+    let mut list = Vec::new();
+    // A calmer mode on offer for this app comes first (1 and 2).
+    if let (Some(app), Some((exe, mode))) = (app, apps::offer()) {
+        if app == exe {
+            let name = tr(crate::tray::app_mode_name(mode));
+            list.push((
+                trf(T::PaletteOfferForNow, &[("mode", name), ("app", app)]),
+                Command::OfferForNow(mode),
+            ));
+            list.push((
+                trf(T::PaletteOfferKeep, &[("mode", name), ("app", app)]),
+                Command::OfferKeep(mode),
+            ));
+        }
+    }
+    list.push((tr(T::TrayFix).to_string(), Command::FixText));
     if app.is_some() {
         list.push((tr(T::PaletteFixField).to_string(), Command::FixField));
         list.push((
@@ -616,6 +635,20 @@ fn run(command: Command, app: Option<&str>) {
                     None => tr(T::TrayAppDefault),
                 };
                 overlay::show(&trf(T::ToastAppMode, &[("mode", label), ("app", app)]));
+            }
+        }
+        Command::OfferForNow(mode) | Command::OfferKeep(mode) => {
+            if let Some(app) = app {
+                apps::close_offer();
+                let name = tr(crate::tray::app_mode_name(mode));
+                if matches!(command, Command::OfferKeep(_)) {
+                    apps::set(app, Some(mode));
+                    config::persist();
+                    overlay::show(&trf(T::ToastAppMode, &[("mode", name), ("app", app)]));
+                } else {
+                    apps::set_for_now(app, mode);
+                    overlay::show(&trf(T::ToastModeForNow, &[("mode", name), ("app", app)]));
+                }
             }
         }
         Command::FieldOff | Command::FieldOn => {

@@ -145,6 +145,7 @@ pub fn show(first_run: bool) {
         hook::Mode::Auto => T::ModeAuto,
         hook::Mode::Suggest => T::ModeSuggest,
         hook::Mode::Manual => T::ModeManual,
+        hook::Mode::Code => T::ModeCode,
     });
     s.label(
         &trf(T::WelcomeMode, &[("mode", mode)]),

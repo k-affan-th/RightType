@@ -65,7 +65,7 @@ struct Tray {
     m_app_name: nwg::MenuItem,
     m_app_default: nwg::MenuItem,
     /// Auto, Suggest, Manual, Off.
-    m_app_modes: [nwg::MenuItem; 4],
+    m_app_modes: [nwg::MenuItem; 5],
     m_learn: nwg::MenuItem,
     m_startup: nwg::MenuItem,
     m_fix: nwg::MenuItem,
@@ -80,10 +80,11 @@ struct Tray {
 /// Pause lengths offered in the tray menu, in minutes.
 const PAUSE_MINUTES: [u32; 3] = [10, 30, 60];
 /// The per-app choices in the "In this app" submenu, in menu order.
-const APP_MODES: [AppMode; 4] = [
+const APP_MODES: [AppMode; 5] = [
     AppMode::Auto,
     AppMode::Suggest,
     AppMode::Manual,
+    AppMode::Code,
     AppMode::Off,
 ];
 
@@ -115,12 +116,24 @@ fn separator(parent: &nwg::Menu) {
         .expect("sep");
 }
 
+/// An app mode's short name.
+pub fn app_mode_name(mode: AppMode) -> T {
+    match mode {
+        AppMode::Auto => T::ModeAuto,
+        AppMode::Suggest => T::ModeSuggest,
+        AppMode::Manual => T::ModeManual,
+        AppMode::Code => T::ModeCode,
+        AppMode::Off => T::ModeOff,
+    }
+}
+
 /// The label of an app mode in the "In this app" submenu.
 fn app_mode_label(mode: AppMode) -> &'static str {
     tr(match mode {
         AppMode::Auto => T::TrayAuto,
         AppMode::Suggest => T::TraySuggest,
         AppMode::Manual => T::TrayManual,
+        AppMode::Code => T::TrayCode,
         AppMode::Off => T::TrayAppOff,
     })
 }
@@ -546,6 +559,7 @@ fn sync_state(ui: &Rc<Tray>) {
             hook::Mode::Auto => T::ModeAuto,
             hook::Mode::Suggest => T::ModeSuggest,
             hook::Mode::Manual => T::ModeManual,
+            hook::Mode::Code => T::ModeCode,
         })
         .to_string()
     } else {

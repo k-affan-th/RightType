@@ -18,6 +18,7 @@
 //! - [`per_app`] — per-app correction modes and their text form.
 //! - [`detect`] — layout-mismatch detection over completed words.
 //! - [`diag`] — recent decisions, with no typed text, for a problem report.
+//! - [`code`] — Code mode: what to fix in a code editor.
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
 //! - [`segment`] — Thai word segmentation (maximal matching) for space-less Thai.
 //! - [`motion`] — how the overlay pill fades and rises in and out.
@@ -28,6 +29,7 @@
 //! - [`sim`] — the hook's Auto pipeline replayed on a string, for benchmarks and tests.
 
 pub mod buffer;
+pub mod code;
 pub mod detect;
 pub mod diag;
 pub mod dict;

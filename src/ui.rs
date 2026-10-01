@@ -812,7 +812,25 @@ pub enum Kind {
     /// A navigation entry (a radio button).
     Nav,
     Edit,
+    /// A list with columns (a report-view list view); drawn by Windows in
+    /// the window's colours.
+    Table,
 }
+
+/// Something done to a table row with the mouse or keyboard.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TableEvent {
+    /// Right-click (or the context-menu key): show the row's actions here,
+    /// in screen pixels.
+    Menu { x: i32, y: i32 },
+    /// Delete pressed on the selected row.
+    Delete,
+    /// The selection moved.
+    Selected,
+}
+
+/// Receives table events.
+type TableHandler = Rc<dyn Fn(u16, TableEvent)>;
 
 pub struct Control {
     pub hwnd: HWND,
@@ -845,6 +863,7 @@ pub struct Surface {
     brushes: RefCell<HashMap<Rgb, HBRUSH>>,
     handler: RefCell<Option<nwg::RawEventHandler>>,
     on_click: RefCell<Option<ClickHandler>>,
+    on_table: RefCell<Option<TableHandler>>,
 }
 
 const WM_ERASEBKGND: u32 = 0x0014;
@@ -941,6 +960,7 @@ impl Surface {
             brushes: RefCell::new(HashMap::new()),
             handler: RefCell::new(None),
             on_click: RefCell::new(None),
+            on_table: RefCell::new(None),
         });
         let weak = Rc::downgrade(&surface);
         let handler =
@@ -956,6 +976,7 @@ impl Surface {
     /// Stop handling messages (call before closing the window).
     pub fn detach(&self) {
         self.on_click.borrow_mut().take();
+        self.on_table.borrow_mut().take();
         if let Some(h) = self.handler.borrow_mut().take() {
             let _ = nwg::unbind_raw_event_handler(&h);
         }
@@ -964,6 +985,11 @@ impl Surface {
     /// Called with the control id when a button, toggle or radio is clicked.
     pub fn on_click(&self, f: impl Fn(u16) + 'static) {
         *self.on_click.borrow_mut() = Some(Rc::new(f));
+    }
+
+    /// Called with the table's id when one of its rows is acted on.
+    pub fn on_table(&self, f: impl Fn(u16, TableEvent) + 'static) {
+        *self.on_table.borrow_mut() = Some(Rc::new(f));
     }
 
     fn brush(&self, color: Rgb) -> HBRUSH {
@@ -1025,6 +1051,10 @@ impl Surface {
             }
             WM_NOTIFY => {
                 let nm = &*(l as *const NmCustomDraw);
+                if let Some((Kind::Table, _)) = self.find(nm.hdr.hwnd_from) {
+                    self.table_notify(nm.hdr.hwnd_from, nm.hdr.id_from as u16, nm.hdr.code, l);
+                    return None;
+                }
                 if nm.hdr.code != windows::Win32::UI::Controls::NM_CUSTOMDRAW {
                     return None;
                 }
@@ -1098,7 +1128,7 @@ impl Surface {
     fn font_for(&self, kind: &Kind) -> HFONT {
         let f = self.fonts.borrow();
         match kind {
-            Kind::Edit | Kind::Secondary | Kind::Toggle { .. } => f.body,
+            Kind::Edit | Kind::Secondary | Kind::Toggle { .. } | Kind::Table => f.body,
             _ => f.body_strong,
         }
     }
@@ -1361,7 +1391,7 @@ impl Surface {
                     DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
                 );
             }
-            Kind::Text(_) | Kind::Edit => {}
+            Kind::Text(_) | Kind::Edit | Kind::Table => {}
         }
         if focus {
             g.stroke_round(rc, radius + pxf(1.0), pxf(2.0), p.text);
@@ -1554,6 +1584,189 @@ impl Surface {
             }
         }
         id
+    }
+
+    /// A table with `columns` (title, width in 96-DPI units); rows are put in
+    /// with [`Surface::set_rows`].
+    pub fn table(&self, columns: &[(&str, i32)], rc: (i32, i32, i32, i32), page: u8) -> u16 {
+        const LVS_REPORT: u32 = 0x1;
+        const LVS_SINGLESEL: u32 = 0x4;
+        const LVS_SHOWSELALWAYS: u32 = 0x8;
+        const LVS_NOSORTHEADER: u32 = 0x8000;
+        const WS_BORDER: u32 = 0x0080_0000;
+        const LVM_SETEXTENDEDLISTVIEWSTYLE: u32 = 0x1036;
+        const LVS_EX_FULLROWSELECT: usize = 0x20;
+        const LVS_EX_DOUBLEBUFFER: usize = 0x0001_0000;
+        const LVM_SETBKCOLOR: u32 = 0x1001;
+        const LVM_SETTEXTCOLOR: u32 = 0x1024;
+        const LVM_SETTEXTBKCOLOR: u32 = 0x1026;
+        const LVM_INSERTCOLUMNW: u32 = 0x1061;
+        let id = self.create(
+            "SysListView32",
+            "",
+            LVS_REPORT
+                | LVS_SINGLESEL
+                | LVS_SHOWSELALWAYS
+                | LVS_NOSORTHEADER
+                | WS_BORDER
+                | WS_TABSTOP
+                | WS_GROUP,
+            rc,
+            Kind::Table,
+            pal().inset,
+            page,
+        );
+        let hwnd = self.hwnd_of(id);
+        let p = pal();
+        unsafe {
+            let ex = LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER;
+            SendMessageW(hwnd, LVM_SETEXTENDEDLISTVIEWSTYLE, WPARAM(ex), LPARAM(ex as isize));
+            SendMessageW(hwnd, LVM_SETBKCOLOR, WPARAM(0), LPARAM(colorref(p.inset).0 as isize));
+            SendMessageW(
+                hwnd,
+                LVM_SETTEXTBKCOLOR,
+                WPARAM(0),
+                LPARAM(colorref(p.inset).0 as isize),
+            );
+            SendMessageW(hwnd, LVM_SETTEXTCOLOR, WPARAM(0), LPARAM(colorref(p.text).0 as isize));
+            if is_dark() {
+                let theme: Vec<u16> = "DarkMode_Explorer\0".encode_utf16().collect();
+                let _ = SetWindowTheme(hwnd, PCWSTR(theme.as_ptr()), PCWSTR::null());
+            }
+            for (i, (title, width)) in columns.iter().enumerate() {
+                let mut text: Vec<u16> = format!("{title}\0").encode_utf16().collect();
+                let col = windows::Win32::UI::Controls::LVCOLUMNW {
+                    mask: windows::Win32::UI::Controls::LVCF_TEXT
+                        | windows::Win32::UI::Controls::LVCF_WIDTH,
+                    cx: px(*width),
+                    pszText: windows::core::PWSTR(text.as_mut_ptr()),
+                    ..Default::default()
+                };
+                SendMessageW(
+                    hwnd,
+                    LVM_INSERTCOLUMNW,
+                    WPARAM(i),
+                    LPARAM(&col as *const _ as isize),
+                );
+            }
+        }
+        id
+    }
+
+    /// Replace a table's rows (each a cell per column), keeping the row
+    /// `select` selected.
+    pub fn set_rows(&self, id: u16, rows: &[Vec<String>], select: Option<usize>) {
+        const LVM_DELETEALLITEMS: u32 = 0x1009;
+        const LVM_INSERTITEMW: u32 = 0x104D;
+        const LVM_SETITEMTEXTW: u32 = 0x1074;
+        let hwnd = self.hwnd_of(id);
+        unsafe {
+            SendMessageW(hwnd, LVM_DELETEALLITEMS, WPARAM(0), LPARAM(0));
+            for (r, row) in rows.iter().enumerate() {
+                for (c, cell) in row.iter().enumerate() {
+                    let mut text: Vec<u16> = format!("{cell}\0").encode_utf16().collect();
+                    let item = windows::Win32::UI::Controls::LVITEMW {
+                        mask: windows::Win32::UI::Controls::LVIF_TEXT,
+                        iItem: r as i32,
+                        iSubItem: c as i32,
+                        pszText: windows::core::PWSTR(text.as_mut_ptr()),
+                        ..Default::default()
+                    };
+                    let msg = if c == 0 {
+                        LVM_INSERTITEMW
+                    } else {
+                        LVM_SETITEMTEXTW
+                    };
+                    let wparam = if c == 0 { 0 } else { r };
+                    SendMessageW(hwnd, msg, WPARAM(wparam), LPARAM(&item as *const _ as isize));
+                }
+            }
+        }
+        if let Some(i) = select.filter(|&i| i < rows.len()) {
+            self.select_row(id, i);
+        }
+    }
+
+    /// Select (and scroll to) row `i` of a table.
+    pub fn select_row(&self, id: u16, i: usize) {
+        const LVM_SETITEMSTATE: u32 = 0x102B;
+        const LVM_ENSUREVISIBLE: u32 = 0x1013;
+        let hwnd = self.hwnd_of(id);
+        let state = windows::Win32::UI::Controls::LIST_VIEW_ITEM_STATE_FLAGS(
+            windows::Win32::UI::Controls::LVIS_SELECTED.0
+                | windows::Win32::UI::Controls::LVIS_FOCUSED.0,
+        );
+        let item = windows::Win32::UI::Controls::LVITEMW {
+            stateMask: state,
+            state,
+            ..Default::default()
+        };
+        unsafe {
+            SendMessageW(
+                hwnd,
+                LVM_SETITEMSTATE,
+                WPARAM(i),
+                LPARAM(&item as *const _ as isize),
+            );
+            SendMessageW(hwnd, LVM_ENSUREVISIBLE, WPARAM(i), LPARAM(0));
+        }
+    }
+
+    /// The selected row of a table.
+    pub fn selected_row(&self, id: u16) -> Option<usize> {
+        const LVM_GETNEXTITEM: u32 = 0x100C;
+        const LVNI_SELECTED: isize = 0x2;
+        let i = unsafe {
+            SendMessageW(
+                self.hwnd_of(id),
+                LVM_GETNEXTITEM,
+                WPARAM(usize::MAX),
+                LPARAM(LVNI_SELECTED),
+            )
+        }
+        .0;
+        usize::try_from(i).ok()
+    }
+
+    /// A table told its parent something (`WM_NOTIFY`).
+    unsafe fn table_notify(&self, hwnd: HWND, id: u16, code: u32, l: isize) {
+        const NM_RCLICK: u32 = (-5i32) as u32;
+        const LVN_KEYDOWN: u32 = (-155i32) as u32;
+        const LVN_ITEMCHANGED: u32 = (-101i32) as u32;
+        const VK_DELETE: u16 = 0x2E;
+        const VK_APPS: u16 = 0x5D;
+        #[repr(C)]
+        struct NmKey {
+            hdr: NmHdr,
+            vkey: u16,
+            flags: u32,
+        }
+        let event = match code {
+            NM_RCLICK => {
+                let mut pt = windows::Win32::Foundation::POINT::default();
+                let _ = GetCursorPos(&mut pt);
+                Some(TableEvent::Menu { x: pt.x, y: pt.y })
+            }
+            LVN_KEYDOWN => match (*(l as *const NmKey)).vkey {
+                VK_DELETE => Some(TableEvent::Delete),
+                VK_APPS => {
+                    let mut rc = RECT::default();
+                    let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(hwnd, &mut rc);
+                    Some(TableEvent::Menu {
+                        x: rc.left + px(40),
+                        y: rc.top + px(40),
+                    })
+                }
+                _ => None,
+            },
+            LVN_ITEMCHANGED => Some(TableEvent::Selected),
+            _ => None,
+        };
+        let Some(event) = event else { return };
+        let cb = self.on_table.borrow().clone();
+        if let Some(cb) = cb {
+            cb(id, event);
+        }
     }
 
     // --- state -----------------------------------------------------------
