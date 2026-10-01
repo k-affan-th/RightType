@@ -1490,8 +1490,15 @@ fn show_preview() {
     run.zeroize();
     match thai {
         Some(mut thai) => {
+            // Only the system caret (Windows answers it without asking the
+            // app): this runs on every key, and the UI Automation fallback
+            // could wait on a slow app. No system caret, no preview.
+            let Some(caret) = crate::caret::caret_rect() else {
+                thai.zeroize();
+                return;
+            };
             let mut tag = format!("→ {thai}");
-            crate::overlay::badge_at_caret(&tag);
+            crate::overlay::badge_at(&tag, caret);
             tag.zeroize();
             thai.zeroize();
             PREVIEW_SHOWN.with(|c| c.set(true));

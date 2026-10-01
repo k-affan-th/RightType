@@ -47,6 +47,25 @@ fn mark_slow(exe: &str) {
     }
 }
 
+/// Does the window answer a no-op message within 100 ms?
+fn responds_quickly(hwnd: isize) -> bool {
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, SMTO_ABORTIFHUNG};
+    let mut result = 0usize;
+    unsafe {
+        SendMessageTimeoutW(
+            HWND(hwnd as *mut _),
+            0, // WM_NULL
+            WPARAM(0),
+            LPARAM(0),
+            SMTO_ABORTIFHUNG,
+            100,
+            Some(&mut result),
+        )
+        .0 != 0
+    }
+}
+
 /// `expected` was just typed as keys into `exe`: check it on a worker thread.
 pub fn after_keys(expected: &str, exe: Option<String>) {
     // An address bar selects its completion after the caret and redraws what
@@ -71,6 +90,13 @@ pub fn after_keys(expected: &str, exe: Option<String>) {
                 || now != foreground
             {
                 crate::hook::e2e_trace("verify: skipped (typing or focus moved)".to_string());
+                return;
+            }
+            // A slow or hung app: asking it through UI Automation would make
+            // the next accessibility call (the UI thread's focus check) wait
+            // behind ours (CI's slow-window test). Not worth it for a check.
+            if !responds_quickly(now) {
+                crate::hook::trace_note("verify: app slow to answer, not checked");
                 return;
             }
             let n = expected.chars().count();
