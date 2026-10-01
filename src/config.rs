@@ -68,11 +68,23 @@ pub struct Config {
     /// The tray icon shows TH / EN.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tray_shows_language: bool,
+    /// The typist's snippets (trigger → text, and which keyboard).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub snippets: Vec<SnippetConfig>,
     /// Put right common Thai misspellings (opt-in).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fix_spelling: bool,
     /// Start RightType again if it crashes (see instance.rs).
     pub restart_after_crash: bool,
+}
+
+/// One snippet as saved.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SnippetConfig {
+    pub trigger: String,
+    pub text: String,
+    /// `thai`, `english` or `either`.
+    pub scope: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -126,6 +138,7 @@ impl Default for Config {
             tray_shows_language: false,
             restart_after_crash: true,
             fix_spelling: false,
+            snippets: Vec::new(),
         }
     }
 }
@@ -167,6 +180,16 @@ pub fn apply(cfg: &Config) {
     hook::set_caps_switches_language(cfg.capslock_switches_language);
     crate::tray::set_shows_language(cfg.tray_shows_language);
     hook::set_fixes_spelling(cfg.fix_spelling);
+    hook::set_snippets(
+        cfg.snippets
+            .iter()
+            .filter_map(|s| {
+                let scope = righttype::snippets::Scope::parse(&s.scope)?;
+                righttype::snippets::check(&s.trigger, &s.text, scope).ok()
+            })
+            .take(righttype::snippets::MAX_SNIPPETS)
+            .collect(),
+    );
     RESTART_AFTER_CRASH.store(cfg.restart_after_crash, std::sync::atomic::Ordering::Relaxed);
     crate::habits::set_enabled(cfg.predict_layout);
     righttype::layout::set_thai_variant(match cfg.thai_layout.as_deref() {
@@ -250,6 +273,14 @@ pub fn persist() {
         capslock_switches_language: hook::caps_switches_language(),
         tray_shows_language: crate::tray::shows_language(),
         fix_spelling: hook::fixes_spelling(),
+        snippets: hook::snippets()
+            .into_iter()
+            .map(|s| SnippetConfig {
+                trigger: s.trigger,
+                text: s.text,
+                scope: s.scope.name().to_string(),
+            })
+            .collect(),
         restart_after_crash: RESTART_AFTER_CRASH.load(std::sync::atomic::Ordering::Relaxed),
         predict_layout: crate::habits::is_enabled(),
         keep_stats: crate::stats::keeps_daily(),

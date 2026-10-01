@@ -41,13 +41,15 @@ const PAGE_HOTKEYS: u8 = 2;
 const PAGE_LEARNED: u8 = 3;
 const PAGE_BLOCKED: u8 = 4;
 const PAGE_ABOUT: u8 = 5;
-/// Sidebar entries, in page order.
-const NAV: [T; 5] = [
-    T::NavGeneral,
-    T::NavHotkeys,
-    T::NavLearned,
-    T::NavBlocked,
-    T::NavAbout,
+const PAGE_SNIPPETS: u8 = 6;
+/// Sidebar entries, top to bottom, and their pages.
+const NAV: [(T, u8); 6] = [
+    (T::NavGeneral, PAGE_GENERAL),
+    (T::NavHotkeys, PAGE_HOTKEYS),
+    (T::NavLearned, PAGE_LEARNED),
+    (T::NavSnippets, PAGE_SNIPPETS),
+    (T::NavBlocked, PAGE_BLOCKED),
+    (T::NavAbout, PAGE_ABOUT),
 ];
 
 /// Toggle rows on the General page: y of each row inside the behaviour card.
@@ -83,7 +85,15 @@ pub fn hotkey_rows() -> Vec<(T, String)> {
 }
 
 struct Ids {
-    nav: [u16; 5],
+    nav: [u16; 6],
+    snip_table: u16,
+    snip_trigger: u16,
+    snip_text: u16,
+    /// Thai, English, either.
+    snip_scope: [u16; 3],
+    snip_save: u16,
+    snip_remove: u16,
+    snip_status: u16,
     lang_en: u16,
     lang_th: u16,
     mode_auto: u16,
@@ -174,7 +184,7 @@ pub fn open() {
 /// Open on a given page (1 = General … 5 = Privacy & about); debug harness use.
 #[cfg(debug_assertions)]
 pub fn open_page(page: u8) {
-    open_on(page.clamp(PAGE_GENERAL, PAGE_ABOUT));
+    open_on(page.clamp(PAGE_GENERAL, PAGE_SNIPPETS));
 }
 
 fn open_on(page: u8) {
@@ -210,8 +220,8 @@ fn open_on(page: u8) {
         p.bg,
         0,
     );
-    let mut nav = [0u16; 5];
-    for (i, label) in NAV.iter().enumerate() {
+    let mut nav = [0u16; 6];
+    for (i, (label, _)) in NAV.iter().enumerate() {
         nav[i] = s.nav(tr(*label), i == 0, (12, 84 + i as i32 * 40, 196, 36));
     }
     s.label(
@@ -415,6 +425,38 @@ fn open_on(page: u8) {
         l,
     );
 
+    // --- Snippets -----------------------------------------------------------
+    let n = PAGE_SNIPPETS;
+    s.label(tr(T::NavSnippets), TextStyle::Title, (X0, 18, CW, 36), p.bg, n);
+    s.label(tr(T::SnippetsIntro), TextStyle::Dim, (X0, 58, CW, 40), p.bg, n);
+    let snip_table = s.table(
+        &[
+            (tr(T::ColTrigger), 110),
+            (tr(T::ColText), 270),
+            (tr(T::ColKeyboard), 110),
+        ],
+        (X0, 102, CW, 210),
+        n,
+    );
+    s.label(tr(T::ColTrigger), TextStyle::Small, (X0, 324, 150, 18), p.bg, n);
+    let snip_trigger = s.line_edit("", (X0 + 4, 348, 142, 24), n);
+    s.label(tr(T::ColText), TextStyle::Small, (X0 + 160, 324, CW - 160, 18), p.bg, n);
+    let snip_text = s.edit("", (X0 + 164, 348, CW - 168, 60), n);
+    let mut snip_scope = [0u16; 3];
+    for (i, key) in [T::ScopeThai, T::ScopeEnglish, T::ScopeEither].iter().enumerate() {
+        snip_scope[i] = s.segment(
+            tr(*key),
+            i == 0,
+            (X0 + 4 + i as i32 * 104, 426, 102, 32),
+            p.inset,
+            n,
+        );
+    }
+    let snip_save = s.button(tr(T::BtnSaveSnippet), true, (X0 + CW - 232, 424, 118, 34), p.bg, n);
+    let snip_remove = s.button(tr(T::BtnRemoveApp), false, (X0 + CW - 108, 424, 108, 34), p.bg, n);
+    let snip_status = s.label("", TextStyle::Small, (X0, 466, CW, 22), p.bg, n);
+    s.label(tr(T::SnippetsNote), TextStyle::Small, (X0, 492, CW, 60), p.bg, n);
+
     // --- Apps: a table of every app with a mode of its own ------------------
     let b = PAGE_BLOCKED;
     s.label(
@@ -540,6 +582,13 @@ fn open_on(page: u8) {
 
     let ids = Ids {
         nav,
+        snip_table,
+        snip_trigger,
+        snip_text,
+        snip_scope,
+        snip_save,
+        snip_remove,
+        snip_status,
         lang_en,
         lang_th,
         mode_auto,
@@ -592,9 +641,12 @@ fn open_on(page: u8) {
         raw: RefCell::new(None),
     });
     fill_apps(&win, None);
+    fill_snippets(&win, None);
+    win.surface.set_checked(win.ids.snip_scope[2], true);
     sync(&win);
-    win.surface
-        .set_checked(win.ids.nav[(page - 1) as usize], true);
+    if let Some(i) = NAV.iter().position(|(_, p)| *p == page) {
+        win.surface.set_checked(win.ids.nav[i], true);
+    }
     win.surface.show_page(page);
     if let Some(h) = win.window.handle.hwnd() {
         crate::ui::present(HWND(h as _), "settings", started);
@@ -610,9 +662,13 @@ fn open_on(page: u8) {
         }
     });
     let weak = Rc::downgrade(&win);
-    win.surface.on_table(move |_id, event| {
+    win.surface.on_table(move |id, event| {
         if let Some(win) = weak.upgrade() {
-            app_table_event(&win, event);
+            if id == win.ids.snip_table {
+                snippet_table_event(&win, event);
+            } else {
+                app_table_event(&win, event);
+            }
         }
     });
     let win_h = win.clone();
@@ -688,7 +744,7 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     let ids = &win.ids;
     let s = &win.surface;
     if let Some(i) = ids.nav.iter().position(|&n| n == id) {
-        s.show_page(i as u8 + 1);
+        s.show_page(NAV[i].1);
         return;
     }
     if id == ids.edit_learned {
@@ -754,6 +810,10 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         overlay::show(tr(T::ToastSaved));
     } else if let Some(i) = ids.app_seg.iter().position(|&b| b == id) {
         set_app_mode(win, APP_MODE_CHOICES[i]);
+    } else if id == ids.snip_save {
+        save_snippet(win);
+    } else if id == ids.snip_remove {
+        remove_snippet(win);
     } else if id == ids.apps_add {
         add_app(win);
     } else if id == ids.apps_keep {
@@ -827,6 +887,112 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         }
     }
     sync(win);
+}
+
+// --------------------------------------------------------- Snippets page
+
+const SCOPES: [righttype::snippets::Scope; 3] = [
+    righttype::snippets::Scope::Thai,
+    righttype::snippets::Scope::English,
+    righttype::snippets::Scope::Either,
+];
+
+/// Fill the Snippets table, selecting the snippet `trigger` when given.
+fn fill_snippets(win: &SettingsWindow, trigger: Option<&str>) {
+    let list = hook::snippets();
+    let cells: Vec<Vec<String>> = list
+        .iter()
+        .map(|sn| {
+            let text: String = sn.text.replace('\n', " ⏎ ");
+            let scope = tr(match sn.scope {
+                righttype::snippets::Scope::Thai => T::ScopeThai,
+                righttype::snippets::Scope::English => T::ScopeEnglish,
+                righttype::snippets::Scope::Either => T::ScopeEither,
+            });
+            vec![sn.trigger.clone(), text, scope.to_string()]
+        })
+        .collect();
+    let select = trigger.and_then(|t| list.iter().position(|sn| sn.trigger == t));
+    win.surface.set_rows(win.ids.snip_table, &cells, select);
+}
+
+fn snippet_table_event(win: &Rc<SettingsWindow>, event: ui::TableEvent) {
+    match event {
+        ui::TableEvent::Delete => remove_snippet(win),
+        ui::TableEvent::Selected | ui::TableEvent::Menu { .. } => {
+            let Some(i) = win.surface.selected_row(win.ids.snip_table) else {
+                return;
+            };
+            let Some(sn) = hook::snippets().into_iter().nth(i) else {
+                return;
+            };
+            let s = &win.surface;
+            s.set_text(win.ids.snip_trigger, &sn.trigger);
+            s.set_text(win.ids.snip_text, &sn.text.replace('\n', "\r\n"));
+            for (k, scope) in SCOPES.iter().enumerate() {
+                s.set_checked(win.ids.snip_scope[k], *scope == sn.scope);
+            }
+        }
+    }
+}
+
+/// Add the snippet in the boxes, or replace the one with its trigger.
+fn save_snippet(win: &SettingsWindow) {
+    use righttype::snippets::{check, Problem, MAX_SNIPPETS};
+    let s = &win.surface;
+    let scope = (0..3)
+        .find(|&k| s.checked(win.ids.snip_scope[k]))
+        .map_or(righttype::snippets::Scope::Either, |k| SCOPES[k]);
+    let mut text = s.text_of(win.ids.snip_text);
+    let checked = check(&s.text_of(win.ids.snip_trigger), &text, scope);
+    text.zeroize();
+    let snippet = match checked {
+        Ok(sn) => sn,
+        Err(problem) => {
+            s.set_text(
+                win.ids.snip_status,
+                tr(match problem {
+                    Problem::TriggerLength => T::SnipTriggerLength,
+                    Problem::TriggerSpace => T::SnipTriggerSpace,
+                    Problem::TextEmpty => T::SnipTextEmpty,
+                    Problem::TextLong => T::SnipTextLong,
+                }),
+            );
+            return;
+        }
+    };
+    let mut list = hook::snippets();
+    let trigger = snippet.trigger.clone();
+    match list.iter().position(|sn| sn.trigger == trigger) {
+        Some(i) => list[i] = snippet,
+        None if list.len() >= MAX_SNIPPETS => {
+            s.set_text(win.ids.snip_status, tr(T::SnipTooMany));
+            return;
+        }
+        None => list.push(snippet),
+    }
+    hook::set_snippets(list);
+    config::persist();
+    fill_snippets(win, Some(&trigger));
+    s.set_text(win.ids.snip_status, tr(T::AppsSaved));
+}
+
+fn remove_snippet(win: &SettingsWindow) {
+    let s = &win.surface;
+    let Some(i) = s.selected_row(win.ids.snip_table) else {
+        s.set_text(win.ids.snip_status, tr(T::AppsPickFirst));
+        return;
+    };
+    let mut list = hook::snippets();
+    if i < list.len() {
+        list.remove(i);
+    }
+    hook::set_snippets(list);
+    config::persist();
+    fill_snippets(win, None);
+    s.set_text(win.ids.snip_trigger, "");
+    s.set_text(win.ids.snip_text, "");
+    s.set_text(win.ids.snip_status, tr(T::SnipRemoved));
 }
 
 // ------------------------------------------------------------- Apps page
@@ -1299,7 +1465,7 @@ fn captured(win: &SettingsWindow) {
 /// Switch page as if its sidebar entry had been clicked.
 fn go_to(win: &SettingsWindow, page: u8) {
     for (i, nav) in win.ids.nav.iter().enumerate() {
-        win.surface.set_checked(*nav, i as u8 + 1 == page);
+        win.surface.set_checked(*nav, NAV[i].1 == page);
     }
     win.surface.show_page(page);
 }
@@ -1340,6 +1506,11 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
         }
         PAGE_LEARNED => {
             field(g, rect(X0, 142, CW, 268));
+        }
+        PAGE_SNIPPETS => {
+            field(g, rect(X0, 344, 150, 32));
+            field(g, rect(X0 + 160, 344, CW - 160, 68));
+            track(g, rect(X0, 422, 3 * 104 + 6, 40));
         }
         PAGE_BLOCKED => {
             track(g, rect(X0, 342, CW, 40));

@@ -491,6 +491,43 @@ enum UndoKind {
     /// (Shift+Backspace, Ctrl+Shift+CapsLock, or Backspace right after)
     /// puts back what was typed, and that word is not fixed again this run.
     Spelling(&'static str),
+    /// A snippet was expanded. Undoing it puts the trigger back; nothing is
+    /// learned.
+    Snippet,
+}
+
+/// The typist's snippets (Settings → Snippets).
+static SNIPPETS: std::sync::RwLock<Vec<righttype::snippets::Snippet>> =
+    std::sync::RwLock::new(Vec::new());
+
+pub fn snippets() -> Vec<righttype::snippets::Snippet> {
+    SNIPPETS.read().map(|l| l.clone()).unwrap_or_default()
+}
+
+pub fn set_snippets(list: Vec<righttype::snippets::Snippet>) {
+    if let Ok(mut l) = SNIPPETS.write() {
+        *l = list;
+    }
+}
+
+/// Put a snippet's `text` in place of its trigger `word`, then the boundary
+/// `vk`. Line breaks are typed as Enter.
+unsafe fn expand_snippet(word: &str, vk: u16, text: &str) -> bool {
+    let shown = policy::shown_with_caps(word, caps_on());
+    inject::expect_before_caret(&shown);
+    let lines: Vec<&str> = text.split('\n').collect();
+    for (i, line) in lines.iter().enumerate() {
+        let delete = if i == 0 { word.chars().count() } else { 0 };
+        let then = if i + 1 < lines.len() { VK_RETURN.0 } else { vk };
+        if !inject::apply(delete, line, Some(then)) {
+            crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+            return false;
+        }
+    }
+    let mut restore = format!("{shown}{}", boundary_literal(vk));
+    set_undo(text.chars().count() + 1, &restore, UndoKind::Snippet);
+    restore.zeroize();
+    true
 }
 
 /// Put right common Thai misspellings (opt-in; `righttype::spelling`).
@@ -583,12 +620,12 @@ unsafe fn undo_last_correction() {
         let restored = rec.restore_text.trim_end_matches(['\r', '\t', ' ']);
         // The word counted was the correction; the one kept is the original.
         habit_correction(!has_thai(restored), has_thai(restored));
-        if rec.kind != UndoKind::Manual {
+        if !matches!(rec.kind, UndoKind::Manual | UndoKind::Snippet) {
             note_rejection();
         }
         let mut kept_spelling = None;
         match rec.kind {
-            UndoKind::Manual => {}
+            UndoKind::Manual | UndoKind::Snippet => {}
             UndoKind::Spelling(wrong) => {
                 SPELLING_KEPT.with(|k| k.borrow_mut().push(wrong));
                 SPELLING_AT.with(|t| t.set(None));
@@ -1461,6 +1498,29 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
 
     let active_layout = policy::supported_layout_id(layout_id(effective_layout()));
+
+    // A snippet's trigger: its text instead, in every mode.
+    let snippet = active_layout.and_then(|layout| {
+        SNIPPETS
+            .read()
+            .ok()
+            .and_then(|l| righttype::snippets::find(&l, &word, layout).cloned())
+    });
+    if let Some(mut snippet) = snippet {
+        diag::note(
+            "snippet expanded",
+            &[("text", Shape::of(&snippet.text).into())],
+        );
+        let done = expand_snippet(&word, vk, &snippet.text);
+        snippet.text.zeroize();
+        STATE.with(|s| s.borrow_mut().recent.clear());
+        word.zeroize();
+        if done {
+            return true;
+        }
+        return false;
+    }
+
     let converted = mark == TokenMark::Converted;
     let mut detection = if converted {
         // D-009: the whole token, including the part converted before the
@@ -2147,7 +2207,12 @@ unsafe fn flip_back_recent() {
         s.borrow()
             .undo
             .as_ref()
-            .is_some_and(|u| matches!(u.kind, UndoKind::CapsAccident | UndoKind::Spelling(_)))
+            .is_some_and(|u| {
+                matches!(
+                    u.kind,
+                    UndoKind::CapsAccident | UndoKind::Spelling(_) | UndoKind::Snippet
+                )
+            })
     }) {
         undo_last_correction();
         return;

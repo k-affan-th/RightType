@@ -27,6 +27,7 @@
 //! - [`recent`] — the last few completed words, for flipping back several at once.
 //! - [`usage`] — daily correction counts for the opt-in weekly view.
 //! - [`spelling`] — common Thai misspellings, put right (opt-in).
+//! - [`snippets`] — a short trigger becomes a longer text, on either keyboard.
 //! - [`sim`] — the hook's Auto pipeline replayed on a string, for benchmarks and tests.
 
 pub mod buffer;
@@ -48,5 +49,6 @@ pub mod repair;
 pub mod secret;
 pub mod segment;
 pub mod sim;
+pub mod snippets;
 pub mod spelling;
 pub mod usage;

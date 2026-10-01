@@ -1566,6 +1566,27 @@ impl Surface {
         )
     }
 
+    /// A one-line text box.
+    pub fn line_edit(&self, s: &str, rc: (i32, i32, i32, i32), page: u8) -> u16 {
+        const ES_AUTOHSCROLL: u32 = 0x80;
+        let id = self.create(
+            "EDIT",
+            s,
+            ES_AUTOHSCROLL | WS_TABSTOP | WS_GROUP,
+            rc,
+            Kind::Edit,
+            pal().inset,
+            page,
+        );
+        if is_dark() {
+            let theme: Vec<u16> = "DarkMode_Explorer\0".encode_utf16().collect();
+            unsafe {
+                let _ = SetWindowTheme(self.hwnd_of(id), PCWSTR(theme.as_ptr()), PCWSTR::null());
+            }
+        }
+        id
+    }
+
     pub fn edit(&self, s: &str, rc: (i32, i32, i32, i32), page: u8) -> u16 {
         let id = self.create(
             "EDIT",
