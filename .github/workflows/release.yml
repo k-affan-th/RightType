@@ -52,7 +52,11 @@ jobs:
 
     - name: Build installer, zip and checksums
       shell: pwsh
-      run: ./packaging/build_release.ps1
+      run: |
+        ./packaging/build_release.ps1
+        # ARM64 last: its run writes SHA256.txt for both.
+        rustup target add aarch64-pc-windows-msvc
+        ./packaging/build_release.ps1 -Arch arm64
 
     - name: winget manifests
       shell: pwsh
@@ -80,6 +84,8 @@ jobs:
         $files = @(
           "dist/RightType-$ver-setup.exe",
           "dist/RightType-$ver-x64.zip",
+          "dist/RightType-$ver-arm64-setup.exe",
+          "dist/RightType-$ver-arm64.zip",
           "dist/SHA256.txt",
           "dist/winget-manifests-$ver.zip"
         )

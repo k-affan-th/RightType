@@ -55,7 +55,15 @@ jobs:
         # build_release.ps1 skips the installer when Inno Setup is missing;
         # here it must exist.
         if (-not (Get-ChildItem dist -Filter "RightType-*-setup.exe")) { throw "setup.exe was not built" }
-    # The installer of every PR, to try a fix on a real PC before a release.
+    # Windows on ARM (Surface Pro X / Copilot+ PCs): cross-built here,
+    # tested on an ARM runner below.
+    - name: Package for ARM64
+      shell: pwsh
+      run: |
+        rustup target add aarch64-pc-windows-msvc
+        ./packaging/build_release.ps1 -Arch arm64
+        if (-not (Get-ChildItem dist -Filter "RightType-*-arm64-setup.exe")) { throw "arm64 setup.exe was not built" }
+    # The installers of every PR, to try a fix on a real PC before a release.
     - name: Upload installer
       uses: actions/upload-artifact@v4
       with:
@@ -68,6 +76,15 @@ jobs:
         $tree = cargo tree --features winos --edges normal --prefix none
         $bad = $tree | Select-String -Pattern '^(reqwest|hyper|ureq|curl|isahc|surf|attohttpc|tokio|native-tls|rustls|openssl|sentry|opentelemetry)\b'
         if ($bad) { $bad; throw "network/telemetry crate in the dependency tree" }
+
+  # The same tests on Windows on ARM, natively.
+  windows-arm:
+    runs-on: windows-11-arm
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Test
+      run: cargo test --features winos --all-targets
 
   # Real apps, real keys: a debug build of RightType in Chrome (a page's text
   # box and the address bar) and Notepad on a Windows desktop, with the text
