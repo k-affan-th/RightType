@@ -44,6 +44,7 @@ use zeroize::Zeroize;
 /// Calls `SendInput`; must run while the keyboard hook is installed so its own
 /// events are recognised (via `LLKHF_INJECTED`) and ignored.
 pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> bool {
+    let context = CONTEXT.with(|c| c.borrow_mut().take());
     if backspaces == 0 && text.is_empty() && trailing_vk.is_none() {
         return true;
     }
@@ -51,7 +52,12 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     // message: nothing the typist presses meanwhile can land between our
     // keys, and nothing depends on how fast the app reads them (Windows 11
     // Notepad garbled keys-typed corrections).
-    if let Ok(tb) = crate::focus::TextBox::focused() {
+    let text_box = if e2e_env("RIGHTTYPE_E2E_NO_TEXTBOX") {
+        Err("turned off for a test")
+    } else {
+        crate::focus::TextBox::focused()
+    };
+    if let Ok(tb) = text_box {
         let mut whole = text.to_string();
         let trailing = match trailing_vk {
             Some(vk) if vk == VK_SPACE.0 => {
@@ -60,11 +66,19 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
             }
             other => other,
         };
-        let replaced = tb.replace_before_caret(backspaces, &whole);
+        let replaced =
+            tb.replace_before_caret(backspaces, &whole, context.as_deref().map(|s| s.as_str()));
         whole.zeroize();
         match replaced {
             Ok(()) => {
                 crate::hook::e2e_trace(format!("inject: text box replaced {backspaces}"));
+                righttype::diag::note(
+                    "replaced by the text box",
+                    &[
+                        ("deleted", backspaces.into()),
+                        ("typed", text.chars().count().into()),
+                    ],
+                );
                 let Some(vk) = trailing else {
                     return true;
                 };
@@ -76,9 +90,14 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
             }
             Err(crate::focus::ReplaceError::Untouched(why)) => {
                 crate::hook::e2e_trace(format!("inject: text box not used ({why}), keys instead"));
+                righttype::diag::note("text box not used", &[("why", why.into())]);
             }
             Err(crate::focus::ReplaceError::Unknown(why)) => {
                 crate::hook::e2e_trace(format!("inject: text box replace unclear ({why})"));
+                righttype::diag::note(
+                    "text box result unclear, not retyped",
+                    &[("why", why.into())],
+                );
                 return false;
             }
         }
@@ -104,7 +123,15 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     // still handling the Backspaces as the last one sent (`สวัสดี` became
     // `ีีีีีี`, and `l;ylfu` put back over Thai `l;ylfuuuuuu`), so text waits
     // until the deletions have landed.
-    let split = needs_gap(backspaces, text).then_some(inputs.len());
+    let exe = crate::hook::current_app();
+    let gap = if exe.as_deref().is_some_and(crate::verify::is_slow) {
+        crate::verify::SLOW_GAP
+    } else if e2e_env("RIGHTTYPE_E2E_NO_GAP") {
+        std::time::Duration::ZERO
+    } else {
+        DELETE_GAP
+    };
+    let split = (needs_gap(backspaces, text) && !gap.is_zero()).then_some(inputs.len());
     // 3. Inject the correction as raw Unicode code units (handles non-BMP too).
     let mut units = [0u16; 2];
     for ch in text.chars() {
@@ -131,11 +158,61 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     let (first, rest) = inputs.split_at(split.unwrap_or(inputs.len()));
     let mut sent = SendInput(first, size_of::<INPUT>() as i32) as usize;
     if sent == first.len() && !rest.is_empty() {
-        std::thread::sleep(DELETE_GAP);
+        std::thread::sleep(gap);
         sent += SendInput(rest, size_of::<INPUT>() as i32) as usize;
     }
     INJECTING.store(false, Ordering::SeqCst);
+    righttype::diag::note(
+        "typed as keys",
+        &[
+            ("deleted", backspaces.into()),
+            ("typed", text.chars().count().into()),
+            (
+                "waited_ms",
+                (split.map_or(0, |_| gap.as_millis() as usize)).into(),
+            ),
+            ("all_sent", (sent == inputs.len()).into()),
+        ],
+    );
+    // Check what the app shows, when the whole correction is before the caret.
+    if sent == inputs.len() && backspaces > 0 {
+        match trailing_vk {
+            None => crate::verify::after_keys(text, exe),
+            Some(vk) if vk == VK_SPACE.0 => {
+                let mut whole = format!("{text} ");
+                crate::verify::after_keys(&whole, exe);
+                whole.zeroize();
+            }
+            Some(_) => {}
+        }
+    }
     sent == inputs.len()
+}
+
+thread_local! {
+    /// What the next [`apply`] expects just before the caret; see
+    /// [`expect_before_caret`].
+    static CONTEXT: std::cell::RefCell<Option<zeroize::Zeroizing<String>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Tell the next [`apply`] (on this thread) what the app should be showing
+/// just before the caret, the deleted characters last. A standard text box is
+/// then checked first: if it has not handled the latest keys yet, the
+/// correction goes in as keys (they queue behind them); if it dropped Thai
+/// marks it would not accept, only what is there is deleted.
+pub fn expect_before_caret(text: &str) {
+    CONTEXT.with(|c| *c.borrow_mut() = Some(zeroize::Zeroizing::new(text.to_string())));
+}
+
+/// Press CapsLock once (ours: the hook lets it through untouched).
+pub unsafe fn toggle_capslock() {
+    let _ = send(&[key(0x14, false), key(0x14, true)]);
+}
+
+/// Debug e2e builds: a switch the test harness sets. Always off in release.
+fn e2e_env(name: &str) -> bool {
+    cfg!(debug_assertions) && std::env::var_os(name).is_some()
 }
 
 /// How long text waits after the Backspaces that precede it. The CI probe

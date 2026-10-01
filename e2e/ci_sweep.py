@@ -3,6 +3,12 @@
     python ci_sweep.py            # all targets
     python ci_sweep.py page omnibox notepad
 
+On anyone's PC without a checkout: CI uploads RightType-selftest-<sha>, a zip
+with the diagnostic build, these scripts and test-on-my-pc.bat. Unzip it,
+double-click the .bat; it writes RightType-test-report.txt and
+RightType-test-trace.txt next to itself. Apps that are not installed are
+skipped.
+
 Physical virtual-key events (as a person types) go into real apps with the
 debug build of RightType, and the text is read back through UI Automation:
 
@@ -24,6 +30,7 @@ do not fail the run until they are fixed (and then say so, as XPASS).
 
 import ctypes
 import ctypes.wintypes as wt
+import os
 import subprocess
 import threading
 import sys
@@ -44,8 +51,92 @@ ENTER = 0x0D
 KNOWN_FAILING: set[str] = set()
 EDGE_ROUNDS = 4
 CURRENT = [None]  # the running RightType process
+# The debug build writes its problem report here every 1.5 s (tray → "Save a
+# problem report…" in a release build), so the sweep can prove it holds no
+# typed text.
+PROBLEM_REPORT = Path(os.environ.get("TEMP", ".")) / "rt-e2e-problem-report.txt"
+os.environ["RIGHTTYPE_E2E_REPORT"] = str(PROBLEM_REPORT)
 
 flip = lambda: tap(BACK, SHIFT)  # noqa: E731
+
+
+def set_capslock(on):
+    if bool(user32.GetKeyState(fs.CAPS) & 1) != on:
+        tap(fs.CAPS)
+        time.sleep(0.3)
+
+
+def palette_by_keyboard(t):
+    """The command palette without a mouse: select a word, open it, type to
+    search, Enter."""
+    def steps():
+        fs.select_word()
+        time.sleep(0.3)
+        tap(fs.SPACE, fs.CTRL, fs.ALT)  # the palette's hotkey
+        time.sleep(1.0)
+        fs.type_keys("upper")
+        time.sleep(0.4)
+        tap(ENTER)
+        time.sleep(1.2)
+    fs.run(t, "palette by keyboard: search, Enter", "hello", "HELLO", then=[steps])
+
+
+def full_screen_browser_still_works(t):
+    """Full screen (F11) with a text cursor is not a game: still corrected."""
+    tap(0x7A)  # F11
+    time.sleep(1.5)
+    try:
+        fs.run(t, "full-screen browser still corrected", "l;ylfu ", "สวัสดี")
+    finally:
+        tap(0x7A)
+        time.sleep(1.5)
+
+
+def capslock_left_on(t):
+    """CapsLock left on: the English layout shows L;YLFU for the keys of
+    สวัสดี. RightType keeps the keys as if it were off."""
+    for name, keys, expect, layout in [
+        ("Thai typed with CapsLock on", "l;ylfu ", "สวัสดี", HKL_EN),
+        ("English typed with CapsLock on stays", "hello world ", "HELLO WORLD", HKL_EN),
+        # Left on by accident: Shift on the first letter shows hELLO.
+        ("CapsLock on by accident, English", "Hello ", "Hello", HKL_EN),
+        # Thai layout: CapsLock shifts every key (l;ylfu gives ศซํศโ๊).
+        ("CapsLock on by accident, Thai layout", "l;ylfu ", "สวัสดี", HKL_TH),
+        # Capitals were meant after all: one Shift+Backspace puts them back
+        # (and CapsLock on again).
+        ("CapsLock fix taken back with Shift+Backspace", "Hello |flip", "hELLO", HKL_EN),
+    ]:
+        t.clear()
+        t.layout(layout)
+        set_capslock(True)
+        try:
+            typed, _, then = keys.partition("|")
+            fs.type_keys(typed)
+            if then == "flip":
+                time.sleep(0.5)
+                flip()
+            time.sleep(0.8)
+            fs.check(t.name, name, t.read(), expect)
+        finally:
+            set_capslock(False)
+
+
+def thai_capslock_probe():
+    """What the Thai Kedmanee layout types with CapsLock on (printed, not
+    judged): whether CapsLock changes Thai letters decides what a word typed
+    on the Thai layout with CapsLock on looks like."""
+    state = (ctypes.c_ubyte * 256)()
+    out = ctypes.create_unicode_buffer(8)
+    rows = []
+    for caps in (0, 1):
+        state[fs.CAPS] = caps
+        chars = ""
+        for key in "l;ylfu":
+            vk = ord(key.upper()) if key.isalpha() else fs.PUNCT[key]
+            n = user32.ToUnicodeEx(vk, 0, state, out, 8, 0, ctypes.c_void_p(HKL_TH))
+            chars += out.value[:n] if n > 0 else "?"
+        rows.append(f"caps={caps}: {chars}")
+    print("Thai layout, keys l;ylfu: " + " | ".join(rows), flush=True)
 
 
 def installed_layouts():
@@ -98,6 +189,11 @@ def rt_health(proc):
 class Page(fs.Chrome):
     name = "page"
 
+    def __init__(self):
+        if not lib.CHROME_EXE.exists():
+            raise SkipTarget("Google Chrome is not installed here")
+        super().__init__()
+
 
 class HangPage(Page):
     name = "hang"
@@ -110,6 +206,8 @@ class Omnibox(fs.Target):
     name = "omnibox"
 
     def __init__(self):
+        if not lib.CHROME_EXE.exists():
+            raise SkipTarget("Google Chrome is not installed here")
         self.app, self.httpd = lib.start_edge(lib.HERE / "target.html", lib.CHROME_EXE)
         self.win = self.app.top_window()
         self.hwnd = self.win.handle
@@ -153,6 +251,8 @@ class EdgeOmnibox(Omnibox):
     name = "edge"
 
     def __init__(self):
+        if not lib.EDGE_EXE.exists():
+            raise SkipTarget("Microsoft Edge is not installed here")
         self.app, self.httpd = lib.start_edge(lib.HERE / "target.html", lib.EDGE_EXE)
         self.win = self.app.top_window()
         self.hwnd = self.win.handle
@@ -169,9 +269,16 @@ def fast_keys(s, pause=0.03):
             vk = fs.SPACE
         elif ch.isalpha() or ch.isdigit():
             vk = ord(ch.upper())
+        elif ch in fs.SHIFTED:
+            base = fs.SHIFTED[ch]
+            fs.tap(fs.PUNCT.get(base, ord(base)), fs.SHIFT, pause=pause)
+            continue
         else:
             vk = fs.PUNCT[ch]
-        fs.tap(vk, pause=pause)
+        if ch.isupper():
+            fs.tap(vk, fs.SHIFT, pause=pause)
+        else:
+            fs.tap(vk, pause=pause)
 
 
 def watch(t, name, keys, expect, typer=type_keys):
@@ -534,6 +641,36 @@ def selection_leaves_clipboard_alone(t):
              f"seq+{after[0] - before[0]} {after[1]!r}", f"seq+0 {before[1]!r}")
 
 
+HUMAN = __import__("random").Random(20260930)  # same "typist" every run
+
+
+def human_keys(s):
+    """Keys at a person's uneven pace: mostly 60-160 ms apart, sometimes a
+    quick burst (25 ms), sometimes a pause (300 ms)."""
+    for ch in s:
+        roll = HUMAN.random()
+        pause = 0.025 if roll < 0.2 else 0.3 if roll > 0.95 else HUMAN.uniform(0.06, 0.16)
+        fast_keys(ch, pause=pause)
+
+
+# Sentences as people type them, some from real bug reports.
+REAL_SENTENCES = [
+    # The first word alone, to tell which half of the next one goes wrong.
+    ("Thai word alone", ";yoouh ", "วันนี้"),
+    ("Thai then English, one line", ";yoouh there is ", "วันนี้ there is"),
+    ("Thai sentence", "lj'wa]N,k.shsojvp ", "ส่งไฟล์มาให้หน่อย"),
+    ("English then Thai", "hello l;ylfu8iy[ ", "hello สวัสดีครับ"),
+    ("Thai then an English tech word", "l;ylfu8iy[ middleware ", "สวัสดีครับ middleware"),
+    ("English computer words", "relogin logout ", "relogin logout"),
+]
+
+
+def realistic(t):
+    for name, keys, expect in REAL_SENTENCES:
+        fs.run(t, f"typed like a person: {name}", "", expect,
+               then=[lambda keys=keys: human_keys(keys)], settle=1.2)
+
+
 def sweep(t):
     run = fs.run
     run(t, "EN->TH word", "l;ylfu ", "สวัสดี")
@@ -558,7 +695,55 @@ def sweep(t):
     # were lost. A person typing ~30 ms per key, word ended by a space.
     fs.run(t, "fast typing through a correction", "", "สวัสดีครับ",
            then=[lambda: fast_keys("l;ylfu8iy["), lambda: tap(fs.SPACE)])
+    realistic(t)
+    capslock_left_on(t)
+    # Thai typed in a wrong order that looks right: two เ for แ (keys g g).
+    fs.run(t, "two เ typed for แ is put right", "gg,; ", "แมว", layout=HKL_TH)
+    if t.name == "page":
+        full_screen_browser_still_works(t)
+        palette_by_keyboard(t)
     selection_leaves_clipboard_alone(t)
+
+
+def notepad11_sweep(t):
+    sweep(t)
+    verify_catches_garbling(t)
+
+
+def verify_catches_garbling(t):
+    """Windows 11 Notepad garbles Thai typed as keys right after Backspaces.
+    With the text-box path and the pause turned off (debug switches), the
+    check-after-write must say what really happened, and once it has seen a
+    garbled word the next one must arrive intact (it waits longer there)."""
+    proc = fs.start_rt({"RIGHTTYPE_E2E_NO_TEXTBOX": "1", "RIGHTTYPE_E2E_NO_GAP": "1"})
+    CURRENT[0] = proc
+    t.focus()
+    # Notepad garbles most of the time, not every time: type until the check
+    # has caught one, then the next must arrive intact.
+    caught = False
+    for attempt in range(1, 6):
+        start = fs.LOG.stat().st_size
+        t.clear()
+        t.layout(HKL_EN)
+        # No space after it: the check waits for a pause in typing.
+        fs.type_keys("l;ylfu")
+        time.sleep(1.2)
+        got = t.read()
+        trace = fs.log_since(start)
+        verdict = ("differs" if "verify: app shows something else" in trace
+                   else "same" if "verify: correction shown as sent" in trace else "none")
+        truth = "same" if got.strip() == "สวัสดี" else "differs"
+        print(f"  garbling attempt {attempt}: got {got!r}, check said {verdict}", flush=True)
+        fs.check(t.name, f"check-after-write tells the truth (attempt {attempt})", verdict, truth)
+        if caught:
+            fs.check(t.name, "after a garbled word the next arrives intact", got.strip(), "สวัสดี")
+            break
+        caught = verdict == "differs"
+    else:
+        print("  Notepad never garbled in 5 attempts", flush=True)
+    # End the word, so this RightType's problem report has a word end too.
+    tap(fs.SPACE)
+    time.sleep(0.5)
 
 
 def edge_sweep(t):
@@ -585,6 +770,29 @@ def ui_timing():
         time.sleep(0.5)
 
 
+def report_has_no_typed_text(target, results):
+    """The problem report RightType kept while this target was typed in
+    names what it did, never the words: none of the text the checks saw may
+    be in it."""
+    time.sleep(2)  # one more report tick
+    try:
+        report = PROBLEM_REPORT.read_text(encoding="utf-8")
+    except OSError:
+        fs.check(target, "problem report was written", "", "a report")
+        return
+    # Text the checks typed or read (not the clipboard checks' own sentinel,
+    # whose words are not typed, and "clipboard" is in RightType's messages).
+    words = {w for _, name, _, got, expect in results if "clipboard" not in name
+             for w in (got + " " + expect).split() if len(w) >= 3}
+    # Whole words: "correct" is part of the report's own word "correction".
+    import re
+    leaked = sorted(w for w in words
+                    if re.search(rf"(?<![\w\u0E00-\u0E7F]){re.escape(w)}(?![\w\u0E00-\u0E7F])", report))
+    fs.check(target, "problem report has no typed text", " ".join(leaked), "")
+    fs.check(target, "problem report records word ends",
+             "yes" if "word end" in report else "no", "yes")
+
+
 def main():
     want = set(sys.argv[1:]) or {"page", "omnibox", "edge", "notepad", "notepad11", "hang"}
     # Thai must be loaded for this session (CI installs it just before).
@@ -595,6 +803,7 @@ def main():
     if not {f"{HKL_EN:08X}", f"{HKL_TH:08X}"} <= set(layouts):
         raise SystemExit("US English and Thai Kedmanee must both be installed")
 
+    thai_capslock_probe()
     fs.write_config(mode="auto", learn=False)
     # Edge runs several rounds: RightType froze there in some runs and not
     # others (after a word boundary handled inside a focus callback), and one
@@ -609,24 +818,26 @@ def main():
             start = fs.LOG.stat().st_size if fs.LOG.exists() else 0
             # The address bar is seeded before RightType runs, so the URL is
             # typed exactly as written.
-            if key == "omnibox":
-                subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
-                t = make()
-                proc = fs.start_rt()
-                t.focus()
-            elif key == "notepad11":
-                subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
-                try:
+            try:
+                if key in ("omnibox", "notepad11"):
+                    subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
                     t = make()
-                except SkipTarget as why:
-                    print(f"notepad11 skipped: {why}", flush=True)
-                    continue
-                notepad11_probe(t)
-                proc = fs.start_rt()
-                t.focus()
-            else:
-                proc = fs.start_rt()
-                t = make()
+                    if key == "notepad11":
+                        notepad11_probe(t)
+                    proc = fs.start_rt()
+                    t.focus()
+                else:
+                    proc = fs.start_rt()
+                    t = make()
+            except SkipTarget as why:
+                print(f"{key} skipped: {why}", flush=True)
+                continue
+            except SystemExit as why:
+                # The app would not start: a failure of this target, not of
+                # the whole sweep.
+                print(f"{key} could not start: {why}", flush=True)
+                fs.check(key, "target started", str(why), "started")
+                continue
             CURRENT[0] = proc
             # A target where RightType died leaves CapsLock on (its
             # Shift+CapsLock then reached Windows); do not let that fail
@@ -634,10 +845,16 @@ def main():
             if user32.GetKeyState(fs.CAPS) & 1:
                 print("CapsLock was left on; turning it off", flush=True)
                 tap(fs.CAPS)
+            results_before = len(fs.RESULTS)
             try:
-                {"edge": edge_sweep, "hang": hang_sweep}.get(key, sweep)(t)
+                {"edge": edge_sweep, "hang": hang_sweep, "notepad11": notepad11_sweep}.get(key, sweep)(t)
             finally:
-                print(f"RightType after {key}: {rt_health(proc)}", flush=True)
+                # A target may restart RightType (CURRENT holds the one running).
+                print(f"RightType after {key}: {rt_health(CURRENT[0])}", flush=True)
+                report_has_no_typed_text(key, fs.RESULTS[results_before:])
+                if key != "notepad11":  # garbled on purpose there
+                    alarms = fs.log_since(start).count("verify: app shows something else")
+                    fs.check(key, "check-after-write raises no false alarm", str(alarms), "0")
                 t.close()
                 sections.setdefault(key, []).append((start, fs.LOG.stat().st_size))
     finally:
@@ -653,15 +870,10 @@ def main():
         elif not ok:
             failed.append(f"{label} — got {got.strip()!r}, expected {expect.strip()!r}")
     passed = sum(r[2] for r in fs.RESULTS)
-    print(f"\nSUMMARY {passed}/{len(fs.RESULTS)} passed; trace: {fs.LOG}")
-    for label in known:
-        print(f"  KNOWN FAILING {label}")
-    for label in fixed:
-        print(f"  XPASS {label} — remove it from KNOWN_FAILING")
-    for line in failed:
-        print(f"  FAIL {line}")
     # Each failing target's own part of the trace (the log is shared, so its
-    # end belongs to whichever target ran last).
+    # end belongs to whichever target ran last). Printed before the summary:
+    # log viewers and the API return only the end of a long log, and the
+    # summary is what has to be in it.
     data = fs.LOG.read_bytes() if failed else b""
     for key, spans in sections.items():
         if any(line.startswith(f"{key}:") for line in failed):
@@ -669,6 +881,24 @@ def main():
                 part = data[start:end].decode("utf-8", errors="replace")
                 print(f"\n--- RightType trace: {key} (round {n}) ---")
                 print(part[-60000:])
+    print(f"\nSUMMARY {passed}/{len(fs.RESULTS)} passed; trace: {fs.LOG}")
+    for label in known:
+        print(f"  KNOWN FAILING {label}")
+    for label in fixed:
+        print(f"  XPASS {label} — remove it from KNOWN_FAILING")
+    for line in failed:
+        print(f"  FAIL {line}")
+    report = lib.HERE / "RightType-test-report.txt"
+    lines = [f"SUMMARY {passed}/{len(fs.RESULTS)} passed"]
+    lines += [f"FAIL {line}" for line in failed] + [f"KNOWN FAILING {x}" for x in known]
+    lines += [f"{'PASS' if ok else 'FAIL'} {target}: {name}: got {got.strip()!r}"
+              for target, name, ok, got, _ in fs.RESULTS]
+    report.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        (lib.HERE / "RightType-test-trace.txt").write_bytes(fs.LOG.read_bytes())
+    except OSError:
+        pass
+    print(f"report: {report}", flush=True)
     sys.exit(1 if failed else 0)
 
 

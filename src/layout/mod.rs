@@ -135,6 +135,95 @@ pub fn th_to_en(input: &str) -> String {
 /// meant to be English (`th_to_en`); otherwise it's ASCII meant to be Thai
 /// (`en_to_th`). Characters the chosen direction doesn't remap pass through, so a
 /// mixed selection only flips the part that belongs to that layout.
+/// Thai digits to 0–9 when the text has any, otherwise 0–9 to Thai digits
+/// (๐–๙): for documents that want one or the other.
+pub fn swap_digits(input: &str) -> String {
+    let thai = |c: char| ('\u{0E50}'..='\u{0E59}').contains(&c);
+    let to_arabic = input.chars().any(thai);
+    input
+        .chars()
+        .map(|c| {
+            if to_arabic && thai(c) {
+                char::from(b'0' + (c as u32 - 0x0E50) as u8)
+            } else if !to_arabic && c.is_ascii_digit() {
+                char::from_u32(0x0E50 + (c as u32 - '0' as u32)).unwrap_or(c)
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
+/// UPPER CASE.
+pub fn upper_case(input: &str) -> String {
+    input.to_uppercase()
+}
+
+/// lower case.
+pub fn lower_case(input: &str) -> String {
+    input.to_lowercase()
+}
+
+/// Title Case: the first letter of each word up, the rest down.
+pub fn title_case(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut start = true;
+    for c in input.chars() {
+        if c.is_alphabetic() {
+            if start {
+                out.extend(c.to_uppercase());
+            } else {
+                out.extend(c.to_lowercase());
+            }
+            start = false;
+        } else {
+            out.push(c);
+            start = c.is_whitespace() || c == '-' || c == '_';
+        }
+    }
+    out
+}
+
+/// sWAP cASE: what CapsLock left on did, undone (`hELLO wORLD` → `Hello World`).
+pub fn swap_case(input: &str) -> String {
+    input
+        .chars()
+        .flat_map(|c| -> Vec<char> {
+            if c.is_uppercase() {
+                c.to_lowercase().collect()
+            } else if c.is_lowercase() {
+                c.to_uppercase().collect()
+            } else {
+                vec![c]
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod case_tests {
+    #[test]
+    fn cases() {
+        assert_eq!(super::upper_case("let x = 1"), "LET X = 1");
+        assert_eq!(super::lower_case("MAX_VALUE"), "max_value");
+        assert_eq!(
+            super::title_case("hELLO wORLD-wide สวัสดี"),
+            "Hello World-Wide สวัสดี"
+        );
+        assert_eq!(super::swap_case("hELLO wORLD"), "Hello World");
+    }
+}
+
+#[cfg(test)]
+mod digit_tests {
+    #[test]
+    fn digits_swap_both_ways() {
+        assert_eq!(super::swap_digits("ปี 2569 ข้อ 3"), "ปี ๒๕๖๙ ข้อ ๓");
+        assert_eq!(super::swap_digits("ปี ๒๕๖๙ ข้อ 3"), "ปี 2569 ข้อ 3");
+        assert_eq!(super::swap_digits("ไม่มีเลข"), "ไม่มีเลข");
+    }
+}
+
 pub fn auto_convert(input: &str) -> String {
     let has_thai = input
         .chars()

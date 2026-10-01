@@ -4,6 +4,103 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+
+- **A preview while you type (Auto)**: before Auto is sure enough to fix a
+  word, the cursor tag shows where the keys are heading — `l;yl` shows
+  `→ สวัส` — so you can see a fix is coming without anything changing yet.
+- **Command palette** (`Ctrl`+`Alt`+`Space`) gains:
+  - **Fix this field**: every wrong-layout word in the field, fixed in one
+    go (read from the app, never through the clipboard; Ctrl+Z undoes it).
+  - **Never convert “word”**: for words you took back lately while learning
+    is off — one click and RightType leaves that word alone from then on.
+  - **Thai digits ↔ 0–9**, **UPPER CASE**, **lower case**, **Title Case**
+    and **sWAP cASE** (CapsLock undone) for the selection.
+  - **Works without a mouse**: ↑↓ (or Tab) and Enter, 1–9 to run a line,
+    type to search (on either keyboard: `fxw` finds ซ่อม), Esc to close.
+  - **CapsLock switches Thai/English** (off by default): tap CapsLock to
+    switch, hold it half a second for CAPS.
+  - **Tray icon shows TH / EN** (off by default).
+- **Thai typed in a wrong order that looks right is put right** (Auto):
+  `เเ` (two เ) for `แ`, `ํา` for `ำ`, a tone mark typed before the vowel
+  above it, the same mark twice — when the result is a Thai word.
+- **Tags and hints stay off shared screens**: Teams, Zoom, recordings and
+  screenshots do not show them (a Suggest hint or preview is what you
+  typed); you still see them.
+- **Portable mode**: an empty file named `portable` next to
+  `righttype.exe` keeps settings and learned words in a `data` folder beside
+  it instead of `%APPDATA%`.
+- **The first three fixes of a session show `↶ Shift+Backspace`** at the
+  cursor, and the Welcome window has a box to try a fix in.
+
+- **Tray → "Save a problem report…"** writes what RightType did lately (the
+  last 400 steps: a word ended and was or wasn't fixed, how the correction
+  was typed, Shift+Backspace, which program the caret moved to) to a file
+  you choose, to attach to a bug report. There is no typed text in it:
+  a word appears only as how many Thai and English letters it had. It is
+  kept in memory only and written only when you save it.
+
+- **Check-after-write**: after RightType types a correction, it reads back
+  the word before the cursor (when the app shares its text) and compares.
+  If an app shows something other than what was sent — the way Windows 11
+  Notepad turned สวัสดี into `ีีีีีี` — it tells you, notes it in the problem
+  report, and from then on waits longer before typing in that app.
+
+- **Stays out of full-screen games, Remote Desktop and virtual machines.**
+  Movement keys spell Thai (`wasd` is ไฟหก), so a game could get
+  Backspaces; and in a remote session or VM the keys belong to the other
+  computer. Games in exclusive full screen, slide shows, and any full-screen
+  window without a text cursor are left alone (a full-screen browser or
+  editor still works); Remote Desktop, the Windows App, Hyper-V, VirtualBox,
+  VMware, AnyDesk, TeamViewer, RustDesk, Parsec and VNC viewers are on the
+  built-in list.
+
+
+### Fixed
+
+- **Notepad, WordPad and other standard text boxes: English typed on the
+  Thai layout could take two more characters with it when fixed**
+  (`;yoouh there` came out as `วันนีthere`). These boxes drop Thai vowels
+  and tone marks that cannot follow the letter before (`there` on the Thai
+  layout is `ะ้ำพำ`; the box keeps `ะพำ`), so there were fewer characters to
+  delete than were typed. RightType now looks at what the box really holds
+  before replacing.
+- **A slow text box could get a correction in the wrong place**: Windows 11
+  Notepad sometimes answers before it has handled the latest keys. If what
+  is before the caret is not what RightType expects yet, the correction is
+  typed as keys instead, which arrive after them.
+
+### Changed
+
+- **Smoother tags and messages**: the pill now rises a few pixels into
+  place while fading in (140 ms, ease-out) and fades out with an ease-in
+  (220 ms), each frame computed from the time elapsed at about 60 frames a
+  second — it used to appear at once and fade in coarse 30 ms steps. A tag
+  that is already showing moves and stays instead of fading in again. The
+  TH, EN and CAPS tags each have a colour of their own (teal, blue, amber).
+- **A `CAPS` tag at the text cursor** when CapsLock is switched on (with
+  the TH/EN tags on), before a sentence comes out in capitals.
+- **CapsLock left on by accident is put right, with a way back**: in Auto,
+  `hELLO` — Shift on the first letter, so capitals were not meant — becomes
+  `Hello`, and a Thai word typed on the Thai layout with CapsLock on (every
+  key comes out shifted: สวัสดี as `ศซํศโ๊`) becomes the word meant;
+  CapsLock is turned off and a note says so. Meant the capitals? One
+  Shift+Backspace (or Ctrl+Shift+CapsLock) puts them back and CapsLock on
+  again. In Manual and Suggest it is only offered (`⇪ Hello · Tab`). Words
+  in capitals (`VARIABLE`, `NASA`) are never touched.
+- **Thai typed with CapsLock left on is still fixed**: the English layout
+  shows `L;YLFU`, but the keys are the ones for สวัสดี, and RightType now
+  reads them that way. English typed with CapsLock on stays as it is
+  (`HELLO`), and anything RightType puts back as typed — Shift+Backspace,
+  undo, a word that goes back at the space — comes back in capitals as it
+  was shown. Pressing CapsLock mid-word leaves that word alone.
+- **English words with a prefix or suffix stay English**: a known word with
+  `re`, `un`, `pre`, `dis`, `multi` … in front or `ing`, `ed`, `ness`,
+  `able`, `s` … behind (`rerise`, `resit`, `multiholes`) is no longer
+  turned into Thai, even when it is not in the word list. Unknown English
+  words wrongly converted in the live study: 170 → 112 of 20,000; Thai is
+  unchanged (a Thai dictionary word always wins).
+
 ## [2.0.1] — 2026-09-30
 
 ### Changed

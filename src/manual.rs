@@ -46,6 +46,15 @@ pub enum Command {
         focus_generation: u64,
         requested_at: Instant,
     },
+    /// Fix every wrong-layout word in the focused field (from the palette).
+    FixField { hwnd: isize, requested_at: Instant },
+    /// Rewrite the selection with `transform` (from the palette: Thai
+    /// digits, letter case).
+    Transform {
+        hwnd: isize,
+        requested_at: Instant,
+        transform: fn(&str) -> String,
+    },
     UndoSelection {
         hwnd: isize,
         focus_generation: u64,
@@ -98,6 +107,76 @@ pub fn request_convert_selection(hwnd: isize, focus_generation: u64) {
     }
 }
 
+/// Ask the worker to fix the whole focused field of `hwnd` (the palette's
+/// "Fix this field"). Non-blocking.
+pub fn request_fix_field(hwnd: isize) {
+    if let Some(tx) = SENDER.get() {
+        let _ = tx.try_send(Command::FixField {
+            hwnd,
+            requested_at: Instant::now(),
+        });
+    }
+}
+
+/// Ask the worker to rewrite the selection of `hwnd` with `transform`.
+pub fn request_transform(hwnd: isize, transform: fn(&str) -> String) {
+    if let Some(tx) = SENDER.get() {
+        let _ = tx.try_send(Command::Transform {
+            hwnd,
+            requested_at: Instant::now(),
+            transform,
+        });
+    }
+}
+
+/// Longest field "Fix this field" retypes (characters).
+const MAX_FIELD_CHARS: usize = 4000;
+
+/// Select the whole field, read it from the app (UI Automation or the text
+/// box itself — never the clipboard), fix only the words in the wrong layout
+/// (as the Fix text window does), and type the result over the selection.
+/// Ctrl+Z in the app undoes it, like a selection conversion.
+unsafe fn fix_field(hwnd: isize) {
+    // The palette has just closed: let focus land back in the field.
+    thread::sleep(Duration::from_millis(200));
+    if GetForegroundWindow().0 as isize != hwnd || !release_modifiers() {
+        return;
+    }
+    let generation = focus::generation();
+    if !send_chord(0x41) {
+        return;
+    }
+    thread::sleep(Duration::from_millis(120));
+    if !same_context(hwnd, generation) {
+        return;
+    }
+    let Some(text) = focus::selected_text() else {
+        overlay::show(tr(T::ErrSelectionNotShared));
+        return;
+    };
+    if text.chars().count() > MAX_FIELD_CHARS {
+        overlay::show(tr(T::ErrFieldTooLong));
+        return;
+    }
+    let mut repaired =
+        righttype::repair::repair(&text, righttype::dict::english(), righttype::dict::thai());
+    if repaired.changes.is_empty() {
+        overlay::show(tr(T::ToastNothingToFix));
+    } else if same_context(hwnd, generation) {
+        let n = repaired.changes.len();
+        type_over_selection(hwnd, generation, &repaired.text);
+        overlay::show(&righttype::i18n::trf(
+            T::ToastFixedWords,
+            &[("n", &n.to_string())],
+        ));
+    }
+    repaired.text.zeroize();
+    for c in &mut repaired.changes {
+        c.original.zeroize();
+        c.fixed.zeroize();
+    }
+}
+
 /// Queue app-native Ctrl+Z for the most recent selection paste, if it still
 /// belongs to the same focused control. Returns whether a command was queued.
 pub fn request_undo_selection(hwnd: isize, focus_generation: u64) -> bool {
@@ -138,7 +217,7 @@ fn run(rx: Receiver<Command>) {
                 focus_generation,
                 requested_at,
             } if requested_at.elapsed() <= MAX_COMMAND_AGE => unsafe {
-                convert_selection(hwnd, focus_generation)
+                convert_selection(hwnd, focus_generation, auto_convert)
             },
             Command::UndoSelection {
                 hwnd,
@@ -147,23 +226,37 @@ fn run(rx: Receiver<Command>) {
             } if requested_at.elapsed() <= MAX_COMMAND_AGE => unsafe {
                 undo_selection(hwnd, focus_generation)
             },
+            Command::FixField { hwnd, requested_at }
+                if requested_at.elapsed() <= Duration::from_secs(3) =>
+            unsafe { fix_field(hwnd) },
+            Command::Transform {
+                hwnd,
+                requested_at,
+                transform,
+            } if requested_at.elapsed() <= Duration::from_secs(3) => unsafe {
+                // The palette has just closed: let focus land back first.
+                thread::sleep(Duration::from_millis(200));
+                if GetForegroundWindow().0 as isize == hwnd {
+                    convert_selection(hwnd, focus::generation(), transform)
+                }
+            },
             _ => {}
         }
     }
 }
 
-unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
+unsafe fn convert_selection(hwnd: isize, focus_generation: u64, convert: fn(&str) -> String) {
     if !same_context(hwnd, focus_generation) {
         return;
     }
 
     if let Some(selection) = focus::selected_text() {
-        crate::hook::e2e_trace("selection: read through UI Automation".to_string());
-        let mut converted = auto_convert(&selection);
+        crate::hook::trace_note("selection: read through UI Automation");
+        let mut converted = convert(&selection);
         if converted == *selection {
-            crate::hook::e2e_trace("selection: conversion was a no-op".to_string());
+            crate::hook::trace_note("selection: conversion was a no-op");
         } else if !release_modifiers() {
-            crate::hook::e2e_trace("selection: could not release held modifiers".to_string());
+            crate::hook::trace_note("selection: could not release held modifiers");
             overlay::show(tr(T::ErrModifiers));
         } else if same_context(hwnd, focus_generation) {
             type_over_selection(hwnd, focus_generation, &converted);
@@ -172,7 +265,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
         return;
     }
     if !clipboard_fallback() {
-        crate::hook::e2e_trace("selection: not shared by the app; clipboard not used".to_string());
+        crate::hook::trace_note("selection: not shared by the app; clipboard not used");
         overlay::show(tr(T::ErrSelectionNotShared));
         return;
     }
@@ -180,14 +273,12 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     let original = match clipboard::snapshot_plain_text() {
         Ok(snapshot) => snapshot,
         Err(clipboard::SnapshotError::Busy) => {
-            crate::hook::e2e_trace("selection: clipboard is busy".to_string());
+            crate::hook::trace_note("selection: clipboard is busy");
             overlay::show(tr(T::ErrClipboardBusy));
             return;
         }
         Err(clipboard::SnapshotError::NotPlainText) => {
-            crate::hook::e2e_trace(
-                "selection: selection conversion needs a plain-text clipboard".to_string(),
-            );
+            crate::hook::trace_note("selection: selection conversion needs a plain-text clipboard");
             overlay::show(tr(T::ErrClipboardNotPlain));
             return;
         }
@@ -196,7 +287,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     // The hotkey chord (Shift+CapsLock) may still be physically held; release any
     // modifiers so the injected Ctrl+C/V isn't polluted by them.
     if !release_modifiers() {
-        crate::hook::e2e_trace("selection: could not release held modifiers".to_string());
+        crate::hook::trace_note("selection: could not release held modifiers");
         overlay::show(tr(T::ErrModifiers));
         return;
     }
@@ -207,7 +298,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     let before = clipboard::sequence();
     if !send_chord(VK_C.0) {
         let _ = clipboard::restore_snapshot(&original);
-        crate::hook::e2e_trace("selection: could not copy the selection".to_string());
+        crate::hook::trace_note("selection: could not copy the selection");
         overlay::show(tr(T::ErrCopy));
         return;
     }
@@ -219,7 +310,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
 
     if clipboard::sequence() == before {
         let _ = clipboard::restore_snapshot(&original);
-        crate::hook::e2e_trace("selection: no text selection was copied".to_string());
+        crate::hook::trace_note("selection: no text selection was copied");
         overlay::show(tr(T::ErrNothingCopied));
         return;
     }
@@ -238,19 +329,19 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     }
     let Some(mut selection) = copied_text else {
         let _ = clipboard::restore_snapshot(&original);
-        crate::hook::e2e_trace("selection: selection is not Unicode text".to_string());
+        crate::hook::trace_note("selection: selection is not Unicode text");
         overlay::show(tr(T::ErrNotUnicode));
         return;
     };
     if selection.is_empty() {
-        crate::hook::e2e_trace("selection: copied selection was empty".to_string());
+        crate::hook::trace_note("selection: copied selection was empty");
         let _ = clipboard::restore_snapshot(&original);
         return;
     }
 
-    let mut converted = auto_convert(&selection);
+    let mut converted = convert(&selection);
     if converted == selection {
-        crate::hook::e2e_trace("selection: conversion was a no-op".to_string());
+        crate::hook::trace_note("selection: conversion was a no-op");
         // Nothing to flip (e.g. selection already in the right script).
         let _ = clipboard::restore_snapshot(&original);
         selection.zeroize();
@@ -267,7 +358,7 @@ unsafe fn convert_selection(hwnd: isize, focus_generation: u64) {
     // replaces the active selection directly, so there is no asynchronous paste
     // racing a fixed-delay clipboard restore (notably in Word and browsers).
     if !clipboard::restore_snapshot(&original) {
-        crate::hook::e2e_trace("selection: could not restore the clipboard".to_string());
+        crate::hook::trace_note("selection: could not restore the clipboard");
         overlay::show(tr(T::ErrRestoreClipboard));
         selection.zeroize();
         converted.zeroize();

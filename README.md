@@ -32,7 +32,9 @@ RightType lives in the **system tray** (no window, no console). Click the tray i
 it switches itself back on), **Manual/Auto/Suggest** mode, **In this app** (a mode
 of its own, or off, for the app you were just typing in), **Learn new words**,
 **Start with Windows**, **Fix text** (paste a paragraph typed in the wrong layout and
-copy it back fixed), **Settings**, **Statistics**, **Hotkeys & help**, and **Quit**.
+copy it back fixed), **Settings**, **Statistics**, **Hotkeys & help**, **Save a problem report**
+(what RightType did lately, to attach to a bug report — words appear only as
+letter counts, never as text), and **Quit**.
 The tooltip shows the current mode, and the icon turns grey while RightType is off.
 
 **Settings** has five pages — General (mode, on/off, start with Windows, learning),
@@ -123,7 +125,9 @@ A keyboard tool sees everything you type. RightType is designed so secrets never
 
 - **Sensitive-context guards** — it disables itself entirely in **password fields**
   (native `ES_PASSWORD`, and browser/Electron/UWP fields via UI Automation) and in a
-  default blacklist of **wallets, password managers, and terminals**.
+  default blacklist of **wallets, password managers, terminals, remote
+  desktops and virtual machines** (the keys belong to another computer), and
+  it stays out of **full-screen games** (`wasd` spells Thai ไฟหก).
 - **Secret-shaped bail-out** — even elsewhere, identifiable private keys and addresses
   are always ignored. Consecutive BIP39 words trigger a phrase-level stream guard.
   Password-like/long ASCII can be wrong-layout Thai;
@@ -173,7 +177,9 @@ It installs RightType, offers a desktop shortcut and start-at-login, and registe
 a normal Windows uninstaller (Settings -> Apps -> RightType).
 
 **Portable zip:** extract `RightType-2.0.1-x64.zip` and run `righttype.exe` where it
-sits — or install it per-user from the extracted folder:
+sits. Put an empty file named `portable` next to it and settings and learned
+words stay in a `data` folder beside it (for a USB stick) instead of
+`%APPDATA%\RightType`. Or install it per-user from the extracted folder:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File install.ps1 -Autostart

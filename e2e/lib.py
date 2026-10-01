@@ -34,7 +34,10 @@ from pywinauto import Desktop
 from pywinauto.application import Application
 
 REPO = Path(__file__).resolve().parents[1]
-EXE = REPO / "target" / "debug" / "righttype.exe"
+# RIGHTTYPE_EXE: a diagnostic build somewhere else (the one-click self-test
+# zip puts it next to these scripts).
+EXE = Path(os.environ["RIGHTTYPE_EXE"]) if os.environ.get("RIGHTTYPE_EXE") else (
+    REPO / "target" / "debug" / "righttype.exe")
 RELEASE_EXE = REPO / "target" / "release" / "righttype.exe"
 SHOTS = Path(__file__).resolve().parent / "shots"
 
@@ -82,15 +85,20 @@ def start_notepad(doc=None):
                 pass
         return out
 
-    before = set(notepad_windows())
-    cmd = ["notepad.exe"] + ([str(doc)] if doc else [])
-    subprocess.Popen(cmd)
-    deadline = time.time() + 15
-    while time.time() < deadline:
-        fresh = [h for h in notepad_windows() if h not in before]
-        if len(fresh) == 1:
-            return Application(backend="uia").connect(handle=fresh[0], timeout=5)
-        time.sleep(0.5)
+    # Twice: on a fresh runner the first launch sometimes shows no window in
+    # time (CI), and that used to end the whole sweep.
+    for _ in range(2):
+        before = set(notepad_windows())
+        cmd = ["notepad.exe"] + ([str(doc)] if doc else [])
+        subprocess.Popen(cmd)
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            fresh = [h for h in notepad_windows() if h not in before]
+            if len(fresh) == 1:
+                return Application(backend="uia").connect(handle=fresh[0], timeout=5)
+            time.sleep(0.5)
+        subprocess.run(["taskkill", "/IM", "notepad.exe", "/F"], capture_output=True)
+        time.sleep(1)
     raise SystemExit("new Notepad window not found after launch")
 
 

@@ -65,6 +65,8 @@ pub struct Engine<'d> {
     /// The focused text box.
     pub screen: String,
     pub counters: Counters,
+    /// CapsLock is on: letters on the English layout show in the other case.
+    pub caps: bool,
 }
 
 impl<'d> Engine<'d> {
@@ -80,6 +82,7 @@ impl<'d> Engine<'d> {
             seed: SeedTracker::new(),
             screen: String::new(),
             counters: Counters::default(),
+            caps: false,
         }
     }
 
@@ -105,14 +108,33 @@ impl<'d> Engine<'d> {
     /// (upper case and symbols mean Shift is held).
     pub fn key(&mut self, key: char) {
         let produced = match self.layout {
+            // CapsLock swaps the case of letters on the English layout.
+            InputLayout::UsQwerty if self.caps && key.is_ascii_alphabetic() => {
+                if key.is_ascii_uppercase() {
+                    key.to_ascii_lowercase()
+                } else {
+                    key.to_ascii_uppercase()
+                }
+            }
             InputLayout::UsQwerty => key,
+            // On the Thai layout CapsLock acts as Shift on every key (CI:
+            // l;ylfu with CapsLock on types ศซํศโ๊).
+            InputLayout::ThaiKedmanee if self.caps => en_to_th(&toggle_shift(key).to_string())
+                .chars()
+                .next()
+                .unwrap_or(key),
             InputLayout::ThaiKedmanee => en_to_th(&key.to_string()).chars().next().unwrap_or(key),
         };
         if !self.enabled {
             self.screen.push(produced);
             return;
         }
-        self.buf.observe(Key::Char(produced));
+        // The hook keeps the key as if CapsLock were off: what was meant.
+        let meant = match self.layout {
+            InputLayout::UsQwerty => key,
+            InputLayout::ThaiKedmanee => en_to_th(&key.to_string()).chars().next().unwrap_or(key),
+        };
+        self.buf.observe(Key::Char(meant));
         if self.mark == Mark::Plain && self.layout == InputLayout::UsQwerty && self.reconcile_run()
         {
             return;
@@ -121,6 +143,18 @@ impl<'d> Engine<'d> {
             self.mark = Mark::Plain;
         }
         self.screen.push(produced);
+    }
+
+    /// CapsLock pressed on its own: the hook drops the word in progress (it
+    /// keeps words as if CapsLock were off, so one typed across a toggle is
+    /// left alone).
+    pub fn toggle_caps(&mut self) {
+        if self.enabled {
+            self.buf.clear();
+            self.owned = None;
+            self.mark = Mark::Plain;
+        }
+        self.caps = !self.caps;
     }
 
     /// Backspace.
@@ -163,7 +197,7 @@ impl<'d> Engine<'d> {
                 .as_ref()
                 .map(|o| o.rendered.clone())
                 .unwrap_or_default();
-            if !policy::goes_back_to_keys(&word, &rendered) {
+            if !policy::run_goes_back(&word, &rendered, self.en, self.th) {
                 self.owned = None;
                 self.counters.live_anchors += 1;
                 self.request_layout(InputLayout::ThaiKedmanee);
@@ -177,13 +211,40 @@ impl<'d> Engine<'d> {
 
         let converted = mark == Mark::Converted;
         let mut detection = if converted {
-            policy::revise_converted(&word, self.en)
+            policy::revise_converted(&word, self.en, self.th)
         } else {
             policy::detect_token(&word, self.layout, self.en, self.th)
         };
         let corrected = detection.as_ref().map(|d| d.corrected.as_str());
         if self.seed.observe_candidate(&word, corrected) {
             detection = None;
+        }
+        if let Some(d) = detection.as_mut() {
+            d.corrected = policy::shown_with_caps(&d.corrected, self.caps);
+        }
+        // Thai typed in a wrong order (เเ for แ): the word put right.
+        if detection.is_none() && self.layout == InputLayout::ThaiKedmanee {
+            if let Some(fixed) = policy::thai_spelling(&word, self.th) {
+                for _ in 0..word.chars().count() {
+                    self.screen.pop();
+                }
+                self.screen.push_str(&fixed);
+                self.screen.push(boundary);
+                return;
+            }
+        }
+        // CapsLock left on by accident: the word as meant, and CapsLock off.
+        if detection.is_none() && self.caps {
+            if let Some(meant) = policy::caps_accident(&word, self.layout, self.th) {
+                let n = word.chars().count();
+                for _ in 0..n {
+                    self.screen.pop();
+                }
+                self.screen.push_str(&meant);
+                self.screen.push(boundary);
+                self.caps = false;
+                return;
+            }
         }
         match detection {
             Some(d) => {
@@ -229,7 +290,7 @@ impl<'d> Engine<'d> {
             reading = Reading::AsTyped;
         }
         let target = match &reading {
-            Reading::AsTyped => run.clone(),
+            Reading::AsTyped => policy::shown_with_caps(&run, self.caps),
             Reading::Thai(thai) => thai.clone(),
         };
         // The hook's model of the screen: what it rendered, or — before it
@@ -289,7 +350,8 @@ impl<'d> Engine<'d> {
         let Some(owned) = self.owned.take() else {
             return;
         };
-        let delta = render::delta(&owned.rendered, run);
+        let shown = policy::shown_with_caps(run, self.caps);
+        let delta = render::delta(&owned.rendered, &shown);
         for _ in 0..delta.backspaces {
             self.screen.pop();
         }
@@ -303,6 +365,44 @@ impl<'d> Engine<'d> {
             self.counters.layout_switches += 1;
         }
     }
+}
+
+/// The same key with Shift toggled, named as on US QWERTY.
+fn toggle_shift(key: char) -> char {
+    const PAIRS: &[(char, char)] = &[
+        ('`', '~'),
+        ('1', '!'),
+        ('2', '@'),
+        ('3', '#'),
+        ('4', '$'),
+        ('5', '%'),
+        ('6', '^'),
+        ('7', '&'),
+        ('8', '*'),
+        ('9', '('),
+        ('0', ')'),
+        ('-', '_'),
+        ('=', '+'),
+        ('[', '{'),
+        (']', '}'),
+        ('\\', '|'),
+        (';', ':'),
+        ('\'', '"'),
+        (',', '<'),
+        ('.', '>'),
+        ('/', '?'),
+    ];
+    if key.is_ascii_alphabetic() {
+        return if key.is_ascii_uppercase() {
+            key.to_ascii_lowercase()
+        } else {
+            key.to_ascii_uppercase()
+        };
+    }
+    PAIRS
+        .iter()
+        .find_map(|&(a, b)| (key == a).then_some(b).or((key == b).then_some(a)))
+        .unwrap_or(key)
 }
 
 fn is_thai(c: char) -> bool {
@@ -370,6 +470,99 @@ mod tests {
     fn everyday_computer_words_stay_english() {
         assert_eq!(type_blind("relogin ", InputLayout::UsQwerty), "relogin ");
         assert_eq!(type_blind("logout ", InputLayout::UsQwerty), "logout ");
+    }
+
+    /// Keys typed with CapsLock on (the keys named as on US QWERTY; upper
+    /// case still means Shift).
+    fn type_with_caps(keys: &str) -> String {
+        let mut e = Engine::new(dict::english(), dict::thai(), InputLayout::UsQwerty);
+        e.caps = true;
+        for c in keys.chars() {
+            if c == ' ' {
+                e.boundary(c);
+            } else {
+                e.key(c);
+            }
+        }
+        e.screen
+    }
+
+    #[test]
+    fn thai_typed_in_a_wrong_order_is_put_right() {
+        // Two เ for แ, nikhahit + า for ำ, a tone mark before the vowel above:
+        // they look right on screen, but search and word breaking miss them.
+        assert_eq!(type_blind("เเมว ", InputLayout::ThaiKedmanee), "แมว ");
+        assert_eq!(type_blind("นํ้า ", InputLayout::ThaiKedmanee), "น้ำ ");
+        assert_eq!(type_blind("ท่ี ", InputLayout::ThaiKedmanee), "ที่ ");
+        // Right already, or not a word once fixed: left alone.
+        assert_eq!(type_blind("แมว ", InputLayout::ThaiKedmanee), "แมว ");
+    }
+
+    #[test]
+    fn capslock_left_on_by_accident_is_undone() {
+        // Shift on the first letter means the typist wanted lower case after
+        // it: CapsLock was on by accident. The word is fixed and CapsLock
+        // turned off.
+        let mut e = Engine::new(dict::english(), dict::thai(), InputLayout::UsQwerty);
+        e.caps = true;
+        for c in "Hello".chars() {
+            e.key(c);
+        }
+        assert_eq!(e.screen, "hELLO");
+        e.boundary(' ');
+        assert_eq!(e.screen, "Hello ");
+        assert!(!e.caps);
+
+        // Thai has no capitals: CapsLock on the Thai layout is always an
+        // accident, and every key comes out shifted.
+        let mut e = Engine::new(dict::english(), dict::thai(), InputLayout::ThaiKedmanee);
+        e.caps = true;
+        for c in "l;ylfu".chars() {
+            e.key(c);
+        }
+        assert_eq!(e.screen, "ศซํศโ๊");
+        e.boundary(' ');
+        assert_eq!(e.screen, "สวัสดี ");
+        assert!(!e.caps);
+
+        // Capitals typed on purpose stay.
+        assert_eq!(type_with_caps("nasa "), "NASA ");
+    }
+
+    #[test]
+    fn thai_typed_with_capslock_on_arrives_as_thai() {
+        // CapsLock left on: the English layout shows `L;YLFU`, but the keys
+        // are the ones for สวัสดี.
+        assert_eq!(type_with_caps("l;ylfu "), "สวัสดี ");
+        assert_eq!(type_with_caps("l;ylfu8iy[ "), "สวัสดีครับ ");
+        assert_eq!(type_with_caps("giupo "), "เรียน ");
+    }
+
+    #[test]
+    fn english_typed_with_capslock_on_stays_as_shown() {
+        assert_eq!(type_with_caps("hello world "), "HELLO WORLD ");
+        assert_eq!(type_with_caps("select from "), "SELECT FROM ");
+        // Converted mid-word, then put back at the space: the keys come back
+        // as they were shown.
+        let en = crate::dict::Dictionary::from_words(["log"]);
+        let th = crate::dict::Dictionary::from_words(["พำ", "สน", "เร", "เรือ"]);
+        let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
+        e.caps = true;
+        for c in "relogin".chars() {
+            e.key(c);
+        }
+        assert_eq!(e.screen, "พำสนเรื");
+        e.boundary(' ');
+        assert_eq!(e.screen, "RELOGIN ");
+    }
+
+    #[test]
+    fn english_prefix_or_suffix_on_a_known_word_stays_english() {
+        // Not in the dictionary, but a known word with a common prefix or
+        // suffix: re + rise, multi + holes, re + sit.
+        for word in ["rerise ", "multiholes ", "resit "] {
+            assert_eq!(type_blind(word, InputLayout::UsQwerty), word);
+        }
     }
 
     #[test]

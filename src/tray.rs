@@ -19,8 +19,9 @@ thread_local! {
     /// Last tooltip pushed to the shell, so the timer refresh is a no-op
     /// unless something actually changed.
     static TIP: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
-    /// Whether the tray shows the "off" icon, for the same reason.
-    static SHOWING_OFF: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+    /// Which icon the tray shows (0 logo, 1 off, 2 TH, 3 EN), for the same
+    /// reason.
+    static SHOWING: std::cell::Cell<Option<u8>> = const { std::cell::Cell::new(None) };
     /// Language the menu was last labelled in.
     static MENU_LANG: std::cell::Cell<Option<righttype::i18n::Lang>> = const { std::cell::Cell::new(None) };
 }
@@ -29,11 +30,27 @@ thread_local! {
 /// blue while RightType is on, grey while it is off.
 static ICON_BYTES: &[u8] = include_bytes!("../assets/icon.ico");
 static ICON_OFF_BYTES: &[u8] = include_bytes!("../assets/icon_off.ico");
+static ICON_TH_BYTES: &[u8] = include_bytes!("../assets/icon_th.ico");
+static ICON_EN_BYTES: &[u8] = include_bytes!("../assets/icon_en.ico");
+
+/// The tray icon shows the keyboard in use (TH / EN) instead of the logo
+/// (opt-in, from the palette).
+static SHOWS_LANGUAGE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn shows_language() -> bool {
+    SHOWS_LANGUAGE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn set_shows_language(on: bool) {
+    SHOWS_LANGUAGE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
 
 struct Tray {
     window: nwg::MessageWindow,
     icon: nwg::Icon,
     icon_off: nwg::Icon,
+    icon_th: nwg::Icon,
+    icon_en: nwg::Icon,
     _tray: nwg::TrayNotification,
     menu: nwg::Menu,
     m_enabled: nwg::MenuItem,
@@ -55,6 +72,7 @@ struct Tray {
     m_settings: nwg::MenuItem,
     m_stats: nwg::MenuItem,
     m_help: nwg::MenuItem,
+    m_report: nwg::MenuItem,
     _sep: nwg::MenuSeparator,
     m_quit: nwg::MenuItem,
 }
@@ -142,6 +160,16 @@ pub fn run() {
     nwg::Icon::builder()
         .source_bin(Some(ICON_OFF_BYTES))
         .build(&mut icon_off)
+        .expect("icon");
+    let mut icon_th = nwg::Icon::default();
+    nwg::Icon::builder()
+        .source_bin(Some(ICON_TH_BYTES))
+        .build(&mut icon_th)
+        .expect("icon");
+    let mut icon_en = nwg::Icon::default();
+    nwg::Icon::builder()
+        .source_bin(Some(ICON_EN_BYTES))
+        .build(&mut icon_en)
         .expect("icon");
 
     let mut tray = nwg::TrayNotification::default();
@@ -242,6 +270,13 @@ pub fn run() {
         .build(&mut m_help)
         .expect("help item");
 
+    let mut m_report = nwg::MenuItem::default();
+    nwg::MenuItem::builder()
+        .text(tr(T::TrayReport))
+        .parent(&menu)
+        .build(&mut m_report)
+        .expect("report item");
+
     let mut sep = nwg::MenuSeparator::default();
     nwg::MenuSeparator::builder()
         .parent(&menu)
@@ -267,6 +302,8 @@ pub fn run() {
         window,
         icon,
         icon_off,
+        icon_th,
+        icon_en,
         _tray: tray,
         menu,
         m_enabled,
@@ -286,6 +323,7 @@ pub fn run() {
         m_settings,
         m_stats,
         m_help,
+        m_report,
         _sep: sep,
         m_quit,
     });
@@ -384,6 +422,8 @@ pub fn run() {
                     stats::open();
                 } else if handle == ui_h.m_help.handle {
                     crate::onboard::show(false);
+                } else if handle == ui_h.m_report.handle {
+                    crate::report::save();
                 }
                 sync_state(&ui_h);
             }
@@ -457,6 +497,7 @@ pub fn run() {
     }
     if let Some(hwnd) = hwnd {
         unsafe { session::arm(hwnd) };
+        focus::set_notify_window(hwnd.0 as isize);
     }
     // UIA focus hook for password-field detection (incl. browsers).
     unsafe { focus::arm() };
@@ -504,9 +545,24 @@ fn sync_state(ui: &Rc<Tray>) {
         ui._tray.set_tip(&tip);
     }
     let working = enabled && healthy;
-    if SHOWING_OFF.with(|c| c.replace(Some(!working))) != Some(!working) {
-        ui._tray
-            .set_icon(if working { &ui.icon } else { &ui.icon_off });
+    let which = if !working {
+        1
+    } else if shows_language() {
+        match hook::current_language() {
+            Some(righttype::policy::InputLayout::ThaiKedmanee) => 2,
+            Some(righttype::policy::InputLayout::UsQwerty) => 3,
+            None => 0,
+        }
+    } else {
+        0
+    };
+    if SHOWING.with(|c| c.replace(Some(which))) != Some(which) {
+        ui._tray.set_icon(match which {
+            1 => &ui.icon_off,
+            2 => &ui.icon_th,
+            3 => &ui.icon_en,
+            _ => &ui.icon,
+        });
     }
     let lang = righttype::i18n::lang();
     if MENU_LANG.with(|c| c.replace(Some(lang))) != Some(lang) {
@@ -521,6 +577,7 @@ fn sync_state(ui: &Rc<Tray>) {
             (&ui.m_settings, T::TraySettings),
             (&ui.m_stats, T::TrayStats),
             (&ui.m_help, T::TrayHelp),
+            (&ui.m_report, T::TrayReport),
             (&ui.m_quit, T::TrayQuit),
             (&ui.m_pause[0], T::TrayPause10),
             (&ui.m_pause[1], T::TrayPause30),

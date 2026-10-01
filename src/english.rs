@@ -200,6 +200,39 @@ pub fn is_derived(token: &str, en: &Dictionary) -> bool {
     })
 }
 
+/// Prefixes that make new English words from old ones (`re` + `login`).
+const PREFIXES: &[&str] = &[
+    "re", "un", "pre", "de", "dis", "mis", "non", "sub", "over", "under", "out", "co", "in",
+    "inter", "auto", "multi",
+];
+
+/// Endings for [`is_affixed`], longest first.
+const AFFIX_SUFFIXES: &[&str] = &[
+    "ization", "ations", "ation", "ments", "ment", "ness", "less", "able", "ings", "ing", "ized",
+    "ize", "ful", "ers", "er", "es", "ed", "ly", "s",
+];
+
+/// A dictionary word (at least 3 letters) with a common prefix, suffix or
+/// both: `rerise`, `multiholes`, `resit`, `unfollowers`. Such words are
+/// missing from any word list but plainly English; typed on the English
+/// layout they are not converted to Thai (see `policy::detect_token`).
+/// Lower case or capitalised letters only.
+pub fn is_affixed(token: &str, en: &Dictionary) -> bool {
+    let Some(word) = compound_shape(token) else {
+        return false;
+    };
+    let root = |r: &str| r.len() >= 3 && (en.contains(r) || en.contains(&format!("{r}e")));
+    let unsuffixed = |w: &str| {
+        AFFIX_SUFFIXES
+            .iter()
+            .any(|s| w.strip_suffix(s).is_some_and(root))
+    };
+    PREFIXES.iter().any(|p| {
+        word.strip_prefix(p)
+            .is_some_and(|rest| root(rest) || unsuffixed(rest))
+    }) || unsuffixed(&word)
+}
+
 /// English as it appears in technical and academic writing, beyond single
 /// dictionary words: numbers, acronyms, derived words and hyphenated terms
 /// whose every part is one of those (`fine-tuning`, `F1-score`, `TF-IDF`,

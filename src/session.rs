@@ -70,6 +70,7 @@ unsafe fn reinstall() {
             }
         }
         Err(_) => {
+            righttype::diag::note("session: keyboard hook could not be reinstalled", &[]);
             if HEALTHY.swap(false, Ordering::Relaxed) {
                 crate::overlay::show(tr(T::ToastHookLost));
             }
@@ -171,7 +172,7 @@ unsafe fn check_liveness() {
         hook::last_hook_tick(),
         LAST_LIVENESS_REINSTALL.load(Ordering::Relaxed),
     ) {
-        crate::hook::e2e_trace("session: hook silent during input, reinstall".to_string());
+        crate::hook::trace_note("session: hook silent during input, reinstall");
         LAST_LIVENESS_REINSTALL.store(now, Ordering::Relaxed);
         reinstall();
     }
@@ -209,19 +210,24 @@ pub unsafe fn on_message(msg: u32, wparam: usize) {
             crate::habits::tick();
             crate::stats::tick();
             crate::learn::tick();
+            crate::palette::close_if_left();
+            #[cfg(debug_assertions)]
+            crate::report::e2e_write();
             if NEEDS_REINSTALL.swap(false, Ordering::Relaxed) {
                 reinstall();
             } else {
                 check_liveness();
             }
         }
+        crate::focus::WM_FOCUS_MOVED => crate::habits::on_focus(),
         WM_POWERBROADCAST if wparam == PBT_APMRESUMEAUTOMATIC || wparam == PBT_APMRESUMESUSPEND => {
             crate::hook::e2e_trace(format!("session: power resume ({wparam:#x}) reinstall"));
+            righttype::diag::note("session: power resume, reinstall", &[]);
             reinstall();
             NEEDS_REINSTALL.store(true, Ordering::Relaxed);
         }
         WM_WTSSESSION_CHANGE if wparam == WTS_SESSION_UNLOCK => {
-            crate::hook::e2e_trace("session: unlock reinstall".to_string());
+            crate::hook::trace_note("session: unlock reinstall");
             reinstall();
             NEEDS_REINSTALL.store(true, Ordering::Relaxed);
         }

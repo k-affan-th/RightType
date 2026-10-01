@@ -1,6 +1,8 @@
 //! The overlay: a small floating pill for status and hints — Windows only.
 //!
-//! It flashes a dark pill, then fades. [`show`] puts it in the **bottom-right
+//! It rises a few pixels into place while fading in, holds, then fades out
+//! (see [`righttype::motion`]; each frame comes from the time elapsed, so a
+//! late timer tick skips a frame instead of stretching the animation). [`show`] puts it in the **bottom-right
 //! corner of the monitor you are working on** (the one holding the foreground
 //! window), for rare, deliberate state changes — mode, on/off, errors — and the
 //! Suggest hint. [`show_at`] puts it next to a rectangle instead (the text
@@ -30,17 +32,18 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClientRect, GetForegroundWindow, KillTimer, PostMessageW, SetLayeredWindowAttributes,
-    SetTimer, SetWindowPos, ShowWindow, HWND_TOPMOST, LWA_ALPHA, SWP_NOACTIVATE, SWP_SHOWWINDOW,
-    SW_HIDE,
+    SetTimer, SetWindowPos, ShowWindow, HWND_TOPMOST, LWA_ALPHA, SWP_NOACTIVATE, SWP_NOSIZE,
+    SWP_SHOWWINDOW, SW_HIDE,
 };
 use zeroize::Zeroize;
 
 use crate::ui::{px, px_at};
+use righttype::motion;
 
-const TIMER_ID: usize = 7;
-const FADE_TIMER_ID: usize = 8;
+const ANIM_TIMER_ID: usize = 9;
 const SHOW_MS_BASE: u32 = 900;
-const FADE_STEP_MS: u32 = 30;
+/// One animation frame: Windows' timer resolution, about 60 frames a second.
+const FRAME_MS: u32 = 15;
 // Sizes in 96-DPI units; scaled for the target monitor when shown.
 const W: i32 = 116;
 const H: i32 = 34;
@@ -58,7 +61,8 @@ const WM_HIDE_TOAST: u32 = 0x8000 + 0x526;
 static TOAST_HWND: AtomicIsize = AtomicIsize::new(0);
 static UI_THREAD_ID: AtomicU32 = AtomicU32::new(0);
 static PENDING: Mutex<Option<(String, Anchor, Style)>> = Mutex::new(None);
-static ALPHA: AtomicU32 = AtomicU32::new(255);
+/// Whether the pill shows a tag (TH / EN / CAPS), for its colour.
+static STYLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// The DPI of the monitor the pill is on, for painting.
 static DPI: AtomicU32 = AtomicU32::new(96);
 
@@ -102,6 +106,19 @@ struct Toast {
 thread_local! {
     static TOAST: RefCell<Option<Toast>> = const { RefCell::new(None) };
     static TEXT: RefCell<String> = const { RefCell::new(String::new()) };
+    static ANIM: std::cell::Cell<Option<Anim>> = const { std::cell::Cell::new(None) };
+}
+
+/// The pill's animation, on the UI thread.
+#[derive(Clone, Copy)]
+struct Anim {
+    phase: motion::Phase,
+    since: std::time::Instant,
+    hold_ms: u32,
+    /// Resting top-left, screen pixels.
+    x: i32,
+    y: i32,
+    dpi: u32,
 }
 
 /// Record the calling thread as the one that owns the overlay window. Call once
@@ -139,6 +156,20 @@ fn ensure_created() -> bool {
         unsafe {
             // Layered window: enables per-pixel alpha for the fade-out.
             let _ = SetLayeredWindowAttributes(HWND(h as _), COLORREF(0), 255_u8, LWA_ALPHA);
+            // Not in screen sharing, recordings or screenshots (Windows 10
+            // 2004 and later): a Suggest hint or preview is typed content,
+            // and the tags are noise on someone else's screen. The typist
+            // still sees them.
+            // (Debug builds: RIGHTTYPE_CAPTURE_OVERLAY lets documentation
+            // screenshots include it.)
+            let capture =
+                cfg!(debug_assertions) && std::env::var_os("RIGHTTYPE_CAPTURE_OVERLAY").is_some();
+            if !capture {
+                let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowDisplayAffinity(
+                    HWND(h as _),
+                    windows::Win32::UI::WindowsAndMessaging::WDA_EXCLUDEFROMCAPTURE,
+                );
+            }
             // Rounded "pill" corners.
             let rgn = CreateRoundRectRgn(0, 0, px(W) + 1, px(H) + 1, px(H), px(H));
             SetWindowRgn(HWND(h as _), rgn, true);
@@ -154,28 +185,8 @@ fn ensure_created() -> bool {
                 unsafe { paint(hwnd) };
                 Some(0)
             }
-            WM_TIMER if w == TIMER_ID => {
-                // Hold period over: start the fade-out animation.
-                unsafe {
-                    let _ = KillTimer(hwnd, TIMER_ID);
-                    ALPHA.store(220, Ordering::Relaxed);
-                    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 220_u8, LWA_ALPHA);
-                    SetTimer(hwnd, FADE_TIMER_ID, FADE_STEP_MS, None);
-                }
-                Some(0)
-            }
-            WM_TIMER if w == FADE_TIMER_ID => {
-                unsafe {
-                    let next = ALPHA.fetch_sub(28, Ordering::Relaxed).saturating_sub(28);
-                    if next == 0 {
-                        let _ = KillTimer(hwnd, FADE_TIMER_ID);
-                        hide(hwnd);
-                        let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
-                    } else {
-                        let _ =
-                            SetLayeredWindowAttributes(hwnd, COLORREF(0), next as u8, LWA_ALPHA);
-                    }
-                }
+            WM_TIMER if w == ANIM_TIMER_ID => {
+                unsafe { tick(hwnd) };
                 Some(0)
             }
             WM_HIDE_TOAST => {
@@ -276,17 +287,59 @@ pub fn dismiss() {
 }
 
 unsafe fn dismiss_on_ui(hwnd: HWND) {
-    let _ = KillTimer(hwnd, FADE_TIMER_ID);
     hide(hwnd);
-    ALPHA.store(255, Ordering::Relaxed);
-    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
+}
+
+/// One animation frame.
+unsafe fn tick(hwnd: HWND) {
+    let Some(mut a) = ANIM.with(|c| c.get()) else {
+        let _ = KillTimer(hwnd, ANIM_TIMER_ID);
+        return;
+    };
+    let elapsed = a.since.elapsed().as_millis().min(u32::MAX as u128) as u32;
+    if a.phase == motion::Phase::Hold {
+        if elapsed >= a.hold_ms {
+            a.phase = motion::Phase::Exit;
+            a.since = std::time::Instant::now();
+            ANIM.with(|c| c.set(Some(a)));
+        }
+        return;
+    }
+    let f = motion::frame(a.phase, elapsed);
+    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), f.alpha, LWA_ALPHA);
+    let drop = (f.drop_px * a.dpi as f32 / 96.0).round() as i32;
+    let _ = SetWindowPos(
+        hwnd,
+        HWND_TOPMOST,
+        a.x,
+        a.y + drop,
+        0,
+        0,
+        SWP_NOACTIVATE | SWP_NOSIZE,
+    );
+    if f.done {
+        match a.phase {
+            motion::Phase::Enter => {
+                a.phase = motion::Phase::Hold;
+                a.since = std::time::Instant::now();
+                ANIM.with(|c| c.set(Some(a)));
+            }
+            _ => hide(hwnd),
+        }
+    }
 }
 
 unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
     let anchor = match anchor {
+        // Tags (TH / EN / CAPS, the preview) come often and use the system
+        // caret only: the UI Automation fallback waits on the app, on this
+        // (the hook's) thread. A message may take that wait.
+        Anchor::Caret if style == Style::Badge => match crate::caret::caret_rect() {
+            Some(caret) => Anchor::Near(caret),
+            None => return,
+        },
         Anchor::Caret => match crate::caret::find_caret() {
             Some(caret) => Anchor::Near(caret),
-            None if style == Style::Badge => return,
             None => Anchor::Corner,
         },
         other => other,
@@ -328,26 +381,44 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
     );
     let h = px_at(H, dpi);
     let (x, y) = place(monitor, anchor, w, h, dpi);
+    let hold = match style {
+        Style::Pill => (SHOW_MS_BASE + units.len() as u32 * 18).min(2400),
+        Style::Badge => BADGE_MS,
+    };
+    STYLE.store(style == Style::Badge, Ordering::Relaxed);
+    // Already on screen (and not leaving): move and hold again, without
+    // fading in a second time — a flicker on every keystroke otherwise.
+    let showing = ANIM
+        .with(|c| c.get())
+        .is_some_and(|a| a.phase != motion::Phase::Exit);
+    let anim = Anim {
+        phase: if showing {
+            motion::Phase::Hold
+        } else {
+            motion::Phase::Enter
+        },
+        since: std::time::Instant::now(),
+        hold_ms: hold,
+        x,
+        y,
+        dpi,
+    };
+    let first = motion::frame(anim.phase, 0);
+    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), first.alpha, LWA_ALPHA);
+    let drop = (first.drop_px * dpi as f32 / 96.0).round() as i32;
     let _ = SetWindowPos(
         hwnd,
         HWND_TOPMOST,
         x,
-        y,
+        y + drop,
         w,
         h,
         SWP_NOACTIVATE | SWP_SHOWWINDOW,
     );
     let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, h, h);
     SetWindowRgn(hwnd, rgn, true);
-    ALPHA.store(255, Ordering::Relaxed);
-    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
-    let hold = match style {
-        Style::Pill => (SHOW_MS_BASE + units.len() as u32 * 18).min(2400),
-        Style::Badge => BADGE_MS,
-    };
-    let _ = KillTimer(hwnd, TIMER_ID);
-    let _ = KillTimer(hwnd, FADE_TIMER_ID);
-    SetTimer(hwnd, TIMER_ID, hold, None);
+    ANIM.with(|c| c.set(Some(anim)));
+    SetTimer(hwnd, ANIM_TIMER_ID, FRAME_MS, None);
     let _ = InvalidateRect(hwnd, None, true);
 }
 
@@ -382,11 +453,13 @@ unsafe fn paint(hwnd: HWND) {
     let mut rc = RECT::default();
     let _ = GetClientRect(hwnd, &mut rc);
 
-    // Dark pill background (COLORREF is 0x00BBGGRR).
-    let brush = CreateSolidBrush(COLORREF(0x002A_2A2A));
+    // Dark pill; the TH / EN / CAPS tags each in a colour of their own, so
+    // the language reads at a glance (COLORREF is 0x00BBGGRR).
+    let (fill, edge) = TEXT.with(|t| tag_colours(&t.borrow(), STYLE.load(Ordering::Relaxed)));
+    let brush = CreateSolidBrush(COLORREF(fill));
     FillRect(hdc, &rc, brush);
     let _ = DeleteObject(HGDIOBJ(brush.0));
-    let border = CreateSolidBrush(COLORREF(0x0045_4545));
+    let border = CreateSolidBrush(COLORREF(edge));
     FrameRect(hdc, &rc, border);
     let _ = DeleteObject(HGDIOBJ(border.0));
 
@@ -417,8 +490,20 @@ unsafe fn draw_centered(hdc: HDC, text: &str, rc: &mut RECT) {
     units.zeroize();
 }
 
+/// Fill and border of the pill: a tag's own colour, or dark for messages.
+fn tag_colours(text: &str, badge: bool) -> (u32, u32) {
+    match (badge, text) {
+        (true, "TH") => (0x005C_6F1F, 0x007A_8F33),   // teal
+        (true, "EN") => (0x0097_572B, 0x00B3_7040),   // blue
+        (true, "CAPS") => (0x0000_5A8A, 0x0010_74AA), // amber
+        _ => (0x002A_2A2A, 0x0045_4545),
+    }
+}
+
 unsafe fn hide(hwnd: HWND) {
-    let _ = KillTimer(hwnd, TIMER_ID);
+    let _ = KillTimer(hwnd, ANIM_TIMER_ID);
+    ANIM.with(|c| c.set(None));
+    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
     let _ = ShowWindow(hwnd, SW_HIDE);
     // A suggestion preview is typed content: do not keep it past its display.
     TEXT.with(|t| t.borrow_mut().zeroize());

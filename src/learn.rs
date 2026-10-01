@@ -216,9 +216,6 @@ pub fn clear() {
 /// the word they kept. Learn it immediately — English or Thai. No-op unless
 /// learning is enabled.
 pub fn learn_now(word: &str) {
-    if !is_enabled() {
-        return;
-    }
     // Edge punctuation travels with a token (it may be a Thai letter on the
     // other layout) but is not part of the word.
     let word = word
@@ -237,9 +234,52 @@ pub fn learn_now(word: &str) {
     } else {
         return;
     };
+    if !is_enabled() {
+        // Learning is off: keep it (in memory) so the palette can offer to
+        // keep it as typed with one click ([`keep_as_typed`]).
+        remember_reversed(key);
+        return;
+    }
     PENDING.lock().unwrap().remove(&key);
     commit(&key);
     key.zeroize();
+}
+
+/// Words the typist reversed lately while learning was off, newest first —
+/// in memory only, at most [`REVERSED_CAP`], wiped when taught or at exit.
+static REVERSED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+const REVERSED_CAP: usize = 5;
+
+fn remember_reversed(word: String) {
+    let mut list = REVERSED.lock().unwrap();
+    if let Some(i) = list.iter().position(|w| *w == word) {
+        list.remove(i).zeroize();
+    }
+    list.insert(0, word);
+    while list.len() > REVERSED_CAP {
+        if let Some(mut old) = list.pop() {
+            old.zeroize();
+        }
+    }
+}
+
+/// See [`REVERSED`].
+pub fn reversed_words() -> Vec<String> {
+    REVERSED.lock().unwrap().clone()
+}
+
+/// Keep `word` as typed from now on (the palette's "Never convert …"): the
+/// typist asked for it, so it is learned even with learning off. It passed
+/// the same shape and dictionary checks when it was remembered.
+pub fn keep_as_typed(word: &str) {
+    let mut list = REVERSED.lock().unwrap();
+    if let Some(i) = list.iter().position(|w| w == word) {
+        let mut w = list.remove(i);
+        drop(list);
+        PENDING.lock().unwrap().remove(&w);
+        commit(&w);
+        w.zeroize();
+    }
 }
 
 /// Observe a completed word. After [`REPEATS`] sightings of a qualifying English

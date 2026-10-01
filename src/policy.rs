@@ -159,6 +159,10 @@ pub fn detect_token(
             detect::detect(token, en, th)
                 .or_else(|| us_layout_thai_with_punctuation(token, en, th))
                 .filter(|d| !only_short_thai_words(&d.corrected, th))
+                // A known English word with a prefix or suffix stays English,
+                // unless its Thai reading is itself a Thai word (กำหนด is
+                // `desof`, de + sof).
+                .filter(|d| !english::is_affixed(token, en) || th.contains(&d.corrected))
         }
         InputLayout::ThaiKedmanee => {
             if !has_thai || has_latin {
@@ -378,6 +382,96 @@ fn thai_layout_compound(token: &str, th: &Dictionary) -> Option<Detection> {
     })
 }
 
+/// A Thai word typed in an order that looks right but is not: two เ for แ,
+/// nikhahit + า for ำ, a tone mark before the vowel above or below it, the
+/// same mark twice. Search and word breaking miss such words. `Some` with the
+/// word put right only when that is a Thai dictionary word (one word, not a
+/// split of several: random keys can split into short words).
+pub fn thai_spelling(word: &str, th: &Dictionary) -> Option<String> {
+    const TONES: &[char] = &['\u{0E48}', '\u{0E49}', '\u{0E4A}', '\u{0E4B}', '\u{0E4C}'];
+    const ABOVE_BELOW: &[char] = &[
+        '\u{0E31}', '\u{0E34}', '\u{0E35}', '\u{0E36}', '\u{0E37}', '\u{0E38}', '\u{0E39}',
+    ];
+    if word.is_empty() || !word.chars().all(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c)) {
+        return None;
+    }
+    let mut c: Vec<char> = word.replace("เเ", "แ").chars().collect();
+    let mut i = 0;
+    while i + 1 < c.len() {
+        if c[i] == '\u{0E4D}' && c[i + 1] == '\u{0E32}' {
+            // ํ + า is ำ (a tone mark may sit between: นํ้า).
+            c[i] = '\u{0E33}';
+            c.remove(i + 1);
+        } else if c[i] == '\u{0E4D}'
+            && i + 2 < c.len()
+            && TONES.contains(&c[i + 1])
+            && c[i + 2] == '\u{0E32}'
+        {
+            let tone = c[i + 1];
+            c[i] = tone;
+            c[i + 1] = '\u{0E33}';
+            c.remove(i + 2);
+        } else if TONES.contains(&c[i]) && ABOVE_BELOW.contains(&c[i + 1]) {
+            c.swap(i, i + 1);
+        } else if c[i] == c[i + 1] && (TONES.contains(&c[i]) || ABOVE_BELOW.contains(&c[i])) {
+            c.remove(i + 1);
+            continue;
+        }
+        i += 1;
+    }
+    let fixed: String = c.into_iter().collect();
+    (fixed != word && th.contains(&fixed)).then_some(fixed)
+}
+
+/// A word typed with CapsLock left on by accident, as the typist meant it
+/// (`intended` is the word as if CapsLock were off), or `None`.
+///
+/// - English: Shift on the first letter and lower case after it (`Hello`,
+///   shown as `hELLO`) — nobody means that; `HELLO` in capitals may be meant
+///   and is left alone.
+/// - Thai has no capitals: on the Thai layout CapsLock shifts every key
+///   (`สวัสดี` comes out `ศซํศโ๊`), so a word whose keys spell known Thai is
+///   put right.
+pub fn caps_accident(intended: &str, layout: InputLayout, th: &Dictionary) -> Option<String> {
+    let mut chars = intended.chars();
+    let ok = match layout {
+        InputLayout::UsQwerty => {
+            chars.next().is_some_and(|c| c.is_ascii_uppercase())
+                && intended.chars().count() >= 2
+                && chars.all(|c| c.is_ascii_lowercase())
+        }
+        InputLayout::ThaiKedmanee => {
+            !intended.is_empty()
+                && intended
+                    .chars()
+                    .all(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c))
+                && crate::segment::segment(intended, th)
+                    .iter()
+                    .all(|s| s.known)
+        }
+    };
+    ok.then(|| intended.to_string())
+}
+
+/// `keys` as the English layout shows them with CapsLock on: letters in the
+/// other case. RightType keeps the keys as if CapsLock were off, so a Thai
+/// word typed with CapsLock left on still reads as Thai; text it puts back
+/// "as typed" is shown this way.
+pub fn shown_with_caps(keys: &str, caps: bool) -> String {
+    if !caps {
+        return keys.to_string();
+    }
+    keys.chars()
+        .map(|c| {
+            if c.is_ascii_uppercase() {
+                c.to_ascii_lowercase()
+            } else {
+                c.to_ascii_uppercase()
+            }
+        })
+        .collect()
+}
+
 /// The boundary decision for a token RightType itself converted to Thai while
 /// it was being typed (D-009).
 ///
@@ -387,8 +481,10 @@ fn thai_layout_compound(token: &str, th: &Dictionary) -> Option<Detection> {
 /// whole token visible. If its keystrokes spell English — a dictionary word, a
 /// learned word or a compound — the early reading was wrong and the *whole*
 /// token goes back, not just the part typed after the anchor. So does a
-/// token that cannot end as Thai ([`is_unfinished_thai`]).
-pub fn revise_converted(token: &str, en: &Dictionary) -> Option<Detection> {
+/// token that cannot end as Thai ([`is_unfinished_thai`]), and one whose keys
+/// are a known English word with a prefix or suffix ([`english::is_affixed`])
+/// unless the Thai itself is a dictionary word.
+pub fn revise_converted(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
     let raw = th_to_en(token.trim());
     // Trailing sentence punctuation may follow a word (`middleware,`), but on
     // this layout most ASCII punctuation is a Thai letter (`[` is บ, `;` is น),
@@ -397,7 +493,9 @@ pub fn revise_converted(token: &str, en: &Dictionary) -> Option<Detection> {
     if raw.len() - core.len() > 2
         || core.chars().count() < 3
         || !core.chars().all(|c| c.is_ascii_alphabetic())
-        || !(english::is_word(core, en) || is_unfinished_thai(token.trim()))
+        || !(english::is_word(core, en)
+            || is_unfinished_thai(token.trim())
+            || (english::is_affixed(core, en) && !th.contains(token.trim())))
     {
         return None;
     }
@@ -540,6 +638,38 @@ pub fn goes_back_to_keys(keys: &str, reading: &str) -> bool {
     is_unfinished_thai(reading) && keys.chars().all(|c| c.is_ascii_alphabetic())
 }
 
+/// At a boundary, with the dictionaries: [`goes_back_to_keys`], or the keys
+/// make a known English word with a prefix or suffix ([`english::is_affixed`]:
+/// `rerise`, shown as Thai since `reris`) and the reading is not itself a Thai
+/// word.
+pub fn run_goes_back(keys: &str, reading: &str, en: &Dictionary, th: &Dictionary) -> bool {
+    goes_back_to_keys(keys, reading) || (english::is_affixed(keys, en) && !th.contains(reading))
+}
+
+/// Auto, mid-word, before anything is rewritten: the Thai the keys typed so
+/// far are heading for, to show next to the cursor (`l;ylf` → `สวัสด`), or
+/// `None`.
+///
+/// Auto rewrites a word only once it is sure (see [`live_reading`]), which
+/// takes a few keys; until then the typist sees English and cannot tell
+/// whether a fix is coming. The preview says so without touching the text.
+/// It needs three keys or more that all turn into Thai and start real Thai
+/// words, and is not shown for keys that are (or can still become) an
+/// English word, a secret's shape, or once Auto is already rewriting.
+pub fn preview(run: &str, en: &Dictionary, th: &Dictionary) -> Option<String> {
+    if run.chars().count() < 3
+        || english::is_word(run, en)
+        || en.has_extension(run)
+        || secret::classify_token(run).is_some()
+        || matches!(live_reading(run, false, en, th), Reading::Thai(_))
+    {
+        return None;
+    }
+    let thai = en_to_th(run);
+    let all_thai = thai.chars().all(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+    (all_thai && segment::is_viable_prefix(&thai, th)).then_some(thai)
+}
+
 pub fn live_reading(run: &str, holding_thai: bool, en: &Dictionary, th: &Dictionary) -> Reading {
     if run.is_empty() {
         return Reading::AsTyped;
@@ -577,6 +707,18 @@ pub fn live_reading(run: &str, holding_thai: bool, en: &Dictionary, th: &Diction
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_preview_shows_where_the_keys_are_heading() {
+        let (en, th) = (crate::dict::english(), crate::dict::thai());
+        // On the way to สวัสดี, before Auto is sure.
+        assert_eq!(preview("l;yl", en, th).as_deref(), Some("สวัส"));
+        // Too short to say; English (or its beginning); Auto already on it.
+        assert_eq!(preview("l;", en, th), None);
+        assert_eq!(preview("hell", en, th), None);
+        assert_eq!(preview("hello", en, th), None);
+        assert_eq!(preview("l;ylfu", en, th), None);
+    }
 
     fn dicts() -> (Dictionary, Dictionary) {
         (

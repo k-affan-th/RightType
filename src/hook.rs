@@ -31,6 +31,7 @@ use std::time::{Duration, Instant};
 use zeroize::Zeroize;
 
 use righttype::buffer::{Key, WordBuffer};
+use righttype::diag::{self, Shape};
 use righttype::hotkeys::{Action, Chord, Hotkeys};
 use righttype::layout::auto_convert;
 use righttype::per_app::AppMode;
@@ -159,6 +160,50 @@ unsafe fn capture_key(vk: u16) -> bool {
 /// Master on/off, controlled from the tray. When off the hook passes every key
 /// straight through and touches nothing.
 static ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// CapsLock tapped on its own switches Thai/English (opt-in, from the
+/// palette); held for half a second it toggles CapsLock as usual.
+static CAPS_SWITCHES: AtomicBool = AtomicBool::new(false);
+/// How long CapsLock must be held to act as CapsLock when it switches
+/// languages.
+const CAPS_HOLD: Duration = Duration::from_millis(500);
+
+pub fn caps_switches_language() -> bool {
+    CAPS_SWITCHES.load(Ordering::Relaxed)
+}
+
+pub fn set_caps_switches_language(on: bool) {
+    CAPS_SWITCHES.store(on, Ordering::Relaxed);
+}
+
+thread_local! {
+    /// When a CapsLock that switches languages went down (its key-down was
+    /// swallowed; the release decides).
+    static CAPS_DOWN_AT: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+}
+
+/// CapsLock released after its key-down was swallowed for switching: a tap
+/// switches Thai/English, a hold toggles CapsLock.
+unsafe fn caps_released(down_at: Instant) {
+    if down_at.elapsed() >= CAPS_HOLD {
+        inject::toggle_capslock();
+        return;
+    }
+    let to = match policy::supported_layout_id(layout_id(effective_layout())) {
+        Some(policy::InputLayout::ThaiKedmanee) => policy::InputLayout::UsQwerty,
+        _ => policy::InputLayout::ThaiKedmanee,
+    };
+    activate_layout(to);
+    if crate::caret::is_enabled() {
+        crate::overlay::badge_at_caret(match to {
+            policy::InputLayout::ThaiKedmanee => "TH",
+            policy::InputLayout::UsQwerty => "EN",
+        });
+    }
+}
+
+/// How many more automatic fixes this session show the Shift+Backspace tip.
+static UNDO_TIPS_LEFT: AtomicU32 = AtomicU32::new(3);
 
 /// Is RightType currently enabled?
 pub fn is_enabled() -> bool {
@@ -382,6 +427,9 @@ impl Drop for OwnedRun {
 }
 
 struct SuggestionRecord {
+    /// A word typed with CapsLock on by accident: taking it also turns
+    /// CapsLock off.
+    caps: bool,
     original: String,
     corrected: String,
     boundary_vk: u16,
@@ -424,6 +472,11 @@ enum UndoKind {
     /// RightType anchored a run mid-word. Undoing it hands the token back to
     /// the typist; it is learned once they finish it.
     AutoMidToken,
+    /// RightType put right a word typed with CapsLock on by accident and
+    /// turned CapsLock off. Undoing it (Ctrl+Shift+CapsLock, or the next
+    /// Shift+Backspace) puts the capitals back and turns CapsLock on again:
+    /// they were meant (code, acronyms).
+    CapsAccident,
 }
 
 impl Drop for UndoRecord {
@@ -451,20 +504,32 @@ fn set_undo(injected_len: usize, restore_text: &str, kind: UndoKind) {
 unsafe fn undo_last_correction() {
     let Some(rec) = STATE.with(|s| s.borrow_mut().undo.take()) else {
         e2e_trace("undo: no record".to_string());
+        diag::note("undo: nothing to undo", &[]);
         return;
     };
     if rec.created_at.elapsed() > Duration::from_secs(30) {
         e2e_trace("undo: record expired".to_string());
+        diag::note("undo: older than 30 s", &[]);
         return;
     }
     let ok = inject::apply(rec.injected_len, &rec.restore_text, None);
     e2e_trace(format!("undo apply len={} -> {ok}", rec.injected_len));
+    diag::note(
+        "undo",
+        &[("deleted", rec.injected_len.into()), ("ok", ok.into())],
+    );
     if ok {
         let restored = rec.restore_text.trim_end_matches(['\r', '\t', ' ']);
         // The word counted was the correction; the one kept is the original.
         habit_correction(!has_thai(restored), has_thai(restored));
         match rec.kind {
             UndoKind::Manual => {}
+            UndoKind::CapsAccident => {
+                if !caps_on() {
+                    inject::toggle_capslock();
+                }
+                crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastCapsKept));
+            }
             UndoKind::AutoWord => crate::learn::learn_now(restored),
             UndoKind::AutoMidToken => STATE.with(|s| {
                 let mut st = s.borrow_mut();
@@ -653,12 +718,62 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
                 INJECTING.load(Ordering::Relaxed)
             ));
         }
-        if !ours && process(wparam.0 as u32, kb) {
-            // We handled this key as a hotkey/correction; swallow it.
-            return LRESULT(1);
+        if !ours && wparam.0 as u32 == WM_KEYDOWN {
+            crate::verify::TYPED.fetch_add(1, Ordering::SeqCst);
+        }
+        if !ours {
+            // A key can arrive while the previous one is still being handled:
+            // waiting on a slow text box (SendMessageTimeout) lets Windows
+            // call this hook again on the same thread. Handling it then
+            // corrected a word twice (CI: 'สสวัสดี'). Such a key goes through
+            // untouched, and the word in progress is dropped once the outer
+            // call is done: what is on screen is no longer known. (Keys that
+            // arrive while our own keys are being sent are handled as before:
+            // passing those through turned a Shift+Backspace into a plain
+            // Backspace — CI, Edge.)
+            let nested = PROCESSING.with(|p| p.get());
+            if nested && crate::focus::waiting_on_app() {
+                NESTED_KEY.with(|n| n.set(true));
+                e2e_trace(format!(
+                    "key vk={:#x} arrived while busy: passed through",
+                    kb.vkCode
+                ));
+                return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+            }
+            // Restored however `process` ends.
+            struct Done(bool);
+            impl Drop for Done {
+                fn drop(&mut self) {
+                    PROCESSING.with(|p| p.set(self.0));
+                }
+            }
+            PROCESSING.with(|p| p.set(true));
+            let done = Done(nested);
+            let swallow = process(wparam.0 as u32, kb);
+            drop(done);
+            if NESTED_KEY.with(|n| n.replace(false)) {
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    st.buf.clear();
+                    st.owned = None;
+                    st.mark = TokenMark::Plain;
+                    st.recent.clear();
+                });
+            }
+            if swallow {
+                // We handled this key as a hotkey/correction; swallow it.
+                return LRESULT(1);
+            }
         }
     }
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
+thread_local! {
+    /// The hook is handling a key (see the re-entry note in the hook).
+    static PROCESSING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// A key arrived while one was being handled.
+    static NESTED_KEY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Computer-driven Windows E2E necessarily uses `SendInput`, which Windows marks
@@ -686,6 +801,24 @@ pub(crate) fn e2e_trace(msg: String) {
 
 #[cfg(not(debug_assertions))]
 pub(crate) fn e2e_trace(_: String) {}
+
+/// The keyboard the focused app types with now, if RightType has a table for
+/// it (the tray's TH / EN icon).
+pub fn current_language() -> Option<policy::InputLayout> {
+    unsafe { policy::supported_layout_id(layout_id(effective_layout())) }
+}
+
+/// The program the typist is typing in (its file name), as last seen.
+pub(crate) fn current_app() -> Option<String> {
+    STATE.with(|s| s.borrow().app_exe.clone())
+}
+
+/// A fixed message for both the debug trace and the problem report
+/// ([`diag`]); `'static`, so it cannot carry typed text.
+pub(crate) fn trace_note(msg: &'static str) {
+    e2e_trace(msg.to_string());
+    diag::note(msg, &[]);
+}
 
 /// Debug e2e builds: report a fatal exception (code, address and the
 /// faulting thread's stack) to stderr before Windows ends the process, which
@@ -790,6 +923,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         false
     };
     if !down {
+        if vk == VK_CAPITAL.0 {
+            if let Some(at) = CAPS_DOWN_AT.with(|c| c.take()) {
+                caps_released(at);
+                return true;
+            }
+        }
         return false;
     }
     e2e_trace(format!("key vk={vk:#x} repeat={repeat}"));
@@ -797,6 +936,20 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return true;
     }
     let action = hotkeys().action_for(vk, is_down(VK_CONTROL), is_down(VK_SHIFT), is_down(VK_MENU));
+
+    // The command palette is open and in front: its keys are its own
+    // (arrows, Enter, 1–9, typing to search, Esc), so it works without a
+    // mouse. Its own hotkey still closes it.
+    if action != Some(Action::Palette)
+        && !is_down(VK_CONTROL)
+        && !is_down(VK_MENU)
+        && crate::palette::is_open()
+    {
+        let ch = translate(vk, kb.scanCode as u16);
+        if crate::palette::key(vk, ch) {
+            return true;
+        }
+    }
 
     // Tab (alone) right after a Suggest hint takes it, like Alt+CapsLock. The
     // hint exists only until the next key, so Tab is otherwise untouched.
@@ -930,13 +1083,16 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         });
     }
 
-    // If focus or layout changed since the last key, the buffered word is stale.
+    // If focus or layout changed since the last key, the buffered word is stale
+    // (the focus worker's answer about this key's field first).
+    crate::focus::settle(Duration::from_millis(60));
     sync_context();
     note_english_variant(effective_layout());
 
     // Never run where secrets are typed: blacklisted apps, or password fields
     // (native ES_PASSWORD, or UIA-detected ones in browsers/Electron/UWP).
     if STATE.with(|s| s.borrow().sensitive_app)
+        || safety::is_full_screen()
         || safety::is_password_field()
         || crate::focus::is_password_field()
     {
@@ -1003,7 +1159,33 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             return true;
         }
         // CapsLock alone (or a chord that is not a hotkey) is a normal toggle.
+        // A word is kept as if CapsLock were off and shown with its state,
+        // so one typed across a toggle is left alone.
+        if vk == VK_CAPITAL.0 && caps_switches_language() && is_enabled() {
+            // A language key now: the release decides (tap or hold).
+            if !repeat {
+                CAPS_DOWN_AT.with(|c| c.set(Some(Instant::now())));
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    st.buf.clear();
+                    st.owned = None;
+                    st.mark = TokenMark::Plain;
+                });
+            }
+            return true;
+        }
         if vk == VK_CAPITAL.0 {
+            // Turning it on: say so where the eyes are, before a sentence
+            // comes out in capitals (the state flips after this key).
+            if !caps_on() && crate::caret::is_enabled() {
+                crate::overlay::badge_at_caret("CAPS");
+            }
+            STATE.with(|s| {
+                let mut st = s.borrow_mut();
+                st.buf.clear();
+                st.owned = None;
+                st.mark = TokenMark::Plain;
+            });
             return false;
         }
     }
@@ -1017,6 +1199,23 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             STATE.with(|s| s.borrow().buf.current().chars().count()),
             STATE.with(|s| s.borrow().recent.len()),
         ));
+        if !repeat {
+            diag::note(
+                "Shift+Backspace",
+                &[
+                    (
+                        "word_in_progress",
+                        STATE
+                            .with(|s| s.borrow().buf.current().chars().count())
+                            .into(),
+                    ),
+                    (
+                        "recent_words",
+                        STATE.with(|s| s.borrow().recent.len()).into(),
+                    ),
+                ],
+            );
+        }
         // Holding the keys acts once: each flip reaches one word further back,
         // so auto-repeat would run through all of them in a blink.
         if repeat {
@@ -1089,9 +1288,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
             && policy::supported_layout_id(layout_id(effective_layout()))
                 == Some(policy::InputLayout::UsQwerty)
-            && reconcile_run()
         {
-            return true;
+            if reconcile_run() {
+                take_down_preview();
+                return true;
+            }
+            show_preview();
         }
         // Navigation and focus events move the caret away from the run, so the
         // text we rendered is no longer ours to edit. Let go without touching it.
@@ -1118,15 +1320,18 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // A boundary ends a run we own. If its reading cannot end as Thai and
     // the keys were all letters, they go back to what was typed and the word
-    // is judged like any other below (see `policy::goes_back_to_keys`).
+    // is judged like any other below (see `policy::run_goes_back`).
     let back = STATE.with(|s| {
-        s.borrow()
-            .owned
-            .as_ref()
-            .is_some_and(|o| policy::goes_back_to_keys(&word, &o.rendered))
+        s.borrow().owned.as_ref().is_some_and(|o| {
+            policy::run_goes_back(&word, &o.rendered, dict::english(), dict::thai())
+        })
     });
     if back {
         e2e_trace(format!("boundary: {word:?} cannot end as Thai, withdrawn"));
+        diag::note(
+            "word end: live Thai put back to the keys",
+            &[("keys", Shape::of(&word).into())],
+        );
         withdraw_owned_run_to(&word);
     }
     // Otherwise its reading has already been applied to the screen, so the
@@ -1134,6 +1339,10 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // assumes the screen still holds the raw keystrokes.
     if let Some(mut rendered) = anchor_owned_run(&word, vk) {
         e2e_trace("boundary: owned run anchored".to_string());
+        diag::note(
+            "word end: live Thai kept",
+            &[("shown", Shape::of(&rendered).into())],
+        );
         remember_completed(&rendered, vk, true);
         rendered.zeroize();
         word.zeroize();
@@ -1148,7 +1357,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         if learn && !seed_run {
             crate::learn::learn_now(&word);
         }
-        remember_completed(&word, vk, false);
+        remember_as_shown(&word, vk, false);
         word.zeroize();
         return false;
     }
@@ -1158,7 +1367,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     let mut detection = if converted {
         // D-009: the whole token, including the part converted before the
         // anchor, gets its first complete look now.
-        policy::revise_converted(&word, dict::english())
+        policy::revise_converted(&word, dict::english(), dict::thai())
     } else {
         active_layout
             .and_then(|layout| policy::detect_token(&word, layout, dict::english(), dict::thai()))
@@ -1168,6 +1377,23 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         detection.as_ref().map(|d| d.corrected.clone()),
         mode_now
     ));
+    diag::note(
+        "word end",
+        &[
+            ("typed", Shape::of(&word).into()),
+            (
+                "layout",
+                match active_layout {
+                    Some(policy::InputLayout::UsQwerty) => "English",
+                    Some(policy::InputLayout::ThaiKedmanee) => "Thai",
+                    None => "other",
+                }
+                .into(),
+            ),
+            ("switched_mid_word", converted.into()),
+            ("wrong_layout", detection.is_some().into()),
+        ],
+    );
 
     // Track the meaningful English stream, including a wrong-layout candidate.
     // This cannot retroactively protect the first words of a phrase (ordinary
@@ -1182,6 +1408,10 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         detection = None;
         forget_recent_text();
     }
+    // English put in place of the word is shown as CapsLock shows it.
+    if let Some(d) = detection.as_mut() {
+        d.corrected = policy::shown_with_caps(&d.corrected, caps_on());
+    }
 
     // Learning sees only ordinary US-QWERTY input for which the production
     // policy found no wrong-layout candidate. This keeps converted candidates
@@ -1190,13 +1420,75 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         crate::learn::observe(&word);
     }
 
+    // CapsLock left on by accident (`hELLO`, or Thai typed with every key
+    // shifted): in Auto the word is put as meant and CapsLock turned off.
+    // Thai typed in a wrong order that looks right (เเ for แ, ํา for ำ, a
+    // tone mark before the vowel): put right when that is a Thai word.
+    if detection.is_none()
+        && !seed_run
+        && mode_now == Mode::Auto
+        && policy::supported_layout_id(layout_id(effective_layout()))
+            == Some(policy::InputLayout::ThaiKedmanee)
+    {
+        if let Some(fixed) = policy::thai_spelling(&word, dict::thai()) {
+            detection = Some(righttype::detect::Detection {
+                corrected: fixed,
+                confidence: righttype::detect::Confidence::High,
+                evidence: righttype::detect::Evidence::ExactDictionary,
+            });
+        }
+    }
+    // CapsLock left on by accident (`hELLO`, or Thai typed with every key
+    // shifted). Auto puts it right and turns CapsLock off, with a way back:
+    // capitals may be meant (code, acronyms), and one Shift+Backspace (or
+    // Ctrl+Shift+CapsLock) restores them and CapsLock. Manual and Suggest
+    // offer it as a hint that Tab takes.
+    let mut caps_accident = false;
+    if detection.is_none() && !seed_run && caps_on() {
+        let layout_now = policy::supported_layout_id(layout_id(effective_layout()));
+        if let Some(meant) = layout_now.and_then(|l| policy::caps_accident(&word, l, dict::thai()))
+        {
+            detection = Some(righttype::detect::Detection {
+                corrected: meant,
+                confidence: righttype::detect::Confidence::High,
+                evidence: righttype::detect::Evidence::ExactDictionary,
+            });
+            caps_accident = true;
+        }
+    }
+
     // Auto mode commits only at this boundary; Manual mode retains the token for
     // Shift+Backspace.
-    let swallow = match (mode_now, detection) {
+    let mode_for_word = if caps_accident && mode_now != Mode::Auto {
+        Mode::Suggest
+    } else {
+        mode_now
+    };
+    let swallow = match (mode_for_word, detection) {
         (Mode::Auto, Some(d)) => {
             let mut corrected = d.corrected.clone();
             let done = maybe_correct(&word, Some(vk), d);
-            if done {
+            if done && !caps_accident && crate::caret::is_enabled() {
+                // The first few fixes of a session show how to take one back.
+                if UNDO_TIPS_LEFT
+                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
+                    .is_ok()
+                {
+                    crate::overlay::badge_at_caret(righttype::i18n::tr(
+                        righttype::i18n::T::TipShiftBackspace,
+                    ));
+                }
+            }
+            if done && caps_accident {
+                inject::toggle_capslock();
+                STATE.with(|s| {
+                    if let Some(u) = s.borrow_mut().undo.as_mut() {
+                        u.kind = UndoKind::CapsAccident;
+                    }
+                });
+                diag::note("CapsLock on by accident: word put right, CapsLock off", &[]);
+                crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastCapsOff));
+            } else if done {
                 // Shift+Backspace right after an automatic correction flips it
                 // back — the undo gesture people reach for first.
                 remember_completed(&corrected, vk, true);
@@ -1207,10 +1499,16 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         (Mode::Suggest, Some(d)) => {
             // Show *what* would be written, not just that something would:
             // a hint you cannot read is a hint you cannot judge.
-            let mut hint = format!("{}  ·  Tab", d.corrected);
+            let mut hint = if caps_accident {
+                diag::note("CapsLock on by accident? offered the word as meant", &[]);
+                format!("⇪ {}  ·  Tab", d.corrected)
+            } else {
+                format!("{}  ·  Tab", d.corrected)
+            };
             STATE.with(|s| {
                 s.borrow_mut().suggestion = Some(SuggestionRecord {
-                    original: word.clone(),
+                    caps: caps_accident,
+                    original: policy::shown_with_caps(&word, caps_on()),
                     corrected: d.corrected,
                     boundary_vk: vk,
                     created: Instant::now(),
@@ -1225,7 +1523,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         _ => false,
     };
     if !swallow {
-        remember_completed(&word, vk, converted);
+        remember_as_shown(&word, vk, converted);
     }
     word.zeroize();
     swallow
@@ -1264,7 +1562,54 @@ fn show_live_hint() {
     run.zeroize();
 }
 
+/// Auto, mid-word: where the keys are heading (`→ สวัสด`), next to the
+/// cursor, before Auto is sure enough to rewrite anything
+/// ([`policy::preview`]). Only with the cursor tags on.
+fn show_preview() {
+    if !crate::caret::is_enabled() {
+        return;
+    }
+    let (run, guarding, owned) = STATE.with(|s| {
+        let st = s.borrow();
+        (
+            st.buf.current().to_string(),
+            st.seed.guarding(),
+            st.owned.is_some(),
+        )
+    });
+    let mut run = run;
+    let thai = (!guarding && !owned)
+        .then(|| policy::preview(&run, dict::english(), dict::thai()))
+        .flatten();
+    run.zeroize();
+    match thai {
+        Some(mut thai) => {
+            // Only the system caret (Windows answers it without asking the
+            // app): this runs on every key, and the UI Automation fallback
+            // could wait on a slow app. No system caret, no preview.
+            let Some(caret) = crate::caret::caret_rect() else {
+                thai.zeroize();
+                return;
+            };
+            let mut tag = format!("→ {thai}");
+            crate::overlay::badge_at(&tag, caret);
+            tag.zeroize();
+            thai.zeroize();
+            PREVIEW_SHOWN.with(|c| c.set(true));
+        }
+        None => take_down_preview(),
+    }
+}
+
+fn take_down_preview() {
+    if PREVIEW_SHOWN.with(|c| c.replace(false)) {
+        crate::overlay::dismiss();
+    }
+}
+
 thread_local! {
+    /// An Auto preview is on screen.
+    static PREVIEW_SHOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// A live hint is on screen (so it can be taken down when it no longer
     /// applies).
     static LIVE_HINT_SHOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
@@ -1286,6 +1631,14 @@ fn forget_recent_text() {
 
 /// Keep the word a boundary just completed (as it is on screen), for
 /// Shift+Backspace right after it.
+/// [`remember_completed`] for a word the app shows as typed: with CapsLock
+/// on, its letters are in the other case from the keys kept for it.
+unsafe fn remember_as_shown(word: &str, boundary_vk: u16, converted: bool) {
+    let mut shown = policy::shown_with_caps(word, caps_on());
+    remember_completed(&shown, boundary_vk, converted);
+    shown.zeroize();
+}
+
 fn remember_completed(word: &str, boundary_vk: u16, converted: bool) {
     let exe = STATE.with(|s| {
         let mut st = s.borrow_mut();
@@ -1538,6 +1891,10 @@ unsafe fn accept_suggestion() {
         UndoKind::Manual,
     );
     restore.zeroize();
+    if suggestion.caps && caps_on() {
+        inject::toggle_capslock();
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastCapsOff));
+    }
     crate::stats::record_manual();
     habit_correction(
         has_thai(&suggestion.original),
@@ -1572,8 +1929,20 @@ fn has_thai(text: &str) -> bool {
 /// words back to the other layout (see [`Recent`]). The whole span from that
 /// word to the caret is retyped in one injection, and it is one Undo step.
 unsafe fn flip_back_recent() {
-    let Some(step) = STATE.with(|s| s.borrow().recent.next_step(auto_convert)) else {
+    // Right after a CapsLock fix, Shift+Backspace is its way back (flipping
+    // `Hello` to Thai would be no use).
+    if STATE.with(|s| {
+        s.borrow()
+            .undo
+            .as_ref()
+            .is_some_and(|u| u.kind == UndoKind::CapsAccident)
+    }) {
+        undo_last_correction();
+        return;
+    }
+    let Some(step) = STATE.with(|s| s.borrow().recent.next_step(convert_shown)) else {
         e2e_trace("flip back: no recent word".to_string());
+        diag::note("Shift+Backspace: nothing to flip", &[]);
         // Say so: a press that does nothing looks like one that failed.
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastNothingToFlip));
         return;
@@ -1583,7 +1952,7 @@ unsafe fn flip_back_recent() {
     {
         // Nothing changes on screen (a number, say): just move on to the
         // word before it on the next press.
-        STATE.with(|s| s.borrow_mut().recent.commit(auto_convert));
+        STATE.with(|s| s.borrow_mut().recent.commit(convert_shown));
         return;
     }
     if !inject::apply(
@@ -1595,7 +1964,7 @@ unsafe fn flip_back_recent() {
         STATE.with(|s| s.borrow_mut().recent.clear());
         return;
     }
-    STATE.with(|s| s.borrow_mut().recent.commit(auto_convert));
+    STATE.with(|s| s.borrow_mut().recent.commit(convert_shown));
     set_undo(
         step.insert.chars().count() + 1,
         &step.restore,
@@ -1628,6 +1997,16 @@ unsafe fn flip_back_recent() {
     }
 }
 
+/// Flip a word as the app shows it. With CapsLock on, English on screen is in
+/// the other case from its keys (`L;YLFU` is สวัสดี), and English put back
+/// is shown that way too. CapsLock clears the recent words, so its state now
+/// is the one they were typed with.
+fn convert_shown(word: &str) -> String {
+    let caps = unsafe { caps_on() };
+    let keys = policy::shown_with_caps(word, caps);
+    policy::shown_with_caps(&auto_convert(&keys), caps)
+}
+
 /// Manual: flip the layout of the word currently in the buffer, in place. A no-op
 /// when the buffer is empty (e.g. an auto-repeat after the word was already
 /// converted) — the caller swallows the key either way.
@@ -1641,10 +2020,16 @@ unsafe fn convert_last_word() {
     }
 
     let backspaces = word.chars().count();
+    // The buffer keeps the keys as if CapsLock were off; the app shows them
+    // with it.
     let mut converted = auto_convert(&word);
     let changed = converted != word;
     if changed {
-        if !inject::apply(backspaces, &converted, None) {
+        let mut shown = policy::shown_with_caps(&converted, caps_on());
+        inject::expect_before_caret(&policy::shown_with_caps(&word, caps_on()));
+        let injected = inject::apply(backspaces, &shown, None);
+        shown.zeroize();
+        if !injected {
             crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
             word.zeroize();
             converted.zeroize();
@@ -1659,7 +2044,9 @@ unsafe fn convert_last_word() {
             st.buf.replace(&converted);
             st.mark = TokenMark::Decided { learn };
         });
-        set_undo(converted.chars().count(), &word, UndoKind::Manual);
+        let mut shown = policy::shown_with_caps(&word, caps_on());
+        set_undo(converted.chars().count(), &shown, UndoKind::Manual);
+        shown.zeroize();
         crate::stats::record_manual();
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastFlippedOne));
 
@@ -1689,7 +2076,9 @@ unsafe fn withdraw_owned_run_to(run: &str) -> bool {
     let Some(owned) = STATE.with(|s| s.borrow_mut().owned.take()) else {
         return false;
     };
-    let delta = render::delta(&owned.rendered, run);
+    let shown = policy::shown_with_caps(run, caps_on());
+    let delta = render::delta(&owned.rendered, &shown);
+    inject::expect_before_caret(&owned.rendered);
     if !delta.is_empty() && !inject::apply(delta.backspaces, &delta.insert, None) {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
     }
@@ -1705,7 +2094,11 @@ unsafe fn withdraw_owned_run_to(run: &str) -> bool {
 /// last rendered character and leave the first one behind.
 unsafe fn anchor_owned_run(run: &str, boundary_vk: u16) -> Option<String> {
     let owned = STATE.with(|s| s.borrow_mut().owned.take())?;
-    let mut restore = format!("{run}{}", boundary_literal(boundary_vk));
+    let mut restore = format!(
+        "{}{}",
+        policy::shown_with_caps(run, caps_on()),
+        boundary_literal(boundary_vk)
+    );
     set_undo(
         owned.rendered.chars().count() + 1,
         &restore,
@@ -1773,9 +2166,20 @@ where
     e2e_trace(format!(
         "reconcile run={run:?} holding={holding} -> {reading:?}"
     ));
+    match (&reading, holding) {
+        (policy::Reading::Thai(_), false) => diag::note(
+            "mid-word: shown as Thai",
+            &[("typed", Shape::of(&run).into())],
+        ),
+        (policy::Reading::AsTyped, true) => diag::note(
+            "mid-word: back to the keys",
+            &[("typed", Shape::of(&run).into())],
+        ),
+        _ => {}
+    }
 
     let target = match &reading {
-        policy::Reading::AsTyped => run.clone(),
+        policy::Reading::AsTyped => policy::shown_with_caps(&run, caps_on()),
         policy::Reading::Thai(thai) => thai.clone(),
     };
 
@@ -1800,6 +2204,12 @@ where
     };
 
     let delta = render::delta(&on_screen, &target);
+    // Before we own the run the app shows the keys as CapsLock shows them.
+    inject::expect_before_caret(&if holding {
+        on_screen.clone()
+    } else {
+        policy::shown_with_caps(&on_screen, caps_on())
+    });
     if !delta.is_empty() && !apply(delta.backspaces, &delta.insert, None) {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
         STATE.with(|s| s.borrow_mut().owned = None);
@@ -1831,7 +2241,9 @@ where
                 // keystrokes that follow extend it, so the boundary still sees
                 // the whole word. Clearing it here is what used to leave
                 // `กรดดำrent`: the boundary judged only the tail.
-                set_undo(target.chars().count(), &run, UndoKind::AutoMidToken);
+                let mut shown = policy::shown_with_caps(&run, caps_on());
+                set_undo(target.chars().count(), &shown, UndoKind::AutoMidToken);
+                shown.zeroize();
                 crate::stats::record_auto();
                 STATE.with(|s| {
                     let mut st = s.borrow_mut();
@@ -1875,6 +2287,9 @@ where
     // callers that swallowed the triggering character before it landed.
     let backspaces = word.chars().count() - usize::from(boundary_vk.is_none());
     let mut corrected = d.corrected;
+    if boundary_vk.is_some() {
+        inject::expect_before_caret(&policy::shown_with_caps(word, caps_on()));
+    }
     if !apply(backspaces, &corrected, boundary_vk) {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
         corrected.zeroize();
@@ -1883,10 +2298,13 @@ where
 
     // Undo target: retype the original word plus the boundary it would have
     // gotten anyway (the boundary keystroke itself never reached the app).
+    // With CapsLock on the app showed the keys in the other case.
+    let mut shown = policy::shown_with_caps(word, caps_on());
     let mut restore = match boundary_vk {
-        Some(vk) => format!("{word}{}", boundary_literal(vk)),
-        None => word.to_string(),
+        Some(vk) => format!("{shown}{}", boundary_literal(vk)),
+        None => shown.clone(),
     };
+    shown.zeroize();
     set_undo(
         corrected.chars().count() + usize::from(boundary_vk.is_some()),
         &restore,
@@ -1946,15 +2364,15 @@ unsafe fn classify(vk: u16, scan: u16) -> Option<Key> {
     translate(vk, scan).map(Key::Char)
 }
 
-/// Reproduce the character the keystroke produced, using the foreground layout
-/// and the live Shift/Caps state.
+/// The character the keystroke means, using the foreground layout and the
+/// live Shift state — as if CapsLock were off. With CapsLock left on the
+/// English layout shows `L;YLFU`, but the keys are the ones for สวัสดี; text
+/// put back "as typed" is shown with CapsLock again
+/// ([`policy::shown_with_caps`]).
 unsafe fn translate(vk: u16, scan: u16) -> Option<char> {
     let mut state = [0u8; 256];
     if is_down(VK_SHIFT) {
         state[VK_SHIFT.0 as usize] = 0x80;
-    }
-    if caps_on() {
-        state[VK_CAPITAL.0 as usize] = 0x01;
     }
 
     let hkl = effective_layout();
@@ -2010,6 +2428,15 @@ unsafe fn sync_context() {
             // next keypress (e.g. the Undo hotkey itself) would otherwise
             // erase the record it is about to use. Window/focus changes are
             // genuine context loss.
+            diag::note(
+                "context changed",
+                &[
+                    ("window", changed.into()),
+                    ("layout", lang_changed.into()),
+                    ("layout_id", ((hkl_i as u64 & 0xFFFF) as i64).into()),
+                    ("field", focus_changed.into()),
+                ],
+            );
             if changed || focus_changed {
                 st.undo = None;
             }
@@ -2033,6 +2460,13 @@ unsafe fn sync_context() {
         let blacklisted = exe.as_deref().map_or(true, safety::is_blacklisted_name);
         if let Some(exe) = exe.as_deref() {
             crate::apps::note_typing_in(exe);
+        }
+        diag::note_app(
+            exe.as_deref().unwrap_or("?"),
+            crate::habits::focused_class().as_deref().unwrap_or("?"),
+        );
+        if blacklisted {
+            diag::note("app is protected: RightType stays out", &[]);
         }
         STATE.with(|s| {
             let mut st = s.borrow_mut();

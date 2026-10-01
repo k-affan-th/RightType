@@ -43,6 +43,8 @@ mod palette;
 #[cfg(feature = "winos")]
 mod ram;
 #[cfg(feature = "winos")]
+mod report;
+#[cfg(feature = "winos")]
 mod safety;
 #[cfg(feature = "winos")]
 mod session;
@@ -56,6 +58,8 @@ mod stats;
 mod tray;
 #[cfg(feature = "winos")]
 mod ui;
+#[cfg(feature = "winos")]
+mod verify;
 
 #[cfg(not(feature = "winos"))]
 fn main() {
@@ -92,6 +96,7 @@ fn main() {
     hook::report_fatal_exceptions();
     // The clipboard "convert selection" worker runs off the hook thread.
     let _manual = manual::spawn();
+    safety::watch_full_screen();
     // Build the tray, install the hook, and run the message loop until Quit.
     tray::run();
 }

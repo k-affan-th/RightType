@@ -109,7 +109,7 @@ pub fn clear() {
 }
 
 /// The focused control's class name in the foreground window.
-fn focused_class() -> Option<String> {
+pub(crate) fn focused_class() -> Option<String> {
     unsafe {
         let thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
         let mut gui = GUITHREADINFO {
