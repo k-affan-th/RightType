@@ -150,6 +150,9 @@ texts! {
     ToastCapsOff => "CapsLock was on — word fixed, CapsLock off · Shift+Backspace if you meant capitals", "CapsLock ค้าง — แก้คำและปิด CapsLock แล้ว · ตั้งใจพิมพ์ตัวใหญ่? กด Shift+Backspace";
     ToastCapsKept => "Capitals kept, CapsLock on again", "คืนตัวพิมพ์ใหญ่และเปิด CapsLock ให้แล้ว";
     ToastModeCode => "Code mode: only what is clearly a slip — never names, Thai only in comments and strings", "โหมดโค้ด: แก้เฉพาะที่พิมพ์ผิดแป้นชัด ๆ ไม่แตะชื่อตัวแปร และแปลงเป็นไทยเฉพาะใน comment/string";
+    RowSyncSettings => "Sync settings and snippets too", "ซิงก์การตั้งค่าและคำย่อด้วย";
+    SubSyncSettings => "Modes, apps, hotkeys and snippets, in the same folder, for every PC that uses it. Off by default.", "โหมด รายการแอป ปุ่มลัด และคำย่อ เก็บในโฟลเดอร์เดียวกัน ใช้ร่วมกันทุกเครื่องที่ใช้โฟลเดอร์นี้ (ปิดไว้เป็นค่าเริ่มต้น)";
+    SyncNeedsFolder => "Choose a sync folder first.", "เลือกโฟลเดอร์สำหรับซิงก์ก่อน";
     NavSnippets => "Snippets", "คำย่อ";
     SnippetsIntro => "Type a short trigger, then Space or Enter, and it becomes the text. Shift+Backspace right after puts the trigger back.", "พิมพ์คำย่อแล้วกด Space หรือ Enter จะกลายเป็นข้อความเต็ม กด Shift+Backspace ทันทีเพื่อคืนคำย่อ";
     ColTrigger => "Trigger", "คำย่อ";

@@ -134,6 +134,7 @@ struct Ids {
     folder_label: u16,
     sync_folder: u16,
     this_pc: u16,
+    sync_settings: u16,
 }
 
 /// The modes offered for an app on the Apps page, in button order.
@@ -410,6 +411,13 @@ fn open_on(page: u8) {
         p.bg,
         l,
     );
+    let sync_settings = s.toggle(
+        tr(T::RowSyncSettings),
+        tr(T::SubSyncSettings),
+        (X0 + 4, 576, CW - 8, 64),
+        p.surface,
+        l,
+    );
     let clear_learned = s.button(
         tr(T::BtnClearAll),
         false,
@@ -627,6 +635,7 @@ fn open_on(page: u8) {
         folder_label,
         sync_folder,
         this_pc,
+        sync_settings,
     };
 
     ui::size_and_center(surface.hwnd, W, H);
@@ -714,6 +723,10 @@ fn sync(win: &SettingsWindow) {
     s.set_checked(ids.learn, learn::is_enabled());
     s.set_checked(ids.caret_hints, crate::caret::is_enabled());
     s.set_checked(ids.spelling, hook::fixes_spelling());
+    s.set_checked(
+        ids.sync_settings,
+        config::SYNC_SETTINGS.load(Ordering::Relaxed),
+    );
     s.set_checked(ids.predict, crate::habits::is_enabled());
     s.set_checked(
         ids.restart,
@@ -777,6 +790,17 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     } else if id == ids.clear_habits {
         crate::habits::clear();
         overlay::show(tr(T::ToastHabitsCleared));
+    } else if id == ids.sync_settings {
+        let on = s.checked(ids.sync_settings);
+        if on && learn::folder().is_none() {
+            s.set_checked(ids.sync_settings, false);
+            s.set_text(ids.learned_status, tr(T::SyncNeedsFolder));
+            return;
+        }
+        config::set_sync_settings(on);
+        // Settings from the folder may have changed what this window shows.
+        fill_apps(win, None);
+        fill_snippets(win, None);
     } else if id == ids.spelling {
         hook::set_fixes_spelling(s.checked(ids.spelling));
         config::persist();
@@ -1506,6 +1530,7 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
         }
         PAGE_LEARNED => {
             field(g, rect(X0, 142, CW, 268));
+            card(g, rect(X0, 572, CW, 72));
         }
         PAGE_SNIPPETS => {
             field(g, rect(X0, 344, 150, 32));
