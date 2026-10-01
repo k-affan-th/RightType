@@ -497,6 +497,7 @@ pub fn run() {
     }
     if let Some(hwnd) = hwnd {
         unsafe { session::arm(hwnd) };
+        focus::set_notify_window(hwnd.0 as isize);
     }
     // UIA focus hook for password-field detection (incl. browsers).
     unsafe { focus::arm() };

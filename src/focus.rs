@@ -92,7 +92,8 @@ pub unsafe fn arm() {
         bound_waits(&uia);
         UIA.with(|u| *u.borrow_mut() = Some(uia));
     }
-    refresh_status();
+    start_worker();
+    wake_worker();
     let hook = SetWinEventHook(
         EVENT_OBJECT_FOCUS,
         EVENT_OBJECT_FOCUS,
@@ -103,8 +104,48 @@ pub unsafe fn arm() {
         WINEVENT_OUTOFCONTEXT,
     );
     HOOK.with(|h| *h.borrow_mut() = Some(hook));
-    // A field that already has focus at startup gets no focus event.
-    crate::habits::on_focus();
+}
+
+/// Where the focus worker reports "the caret moved to another field", so the
+/// per-field habit switch runs on the UI thread (the hook's state lives
+/// there). Set by the tray once its window exists.
+static NOTIFY_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+/// Posted to [`NOTIFY_HWND`] when the caret moved to another field.
+pub const WM_FOCUS_MOVED: u32 = 0x8000 + 0x551;
+
+pub fn set_notify_window(hwnd: isize) {
+    NOTIFY_HWND.store(hwnd, Ordering::Release);
+}
+
+static WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<()>> = std::sync::OnceLock::new();
+
+/// The focus questions (which element, is it a password field, does it
+/// complete inline) go to the app through UI Automation, which waits on the
+/// app — seconds for a hung one, and the cap set on the client does not
+/// cover GetFocusedElement (CI's slow-window test: the UI thread, and with it
+/// the keyboard hook and the tray, stuck there). So they are asked on a
+/// thread of their own; the hook reads the answers from atomics.
+fn start_worker() {
+    let (tx, rx) = std::sync::mpsc::sync_channel::<()>(1);
+    if WORKER.set(tx).is_err() {
+        return;
+    }
+    let _ = std::thread::Builder::new()
+        .name("focus".into())
+        .spawn(move || {
+            while rx.recv().is_ok() {
+                // Focus events come in bursts: answer once for all of them.
+                while rx.try_recv().is_ok() {}
+                unsafe { on_focus_inner() };
+            }
+        });
+}
+
+/// Ask the focus worker to look again (never waits; a pending ask covers it).
+fn wake_worker() {
+    if let Some(tx) = WORKER.get() {
+        let _ = tx.try_send(());
+    }
 }
 
 /// Remove the focus hook.
@@ -134,10 +175,11 @@ unsafe extern "system" fn on_focus(
         "focus event from hwnd={:#x} obj={idobj} child={idchild} depth={depth}",
         hwnd.0 as usize
     ));
-    on_focus_inner();
+    wake_worker();
     DEPTH.with(|d| d.set(depth));
 }
 
+/// On the focus worker thread.
 unsafe fn on_focus_inner() {
     let started = std::time::Instant::now();
     let moved = moves_to_another_field();
@@ -157,7 +199,16 @@ unsafe fn on_focus_inner() {
         &[("password", is_password_field().into())],
     );
     // After the password check above: the habit switch never runs in one.
-    crate::habits::on_focus();
+    // It changes the hook's state, so it runs on the UI thread.
+    let hwnd = NOTIFY_HWND.load(Ordering::Acquire);
+    if hwnd != 0 {
+        let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+            HWND(hwnd as *mut _),
+            WM_FOCUS_MOVED,
+            windows::Win32::Foundation::WPARAM(0),
+            windows::Win32::Foundation::LPARAM(0),
+        );
+    }
 }
 
 /// Whether a focus event means the caret went to another field.
@@ -170,8 +221,9 @@ unsafe fn on_focus_inner() {
 /// typed and convert only its end (`l;ylfu` became `l;ัสดี`). Such events
 /// also leave the password status alone: it still describes the field.
 unsafe fn moves_to_another_field() -> bool {
-    UIA.with(|u| {
-        let Some(uia) = u.borrow().clone() else {
+    let uia = uia_here();
+    UIA.with(|_| {
+        let Some(uia) = uia else {
             return true;
         };
         let Ok(element) = uia.GetFocusedElement() else {
@@ -208,9 +260,9 @@ fn is_list_row(control_type: UIA_CONTROLTYPE_ID) -> bool {
 
 unsafe fn refresh_status() {
     let mut inline = false;
-    let status = UIA.with(|u| {
-        u.borrow()
-            .as_ref()
+    let uia = uia_here();
+    let status = UIA.with(|_| {
+        uia.as_ref()
             .and_then(|uia| {
                 let el = uia.GetFocusedElement().ok()?;
                 let class = el

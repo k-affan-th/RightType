@@ -331,9 +331,15 @@ unsafe fn tick(hwnd: HWND) {
 
 unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
     let anchor = match anchor {
+        // Tags (TH / EN / CAPS, the preview) come often and use the system
+        // caret only: the UI Automation fallback waits on the app, on this
+        // (the hook's) thread. A message may take that wait.
+        Anchor::Caret if style == Style::Badge => match crate::caret::caret_rect() {
+            Some(caret) => Anchor::Near(caret),
+            None => return,
+        },
         Anchor::Caret => match crate::caret::find_caret() {
             Some(caret) => Anchor::Near(caret),
-            None if style == Style::Badge => return,
             None => Anchor::Corner,
         },
         other => other,
