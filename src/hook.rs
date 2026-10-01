@@ -721,12 +721,54 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         if !ours && wparam.0 as u32 == WM_KEYDOWN {
             crate::verify::TYPED.fetch_add(1, Ordering::SeqCst);
         }
-        if !ours && process(wparam.0 as u32, kb) {
-            // We handled this key as a hotkey/correction; swallow it.
-            return LRESULT(1);
+        if !ours {
+            // A key can arrive while the previous one is still being handled:
+            // waiting on a slow app (SendMessageTimeout to a text box) lets
+            // Windows call this hook again on the same thread. Handling it
+            // then corrected a word twice (CI: 'สสวัสดี'). Such a key goes
+            // through untouched, and the word in progress is dropped once
+            // the outer call is done: what is on screen is no longer known.
+            if PROCESSING.with(|p| p.replace(true)) {
+                NESTED_KEY.with(|n| n.set(true));
+                e2e_trace(format!(
+                    "key vk={:#x} arrived while busy: passed through",
+                    kb.vkCode
+                ));
+                return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+            }
+            // Cleared however `process` ends.
+            struct Done;
+            impl Drop for Done {
+                fn drop(&mut self) {
+                    PROCESSING.with(|p| p.set(false));
+                }
+            }
+            let done = Done;
+            let swallow = process(wparam.0 as u32, kb);
+            drop(done);
+            if NESTED_KEY.with(|n| n.replace(false)) {
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    st.buf.clear();
+                    st.owned = None;
+                    st.mark = TokenMark::Plain;
+                    st.recent.clear();
+                });
+            }
+            if swallow {
+                // We handled this key as a hotkey/correction; swallow it.
+                return LRESULT(1);
+            }
         }
     }
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
+thread_local! {
+    /// The hook is handling a key (see the re-entry note in the hook).
+    static PROCESSING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// A key arrived while one was being handled.
+    static NESTED_KEY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Computer-driven Windows E2E necessarily uses `SendInput`, which Windows marks
