@@ -517,6 +517,18 @@ impl TextBox {
     }
 
     fn ask_within(&self, msg: u32, w: usize, l: isize, ms: u32) -> Option<usize> {
+        // Inside the keyboard hook, every wait of one replacement shares one
+        // budget (see `HOOK_BUDGET`).
+        let ms = match REPLACE_DEADLINE.with(|d| d.get()) {
+            Some(deadline) => {
+                let left = deadline.saturating_duration_since(std::time::Instant::now());
+                if left.is_zero() {
+                    return None;
+                }
+                ms.min(left.as_millis().max(1) as u32)
+            }
+            None => ms,
+        };
         // While this waits, Windows may hand the keyboard hook the next key
         // on this thread (see `waiting_on_app`).
         struct Waiting;
@@ -698,6 +710,29 @@ impl TextBox {
         text: &str,
         context: Option<&str>,
     ) -> Result<(), ReplaceError> {
+        // In the keyboard hook, all the waits on the box together stay under
+        // what Windows allows a hook: past that it lets the key through
+        // itself (CI: a fresh Notepad slow to answer, and the `u` that
+        // finished `l;ylfu` landed after สวัสดี).
+        struct Budget;
+        impl Drop for Budget {
+            fn drop(&mut self) {
+                REPLACE_DEADLINE.with(|d| d.set(None));
+            }
+        }
+        let _budget = crate::hook::in_hook().then(|| {
+            REPLACE_DEADLINE.with(|d| d.set(Some(std::time::Instant::now() + HOOK_BUDGET)));
+            Budget
+        });
+        self.replace_within_budget(delete, text, context)
+    }
+
+    fn replace_within_budget(
+        &self,
+        delete: usize,
+        text: &str,
+        context: Option<&str>,
+    ) -> Result<(), ReplaceError> {
         const EM_SETSEL: u32 = 0x00B1;
         const EM_REPLACESEL: u32 = 0x00C2;
         let (start, end) = self
@@ -746,7 +781,15 @@ impl TextBox {
 
 thread_local! {
     static WAITING_ON_APP: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// When the waits of a replacement made in the keyboard hook must end.
+    static REPLACE_DEADLINE: std::cell::Cell<Option<std::time::Instant>> =
+        const { std::cell::Cell::new(None) };
 }
+
+/// All the waits on a text box for one replacement in the keyboard hook.
+/// Windows' own limit for a hook (`LowLevelHooksTimeout`) is a few hundred
+/// milliseconds; the hook's other work fits in what is left.
+const HOOK_BUDGET: std::time::Duration = std::time::Duration::from_millis(200);
 
 /// This thread is waiting for a text box to answer (SendMessageTimeout).
 /// The wait lets Windows call the keyboard hook again for the next key; that

@@ -82,20 +82,21 @@ def palette_by_keyboard(t):
 
 
 # Added to the sweep's config: a snippet and the misspelling fixes (2.1).
-EXTRA_CONFIG = '''fix_spelling = true
-
-[[snippets]]
+SNIPPET_CONFIG = '''[[snippets]]
 trigger = ";sig"
 text = "Best regards"
 scope = "either"
 '''
 
 
-def write_sweep_config(extra_top=""):
+def write_sweep_config(tables=""):
+    """The sweep's config. `tables` (TOML tables such as [app_modes]) go
+    after every top-level key: a key written after a table header belongs
+    to that table (and then the whole file is refused)."""
     fs.write_config(mode="auto", learn=False)
     path = fs.DATA / "config.toml"
-    path.write_text(path.read_text(encoding="utf-8") + extra_top + EXTRA_CONFIG,
-                    encoding="utf-8")
+    path.write_text(path.read_text(encoding="utf-8") + "fix_spelling = true\n\n" + tables
+                    + SNIPPET_CONFIG, encoding="utf-8")
 
 
 def snippets_and_spelling(t):
