@@ -127,6 +127,9 @@ def code_mode(t):
         write_sweep_config()
         CURRENT[0] = fs.start_rt()
         t.focus()
+    # A fresh RightType: give the problem report (checked after the sweep)
+    # a word to record again.
+    fs.run(t, "Auto again after Code mode", "l;ylfu ", "สวัสดี")
 
 
 def one_instance():

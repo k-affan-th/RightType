@@ -821,7 +821,7 @@ enum ContextAsk {
 static CONTEXT_WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<ContextAsk>> =
     std::sync::OnceLock::new();
 
-/// [`text_before_caret`] for the keyboard hook, which must not make the
+/// Up to `n` characters before the caret, for the keyboard hook, which must not make the
 /// cross-process calls itself: asked of a worker, waiting at most `max`
 /// (`None` past that — the caller treats it as "cannot tell"). Code mode
 /// asks this at a word's end, only for a word it would otherwise fix.
@@ -848,7 +848,7 @@ fn context_worker() -> &'static std::sync::mpsc::SyncSender<ContextAsk> {
                 while let Ok(ask) = rx.recv() {
                     match ask {
                         ContextAsk::Text(n, reply) => {
-                            let _ = reply.try_send(text_before_caret(n));
+                            let _ = reply.try_send(text_before_caret_up_to(n));
                         }
                         ContextAsk::Boxes(spans, reply) => {
                             let _ = reply.try_send(boxes_before_caret(&spans));
@@ -993,10 +993,16 @@ fn union_of_boxes(
 /// does not say, text is selected, or the field is a password field. Worker
 /// threads only (cross-process calls).
 pub fn text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
-    uia_text_before_caret(n).or_else(|| edit_text_before_caret(n))
+    uia_text_before_caret(n, true).or_else(|| edit_text_before_caret(n, true))
 }
 
-fn uia_text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
+/// Like [`text_before_caret`], but up to `n` characters: all of it when the
+/// field holds fewer (Code mode reads the line, however short).
+fn text_before_caret_up_to(n: usize) -> Option<zeroize::Zeroizing<String>> {
+    uia_text_before_caret(n, false).or_else(|| edit_text_before_caret(n, false))
+}
+
+fn uia_text_before_caret(n: usize, exact: bool) -> Option<zeroize::Zeroizing<String>> {
     use windows::Win32::UI::Accessibility::{
         IUIAutomationTextPattern, TextPatternRangeEndpoint_Start, TextUnit_Character,
         UIA_TextPatternId,
@@ -1022,7 +1028,7 @@ fn uia_text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
         let moved = range
             .MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Character, -back)
             .ok()?;
-        if moved != -back {
+        if exact && moved != -back {
             return None;
         }
         let text = zeroize::Zeroizing::new(range.GetText(-1).ok()?.to_string());
@@ -1030,7 +1036,7 @@ fn uia_text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
     }
 }
 
-fn edit_text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
+fn edit_text_before_caret(n: usize, exact: bool) -> Option<zeroize::Zeroizing<String>> {
     use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
     use zeroize::Zeroize;
     let tb = TextBox::focused().ok()?;
@@ -1056,7 +1062,7 @@ fn edit_text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
         tail
     });
     units.zeroize();
-    text.filter(|t| t.chars().count() == n)
+    text.filter(|t| !exact || t.chars().count() == n)
 }
 
 /// The text cursor of the focused element, from UI Automation, in screen
