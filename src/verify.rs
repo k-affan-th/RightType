@@ -104,7 +104,9 @@ pub fn after_keys(expected: &str, exe: Option<String>) {
                 return;
             }
             let n = expected.chars().count();
-            let Some(shown) = crate::focus::text_before_caret(n) else {
+            // Room to spare: some apps count Thai clusters (ว + ั) as one
+            // character, and the text then comes back longer than asked.
+            let Some(shown) = crate::focus::text_before_caret_up_to(n + 8) else {
                 crate::hook::trace_note("verify: app does not share its text");
                 return;
             };
@@ -121,12 +123,15 @@ pub fn after_keys(expected: &str, exe: Option<String>) {
                 crate::hook::e2e_trace("verify: answer too late to tell".to_string());
                 return;
             }
-            if *shown == *expected {
+            if shown.ends_with(expected.as_str()) {
                 crate::hook::trace_note("verify: correction shown as sent");
                 return;
             }
             let mut sent: Vec<char> = expected.chars().collect();
             let mut got: Vec<char> = shown.chars().collect();
+            // The part that should be the correction: the last `n`.
+            let tail = got.len().saturating_sub(n);
+            got.drain(..tail);
             let same = sent.iter().zip(&got).filter(|(a, b)| a == b).count();
             sent.zeroize();
             got.zeroize();

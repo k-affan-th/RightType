@@ -1040,8 +1040,10 @@ pub fn text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
 }
 
 /// Like [`text_before_caret`], but up to `n` characters: all of it when the
-/// field holds fewer (Code mode reads the line, however short).
-fn text_before_caret_up_to(n: usize) -> Option<zeroize::Zeroizing<String>> {
+/// field holds fewer (Code mode reads the line, however short). Some apps
+/// count a character as a whole cluster (Chrome: ว and ั are one), so the
+/// text may be longer than `n` — compare its end, not its length.
+pub fn text_before_caret_up_to(n: usize) -> Option<zeroize::Zeroizing<String>> {
     uia_text_before_caret(n, false).or_else(|| edit_text_before_caret(n, false))
 }
 
