@@ -446,6 +446,16 @@ impl TextBox {
     }
 
     fn ask_within(&self, msg: u32, w: usize, l: isize, ms: u32) -> Option<usize> {
+        // While this waits, Windows may hand the keyboard hook the next key
+        // on this thread (see `waiting_on_app`).
+        struct Waiting;
+        impl Drop for Waiting {
+            fn drop(&mut self) {
+                WAITING_ON_APP.with(|w| w.set(w.get() - 1));
+            }
+        }
+        WAITING_ON_APP.with(|w| w.set(w.get() + 1));
+        let _waiting = Waiting;
         use windows::Win32::Foundation::{LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, SMTO_ABORTIFHUNG};
         let mut result = 0usize;
@@ -661,6 +671,17 @@ impl TextBox {
             )),
         }
     }
+}
+
+thread_local! {
+    static WAITING_ON_APP: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// This thread is waiting for a text box to answer (SendMessageTimeout).
+/// The wait lets Windows call the keyboard hook again for the next key; that
+/// key must not be handled then (the word on screen is about to change).
+pub fn waiting_on_app() -> bool {
+    WAITING_ON_APP.with(|w| w.get() > 0)
 }
 
 /// Why [`TextBox::replace_before_caret`] did not do the job.

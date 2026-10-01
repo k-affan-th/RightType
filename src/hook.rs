@@ -723,12 +723,16 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         }
         if !ours {
             // A key can arrive while the previous one is still being handled:
-            // waiting on a slow app (SendMessageTimeout to a text box) lets
-            // Windows call this hook again on the same thread. Handling it
-            // then corrected a word twice (CI: 'สสวัสดี'). Such a key goes
-            // through untouched, and the word in progress is dropped once
-            // the outer call is done: what is on screen is no longer known.
-            if PROCESSING.with(|p| p.replace(true)) {
+            // waiting on a slow text box (SendMessageTimeout) lets Windows
+            // call this hook again on the same thread. Handling it then
+            // corrected a word twice (CI: 'สสวัสดี'). Such a key goes through
+            // untouched, and the word in progress is dropped once the outer
+            // call is done: what is on screen is no longer known. (Keys that
+            // arrive while our own keys are being sent are handled as before:
+            // passing those through turned a Shift+Backspace into a plain
+            // Backspace — CI, Edge.)
+            let nested = PROCESSING.with(|p| p.get());
+            if nested && crate::focus::waiting_on_app() {
                 NESTED_KEY.with(|n| n.set(true));
                 e2e_trace(format!(
                     "key vk={:#x} arrived while busy: passed through",
@@ -736,14 +740,15 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
                 ));
                 return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
             }
-            // Cleared however `process` ends.
-            struct Done;
+            // Restored however `process` ends.
+            struct Done(bool);
             impl Drop for Done {
                 fn drop(&mut self) {
-                    PROCESSING.with(|p| p.set(false));
+                    PROCESSING.with(|p| p.set(self.0));
                 }
             }
-            let done = Done;
+            PROCESSING.with(|p| p.set(true));
+            let done = Done(nested);
             let swallow = process(wparam.0 as u32, kb);
             drop(done);
             if NESTED_KEY.with(|n| n.replace(false)) {

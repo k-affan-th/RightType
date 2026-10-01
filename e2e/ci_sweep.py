@@ -832,6 +832,12 @@ def main():
             except SkipTarget as why:
                 print(f"{key} skipped: {why}", flush=True)
                 continue
+            except SystemExit as why:
+                # The app would not start: a failure of this target, not of
+                # the whole sweep.
+                print(f"{key} could not start: {why}", flush=True)
+                fs.check(key, "target started", str(why), "started")
+                continue
             CURRENT[0] = proc
             # A target where RightType died leaves CapsLock on (its
             # Shift+CapsLock then reached Windows); do not let that fail
