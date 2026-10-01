@@ -162,6 +162,7 @@ pub unsafe fn arm() {
     }
     start_worker();
     wake_worker();
+    let _ = context_worker();
     let hook = SetWinEventHook(
         EVENT_OBJECT_FOCUS,
         EVENT_OBJECT_FOCUS,
@@ -829,7 +830,9 @@ pub fn text_before_caret_within(
     max: std::time::Duration,
 ) -> Option<zeroize::Zeroizing<String>> {
     let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
-    context_worker().try_send(ContextAsk::Text(n, reply_tx)).ok()?;
+    context_worker()
+        .try_send(ContextAsk::Text(n, reply_tx))
+        .ok()?;
     reply_rx.recv_timeout(max).ok().flatten()
 }
 
@@ -839,6 +842,9 @@ fn context_worker() -> &'static std::sync::mpsc::SyncSender<ContextAsk> {
         let _ = std::thread::Builder::new()
             .name("context".into())
             .spawn(move || {
+                // Ready before the first question: making the UI Automation
+                // client takes longer than the hook waits for an answer.
+                let _ = uia_here();
                 while let Ok(ask) = rx.recv() {
                     match ask {
                         ContextAsk::Text(n, reply) => {

@@ -2,10 +2,60 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.1.0]
 
 ### Added
 
+- **Code mode** for code editors (VS Code, Cursor, Visual Studio,
+  JetBrains IDEs, Sublime Text, Notepad++ and others; on by default there,
+  changeable per app):
+  - names are never touched: `camelCase`, `snake_case`, `CONSTANT`, and
+    anything with digits or `_ . :: ->`;
+  - Thai keys typed for code come back as the English typed (`ฟหกด` →
+    `asdf`), even when that is not a dictionary word;
+  - English typed for Thai becomes Thai only inside a comment or a string;
+    where the editor does not share its text, it is offered as a hint;
+  - CapsLock is not treated as an accident (`MAX_SIZE` is meant).
+- **A calmer mode offered where fixes keep being taken back**: three in ten
+  minutes in one app, and RightType offers Suggest (or Manual) there —
+  **this time only** or **from now on** — from the palette (1 or 2).
+- **Settings → Apps is a table**: app, mode, set by (you, this time only,
+  default, safety), and where the program is. Select a row and pick a mode,
+  or right-click it (keep for good, remove, show the program file);
+  **+ Add an app that is open** lists running programs instead of typing a
+  name. Built-in safety apps are listed, locked.
+- **Recent words in the palette**: the last words typed, each with what it
+  would flip to. Tick several with Space and they are **tinted where they
+  are in the app** (when the app says where), then Enter flips exactly
+  those and leaves the words between them alone.
+- **Off in this field** (palette): RightType stays out of one field — a
+  search box, a code cell — and keeps working everywhere else in the app,
+  until it restarts.
+- **Snippets** (Settings → Snippets): a short trigger and Space becomes a
+  longer text, line breaks included. Each works on the Thai keyboard, the
+  English one, or **either** — matched by the keys pressed, so `;addr`
+  works with the Thai keyboard on too. Shift+Backspace right after puts the
+  trigger back. Not in password fields.
+- **Common Thai misspellings put right** (opt-in, Settings → General or the
+  palette): `อนุญาติ` → `อนุญาต`, `ผลลัพท์` → `ผลลัพธ์` and about 60 more,
+  only where the result reads better to the dictionary and never a word the
+  dictionary knows. Each fix shows in its own colour (purple) with what
+  changed; **Backspace right after puts the word back** instead of
+  deleting into it, and that word is left alone from then on.
+- **Screen readers** (Narrator, NVDA, JAWS) hear each fix ("Fixed:
+  สวัสดี"), tag and message, only while one is running.
+- **High Contrast**: Settings, the palette, tags and highlights use the
+  contrast theme's own colours.
+- **One RightType at a time, with no dialog**: opening it again shows
+  "already running" for a moment; opening another version or copy closes
+  the running one and takes over ("Now running 2.1.0, closed 2.0.1").
+- **Start again after a crash** (on by default, Settings → Privacy & about):
+  not after you quit it or end it in Task Manager, at most three times in a
+  row.
+- **Sync settings and snippets too** (opt-in): with a sync folder for the
+  learned words, modes, apps, hotkeys and snippets are shared by every PC
+  using that folder.
+- **Windows on ARM**: an arm64 installer and zip.
 - **A preview while you type (Auto)**: before Auto is sure enough to fix a
   word, the cursor tag shows where the keys are heading — `l;yl` shows
   `→ สวัส` — so you can see a fix is coming without anything changing yet.

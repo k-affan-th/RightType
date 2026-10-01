@@ -56,9 +56,8 @@ pub fn verdict(
             if let Some(d) = detected {
                 return Verdict::Fix(d.to_string());
             }
-            let english = crate::layout::th_to_en(word);
-            let thai_words = crate::segment::is_fully_known(word, th);
-            if !thai_words && is_name(&english) && english.chars().count() >= 2 {
+            if thai_keys_look_like_code(word, th) {
+                let english = crate::layout::th_to_en(word);
                 // Not sure it is code (the editor does not share its text):
                 // a Thai name in a string is possible, so offer it.
                 if prose.is_none() {
@@ -84,6 +83,14 @@ pub fn verdict(
             }
         }
     }
+}
+
+/// Could Thai `word` be the keys of a name typed on the Thai keyboard (not
+/// Thai words, and the English keys have a name's shape)? Only then is the
+/// line worth reading.
+pub fn thai_keys_look_like_code(word: &str, th: &Dictionary) -> bool {
+    let english = crate::layout::th_to_en(word);
+    english.chars().count() >= 2 && is_name(&english) && !crate::segment::is_fully_known(word, th)
 }
 
 /// Has `s` the shape of a name in code: a letter or `_` first, then letters,

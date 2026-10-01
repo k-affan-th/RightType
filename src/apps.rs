@@ -134,7 +134,10 @@ pub fn note_rejection(exe: &str, mode: AppMode) -> Option<AppMode> {
         return None;
     }
     let mut all = REJECTIONS.lock().unwrap();
-    let times = all.get_or_insert_with(HashMap::new).entry(exe.to_string()).or_default();
+    let times = all
+        .get_or_insert_with(HashMap::new)
+        .entry(exe.to_string())
+        .or_default();
     if !per_app::rejection_offers(times, Instant::now()) {
         return None;
     }
@@ -166,7 +169,7 @@ pub fn clear_for_now(exe: &str) {
 /// Settings → Apps (adding one, and where each program lives); read when
 /// asked, not kept.
 pub fn running() -> Vec<(String, String)> {
-    use windows::Win32::Foundation::{BOOL, CloseHandle, HWND, LPARAM};
+    use windows::Win32::Foundation::{CloseHandle, BOOL, HWND, LPARAM};
     use windows::Win32::System::Threading::{
         OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
         PROCESS_QUERY_LIMITED_INFORMATION,

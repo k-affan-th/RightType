@@ -157,7 +157,10 @@ mod tests {
             fix("ผลลัพท์ที่ได้", th).map(|f| f.0),
             Some("ผลลัพธ์ที่ได้".to_string())
         );
-        assert_eq!(fix("ขอบคุณนะค่ะ", th).map(|f| f.0), Some("ขอบคุณนะคะ".to_string()));
+        assert_eq!(
+            fix("ขอบคุณนะค่ะ", th).map(|f| f.0),
+            Some("ขอบคุณนะคะ".to_string())
+        );
     }
 
     #[test]

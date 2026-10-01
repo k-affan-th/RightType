@@ -18,9 +18,10 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 use windows::Win32::UI::Accessibility::{
     IRawElementProviderSimple, IRawElementProviderSimple_Impl, NotificationKind_ActionCompleted,
-    NotificationProcessing_ImportantMostRecent, ProviderOptions, ProviderOptions_ServerSideProvider,
-    ProviderOptions_UseComThreading, UiaClientsAreListening, UiaHostProviderFromHwnd,
-    UiaRaiseNotificationEvent, UIA_NamePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID,
+    NotificationProcessing_ImportantMostRecent, ProviderOptions,
+    ProviderOptions_ServerSideProvider, ProviderOptions_UseComThreading, UIA_NamePropertyId,
+    UiaClientsAreListening, UiaHostProviderFromHwnd, UiaRaiseNotificationEvent, UIA_PATTERN_ID,
+    UIA_PROPERTY_ID,
 };
 use zeroize::Zeroize;
 

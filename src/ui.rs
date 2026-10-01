@@ -251,8 +251,7 @@ fn luminance(rgb: Rgb) -> u32 {
 /// outlines instead of subtle fills (which a contrast theme does not have).
 fn contrast_palette() -> Palette {
     use windows::Win32::Graphics::Gdi::{
-        COLOR_BTNFACE, COLOR_HIGHLIGHT, COLOR_HIGHLIGHTTEXT, COLOR_WINDOW,
-        COLOR_WINDOWTEXT,
+        COLOR_BTNFACE, COLOR_HIGHLIGHT, COLOR_HIGHLIGHTTEXT, COLOR_WINDOW, COLOR_WINDOWTEXT,
     };
     let window = sys_rgb(COLOR_WINDOW);
     let text = sys_rgb(COLOR_WINDOWTEXT);
@@ -1641,15 +1640,30 @@ impl Surface {
         let p = pal();
         unsafe {
             let ex = LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER;
-            SendMessageW(hwnd, LVM_SETEXTENDEDLISTVIEWSTYLE, WPARAM(ex), LPARAM(ex as isize));
-            SendMessageW(hwnd, LVM_SETBKCOLOR, WPARAM(0), LPARAM(colorref(p.inset).0 as isize));
+            SendMessageW(
+                hwnd,
+                LVM_SETEXTENDEDLISTVIEWSTYLE,
+                WPARAM(ex),
+                LPARAM(ex as isize),
+            );
+            SendMessageW(
+                hwnd,
+                LVM_SETBKCOLOR,
+                WPARAM(0),
+                LPARAM(colorref(p.inset).0 as isize),
+            );
             SendMessageW(
                 hwnd,
                 LVM_SETTEXTBKCOLOR,
                 WPARAM(0),
                 LPARAM(colorref(p.inset).0 as isize),
             );
-            SendMessageW(hwnd, LVM_SETTEXTCOLOR, WPARAM(0), LPARAM(colorref(p.text).0 as isize));
+            SendMessageW(
+                hwnd,
+                LVM_SETTEXTCOLOR,
+                WPARAM(0),
+                LPARAM(colorref(p.text).0 as isize),
+            );
             if is_dark() {
                 let theme: Vec<u16> = "DarkMode_Explorer\0".encode_utf16().collect();
                 let _ = SetWindowTheme(hwnd, PCWSTR(theme.as_ptr()), PCWSTR::null());
@@ -1699,7 +1713,12 @@ impl Surface {
                         LVM_SETITEMTEXTW
                     };
                     let wparam = if c == 0 { 0 } else { r };
-                    SendMessageW(hwnd, msg, WPARAM(wparam), LPARAM(&item as *const _ as isize));
+                    SendMessageW(
+                        hwnd,
+                        msg,
+                        WPARAM(wparam),
+                        LPARAM(&item as *const _ as isize),
+                    );
                 }
             }
         }

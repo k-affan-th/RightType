@@ -435,8 +435,20 @@ fn open_on(page: u8) {
 
     // --- Snippets -----------------------------------------------------------
     let n = PAGE_SNIPPETS;
-    s.label(tr(T::NavSnippets), TextStyle::Title, (X0, 18, CW, 36), p.bg, n);
-    s.label(tr(T::SnippetsIntro), TextStyle::Dim, (X0, 58, CW, 40), p.bg, n);
+    s.label(
+        tr(T::NavSnippets),
+        TextStyle::Title,
+        (X0, 18, CW, 36),
+        p.bg,
+        n,
+    );
+    s.label(
+        tr(T::SnippetsIntro),
+        TextStyle::Dim,
+        (X0, 58, CW, 40),
+        p.bg,
+        n,
+    );
     let snip_table = s.table(
         &[
             (tr(T::ColTrigger), 110),
@@ -446,12 +458,27 @@ fn open_on(page: u8) {
         (X0, 102, CW, 210),
         n,
     );
-    s.label(tr(T::ColTrigger), TextStyle::Small, (X0, 324, 150, 18), p.bg, n);
+    s.label(
+        tr(T::ColTrigger),
+        TextStyle::Small,
+        (X0, 324, 150, 18),
+        p.bg,
+        n,
+    );
     let snip_trigger = s.line_edit("", (X0 + 4, 348, 142, 24), n);
-    s.label(tr(T::ColText), TextStyle::Small, (X0 + 160, 324, CW - 160, 18), p.bg, n);
+    s.label(
+        tr(T::ColText),
+        TextStyle::Small,
+        (X0 + 160, 324, CW - 160, 18),
+        p.bg,
+        n,
+    );
     let snip_text = s.edit("", (X0 + 164, 348, CW - 168, 60), n);
     let mut snip_scope = [0u16; 3];
-    for (i, key) in [T::ScopeThai, T::ScopeEnglish, T::ScopeEither].iter().enumerate() {
+    for (i, key) in [T::ScopeThai, T::ScopeEnglish, T::ScopeEither]
+        .iter()
+        .enumerate()
+    {
         snip_scope[i] = s.segment(
             tr(*key),
             i == 0,
@@ -460,10 +487,28 @@ fn open_on(page: u8) {
             n,
         );
     }
-    let snip_save = s.button(tr(T::BtnSaveSnippet), true, (X0 + CW - 232, 424, 118, 34), p.bg, n);
-    let snip_remove = s.button(tr(T::BtnRemoveApp), false, (X0 + CW - 108, 424, 108, 34), p.bg, n);
+    let snip_save = s.button(
+        tr(T::BtnSaveSnippet),
+        true,
+        (X0 + CW - 232, 424, 118, 34),
+        p.bg,
+        n,
+    );
+    let snip_remove = s.button(
+        tr(T::BtnRemoveApp),
+        false,
+        (X0 + CW - 108, 424, 108, 34),
+        p.bg,
+        n,
+    );
     let snip_status = s.label("", TextStyle::Small, (X0, 466, CW, 22), p.bg, n);
-    s.label(tr(T::SnippetsNote), TextStyle::Small, (X0, 492, CW, 60), p.bg, n);
+    s.label(
+        tr(T::SnippetsNote),
+        TextStyle::Small,
+        (X0, 492, CW, 60),
+        p.bg,
+        n,
+    );
 
     // --- Apps: a table of every app with a mode of its own ------------------
     let b = PAGE_BLOCKED;
@@ -1319,7 +1364,10 @@ fn popup(win: &SettingsWindow, labels: &[String], x: i32, y: i32) -> Option<usiz
             None,
         );
         let _ = DestroyMenu(menu);
-        usize::try_from(picked.0).ok().filter(|&p| p > 0).map(|p| p - 1)
+        usize::try_from(picked.0)
+            .ok()
+            .filter(|&p| p > 0)
+            .map(|p| p - 1)
     }
 }
 

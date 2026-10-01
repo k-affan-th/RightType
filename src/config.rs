@@ -196,7 +196,10 @@ pub fn apply(cfg: &Config) {
             .take(righttype::snippets::MAX_SNIPPETS)
             .collect(),
     );
-    RESTART_AFTER_CRASH.store(cfg.restart_after_crash, std::sync::atomic::Ordering::Relaxed);
+    RESTART_AFTER_CRASH.store(
+        cfg.restart_after_crash,
+        std::sync::atomic::Ordering::Relaxed,
+    );
     crate::habits::set_enabled(cfg.predict_layout);
     righttype::layout::set_thai_variant(match cfg.thai_layout.as_deref() {
         Some("pattachote") => righttype::layout::ThaiVariant::Pattachote,
@@ -222,8 +225,7 @@ pub fn apply(cfg: &Config) {
 // ------------------------------------------------------------ sync folder
 
 /// Settings → Learned words → "Sync settings and snippets too".
-pub static SYNC_SETTINGS: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+pub static SYNC_SETTINGS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// The shared file's time when we last wrote or read it.
 static SHARED_SEEN: std::sync::Mutex<Option<std::time::SystemTime>> = std::sync::Mutex::new(None);
 static SHARED_TICKS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);

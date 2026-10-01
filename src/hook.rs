@@ -584,7 +584,10 @@ fn note_rejection() {
         return;
     };
     if let Some(calmer) = crate::apps::note_rejection(&exe, mode.into()) {
-        diag::note("fixes taken back three times in one app: calmer mode offered", &[]);
+        diag::note(
+            "fixes taken back three times in one app: calmer mode offered",
+            &[],
+        );
         let keys = hotkeys().chord(Action::Palette).format();
         crate::overlay::show(&trf(
             T::ToastOfferMode,
@@ -1515,10 +1518,8 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         snippet.text.zeroize();
         STATE.with(|s| s.borrow_mut().recent.clear());
         word.zeroize();
-        if done {
-            return true;
-        }
-        return false;
+        // Expanded: the boundary was typed after the text, swallow the key.
+        return done;
     }
 
     let converted = mark == TokenMark::Converted;
@@ -1587,10 +1588,13 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                 policy::InputLayout::UsQwerty => {
                     detection.is_some() && !righttype::code::looks_like_identifier(&word)
                 }
-                policy::InputLayout::ThaiKedmanee => detection.is_none(),
+                policy::InputLayout::ThaiKedmanee => {
+                    detection.is_none()
+                        && righttype::code::thai_keys_look_like_code(&word, dict::thai())
+                }
             };
             let prose = if line_matters {
-                crate::focus::text_before_caret_within(160, Duration::from_millis(40))
+                crate::focus::text_before_caret_within(160, Duration::from_millis(80))
                     .map(|t| righttype::code::line_is_prose(&t))
             } else {
                 None
@@ -1718,10 +1722,8 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             let mut corrected = d.corrected.clone();
             let done = maybe_correct(&word, Some(vk), d);
             if done {
-                let mut said = righttype::i18n::trf(
-                    righttype::i18n::T::SayFixed,
-                    &[("word", &corrected)],
-                );
+                let mut said =
+                    righttype::i18n::trf(righttype::i18n::T::SayFixed, &[("word", &corrected)]);
                 crate::overlay::announce(&said);
                 said.zeroize();
             }
@@ -2204,15 +2206,12 @@ unsafe fn flip_back_recent() {
     // Right after a CapsLock fix, Shift+Backspace is its way back (flipping
     // `Hello` to Thai would be no use).
     if STATE.with(|s| {
-        s.borrow()
-            .undo
-            .as_ref()
-            .is_some_and(|u| {
-                matches!(
-                    u.kind,
-                    UndoKind::CapsAccident | UndoKind::Spelling(_) | UndoKind::Snippet
-                )
-            })
+        s.borrow().undo.as_ref().is_some_and(|u| {
+            matches!(
+                u.kind,
+                UndoKind::CapsAccident | UndoKind::Spelling(_) | UndoKind::Snippet
+            )
+        })
     }) {
         undo_last_correction();
         return;
@@ -2324,8 +2323,14 @@ pub unsafe fn flip_picked(picked: &[usize]) {
         note_rejection();
     }
     activate_layout(layout_of(&step.newest));
-    diag::note("palette: picked recent words flipped", &[("words", step.words.into())]);
-    crate::overlay::show(&trf(T::ToastFlippedWords, &[("n", &step.words.to_string())]));
+    diag::note(
+        "palette: picked recent words flipped",
+        &[("words", step.words.into())],
+    );
+    crate::overlay::show(&trf(
+        T::ToastFlippedWords,
+        &[("n", &step.words.to_string())],
+    ));
 }
 
 /// Flip a word as the app shows it. With CapsLock on, English on screen is in

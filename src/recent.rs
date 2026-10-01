@@ -269,7 +269,11 @@ impl Recent {
     /// the others as they are: one step from the oldest picked word to the
     /// caret. `None` when nothing valid is picked. After applying it, call
     /// [`Recent::clear`]: the run of flips does not go on from a pick.
-    pub fn flip_picked(&self, picked: &[usize], convert: impl Fn(&str) -> String) -> Option<FlipStep> {
+    pub fn flip_picked(
+        &self,
+        picked: &[usize],
+        convert: impl Fn(&str) -> String,
+    ) -> Option<FlipStep> {
         let first = *picked.iter().filter(|&&i| i < self.words.len()).min()?;
         let last = self.words.len() - 1;
         let mut restore = String::new();

@@ -661,11 +661,7 @@ fn open() {
     let weak = Rc::downgrade(&palette);
     palette.surface.on_click(move |id| {
         if let Some(p) = weak.upgrade() {
-            let shown = p
-                .visible
-                .borrow()
-                .iter()
-                .position(|&i| p.items[i].0 == id);
+            let shown = p.visible.borrow().iter().position(|&i| p.items[i].0 == id);
             if let Some(k) = shown {
                 run_shown(&p, k);
             }

@@ -14,8 +14,8 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, SetLayeredWindowAttributes,
     SetWindowDisplayAffinity, SetWindowPos, ShowWindow, HWND_TOPMOST, LWA_ALPHA, SWP_NOACTIVATE,
-    SW_HIDE, SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE, WNDCLASSW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    SW_HIDE, SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
 const CLASS: PCWSTR = w!("RightTypeMark");
@@ -47,7 +47,10 @@ fn colour() -> COLORREF {
 unsafe fn make() -> Option<HWND> {
     // One brush while tints are up; `clear` frees it, so the next set
     // follows the theme of the moment.
-    let brush = BRUSH.with(|b| *b.borrow_mut().get_or_insert_with(|| CreateSolidBrush(colour())));
+    let brush = BRUSH.with(|b| {
+        *b.borrow_mut()
+            .get_or_insert_with(|| CreateSolidBrush(colour()))
+    });
     let instance = GetModuleHandleW(None).ok()?;
     let class = WNDCLASSW {
         lpfnWndProc: Some(proc),

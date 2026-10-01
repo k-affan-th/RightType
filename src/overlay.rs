@@ -475,8 +475,7 @@ unsafe fn paint(hwnd: HWND) {
     let (fill, edge, ink) = if crate::ui::high_contrast() {
         contrast_colours(STYLE.load(Ordering::Relaxed))
     } else {
-        let (fill, edge) =
-            TEXT.with(|t| tag_colours(&t.borrow(), STYLE.load(Ordering::Relaxed)));
+        let (fill, edge) = TEXT.with(|t| tag_colours(&t.borrow(), STYLE.load(Ordering::Relaxed)));
         (fill, edge, 0x00FF_FFFF)
     };
     let brush = CreateSolidBrush(COLORREF(fill));

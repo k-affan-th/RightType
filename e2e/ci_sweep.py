@@ -81,6 +81,88 @@ def palette_by_keyboard(t):
     fs.run(t, "palette by keyboard: search, Enter", "hello", "HELLO", then=[steps])
 
 
+# Added to the sweep's config: a snippet and the misspelling fixes (2.1).
+EXTRA_CONFIG = '''fix_spelling = true
+
+[[snippets]]
+trigger = ";sig"
+text = "Best regards"
+scope = "either"
+'''
+
+
+def write_sweep_config(extra_top=""):
+    fs.write_config(mode="auto", learn=False)
+    path = fs.DATA / "config.toml"
+    path.write_text(path.read_text(encoding="utf-8") + extra_top + EXTRA_CONFIG,
+                    encoding="utf-8")
+
+
+def snippets_and_spelling(t):
+    """2.1: a snippet on either keyboard, taken back with Shift+Backspace;
+    a common Thai misspelling put right, and put back by Backspace right
+    after."""
+    fs.run(t, "snippet expands", ";sig ", "Best regards")
+    fs.run(t, "snippet expands on the Thai keyboard (same keys)", ";sig ", "Best regards",
+           layout=HKL_TH)
+    fs.run(t, "snippet taken back with Shift+Backspace", ";sig ", ";sig", then=[flip])
+    # อนุญาติ (keys vo6Pk9b on the Thai keyboard) → อนุญาต.
+    fs.run(t, "common misspelling put right", "vo6Pk9b ", "อนุญาต", layout=HKL_TH)
+    fs.run(t, "Backspace right after puts the misspelling back", "vo6Pk9b ", "อนุญาติ",
+           layout=HKL_TH, then=[lambda: tap(BACK)])
+
+
+def code_mode(t):
+    """2.1 Code mode, with the browser set to it: names stay, Thai keys
+    typed for code come back as the English typed, Thai only in comments."""
+    write_sweep_config('[app_modes]\n"chrome.exe" = "code"\n"msedge.exe" = "code"\n\n')
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+        fs.run(t, "code mode: a name stays", "getUserName ", "getUserName")
+        fs.run(t, "code mode: Thai keys typed for code", "asdf ", "asdf", layout=HKL_TH)
+        fs.run(t, "code mode: Thai-looking keys in code stay", "l;ylfu ", "l;ylfu")
+        fs.run(t, "code mode: Thai in a comment", "// l;ylfu ", "// สวัสดี")
+    finally:
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+
+
+def one_instance():
+    """2.1: a second launch of the same program leaves (the first keeps
+    running); another copy of the program takes over."""
+    first = fs.start_rt()
+    env = {**os.environ, "RIGHTTYPE_E2E_ACCEPT_INJECTED": "1",
+           "RIGHTTYPE_E2E_DATA_DIR": str(fs.DATA)}
+    second = subprocess.Popen([str(fs.EXE)], env=env)
+    try:
+        second.wait(timeout=8)
+        left = "left"
+    except subprocess.TimeoutExpired:
+        left = "still running"
+    fs.check("instance", "second launch of the same program leaves", left, "left")
+    fs.check("instance", "the first keeps running",
+             "running" if first.poll() is None else "ended", "running")
+    copy_dir = Path(os.environ.get("TEMP", ".")) / "rt-e2e-copy"
+    copy_dir.mkdir(exist_ok=True)
+    copy = copy_dir / "righttype.exe"
+    import shutil
+    shutil.copy2(fs.EXE, copy)
+    other = subprocess.Popen([str(copy)], env=env)
+    try:
+        first.wait(timeout=10)
+        old = "closed"
+    except subprocess.TimeoutExpired:
+        old = "still running"
+    time.sleep(1.0)
+    fs.check("instance", "another copy takes over: the old one closes", old, "closed")
+    fs.check("instance", "another copy takes over: the new one runs",
+             "running" if other.poll() is None else "ended", "running")
+    other.kill()
+    subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
+
+
 def full_screen_browser_still_works(t):
     """Full screen (F11) with a text cursor is not a game: still corrected."""
     tap(0x7A)  # F11
@@ -699,9 +781,11 @@ def sweep(t):
     capslock_left_on(t)
     # Thai typed in a wrong order that looks right: two เ for แ (keys g g).
     fs.run(t, "two เ typed for แ is put right", "gg,; ", "แมว", layout=HKL_TH)
+    snippets_and_spelling(t)
     if t.name == "page":
         full_screen_browser_still_works(t)
         palette_by_keyboard(t)
+        code_mode(t)
     selection_leaves_clipboard_alone(t)
 
 
@@ -804,7 +888,7 @@ def main():
         raise SystemExit("US English and Thai Kedmanee must both be installed")
 
     thai_capslock_probe()
-    fs.write_config(mode="auto", learn=False)
+    write_sweep_config()
     # Edge runs several rounds: RightType froze there in some runs and not
     # others (after a word boundary handled inside a focus callback), and one
     # clean round proves nothing.
@@ -860,6 +944,8 @@ def main():
     finally:
         subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
 
+    if "instance" in want or not sys.argv[1:]:
+        one_instance()
     ui_timing()
 
     failed, known, fixed = [], [], []
