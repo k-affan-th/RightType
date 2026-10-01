@@ -156,6 +156,20 @@ fn ensure_created() -> bool {
         unsafe {
             // Layered window: enables per-pixel alpha for the fade-out.
             let _ = SetLayeredWindowAttributes(HWND(h as _), COLORREF(0), 255_u8, LWA_ALPHA);
+            // Not in screen sharing, recordings or screenshots (Windows 10
+            // 2004 and later): a Suggest hint or preview is typed content,
+            // and the tags are noise on someone else's screen. The typist
+            // still sees them.
+            // (Debug builds: RIGHTTYPE_CAPTURE_OVERLAY lets documentation
+            // screenshots include it.)
+            let capture =
+                cfg!(debug_assertions) && std::env::var_os("RIGHTTYPE_CAPTURE_OVERLAY").is_some();
+            if !capture {
+                let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowDisplayAffinity(
+                    HWND(h as _),
+                    windows::Win32::UI::WindowsAndMessaging::WDA_EXCLUDEFROMCAPTURE,
+                );
+            }
             // Rounded "pill" corners.
             let rgn = CreateRoundRectRgn(0, 0, px(W) + 1, px(H) + 1, px(H), px(H));
             SetWindowRgn(HWND(h as _), rgn, true);
