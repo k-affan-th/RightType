@@ -95,10 +95,32 @@ struct Palette {
 /// key, lParam: the character it types, 0 for none).
 const WM_PALETTE_KEY: u32 = 0x8000 + 0x560;
 
-/// Is the palette open and in front (so its keys are its own)?
+/// Is the palette open, with the typist still where they opened it (so
+/// its keys are its own)?
+///
+/// Windows often refuses the palette the keyboard focus — it is opened from
+/// a hotkey that RightType's keyboard hook saw, and that does not count as
+/// RightType being "in front" — so the app keeps the focus and the keys went
+/// to it (CI: `upper` typed into the page). The hook hands the palette its
+/// keys either way, while the window in front is the palette or the one it
+/// was opened from.
 pub fn is_open() -> bool {
     let open = OPEN.load(Ordering::Acquire);
-    open != 0 && unsafe { GetForegroundWindow() }.0 as isize == open
+    if open == 0 {
+        return false;
+    }
+    let fg = unsafe { GetForegroundWindow() }.0 as isize;
+    fg == open || fg == PREVIOUS.load(Ordering::Acquire)
+}
+
+/// The UI thread's 1.5 s timer: close a palette the typist has left (it may
+/// never have had the focus, so leaving it does not deactivate it).
+pub fn close_if_left() {
+    if OPEN.load(Ordering::Acquire) != 0 && !is_open() {
+        if let Some(p) = CURRENT.with(|c| c.borrow().clone()) {
+            close(&p, false);
+        }
+    }
 }
 
 /// The keyboard hook hands the open palette its keys: arrows move, Enter
