@@ -149,6 +149,7 @@ texts! {
     PaletteKeepAsTyped => "Never convert “{word}”", "ไม่ต้องแปลง “{word}” อีก";
     ToastCapsOff => "CapsLock was on — word fixed, CapsLock off · Shift+Backspace if you meant capitals", "CapsLock ค้าง — แก้คำและปิด CapsLock แล้ว · ตั้งใจพิมพ์ตัวใหญ่? กด Shift+Backspace";
     ToastCapsKept => "Capitals kept, CapsLock on again", "คืนตัวพิมพ์ใหญ่และเปิด CapsLock ให้แล้ว";
+    SayFixed => "Fixed: {word}", "แก้เป็น {word}";
     PaletteFieldOff => "Off in this field", "ปิดเฉพาะช่องนี้";
     PaletteFieldOn => "On again in this field", "เปิดในช่องนี้อีกครั้ง";
     ToastFieldOff => "Off in this field until RightType restarts — the rest of the app still works", "ปิดในช่องนี้แล้ว (จนกว่าจะปิด RightType) ช่องอื่นในแอปยังทำงานตามปกติ";

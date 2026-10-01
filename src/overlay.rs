@@ -252,6 +252,11 @@ fn show_styled(text: &str, anchor: Anchor, style: Style, defer: bool) {
         }
     }
     let raw = TOAST_HWND.load(Ordering::Acquire);
+    // Read out what is shown, but not the preview of a word still being
+    // typed (a tag next to it, on every key).
+    if style == Style::Pill || !matches!(anchor, Anchor::Near(_)) {
+        crate::announce::say(raw, text);
+    }
     let hwnd = HWND(raw as *mut c_void);
     if !defer && unsafe { GetCurrentThreadId() } == UI_THREAD_ID.load(Ordering::Acquire) {
         unsafe { show_on_ui(hwnd, text, anchor, style) };
@@ -264,6 +269,18 @@ fn show_styled(text: &str, anchor: Anchor, style: Style, defer: bool) {
             let _ = PostMessageW(hwnd, WM_SHOW_TOAST, WPARAM(0), LPARAM(0));
         }
     }
+}
+
+/// Have a screen reader say `text` without showing anything (a word fixed
+/// with no message on screen). UI thread, or after the window exists.
+pub fn announce(text: &str) {
+    if TOAST_HWND.load(Ordering::Acquire) == 0
+        && (unsafe { GetCurrentThreadId() } != UI_THREAD_ID.load(Ordering::Acquire)
+            || !ensure_created())
+    {
+        return;
+    }
+    crate::announce::say(TOAST_HWND.load(Ordering::Acquire), text);
 }
 
 /// Hide the toast now and wipe its text — used when what it shows may be

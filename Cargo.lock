@@ -267,6 +267,7 @@ dependencies = [
  "serde",
  "toml 0.8.23",
  "windows",
+ "windows-core",
  "zeroize",
 ]
 

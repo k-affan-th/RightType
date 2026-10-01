@@ -1472,6 +1472,14 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         (Mode::Auto, Some(d)) => {
             let mut corrected = d.corrected.clone();
             let done = maybe_correct(&word, Some(vk), d);
+            if done {
+                let mut said = righttype::i18n::trf(
+                    righttype::i18n::T::SayFixed,
+                    &[("word", &corrected)],
+                );
+                crate::overlay::announce(&said);
+                said.zeroize();
+            }
             if done && !caps_accident && crate::caret::is_enabled() {
                 // The first few fixes of a session show how to take one back.
                 if UNDO_TIPS_LEFT

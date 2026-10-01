@@ -11,6 +11,8 @@
 #![cfg_attr(feature = "winos", windows_subsystem = "windows")]
 
 #[cfg(feature = "winos")]
+mod announce;
+#[cfg(feature = "winos")]
 mod apps;
 #[cfg(feature = "winos")]
 mod caret;
