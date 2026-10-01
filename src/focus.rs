@@ -89,6 +89,7 @@ pub unsafe fn arm() {
     if let Ok(uia) =
         CoCreateInstance::<_, IUIAutomation>(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
     {
+        bound_waits(&uia);
         UIA.with(|u| *u.borrow_mut() = Some(uia));
     }
     refresh_status();
@@ -239,6 +240,25 @@ unsafe fn refresh_status() {
 
 /// This thread's UI Automation client, made on first use. The UI thread's
 /// is made by [`arm`]; the selection worker gets its own.
+/// How long one UI Automation call may wait on an app. Windows' default is
+/// several seconds per call: a hung app then held RightType's UI thread (and
+/// with it the keyboard hook and the tray) for that long on every focus
+/// change — CI's slow-window test caught it now and then. Nothing RightType
+/// asks of an app is worth more than this.
+const UIA_WAIT_MS: u32 = 500;
+
+/// Cap this client's waits ([`UIA_WAIT_MS`]); needs Windows 8 or later
+/// (IUIAutomation2), and is skipped where that is missing.
+fn bound_waits(uia: &IUIAutomation) {
+    use windows::core::Interface;
+    if let Ok(two) = uia.cast::<windows::Win32::UI::Accessibility::IUIAutomation2>() {
+        unsafe {
+            let _ = two.SetConnectionTimeout(UIA_WAIT_MS);
+            let _ = two.SetTransactionTimeout(UIA_WAIT_MS);
+        }
+    }
+}
+
 fn uia_here() -> Option<IUIAutomation> {
     UIA.with(|u| {
         if u.borrow().is_none() {
@@ -247,6 +267,7 @@ fn uia_here() -> Option<IUIAutomation> {
                 if let Ok(uia) =
                     CoCreateInstance::<_, IUIAutomation>(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
                 {
+                    bound_waits(&uia);
                     *u.borrow_mut() = Some(uia);
                 }
             }
@@ -430,7 +451,7 @@ impl TextBox {
     }
 
     /// The replacement was sent but not answered in time. Give the box up to
-    /// a second more, then read what is before the caret: the correction in
+    /// 300 ms more, then read what is before the caret: the correction in
     /// place is success; the old text unchanged means nothing happened (keys
     /// may do it); anything else is unknown.
     fn settle_after_slow_replace(
@@ -445,7 +466,9 @@ impl TextBox {
         let Some(context) = context else {
             return Err(unknown);
         };
-        if self.ask_within(WM_NULL, 0, 0, 1000).is_none() {
+        // This runs inside the keyboard hook: keep the wait short (Windows
+        // drops a hook that holds keys too long).
+        if self.ask_within(WM_NULL, 0, 0, 300).is_none() {
             return Err(unknown);
         }
         let Some((a, b)) = self.selection() else {
