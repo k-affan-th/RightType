@@ -50,6 +50,8 @@ enum Command {
     Settings,
     /// Fix every wrong-layout word in the field that had focus.
     FixField,
+    /// CapsLock as a language key, on or off.
+    CapsSwitch,
     /// Thai digits ↔ 0–9 in the selection.
     SwapDigits,
     /// Keep a word the typist reversed lately as typed (by its place in
@@ -117,6 +119,15 @@ fn commands(app: Option<&str>) -> Vec<(String, Command)> {
             Command::KeepAsTyped(i),
         ));
     }
+    let mark = if hook::caps_switches_language() {
+        "✓  "
+    } else {
+        ""
+    };
+    list.push((
+        format!("{mark}{}", tr(T::PaletteCapsSwitch)),
+        Command::CapsSwitch,
+    ));
     list.push((tr(T::TraySettings).to_string(), Command::Settings));
     list
 }
@@ -299,6 +310,16 @@ fn run(command: Command, app: Option<&str>) {
                 };
                 overlay::show(&trf(T::ToastAppMode, &[("mode", label), ("app", app)]));
             }
+        }
+        Command::CapsSwitch => {
+            let on = !hook::caps_switches_language();
+            hook::set_caps_switches_language(on);
+            config::persist();
+            overlay::show(tr(if on {
+                T::ToastCapsSwitchOn
+            } else {
+                T::ToastCapsSwitchOff
+            }));
         }
         Command::Mode(mode) => {
             hook::set_mode(mode);

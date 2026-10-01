@@ -161,6 +161,47 @@ unsafe fn capture_key(vk: u16) -> bool {
 /// straight through and touches nothing.
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
+/// CapsLock tapped on its own switches Thai/English (opt-in, from the
+/// palette); held for half a second it toggles CapsLock as usual.
+static CAPS_SWITCHES: AtomicBool = AtomicBool::new(false);
+/// How long CapsLock must be held to act as CapsLock when it switches
+/// languages.
+const CAPS_HOLD: Duration = Duration::from_millis(500);
+
+pub fn caps_switches_language() -> bool {
+    CAPS_SWITCHES.load(Ordering::Relaxed)
+}
+
+pub fn set_caps_switches_language(on: bool) {
+    CAPS_SWITCHES.store(on, Ordering::Relaxed);
+}
+
+thread_local! {
+    /// When a CapsLock that switches languages went down (its key-down was
+    /// swallowed; the release decides).
+    static CAPS_DOWN_AT: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+}
+
+/// CapsLock released after its key-down was swallowed for switching: a tap
+/// switches Thai/English, a hold toggles CapsLock.
+unsafe fn caps_released(down_at: Instant) {
+    if down_at.elapsed() >= CAPS_HOLD {
+        inject::toggle_capslock();
+        return;
+    }
+    let to = match policy::supported_layout_id(layout_id(effective_layout())) {
+        Some(policy::InputLayout::ThaiKedmanee) => policy::InputLayout::UsQwerty,
+        _ => policy::InputLayout::ThaiKedmanee,
+    };
+    activate_layout(to);
+    if crate::caret::is_enabled() {
+        crate::overlay::badge_at_caret(match to {
+            policy::InputLayout::ThaiKedmanee => "TH",
+            policy::InputLayout::UsQwerty => "EN",
+        });
+    }
+}
+
 /// Is RightType currently enabled?
 pub fn is_enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
@@ -812,6 +853,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         false
     };
     if !down {
+        if vk == VK_CAPITAL.0 {
+            if let Some(at) = CAPS_DOWN_AT.with(|c| c.take()) {
+                caps_released(at);
+                return true;
+            }
+        }
         return false;
     }
     e2e_trace(format!("key vk={vk:#x} repeat={repeat}"));
@@ -1028,6 +1075,19 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // CapsLock alone (or a chord that is not a hotkey) is a normal toggle.
         // A word is kept as if CapsLock were off and shown with its state,
         // so one typed across a toggle is left alone.
+        if vk == VK_CAPITAL.0 && caps_switches_language() && is_enabled() {
+            // A language key now: the release decides (tap or hold).
+            if !repeat {
+                CAPS_DOWN_AT.with(|c| c.set(Some(Instant::now())));
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    st.buf.clear();
+                    st.owned = None;
+                    st.mark = TokenMark::Plain;
+                });
+            }
+            return true;
+        }
         if vk == VK_CAPITAL.0 {
             // Turning it on: say so where the eyes are, before a sentence
             // comes out in capitals (the state flips after this key).
