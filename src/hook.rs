@@ -1276,6 +1276,22 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
 
     // CapsLock left on by accident (`hELLO`, or Thai typed with every key
     // shifted): in Auto the word is put as meant and CapsLock turned off.
+    // Thai typed in a wrong order that looks right (เเ for แ, ํา for ำ, a
+    // tone mark before the vowel): put right when that is a Thai word.
+    if detection.is_none()
+        && !seed_run
+        && mode_now == Mode::Auto
+        && policy::supported_layout_id(layout_id(effective_layout()))
+            == Some(policy::InputLayout::ThaiKedmanee)
+    {
+        if let Some(fixed) = policy::thai_spelling(&word, dict::thai()) {
+            detection = Some(righttype::detect::Detection {
+                corrected: fixed,
+                confidence: righttype::detect::Confidence::High,
+                evidence: righttype::detect::Evidence::ExactDictionary,
+            });
+        }
+    }
     let mut caps_accident = false;
     if detection.is_none() && !seed_run && mode_now == Mode::Auto && caps_on() {
         let layout_now = policy::supported_layout_id(layout_id(effective_layout()));

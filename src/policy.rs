@@ -382,6 +382,47 @@ fn thai_layout_compound(token: &str, th: &Dictionary) -> Option<Detection> {
     })
 }
 
+/// A Thai word typed in an order that looks right but is not: two เ for แ,
+/// nikhahit + า for ำ, a tone mark before the vowel above or below it, the
+/// same mark twice. Search and word breaking miss such words. `Some` with the
+/// word put right only when that is a Thai dictionary word (one word, not a
+/// split of several: random keys can split into short words).
+pub fn thai_spelling(word: &str, th: &Dictionary) -> Option<String> {
+    const TONES: &[char] = &['\u{0E48}', '\u{0E49}', '\u{0E4A}', '\u{0E4B}', '\u{0E4C}'];
+    const ABOVE_BELOW: &[char] = &[
+        '\u{0E31}', '\u{0E34}', '\u{0E35}', '\u{0E36}', '\u{0E37}', '\u{0E38}', '\u{0E39}',
+    ];
+    if word.is_empty() || !word.chars().all(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c)) {
+        return None;
+    }
+    let mut c: Vec<char> = word.replace("เเ", "แ").chars().collect();
+    let mut i = 0;
+    while i + 1 < c.len() {
+        if c[i] == '\u{0E4D}' && c[i + 1] == '\u{0E32}' {
+            // ํ + า is ำ (a tone mark may sit between: นํ้า).
+            c[i] = '\u{0E33}';
+            c.remove(i + 1);
+        } else if c[i] == '\u{0E4D}'
+            && i + 2 < c.len()
+            && TONES.contains(&c[i + 1])
+            && c[i + 2] == '\u{0E32}'
+        {
+            let tone = c[i + 1];
+            c[i] = tone;
+            c[i + 1] = '\u{0E33}';
+            c.remove(i + 2);
+        } else if TONES.contains(&c[i]) && ABOVE_BELOW.contains(&c[i + 1]) {
+            c.swap(i, i + 1);
+        } else if c[i] == c[i + 1] && (TONES.contains(&c[i]) || ABOVE_BELOW.contains(&c[i])) {
+            c.remove(i + 1);
+            continue;
+        }
+        i += 1;
+    }
+    let fixed: String = c.into_iter().collect();
+    (fixed != word && th.contains(&fixed)).then_some(fixed)
+}
+
 /// A word typed with CapsLock left on by accident, as the typist meant it
 /// (`intended` is the word as if CapsLock were off), or `None`.
 ///

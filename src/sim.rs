@@ -222,6 +222,17 @@ impl<'d> Engine<'d> {
         if let Some(d) = detection.as_mut() {
             d.corrected = policy::shown_with_caps(&d.corrected, self.caps);
         }
+        // Thai typed in a wrong order (เเ for แ): the word put right.
+        if detection.is_none() && self.layout == InputLayout::ThaiKedmanee {
+            if let Some(fixed) = policy::thai_spelling(&word, self.th) {
+                for _ in 0..word.chars().count() {
+                    self.screen.pop();
+                }
+                self.screen.push_str(&fixed);
+                self.screen.push(boundary);
+                return;
+            }
+        }
         // CapsLock left on by accident: the word as meant, and CapsLock off.
         if detection.is_none() && self.caps {
             if let Some(meant) = policy::caps_accident(&word, self.layout, self.th) {
@@ -474,6 +485,17 @@ mod tests {
             }
         }
         e.screen
+    }
+
+    #[test]
+    fn thai_typed_in_a_wrong_order_is_put_right() {
+        // Two เ for แ, nikhahit + า for ำ, a tone mark before the vowel above:
+        // they look right on screen, but search and word breaking miss them.
+        assert_eq!(type_blind("เเมว ", InputLayout::ThaiKedmanee), "แมว ");
+        assert_eq!(type_blind("นํ้า ", InputLayout::ThaiKedmanee), "น้ำ ");
+        assert_eq!(type_blind("ท่ี ", InputLayout::ThaiKedmanee), "ที่ ");
+        // Right already, or not a word once fixed: left alone.
+        assert_eq!(type_blind("แมว ", InputLayout::ThaiKedmanee), "แมว ");
     }
 
     #[test]
