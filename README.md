@@ -177,7 +177,9 @@ It installs RightType, offers a desktop shortcut and start-at-login, and registe
 a normal Windows uninstaller (Settings -> Apps -> RightType).
 
 **Portable zip:** extract `RightType-2.0.1-x64.zip` and run `righttype.exe` where it
-sits — or install it per-user from the extracted folder:
+sits. Put an empty file named `portable` next to it and settings and learned
+words stay in a `data` folder beside it (for a USB stick) instead of
+`%APPDATA%\RightType`. Or install it per-user from the extracted folder:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File install.ps1 -Autostart
