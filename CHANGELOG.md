@@ -108,6 +108,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 
+- **A full-screen browser on some PCs was taken for a game** (Chrome after
+  F11 shows Windows no text cursor), so nothing was corrected there. A
+  full-screen window counts as a game only when the focus is not in a text
+  field. Found by the self-test on a real PC.
 - **Notepad, WordPad and other standard text boxes: English typed on the
   Thai layout could take two more characters with it when fixed**
   (`;yoouh there` came out as `วันนีthere`). These boxes drop Thai vowels

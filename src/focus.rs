@@ -36,6 +36,16 @@ static FIELD_STATUS: AtomicU8 = AtomicU8::new(FIELD_UNKNOWN);
 /// The focused field completes what is typed in place — a browser address
 /// bar, which selects its suggestion after the caret. See [`completes_inline`].
 static INLINE_COMPLETION: AtomicBool = AtomicBool::new(false);
+/// The focused element is a place to type text (UI Automation says Edit or
+/// Document). Lets a full-screen browser or editor be told from a game even
+/// where Windows shows no text cursor for it.
+static TEXT_FIELD: AtomicBool = AtomicBool::new(false);
+
+/// Is the focused element a text field (per UI Automation)?
+pub fn is_text_field() -> bool {
+    TEXT_FIELD.load(Ordering::Relaxed)
+}
+
 /// Changes whenever Windows reports that the focused UI element changed.  The
 /// keyboard hook uses this to invalidate text that belongs to an old caret,
 /// including two controls inside the same top-level window.
@@ -354,6 +364,7 @@ fn is_list_row(control_type: UIA_CONTROLTYPE_ID) -> bool {
 
 unsafe fn refresh_status() {
     let mut inline = false;
+    let mut text_field = false;
     let uia = uia_here();
     let status = UIA.with(|_| {
         uia.as_ref()
@@ -368,6 +379,10 @@ unsafe fn refresh_status() {
                     .map(|b| b.to_string())
                     .unwrap_or_default();
                 inline = is_inline_completing(&class, &id);
+                text_field = el.CurrentControlType().is_ok_and(|t| {
+                    t == windows::Win32::UI::Accessibility::UIA_EditControlTypeId
+                        || t == windows::Win32::UI::Accessibility::UIA_DocumentControlTypeId
+                });
                 el.CurrentIsPassword().ok().map(|b| b.as_bool())
             })
             .map(|is_password| {
@@ -379,8 +394,11 @@ unsafe fn refresh_status() {
             })
             .unwrap_or(FIELD_UNKNOWN)
     });
-    crate::hook::e2e_trace(format!("field status={status} inline={inline}"));
+    crate::hook::e2e_trace(format!(
+        "field status={status} inline={inline} text_field={text_field}"
+    ));
     FIELD_STATUS.store(status, Ordering::Relaxed);
+    TEXT_FIELD.store(text_field, Ordering::Relaxed);
     INLINE_COMPLETION.store(inline, Ordering::Relaxed);
 }
 
