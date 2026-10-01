@@ -2114,6 +2114,59 @@ unsafe fn flip_back_recent() {
     }
 }
 
+/// The recent words (oldest first, as on screen) and where each is before
+/// the caret, for the palette's list. The caller wipes the words.
+pub fn recent_words() -> (Vec<String>, Vec<(usize, usize)>) {
+    STATE.with(|s| {
+        let st = s.borrow();
+        (st.recent.words(), st.recent.spans())
+    })
+}
+
+/// A word as it would be after a flip (the palette shows it).
+pub fn flipped(word: &str) -> String {
+    convert_shown(word)
+}
+
+/// The palette's "flip these": flip the recent words at `picked` (oldest
+/// first) and leave the others, in the window they were typed in.
+///
+/// # Safety
+/// UI (hook) thread.
+pub unsafe fn flip_picked(picked: &[usize]) {
+    use righttype::i18n::{tr, trf, T};
+    let same_window = STATE.with(|s| s.borrow().last_hwnd) == GetForegroundWindow().0 as isize;
+    let step = STATE.with(|s| s.borrow().recent.flip_picked(picked, convert_shown));
+    let Some(step) = step.filter(|_| same_window) else {
+        crate::overlay::show(tr(T::ToastNothingToFlip));
+        return;
+    };
+    if !inject::apply(
+        step.backspaces,
+        &step.insert,
+        Some(boundary_vk(step.boundary)),
+    ) {
+        crate::overlay::show(tr(T::ErrCorrectionInject));
+        STATE.with(|s| s.borrow_mut().recent.clear());
+        return;
+    }
+    // The words on screen are no longer the ones recorded: start afresh.
+    STATE.with(|s| s.borrow_mut().recent.clear());
+    set_undo(
+        step.insert.chars().count() + 1,
+        &step.restore,
+        UndoKind::Manual,
+    );
+    crate::stats::record_manual();
+    if let Some(word) = step.learn.as_deref() {
+        crate::learn::learn_now(word);
+        note_rejection();
+    }
+    activate_layout(layout_of(&step.newest));
+    diag::note("palette: picked recent words flipped", &[("words", step.words.into())]);
+    crate::overlay::show(&trf(T::ToastFlippedWords, &[("n", &step.words.to_string())]));
+}
+
 /// Flip a word as the app shows it. With CapsLock on, English on screen is in
 /// the other case from its keys (`L;YLFU` is สวัสดี), and English put back
 /// is shown that way too. CapsLock clears the recent words, so its state now

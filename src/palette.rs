@@ -66,6 +66,9 @@ enum Command {
     CapsSwitch,
     /// Rewrite the selection (digits, letter case).
     Transform(TransformKind),
+    /// A recent word (by its place in the hook's list, oldest first): flip
+    /// it, or every ticked one.
+    History(usize),
     /// The calmer mode on offer (see `apps::note_rejection`): for now, or
     /// for good.
     OfferForNow(AppMode),
@@ -83,7 +86,13 @@ struct Palette {
     surface: Rc<Surface>,
     items: Vec<(u16, Command)>,
     /// Each item's text, for filtering and numbering.
-    labels: Vec<String>,
+    labels: RefCell<Vec<String>>,
+    /// The recent words listed (oldest first), wiped on close.
+    words: RefCell<Vec<String>>,
+    /// Where each recent word is on screen, when the app says.
+    boxes: Vec<Option<RECT>>,
+    /// Recent words ticked with Space (their places in `words`).
+    checked: RefCell<Vec<usize>>,
     /// The line above the list: how to use it, or what has been typed.
     header: u16,
     /// Items shown (indices into `items`), in order, after filtering.
@@ -177,7 +186,7 @@ fn refilter(p: &Palette) {
     let other = righttype::layout::auto_convert(&filter).to_lowercase();
     let visible: Vec<usize> = (0..p.items.len())
         .filter(|&i| {
-            let label = p.labels[i].to_lowercase();
+            let label = p.labels.borrow()[i].to_lowercase();
             filter.is_empty() || label.contains(&filter) || label.contains(&other)
         })
         .collect();
@@ -185,12 +194,7 @@ fn refilter(p: &Palette) {
         let hwnd = p.surface.hwnd_of(*id);
         match visible.iter().position(|&v| v == i) {
             Some(k) => {
-                let label = if k < 9 {
-                    format!("{}   {}", k + 1, p.labels[i])
-                } else {
-                    format!("    {}", p.labels[i])
-                };
-                p.surface.set_text(*id, &label);
+                p.surface.set_text(*id, &numbered(&p.labels.borrow()[i], k));
                 unsafe {
                     let _ = SetWindowPos(
                         hwnd,
@@ -242,6 +246,15 @@ fn refilter(p: &Palette) {
     select(p, 0);
 }
 
+/// An item's text with its number (1–9) in front.
+fn numbered(label: &str, k: usize) -> String {
+    if k < 9 {
+        format!("{}   {label}", k + 1)
+    } else {
+        format!("    {label}")
+    }
+}
+
 /// Select the `k`-th shown item (keyboard focus on it).
 fn select(p: &Palette, k: usize) {
     let visible = p.visible.borrow();
@@ -254,6 +267,74 @@ fn select(p: &Palette, k: usize) {
     unsafe {
         let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(p.surface.hwnd_of(id));
     }
+    drop(visible);
+    if p.filter.borrow().is_empty() {
+        let head = if matches!(selected_command(p), Some(Command::History(_))) {
+            T::PaletteHistoryHint
+        } else {
+            T::PaletteHead
+        };
+        p.surface.set_text(p.header, tr(head));
+    }
+    show_marks(p);
+}
+
+/// The command of the selected item.
+fn selected_command(p: &Palette) -> Option<Command> {
+    let visible = p.visible.borrow();
+    visible.get(p.selected.get()).map(|&i| p.items[i].1)
+}
+
+/// The recent words a press of Enter would flip now: the ticked ones, or
+/// the selected one.
+fn picked(p: &Palette) -> Vec<usize> {
+    let checked = p.checked.borrow();
+    if !checked.is_empty() {
+        let mut v = checked.clone();
+        v.sort_unstable();
+        return v;
+    }
+    match selected_command(p) {
+        Some(Command::History(i)) => vec![i],
+        _ => Vec::new(),
+    }
+}
+
+/// Tint, in the app, the words a press of Enter would flip.
+fn show_marks(p: &Palette) {
+    let boxes: Vec<RECT> = picked(p)
+        .iter()
+        .filter_map(|&i| p.boxes.get(i).copied().flatten())
+        .collect();
+    crate::marks::show(&boxes);
+}
+
+/// Tick or untick the selected recent word (Space).
+fn toggle_checked(p: &Palette) -> bool {
+    let Some(Command::History(word)) = selected_command(p) else {
+        return false;
+    };
+    {
+        let mut checked = p.checked.borrow_mut();
+        match checked.iter().position(|&c| c == word) {
+            Some(at) => {
+                checked.remove(at);
+            }
+            None => checked.push(word),
+        }
+    }
+    let on = p.checked.borrow().contains(&word);
+    let k = p.selected.get();
+    let i = p.visible.borrow()[k];
+    let label = {
+        let mut labels = p.labels.borrow_mut();
+        let rest = labels[i].chars().skip(1).collect::<String>();
+        labels[i] = format!("{}{rest}", if on { '☑' } else { '☐' });
+        labels[i].clone()
+    };
+    p.surface.set_text(p.items[i].0, &numbered(&label, k));
+    show_marks(p);
+    true
 }
 
 /// One key from the hook (see [`key`]).
@@ -277,6 +358,8 @@ fn on_key(p: &Rc<Palette>, vk: u16, ch: Option<char>) {
             }
         }
         0x0D => run_shown(p, at),
+        // Space ticks a recent word (several can be flipped at once).
+        0x20 if p.filter.borrow().is_empty() && toggle_checked(p) => {}
         _ => match ch {
             // 1–9 run that line, unless a filter is being typed.
             Some(d @ '1'..='9') if p.filter.borrow().is_empty() => {
@@ -300,8 +383,36 @@ fn run_shown(p: &Rc<Palette>, k: usize) {
         return;
     };
     let command = p.items[i].1;
+    let words = if let Command::History(_) = command {
+        // Enter on a word flips the ticked ones (or this one if none is).
+        p.selected.set(k);
+        picked(p)
+    } else {
+        Vec::new()
+    };
     close(p, true);
-    run(command, p.app.as_deref());
+    if words.is_empty() {
+        run(command, p.app.as_deref());
+    } else {
+        flip_later(words);
+    }
+}
+
+thread_local! {
+    static TO_FLIP: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Flip the recent words `picked` once the app has the focus back.
+fn flip_later(picked: Vec<usize>) {
+    TO_FLIP.with(|t| *t.borrow_mut() = picked);
+    unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
+        let _ = KillTimer(None, id);
+        let picked = TO_FLIP.with(|t| std::mem::take(&mut *t.borrow_mut()));
+        hook::flip_picked(&picked);
+    }
+    unsafe {
+        SetTimer(None, 0, 150, Some(fire));
+    }
 }
 
 thread_local! {
@@ -324,8 +435,9 @@ pub fn request_open() {
     }
 }
 
-/// The commands, in order, for the current state.
-fn commands(app: Option<&str>) -> Vec<(String, Command)> {
+/// The commands, in order, for the current state. `words` are the recent
+/// words (oldest first).
+fn commands(app: Option<&str>, words: &[String]) -> Vec<(String, Command)> {
     let mut list = Vec::new();
     // A calmer mode on offer for this app comes first (1 and 2).
     if let (Some(app), Some((exe, mode))) = (app, apps::offer()) {
@@ -340,6 +452,12 @@ fn commands(app: Option<&str>) -> Vec<(String, Command)> {
                 Command::OfferKeep(mode),
             ));
         }
+    }
+    // The recent words, newest first: flip one, or tick several with Space.
+    for (i, word) in words.iter().enumerate().rev() {
+        let mut flipped = hook::flipped(word);
+        list.push((format!("☐  {word}  →  {flipped}"), Command::History(i)));
+        flipped.zeroize();
     }
     list.push((tr(T::TrayFix).to_string(), Command::FixText));
     if app.is_some() {
@@ -440,7 +558,15 @@ fn open() {
     let caret = crate::caret::caret_rect();
     ui::refresh();
 
-    let list = commands(app.as_deref());
+    // The recent words, and where they are, asked while the app still has
+    // the focus (before the palette exists).
+    let (words, spans) = hook::recent_words();
+    let boxes = if words.is_empty() {
+        Vec::new()
+    } else {
+        crate::focus::boxes_before_caret_within(spans, std::time::Duration::from_millis(150))
+    };
+    let list = commands(app.as_deref(), &words);
     let h = PAD * 2 + 28 + list.len() as i32 * ROW;
     let mut window = nwg::Window::default();
     if nwg::Window::builder()
@@ -505,7 +631,10 @@ fn open() {
         window,
         surface,
         items,
-        labels: list.iter().map(|(label, _)| label.clone()).collect(),
+        labels: RefCell::new(list.iter().map(|(label, _)| label.clone()).collect()),
+        words: RefCell::new(words),
+        boxes,
+        checked: RefCell::new(Vec::new()),
         header,
         visible: RefCell::new(Vec::new()),
         selected: std::cell::Cell::new(0),
@@ -524,10 +653,13 @@ fn open() {
     let weak = Rc::downgrade(&palette);
     palette.surface.on_click(move |id| {
         if let Some(p) = weak.upgrade() {
-            if let Some((_, command)) = p.items.iter().find(|(i, _)| *i == id) {
-                let command = *command;
-                close(&p, true);
-                run(command, p.app.as_deref());
+            let shown = p
+                .visible
+                .borrow()
+                .iter()
+                .position(|&i| p.items[i].0 == id);
+            if let Some(k) = shown {
+                run_shown(&p, k);
             }
         }
     });
@@ -582,6 +714,13 @@ fn close(p: &Rc<Palette>, refocus: bool) {
         Ordering::AcqRel,
         Ordering::Acquire,
     );
+    crate::marks::clear();
+    for word in p.words.borrow_mut().iter_mut() {
+        word.zeroize();
+    }
+    for label in p.labels.borrow_mut().iter_mut() {
+        label.zeroize();
+    }
     p.surface.detach();
     if let Some(h) = p.handler.borrow_mut().take() {
         let _ = nwg::unbind_raw_event_handler(&h);
@@ -596,6 +735,8 @@ fn close(p: &Rc<Palette>, refocus: bool) {
 
 fn run(command: Command, app: Option<&str>) {
     match command {
+        // Handled in `run_shown`.
+        Command::History(_) => {}
         Command::FixText => crate::fixer::open(),
         Command::Settings => crate::settings::open(),
         Command::FixField => crate::manual::request_fix_field(PREVIOUS.load(Ordering::Acquire)),

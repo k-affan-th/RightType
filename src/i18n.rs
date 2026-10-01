@@ -181,6 +181,7 @@ texts! {
     TrayCode => "Code (for code editors)", "โค้ด (สำหรับเขียนโปรแกรม)";
     ModeCode => "Code", "โค้ด";
     SayFixed => "Fixed: {word}", "แก้เป็น {word}";
+    PaletteHistoryHint => "Recent words · Space ticks more than one · Enter flips them", "คำล่าสุด · Space เลือกหลายคำ · Enter แปลงคำที่เลือก";
     PaletteFieldOff => "Off in this field", "ปิดเฉพาะช่องนี้";
     PaletteFieldOn => "On again in this field", "เปิดในช่องนี้อีกครั้ง";
     ToastFieldOff => "Off in this field until RightType restarts — the rest of the app still works", "ปิดในช่องนี้แล้ว (จนกว่าจะปิด RightType) ช่องอื่นในแอปยังทำงานตามปกติ";

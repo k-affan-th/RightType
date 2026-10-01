@@ -39,6 +39,8 @@ mod learn;
 #[cfg(feature = "winos")]
 mod manual;
 #[cfg(feature = "winos")]
+mod marks;
+#[cfg(feature = "winos")]
 mod onboard;
 #[cfg(feature = "winos")]
 mod overlay;

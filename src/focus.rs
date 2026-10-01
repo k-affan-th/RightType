@@ -807,10 +807,16 @@ fn edit_selected_text() -> Option<zeroize::Zeroizing<String>> {
 
 /// A question for the context worker: how many characters, and where to
 /// answer.
-type ContextAsk = (
-    usize,
-    std::sync::mpsc::SyncSender<Option<zeroize::Zeroizing<String>>>,
-);
+enum ContextAsk {
+    Text(
+        usize,
+        std::sync::mpsc::SyncSender<Option<zeroize::Zeroizing<String>>>,
+    ),
+    Boxes(
+        Vec<(usize, usize)>,
+        std::sync::mpsc::SyncSender<Vec<Option<windows::Win32::Foundation::RECT>>>,
+    ),
+}
 static CONTEXT_WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<ContextAsk>> =
     std::sync::OnceLock::new();
 
@@ -822,20 +828,157 @@ pub fn text_before_caret_within(
     n: usize,
     max: std::time::Duration,
 ) -> Option<zeroize::Zeroizing<String>> {
-    let tx = CONTEXT_WORKER.get_or_init(|| {
+    let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+    context_worker().try_send(ContextAsk::Text(n, reply_tx)).ok()?;
+    reply_rx.recv_timeout(max).ok().flatten()
+}
+
+fn context_worker() -> &'static std::sync::mpsc::SyncSender<ContextAsk> {
+    CONTEXT_WORKER.get_or_init(|| {
         let (tx, rx) = std::sync::mpsc::sync_channel::<ContextAsk>(1);
         let _ = std::thread::Builder::new()
             .name("context".into())
             .spawn(move || {
-                while let Ok((n, reply)) = rx.recv() {
-                    let _ = reply.try_send(text_before_caret(n));
+                while let Ok(ask) = rx.recv() {
+                    match ask {
+                        ContextAsk::Text(n, reply) => {
+                            let _ = reply.try_send(text_before_caret(n));
+                        }
+                        ContextAsk::Boxes(spans, reply) => {
+                            let _ = reply.try_send(boxes_before_caret(&spans));
+                        }
+                    }
                 }
             });
         tx
-    });
+    })
+}
+
+/// Where pieces of the text before the caret are on screen: for each
+/// `(start, len)` — starting `start` characters before the caret, `len`
+/// long — its box in screen pixels, or `None`. Asked of the app through UI
+/// Automation on a worker, waiting at most `max`; empty when the app does
+/// not say. For showing which words a palette command would change.
+pub fn boxes_before_caret_within(
+    spans: Vec<(usize, usize)>,
+    max: std::time::Duration,
+) -> Vec<Option<windows::Win32::Foundation::RECT>> {
     let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
-    tx.try_send((n, reply_tx)).ok()?;
-    reply_rx.recv_timeout(max).ok().flatten()
+    if context_worker()
+        .try_send(ContextAsk::Boxes(spans, reply_tx))
+        .is_err()
+    {
+        return Vec::new();
+    }
+    reply_rx.recv_timeout(max).unwrap_or_default()
+}
+
+fn boxes_before_caret(spans: &[(usize, usize)]) -> Vec<Option<windows::Win32::Foundation::RECT>> {
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationTextPattern, TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
+        TextUnit_Character, UIA_TextPatternId,
+    };
+    let none = || vec![None; spans.len()];
+    let Some(uia) = uia_here() else {
+        return none();
+    };
+    unsafe {
+        let Ok(element) = uia.GetFocusedElement() else {
+            return none();
+        };
+        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            return none();
+        }
+        let Ok(pattern) =
+            element.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+        else {
+            return none();
+        };
+        let Some(caret) = pattern
+            .GetSelection()
+            .ok()
+            .filter(|s| s.Length().unwrap_or(0) > 0)
+            .and_then(|s| s.GetElement(0).ok())
+        else {
+            return none();
+        };
+        // An empty range at the caret.
+        let _ = caret.MoveEndpointByRange(
+            TextPatternRangeEndpoint_End,
+            &caret,
+            TextPatternRangeEndpoint_Start,
+        );
+        spans
+            .iter()
+            .map(|&(start, len)| {
+                let r = caret.Clone().ok()?;
+                let moved = r
+                    .MoveEndpointByUnit(
+                        TextPatternRangeEndpoint_Start,
+                        TextUnit_Character,
+                        -(start as i32),
+                    )
+                    .ok()?;
+                if moved != -(start as i32) {
+                    return None;
+                }
+                r.MoveEndpointByRange(
+                    TextPatternRangeEndpoint_End,
+                    &r,
+                    TextPatternRangeEndpoint_Start,
+                )
+                .ok()?;
+                r.MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, len as i32)
+                    .ok()?;
+                union_of_boxes(&r)
+            })
+            .collect()
+    }
+}
+
+/// One box around every line of `range`.
+fn union_of_boxes(
+    range: &windows::Win32::UI::Accessibility::IUIAutomationTextRange,
+) -> Option<windows::Win32::Foundation::RECT> {
+    unsafe {
+        let array = range.GetBoundingRectangles().ok()?;
+        if array.is_null() {
+            return None;
+        }
+        let count = (*array).rgsabound[0].cElements as usize;
+        let data = (*array).pvData as *const f64;
+        let mut out: Option<windows::Win32::Foundation::RECT> = None;
+        if !data.is_null() {
+            for k in 0..count / 4 {
+                let (x, y, w, h) = (
+                    *data.add(4 * k),
+                    *data.add(4 * k + 1),
+                    *data.add(4 * k + 2),
+                    *data.add(4 * k + 3),
+                );
+                if w <= 0.0 || h <= 0.0 {
+                    continue;
+                }
+                let r = windows::Win32::Foundation::RECT {
+                    left: x as i32,
+                    top: y as i32,
+                    right: (x + w) as i32,
+                    bottom: (y + h) as i32,
+                };
+                out = Some(match out {
+                    None => r,
+                    Some(o) => windows::Win32::Foundation::RECT {
+                        left: o.left.min(r.left),
+                        top: o.top.min(r.top),
+                        right: o.right.max(r.right),
+                        bottom: o.bottom.max(r.bottom),
+                    },
+                });
+            }
+        }
+        let _ = windows::Win32::System::Ole::SafeArrayDestroy(array);
+        out
+    }
 }
 
 /// The last `n` characters before the caret in the focused field, asked of
