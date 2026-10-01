@@ -1142,9 +1142,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
             && policy::supported_layout_id(layout_id(effective_layout()))
                 == Some(policy::InputLayout::UsQwerty)
-            && reconcile_run()
         {
-            return true;
+            if reconcile_run() {
+                take_down_preview();
+                return true;
+            }
+            show_preview();
         }
         // Navigation and focus events move the caret away from the run, so the
         // text we rendered is no longer ours to edit. Let go without touching it.
@@ -1369,7 +1372,47 @@ fn show_live_hint() {
     run.zeroize();
 }
 
+/// Auto, mid-word: where the keys are heading (`→ สวัสด`), next to the
+/// cursor, before Auto is sure enough to rewrite anything
+/// ([`policy::preview`]). Only with the cursor tags on.
+fn show_preview() {
+    if !crate::caret::is_enabled() {
+        return;
+    }
+    let (run, guarding, owned) = STATE.with(|s| {
+        let st = s.borrow();
+        (
+            st.buf.current().to_string(),
+            st.seed.guarding(),
+            st.owned.is_some(),
+        )
+    });
+    let mut run = run;
+    let thai = (!guarding && !owned)
+        .then(|| policy::preview(&run, dict::english(), dict::thai()))
+        .flatten();
+    run.zeroize();
+    match thai {
+        Some(mut thai) => {
+            let mut tag = format!("→ {thai}");
+            crate::overlay::badge_at_caret(&tag);
+            tag.zeroize();
+            thai.zeroize();
+            PREVIEW_SHOWN.with(|c| c.set(true));
+        }
+        None => take_down_preview(),
+    }
+}
+
+fn take_down_preview() {
+    if PREVIEW_SHOWN.with(|c| c.replace(false)) {
+        crate::overlay::dismiss();
+    }
+}
+
 thread_local! {
+    /// An Auto preview is on screen.
+    static PREVIEW_SHOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// A live hint is on screen (so it can be taken down when it no longer
     /// applies).
     static LIVE_HINT_SHOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };

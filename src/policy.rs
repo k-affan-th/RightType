@@ -605,6 +605,30 @@ pub fn run_goes_back(keys: &str, reading: &str, en: &Dictionary, th: &Dictionary
     goes_back_to_keys(keys, reading) || (english::is_affixed(keys, en) && !th.contains(reading))
 }
 
+/// Auto, mid-word, before anything is rewritten: the Thai the keys typed so
+/// far are heading for, to show next to the cursor (`l;ylf` → `สวัสด`), or
+/// `None`.
+///
+/// Auto rewrites a word only once it is sure (see [`live_reading`]), which
+/// takes a few keys; until then the typist sees English and cannot tell
+/// whether a fix is coming. The preview says so without touching the text.
+/// It needs three keys or more that all turn into Thai and start real Thai
+/// words, and is not shown for keys that are (or can still become) an
+/// English word, a secret's shape, or once Auto is already rewriting.
+pub fn preview(run: &str, en: &Dictionary, th: &Dictionary) -> Option<String> {
+    if run.chars().count() < 3
+        || english::is_word(run, en)
+        || en.has_extension(run)
+        || secret::classify_token(run).is_some()
+        || matches!(live_reading(run, false, en, th), Reading::Thai(_))
+    {
+        return None;
+    }
+    let thai = en_to_th(run);
+    let all_thai = thai.chars().all(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+    (all_thai && segment::is_viable_prefix(&thai, th)).then_some(thai)
+}
+
 pub fn live_reading(run: &str, holding_thai: bool, en: &Dictionary, th: &Dictionary) -> Reading {
     if run.is_empty() {
         return Reading::AsTyped;
@@ -642,6 +666,18 @@ pub fn live_reading(run: &str, holding_thai: bool, en: &Dictionary, th: &Diction
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_preview_shows_where_the_keys_are_heading() {
+        let (en, th) = (crate::dict::english(), crate::dict::thai());
+        // On the way to สวัสดี, before Auto is sure.
+        assert_eq!(preview("l;yl", en, th).as_deref(), Some("สวัส"));
+        // Too short to say; English (or its beginning); Auto already on it.
+        assert_eq!(preview("l;", en, th), None);
+        assert_eq!(preview("hell", en, th), None);
+        assert_eq!(preview("hello", en, th), None);
+        assert_eq!(preview("l;ylfu", en, th), None);
+    }
 
     fn dicts() -> (Dictionary, Dictionary) {
         (
