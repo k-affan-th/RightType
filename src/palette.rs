@@ -12,6 +12,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicIsize, Ordering};
+use zeroize::Zeroize;
 
 use native_windows_gui as nwg;
 use righttype::i18n::{tr, trf, T};
@@ -45,6 +46,9 @@ enum Command {
     AppDefault,
     Mode(hook::Mode),
     Settings,
+    /// Keep a word the typist reversed lately as typed (by its place in
+    /// `learn::reversed_words`).
+    KeepAsTyped(usize),
 }
 
 struct Palette {
@@ -96,6 +100,12 @@ fn commands(app: Option<&str>) -> Vec<(String, Command)> {
     ] {
         let mark = if mode == now { "✓  " } else { "" };
         list.push((format!("{mark}{}", tr(key)), Command::Mode(mode)));
+    }
+    for (i, word) in crate::learn::reversed_words().iter().enumerate().take(3) {
+        list.push((
+            trf(T::PaletteKeepAsTyped, &[("word", word)]),
+            Command::KeepAsTyped(i),
+        ));
     }
     list.push((tr(T::TraySettings).to_string(), Command::Settings));
     list
@@ -250,6 +260,13 @@ fn run(command: Command, app: Option<&str>) {
     match command {
         Command::FixText => crate::fixer::open(),
         Command::Settings => crate::settings::open(),
+        Command::KeepAsTyped(i) => {
+            if let Some(mut word) = crate::learn::reversed_words().into_iter().nth(i) {
+                crate::learn::keep_as_typed(&word);
+                overlay::show(tr(T::ToastSaved));
+                word.zeroize();
+            }
+        }
         Command::Pause => {
             session::pause(30);
             overlay::show(&trf(T::ToastPaused, &[("n", "30")]));
