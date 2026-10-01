@@ -91,6 +91,10 @@ struct Palette {
     handler: RefCell<Option<nwg::RawEventHandler>>,
 }
 
+/// The palette was asked for and is not open yet: its keys are kept for it.
+static OPENING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static EARLY_KEYS: std::sync::Mutex<Vec<(u16, Option<char>)>> = std::sync::Mutex::new(Vec::new());
+
 /// A key for the open palette, posted by the keyboard hook (wParam: virtual
 /// key, lParam: the character it types, 0 for none).
 const WM_PALETTE_KEY: u32 = 0x8000 + 0x560;
@@ -105,6 +109,9 @@ const WM_PALETTE_KEY: u32 = 0x8000 + 0x560;
 /// keys either way, while the window in front is the palette or the one it
 /// was opened from.
 pub fn is_open() -> bool {
+    if OPENING.load(Ordering::Acquire) {
+        return true;
+    }
     let open = OPEN.load(Ordering::Acquire);
     if open == 0 {
         return false;
@@ -133,6 +140,13 @@ pub fn key(vk: u16, ch: Option<char>) -> bool {
         return false;
     }
     let open = OPEN.load(Ordering::Acquire);
+    if open == 0 {
+        // Still opening: keep it for when it is.
+        if let Ok(mut keys) = EARLY_KEYS.lock() {
+            keys.push((vk, ch));
+        }
+        return true;
+    }
     unsafe {
         let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
             HWND(open as *mut _),
@@ -286,6 +300,9 @@ thread_local! {
 /// Open the palette soon, from the message loop (the keyboard hook calls
 /// this and must not create windows itself).
 pub fn request_open() {
+    // Keys typed right after the hotkey belong to the palette, though it is
+    // not open yet (CI: 'up' of 'upper' went into the page).
+    OPENING.store(true, Ordering::Release);
     unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
         let _ = KillTimer(None, id);
         open();
@@ -363,6 +380,19 @@ fn commands(app: Option<&str>) -> Vec<(String, Command)> {
 }
 
 fn open() {
+    // However this ends (opened, closed instead, or failed), it is no longer
+    // opening: never leave the hook holding keys for a palette that is not
+    // coming.
+    struct Opened;
+    impl Drop for Opened {
+        fn drop(&mut self) {
+            OPENING.store(false, Ordering::Release);
+            if let Ok(mut keys) = EARLY_KEYS.lock() {
+                keys.clear();
+            }
+        }
+    }
+    let _opened = Opened;
     if let Some(existing) = CURRENT.with(|c| c.borrow().clone()) {
         close(&existing, false);
         return;
@@ -370,7 +400,9 @@ fn open() {
     let previous = unsafe { GetForegroundWindow() };
     PREVIOUS.store(previous.0 as isize, Ordering::Release);
     let app = unsafe { crate::safety::foreground_exe(previous) }.filter(|e| e != "righttype.exe");
-    let caret = crate::caret::find_caret();
+    // The system caret only: asking the app (UI Automation) can be slow,
+    // and keys typed meanwhile wait for the palette.
+    let caret = crate::caret::caret_rect();
     ui::refresh();
 
     let list = commands(app.as_deref());
@@ -490,7 +522,18 @@ fn open() {
     )
     .ok();
     *palette.handler.borrow_mut() = raw;
-    CURRENT.with(|c| *c.borrow_mut() = Some(palette));
+    CURRENT.with(|c| *c.borrow_mut() = Some(palette.clone()));
+    // Keys typed while it was opening, in order.
+    let early: Vec<(u16, Option<char>)> = EARLY_KEYS
+        .lock()
+        .map(|mut k| std::mem::take(&mut *k))
+        .unwrap_or_default();
+    for (vk, ch) in early {
+        if CURRENT.with(|c| c.borrow().is_none()) {
+            break;
+        }
+        on_key(&palette, vk, ch);
+    }
 }
 
 /// Close the palette; `refocus` returns focus to where the user was typing.

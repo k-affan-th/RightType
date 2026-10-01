@@ -780,8 +780,10 @@ def report_has_no_typed_text(target, results):
     except OSError:
         fs.check(target, "problem report was written", "", "a report")
         return
-    words = {w for _, _, _, got, expect in results for w in (got + " " + expect).split()
-             if len(w) >= 3}
+    # Text the checks typed or read (not the clipboard checks' own sentinel,
+    # whose words are not typed, and "clipboard" is in RightType's messages).
+    words = {w for _, name, _, got, expect in results if "clipboard" not in name
+             for w in (got + " " + expect).split() if len(w) >= 3}
     # Whole words: "correct" is part of the report's own word "correction".
     import re
     leaked = sorted(w for w in words
