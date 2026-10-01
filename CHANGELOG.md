@@ -44,6 +44,12 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Changed
 
+- **Smoother tags and messages**: the pill now rises a few pixels into
+  place while fading in (140 ms, ease-out) and fades out with an ease-in
+  (220 ms), each frame computed from the time elapsed at about 60 frames a
+  second — it used to appear at once and fade in coarse 30 ms steps. A tag
+  that is already showing moves and stays instead of fading in again. The
+  TH, EN and CAPS tags each have a colour of their own (teal, blue, amber).
 - **A `CAPS` tag at the text cursor** when CapsLock is switched on (with
   the TH/EN tags on), before a sentence comes out in capitals.
 - **CapsLock left on by accident is put right** (Auto): `hELLO` — Shift

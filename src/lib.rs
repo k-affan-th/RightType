@@ -20,6 +20,7 @@
 //! - [`diag`] — recent decisions, with no typed text, for a problem report.
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
 //! - [`segment`] — Thai word segmentation (maximal matching) for space-less Thai.
+//! - [`motion`] — how the overlay pill fades and rises in and out.
 //! - [`render`] — reconciling on-screen text with the run's current best reading.
 //! - [`repair`] — fixing a whole piece of finished text (the Fix text window).
 //! - [`recent`] — the last few completed words, for flipping back several at once.
@@ -34,6 +35,7 @@ pub mod english;
 pub mod hotkeys;
 pub mod i18n;
 pub mod layout;
+pub mod motion;
 pub mod per_app;
 pub mod policy;
 pub mod predict;
