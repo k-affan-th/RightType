@@ -46,6 +46,8 @@ pub enum Command {
         focus_generation: u64,
         requested_at: Instant,
     },
+    /// Fix every wrong-layout word in the focused field (from the palette).
+    FixField { hwnd: isize, requested_at: Instant },
     UndoSelection {
         hwnd: isize,
         focus_generation: u64,
@@ -98,6 +100,65 @@ pub fn request_convert_selection(hwnd: isize, focus_generation: u64) {
     }
 }
 
+/// Ask the worker to fix the whole focused field of `hwnd` (the palette's
+/// "Fix this field"). Non-blocking.
+pub fn request_fix_field(hwnd: isize) {
+    if let Some(tx) = SENDER.get() {
+        let _ = tx.try_send(Command::FixField {
+            hwnd,
+            requested_at: Instant::now(),
+        });
+    }
+}
+
+/// Longest field "Fix this field" retypes (characters).
+const MAX_FIELD_CHARS: usize = 4000;
+
+/// Select the whole field, read it from the app (UI Automation or the text
+/// box itself — never the clipboard), fix only the words in the wrong layout
+/// (as the Fix text window does), and type the result over the selection.
+/// Ctrl+Z in the app undoes it, like a selection conversion.
+unsafe fn fix_field(hwnd: isize) {
+    // The palette has just closed: let focus land back in the field.
+    thread::sleep(Duration::from_millis(200));
+    if GetForegroundWindow().0 as isize != hwnd || !release_modifiers() {
+        return;
+    }
+    let generation = focus::generation();
+    if !send_chord(0x41) {
+        return;
+    }
+    thread::sleep(Duration::from_millis(120));
+    if !same_context(hwnd, generation) {
+        return;
+    }
+    let Some(text) = focus::selected_text() else {
+        overlay::show(tr(T::ErrSelectionNotShared));
+        return;
+    };
+    if text.chars().count() > MAX_FIELD_CHARS {
+        overlay::show(tr(T::ErrFieldTooLong));
+        return;
+    }
+    let mut repaired =
+        righttype::repair::repair(&text, righttype::dict::english(), righttype::dict::thai());
+    if repaired.changes.is_empty() {
+        overlay::show(tr(T::ToastNothingToFix));
+    } else if same_context(hwnd, generation) {
+        let n = repaired.changes.len();
+        type_over_selection(hwnd, generation, &repaired.text);
+        overlay::show(&righttype::i18n::trf(
+            T::ToastFixedWords,
+            &[("n", &n.to_string())],
+        ));
+    }
+    repaired.text.zeroize();
+    for c in &mut repaired.changes {
+        c.original.zeroize();
+        c.fixed.zeroize();
+    }
+}
+
 /// Queue app-native Ctrl+Z for the most recent selection paste, if it still
 /// belongs to the same focused control. Returns whether a command was queued.
 pub fn request_undo_selection(hwnd: isize, focus_generation: u64) -> bool {
@@ -147,6 +208,9 @@ fn run(rx: Receiver<Command>) {
             } if requested_at.elapsed() <= MAX_COMMAND_AGE => unsafe {
                 undo_selection(hwnd, focus_generation)
             },
+            Command::FixField { hwnd, requested_at }
+                if requested_at.elapsed() <= Duration::from_secs(3) =>
+            unsafe { fix_field(hwnd) },
             _ => {}
         }
     }

@@ -132,6 +132,10 @@ texts! {
     ToastHookLost => "RightType lost the keyboard — retrying…", "RightType ตรวจจับคีย์บอร์ดไม่ได้ — กำลังลองใหม่…";
     ToastHookBack => "RightType is working again", "RightType กลับมาทำงานแล้ว";
     ToastSaved => "Saved", "บันทึกแล้ว";
+    PaletteFixField => "Fix this field", "ซ่อมทั้งช่องนี้";
+    ErrFieldTooLong => "This field is too long to fix here — use Fix text", "ช่องนี้ยาวเกินไป ใช้หน้าต่างซ่อมข้อความแทน";
+    ToastNothingToFix => "Nothing to fix in this field", "ไม่มีคำที่ต้องแก้ในช่องนี้";
+    ToastFixedWords => "Fixed {n} words · Ctrl+Z undoes it", "แก้ {n} คำ · Ctrl+Z ย้อนได้";
     PaletteKeepAsTyped => "Never convert “{word}”", "ไม่ต้องแปลง “{word}” อีก";
     ToastCapsOff => "CapsLock was on — fixed the word and turned it off", "CapsLock ค้างอยู่ — แก้คำให้และปิด CapsLock แล้ว";
     ToastVerifyDiffers => "This app showed the fix differently — check the last word (Ctrl+Z undoes it). RightType will type slower here.", "แอปนี้แสดงคำที่แก้ไม่ตรง ลองดูคำล่าสุด (Ctrl+Z ย้อนได้) ต่อไป RightType จะพิมพ์ช้าลงในแอปนี้";

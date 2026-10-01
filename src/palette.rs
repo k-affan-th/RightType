@@ -29,6 +29,8 @@ use crate::ui::{self, pal, Gfx, Surface, TextStyle};
 use crate::{apps, config, hook, overlay, session};
 
 static OPEN: AtomicIsize = AtomicIsize::new(0);
+/// The window that had focus when the palette last opened.
+static PREVIOUS: AtomicIsize = AtomicIsize::new(0);
 
 const W: i32 = 320;
 const ROW: i32 = 36;
@@ -46,6 +48,8 @@ enum Command {
     AppDefault,
     Mode(hook::Mode),
     Settings,
+    /// Fix every wrong-layout word in the field that had focus.
+    FixField,
     /// Keep a word the typist reversed lately as typed (by its place in
     /// `learn::reversed_words`).
     KeepAsTyped(usize),
@@ -80,6 +84,9 @@ pub fn request_open() {
 /// The commands, in order, for the current state.
 fn commands(app: Option<&str>) -> Vec<(String, Command)> {
     let mut list = vec![(tr(T::TrayFix).to_string(), Command::FixText)];
+    if app.is_some() {
+        list.push((tr(T::PaletteFixField).to_string(), Command::FixField));
+    }
     if session::is_paused() {
         list.push((tr(T::TrayResume).to_string(), Command::Resume));
     } else if hook::is_enabled() {
@@ -117,6 +124,7 @@ fn open() {
         return;
     }
     let previous = unsafe { GetForegroundWindow() };
+    PREVIOUS.store(previous.0 as isize, Ordering::Release);
     let app = unsafe { crate::safety::foreground_exe(previous) }.filter(|e| e != "righttype.exe");
     let caret = crate::caret::find_caret();
     ui::refresh();
@@ -260,6 +268,7 @@ fn run(command: Command, app: Option<&str>) {
     match command {
         Command::FixText => crate::fixer::open(),
         Command::Settings => crate::settings::open(),
+        Command::FixField => crate::manual::request_fix_field(PREVIOUS.load(Ordering::Acquire)),
         Command::KeepAsTyped(i) => {
             if let Some(mut word) = crate::learn::reversed_words().into_iter().nth(i) {
                 crate::learn::keep_as_typed(&word);
