@@ -68,6 +68,9 @@ pub struct Config {
     /// The tray icon shows TH / EN.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tray_shows_language: bool,
+    /// Put right common Thai misspellings (opt-in).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fix_spelling: bool,
     /// Start RightType again if it crashes (see instance.rs).
     pub restart_after_crash: bool,
 }
@@ -122,6 +125,7 @@ impl Default for Config {
             capslock_switches_language: false,
             tray_shows_language: false,
             restart_after_crash: true,
+            fix_spelling: false,
         }
     }
 }
@@ -162,6 +166,7 @@ pub fn apply(cfg: &Config) {
     crate::manual::set_clipboard_fallback(cfg.selection_via_clipboard);
     hook::set_caps_switches_language(cfg.capslock_switches_language);
     crate::tray::set_shows_language(cfg.tray_shows_language);
+    hook::set_fixes_spelling(cfg.fix_spelling);
     RESTART_AFTER_CRASH.store(cfg.restart_after_crash, std::sync::atomic::Ordering::Relaxed);
     crate::habits::set_enabled(cfg.predict_layout);
     righttype::layout::set_thai_variant(match cfg.thai_layout.as_deref() {
@@ -244,6 +249,7 @@ pub fn persist() {
         selection_via_clipboard: crate::manual::clipboard_fallback(),
         capslock_switches_language: hook::caps_switches_language(),
         tray_shows_language: crate::tray::shows_language(),
+        fix_spelling: hook::fixes_spelling(),
         restart_after_crash: RESTART_AFTER_CRASH.load(std::sync::atomic::Ordering::Relaxed),
         predict_layout: crate::habits::is_enabled(),
         keep_stats: crate::stats::keeps_daily(),

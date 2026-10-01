@@ -182,6 +182,11 @@ texts! {
     ModeCode => "Code", "โค้ด";
     SayFixed => "Fixed: {word}", "แก้เป็น {word}";
     PaletteHistoryHint => "Recent words · Space ticks more than one · Enter flips them", "คำล่าสุด · Space เลือกหลายคำ · Enter แปลงคำที่เลือก";
+    ToastSpellingFixed => "✎ Spelling: {wrong} → {right} · Backspace or Shift+Backspace puts it back", "✎ แก้คำสะกด: {wrong} → {right} · กด Backspace หรือ Shift+Backspace เพื่อคืนคำเดิม";
+    ToastSpellingKept => "Put back as typed — “{word}” will not be changed again", "คืนคำที่พิมพ์ไว้แล้ว จะไม่แก้ “{word}” อีก";
+    PaletteSpelling => "Fix common Thai misspellings", "แก้คำไทยที่สะกดผิดบ่อย";
+    RowSpelling => "Fix common Thai misspellings", "แก้คำไทยที่สะกดผิดบ่อย";
+    SubSpelling => "อนุญาติ → อนุญาต and about 60 more, in Auto. Each fix is shown; Backspace right after puts it back.", "เช่น อนุญาติ → อนุญาต และอีกราว 60 คำ (โหมดอัตโนมัติ) แจ้งทุกครั้งที่แก้ กด Backspace ทันทีเพื่อคืนคำเดิม";
     PaletteFieldOff => "Off in this field", "ปิดเฉพาะช่องนี้";
     PaletteFieldOn => "On again in this field", "เปิดในช่องนี้อีกครั้ง";
     ToastFieldOff => "Off in this field until RightType restarts — the rest of the app still works", "ปิดในช่องนี้แล้ว (จนกว่าจะปิด RightType) ช่องอื่นในแอปยังทำงานตามปกติ";

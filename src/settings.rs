@@ -32,7 +32,7 @@ static OPEN: AtomicIsize = AtomicIsize::new(0);
 
 /// Client size and layout, in 96-DPI units.
 const W: i32 = 760;
-const H: i32 = 636;
+const H: i32 = 700;
 const X0: i32 = 232;
 const CW: i32 = 504;
 
@@ -94,6 +94,7 @@ struct Ids {
     startup: u16,
     learn: u16,
     caret_hints: u16,
+    spelling: u16,
     learned: u16,
     edit_learned: u16,
     learned_list: u16,
@@ -275,7 +276,8 @@ fn open_on(page: u8) {
     let startup = s.toggle(tr(T::RowStartup), tr(T::SubStartup), row(1), p.surface, g);
     let learn = s.toggle(tr(T::RowLearn), tr(T::SubLearn), row(2), p.surface, g);
     let caret_hints = s.toggle(tr(T::RowCaret), tr(T::SubCaret), row(3), p.surface, g);
-    let learned_y = CARD_B_Y + 4 * ROW_H + 14;
+    let spelling = s.toggle(tr(T::RowSpelling), tr(T::SubSpelling), row(4), p.surface, g);
+    let learned_y = CARD_B_Y + 5 * ROW_H + 14;
     let learned = s.label(
         "",
         TextStyle::Dim,
@@ -548,6 +550,7 @@ fn open_on(page: u8) {
         startup,
         learn,
         caret_hints,
+        spelling,
         learned,
         edit_learned,
         learned_list,
@@ -654,6 +657,7 @@ fn sync(win: &SettingsWindow) {
     s.set_checked(ids.startup, startup::is_enabled());
     s.set_checked(ids.learn, learn::is_enabled());
     s.set_checked(ids.caret_hints, crate::caret::is_enabled());
+    s.set_checked(ids.spelling, hook::fixes_spelling());
     s.set_checked(ids.predict, crate::habits::is_enabled());
     s.set_checked(
         ids.restart,
@@ -717,6 +721,9 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     } else if id == ids.clear_habits {
         crate::habits::clear();
         overlay::show(tr(T::ToastHabitsCleared));
+    } else if id == ids.spelling {
+        hook::set_fixes_spelling(s.checked(ids.spelling));
+        config::persist();
     } else if id == ids.caret_hints {
         crate::caret::set_enabled(s.checked(ids.caret_hints));
         config::persist();
@@ -1319,8 +1326,8 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
         PAGE_GENERAL => {
             card(g, rect(X0, 98, CW, 132));
             track(g, rect(X0 + 16, 110, CW - 32, 48));
-            card(g, rect(X0, CARD_B_Y, CW, 4 * ROW_H + 64));
-            for i in 1..=4 {
+            card(g, rect(X0, CARD_B_Y, CW, 5 * ROW_H + 64));
+            for i in 1..=5 {
                 divider(hdc, X0 + 16, CARD_B_Y + i * ROW_H + 2, CW - 32);
             }
         }

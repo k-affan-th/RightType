@@ -64,6 +64,8 @@ enum Command {
     TrayLanguage,
     /// CapsLock as a language key, on or off.
     CapsSwitch,
+    /// Common Thai misspellings put right, on or off.
+    Spelling,
     /// Rewrite the selection (digits, letter case).
     Transform(TransformKind),
     /// A recent word (by its place in the hook's list, oldest first): flip
@@ -453,8 +455,9 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<(String, Command)> {
             ));
         }
     }
-    // The recent words, newest first: flip one, or tick several with Space.
-    for (i, word) in words.iter().enumerate().rev() {
+    // The recent words, newest first (at most five, to keep the list short):
+    // flip one, or tick several with Space.
+    for (i, word) in words.iter().enumerate().rev().take(5) {
         let mut flipped = hook::flipped(word);
         list.push((format!("☐  {word}  →  {flipped}"), Command::History(i)));
         flipped.zeroize();
@@ -527,6 +530,11 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<(String, Command)> {
     list.push((
         format!("{mark}{}", tr(T::PaletteCapsSwitch)),
         Command::CapsSwitch,
+    ));
+    let mark = if hook::fixes_spelling() { "✓  " } else { "" };
+    list.push((
+        format!("{mark}{}", tr(T::PaletteSpelling)),
+        Command::Spelling,
     ));
     list.push((tr(T::TraySettings).to_string(), Command::Settings));
     list
@@ -814,6 +822,10 @@ fn run(command: Command, app: Option<&str>) {
             } else {
                 T::ToastCapsSwitchOff
             }));
+        }
+        Command::Spelling => {
+            hook::set_fixes_spelling(!hook::fixes_spelling());
+            config::persist();
         }
         Command::Mode(mode) => {
             hook::set_mode(mode);

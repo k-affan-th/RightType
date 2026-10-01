@@ -519,6 +519,9 @@ fn tag_colours(text: &str, badge: bool) -> (u32, u32) {
         (true, "TH") => (0x005C_6F1F, 0x007A_8F33),   // teal
         (true, "EN") => (0x0097_572B, 0x00B3_7040),   // blue
         (true, "CAPS") => (0x0000_5A8A, 0x0010_74AA), // amber
+        // A spelling fix: its own colour, so it is not mistaken for a
+        // keyboard fix.
+        (false, t) if t.starts_with('✎') => (0x0078_3C6A, 0x0092_5487), // purple
         _ => (0x002A_2A2A, 0x0045_4545),
     }
 }

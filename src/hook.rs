@@ -487,6 +487,33 @@ enum UndoKind {
     /// Shift+Backspace) puts the capitals back and turns CapsLock on again:
     /// they were meant (code, acronyms).
     CapsAccident,
+    /// RightType put right a common Thai misspelling (this one). Undoing it
+    /// (Shift+Backspace, Ctrl+Shift+CapsLock, or Backspace right after)
+    /// puts back what was typed, and that word is not fixed again this run.
+    Spelling(&'static str),
+}
+
+/// Put right common Thai misspellings (opt-in; `righttype::spelling`).
+static FIX_SPELLING: AtomicBool = AtomicBool::new(false);
+
+pub fn fixes_spelling() -> bool {
+    FIX_SPELLING.load(Ordering::Relaxed)
+}
+
+pub fn set_fixes_spelling(on: bool) {
+    FIX_SPELLING.store(on, Ordering::Relaxed);
+}
+
+/// A Backspace this soon after a spelling fix takes the fix back instead of
+/// deleting: someone surprised by a changed word reaches for Backspace, and
+/// deleting into a fix they did not expect leaves a mess.
+const SPELLING_GRACE: Duration = Duration::from_millis(1500);
+
+thread_local! {
+    /// When the last spelling fix was made (for [`SPELLING_GRACE`]).
+    static SPELLING_AT: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+    /// Misspellings the typist took a fix back for: left alone from now on.
+    static SPELLING_KEPT: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
 }
 
 impl Drop for UndoRecord {
@@ -559,8 +586,14 @@ unsafe fn undo_last_correction() {
         if rec.kind != UndoKind::Manual {
             note_rejection();
         }
+        let mut kept_spelling = None;
         match rec.kind {
             UndoKind::Manual => {}
+            UndoKind::Spelling(wrong) => {
+                SPELLING_KEPT.with(|k| k.borrow_mut().push(wrong));
+                SPELLING_AT.with(|t| t.set(None));
+                kept_spelling = Some(wrong);
+            }
             UndoKind::CapsAccident => {
                 if !caps_on() {
                     inject::toggle_capslock();
@@ -576,7 +609,13 @@ unsafe fn undo_last_correction() {
         }
         // The typist meant what they typed: keep typing it in its own layout.
         activate_layout(layout_of(restored));
-        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
+        match kept_spelling {
+            Some(wrong) => crate::overlay::show_at(
+                &righttype::i18n::trf(righttype::i18n::T::ToastSpellingKept, &[("word", wrong)]),
+                crate::caret::hint_anchor(),
+            ),
+            None => crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo)),
+        }
     } else {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrUndoInject));
     }
@@ -1286,6 +1325,26 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return false;
     };
 
+    // Backspace right after a spelling fix takes the fix back.
+    if key == Key::Backspace
+        && SPELLING_AT
+            .with(|t| t.take())
+            .is_some_and(|at| at.elapsed() < SPELLING_GRACE)
+        && STATE.with(|s| {
+            s.borrow()
+                .undo
+                .as_ref()
+                .is_some_and(|u| matches!(u.kind, UndoKind::Spelling(_)))
+        })
+    {
+        diag::note("Backspace right after a spelling fix: fix taken back", &[]);
+        undo_last_correction();
+        return true;
+    }
+    if matches!(key, Key::Char(_) | Key::Boundary) {
+        SPELLING_AT.with(|t| t.set(None));
+    }
+
     // Any text reaching the app moves the caret past a correction's Undo
     // window: the record counts characters from the end, so replaying it now
     // would delete what was just typed instead of what we changed.
@@ -1540,6 +1599,28 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             });
         }
     }
+    // A common Thai misspelling (opt-in): put right in Auto, with its own
+    // message and the way back.
+    let mut spelling: Option<(&'static str, &'static str)> = None;
+    if detection.is_none()
+        && !seed_run
+        && mode_now == Mode::Auto
+        && fixes_spelling()
+        && policy::supported_layout_id(layout_id(effective_layout()))
+            == Some(policy::InputLayout::ThaiKedmanee)
+    {
+        if let Some((fixed, wrong, right)) = righttype::spelling::fix(&word, dict::thai()) {
+            if !SPELLING_KEPT.with(|k| k.borrow().contains(&wrong)) {
+                detection = Some(righttype::detect::Detection {
+                    corrected: fixed,
+                    confidence: righttype::detect::Confidence::High,
+                    evidence: righttype::detect::Evidence::ExactDictionary,
+                });
+                spelling = Some((wrong, right));
+            }
+        }
+    }
+
     // CapsLock left on by accident (`hELLO`, or Thai typed with every key
     // shifted). Auto puts it right and turns CapsLock off, with a way back:
     // capitals may be meant (code, acronyms), and one Shift+Backspace (or
@@ -1584,7 +1665,22 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                 crate::overlay::announce(&said);
                 said.zeroize();
             }
-            if done && !caps_accident && crate::caret::is_enabled() {
+            if let (true, Some((wrong, right))) = (done, spelling) {
+                STATE.with(|s| {
+                    if let Some(u) = s.borrow_mut().undo.as_mut() {
+                        u.kind = UndoKind::Spelling(wrong);
+                    }
+                });
+                SPELLING_AT.with(|t| t.set(Some(Instant::now())));
+                diag::note("common misspelling put right", &[]);
+                crate::overlay::show_at(
+                    &righttype::i18n::trf(
+                        righttype::i18n::T::ToastSpellingFixed,
+                        &[("wrong", wrong), ("right", right)],
+                    ),
+                    crate::caret::hint_anchor(),
+                );
+            } else if done && !caps_accident && crate::caret::is_enabled() {
                 // The first few fixes of a session show how to take one back.
                 if UNDO_TIPS_LEFT
                     .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
@@ -2051,7 +2147,7 @@ unsafe fn flip_back_recent() {
         s.borrow()
             .undo
             .as_ref()
-            .is_some_and(|u| u.kind == UndoKind::CapsAccident)
+            .is_some_and(|u| matches!(u.kind, UndoKind::CapsAccident | UndoKind::Spelling(_)))
     }) {
         undo_last_correction();
         return;
