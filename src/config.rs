@@ -65,6 +65,9 @@ pub struct Config {
     /// CapsLock tapped switches Thai/English; held, it is CapsLock.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub capslock_switches_language: bool,
+    /// The tray icon shows TH / EN.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tray_shows_language: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -114,6 +117,7 @@ impl Default for Config {
             thai_layout: None,
             selection_via_clipboard: false,
             capslock_switches_language: false,
+            tray_shows_language: false,
         }
     }
 }
@@ -153,6 +157,7 @@ pub fn apply(cfg: &Config) {
     crate::caret::set_enabled(cfg.caret_hints);
     crate::manual::set_clipboard_fallback(cfg.selection_via_clipboard);
     hook::set_caps_switches_language(cfg.capslock_switches_language);
+    crate::tray::set_shows_language(cfg.tray_shows_language);
     crate::habits::set_enabled(cfg.predict_layout);
     righttype::layout::set_thai_variant(match cfg.thai_layout.as_deref() {
         Some("pattachote") => righttype::layout::ThaiVariant::Pattachote,
@@ -229,6 +234,7 @@ pub fn persist() {
         caret_hints: crate::caret::is_enabled(),
         selection_via_clipboard: crate::manual::clipboard_fallback(),
         capslock_switches_language: hook::caps_switches_language(),
+        tray_shows_language: crate::tray::shows_language(),
         predict_layout: crate::habits::is_enabled(),
         keep_stats: crate::stats::keeps_daily(),
         learned_folder: learn::folder().map(|p| p.to_string_lossy().into_owned()),

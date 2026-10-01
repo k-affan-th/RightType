@@ -50,6 +50,8 @@ enum Command {
     Settings,
     /// Fix every wrong-layout word in the field that had focus.
     FixField,
+    /// The tray icon shows TH / EN, on or off.
+    TrayLanguage,
     /// CapsLock as a language key, on or off.
     CapsSwitch,
     /// Thai digits ↔ 0–9 in the selection.
@@ -119,6 +121,15 @@ fn commands(app: Option<&str>) -> Vec<(String, Command)> {
             Command::KeepAsTyped(i),
         ));
     }
+    let mark = if crate::tray::shows_language() {
+        "✓  "
+    } else {
+        ""
+    };
+    list.push((
+        format!("{mark}{}", tr(T::PaletteTrayLanguage)),
+        Command::TrayLanguage,
+    ));
     let mark = if hook::caps_switches_language() {
         "✓  "
     } else {
@@ -310,6 +321,10 @@ fn run(command: Command, app: Option<&str>) {
                 };
                 overlay::show(&trf(T::ToastAppMode, &[("mode", label), ("app", app)]));
             }
+        }
+        Command::TrayLanguage => {
+            crate::tray::set_shows_language(!crate::tray::shows_language());
+            config::persist();
         }
         Command::CapsSwitch => {
             let on = !hook::caps_switches_language();

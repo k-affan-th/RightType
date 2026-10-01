@@ -741,6 +741,12 @@ pub(crate) fn e2e_trace(msg: String) {
 #[cfg(not(debug_assertions))]
 pub(crate) fn e2e_trace(_: String) {}
 
+/// The keyboard the focused app types with now, if RightType has a table for
+/// it (the tray's TH / EN icon).
+pub fn current_language() -> Option<policy::InputLayout> {
+    unsafe { policy::supported_layout_id(layout_id(effective_layout())) }
+}
+
 /// The program the typist is typing in (its file name), as last seen.
 pub(crate) fn current_app() -> Option<String> {
     STATE.with(|s| s.borrow().app_exe.clone())

@@ -133,6 +133,7 @@ texts! {
     ToastHookBack => "RightType is working again", "RightType กลับมาทำงานแล้ว";
     ToastSaved => "Saved", "บันทึกแล้ว";
     PaletteSwapDigits => "Thai digits ↔ 0–9 in the selection", "เลขไทย ↔ เลขอารบิก ในข้อความที่เลือก";
+    PaletteTrayLanguage => "Tray icon shows TH / EN", "ไอคอนถาดระบบแสดง TH / EN";
     PaletteCapsSwitch => "CapsLock switches Thai/English", "CapsLock สลับภาษาไทย/อังกฤษ";
     ToastCapsSwitchOn => "Tap CapsLock to switch language · hold it for CAPS", "แตะ CapsLock เพื่อสลับภาษา · กดค้างเพื่อพิมพ์ตัวใหญ่";
     ToastCapsSwitchOff => "CapsLock is CapsLock again", "CapsLock กลับมาเป็นปุ่มตัวพิมพ์ใหญ่ตามเดิม";
