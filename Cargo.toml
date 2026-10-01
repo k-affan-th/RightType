@@ -75,6 +75,7 @@ features = [
     "Win32_System_SystemInformation",
     "Win32_System_RemoteDesktop",
     "Win32_System_Diagnostics_Debug",
+    "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Kernel",
     "Win32_Security",
 ]

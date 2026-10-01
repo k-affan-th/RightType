@@ -31,6 +31,8 @@ mod hook;
 #[cfg(feature = "winos")]
 mod inject;
 #[cfg(feature = "winos")]
+mod instance;
+#[cfg(feature = "winos")]
 mod learn;
 #[cfg(feature = "winos")]
 mod manual;
@@ -75,6 +77,24 @@ fn main() {
 
 #[cfg(feature = "winos")]
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("--watchdog") {
+        instance::run_watchdog(&args[1..]);
+    }
+    let restarts: Option<u32> = args
+        .iter()
+        .position(|a| a == "--restarted")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|n| n.parse().ok());
+    // One RightType at a time: settle with any already running (no dialog).
+    let replaced = match instance::claim() {
+        instance::Start::Leave => return,
+        instance::Start::Run { replaced } => replaced,
+    };
+    instance::set_notice(replaced, restarts);
+    if config::load().restart_after_crash && instance::watchdog_allowed() {
+        instance::start_watchdog(restarts.unwrap_or(0));
+    }
     // Crisp text at 125–200 % display scaling on every monitor: per-monitor
     // aware (v2), so a window moved to a screen with another scale re-lays
     // itself out (ui.rs) instead of being bitmap-stretched. The manifest asks

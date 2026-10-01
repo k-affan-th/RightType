@@ -149,6 +149,10 @@ texts! {
     PaletteKeepAsTyped => "Never convert “{word}”", "ไม่ต้องแปลง “{word}” อีก";
     ToastCapsOff => "CapsLock was on — word fixed, CapsLock off · Shift+Backspace if you meant capitals", "CapsLock ค้าง — แก้คำและปิด CapsLock แล้ว · ตั้งใจพิมพ์ตัวใหญ่? กด Shift+Backspace";
     ToastCapsKept => "Capitals kept, CapsLock on again", "คืนตัวพิมพ์ใหญ่และเปิด CapsLock ให้แล้ว";
+    ToastAlreadyRunning => "RightType is already running — it's in the tray (bottom right)", "RightType เปิดอยู่แล้ว อยู่ที่ tray มุมขวาล่าง";
+    ToastReplaced => "Now running RightType {v} (closed {old})", "เปลี่ยนเป็น RightType {v} แล้ว (ปิดตัว {old})";
+    ToastReplacedUnknown => "Now running RightType {v} (closed the copy that was running)", "เปลี่ยนเป็น RightType {v} แล้ว (ปิดตัวที่เปิดอยู่ก่อน)";
+    ToastRestarted => "RightType stopped unexpectedly and was started again", "RightType หยุดทำงานกะทันหัน จึงเปิดใหม่ให้แล้ว";
     ToastVerifyDiffers => "This app showed the fix differently — check the last word (Ctrl+Z undoes it). RightType will type slower here.", "แอปนี้แสดงคำที่แก้ไม่ตรง ลองดูคำล่าสุด (Ctrl+Z ย้อนได้) ต่อไป RightType จะพิมพ์ช้าลงในแอปนี้";
     ToastLearnedCleared => "Learned words cleared", "ล้างคำที่เรียนรู้แล้ว";
     ToastSuggestAccept => "Alt+CapsLock", "Alt+CapsLock";

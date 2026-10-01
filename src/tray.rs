@@ -478,6 +478,13 @@ pub fn run() {
     let ui_t = ui.clone();
     let raw = nwg::bind_raw_event_handler(&ui.window.handle, 0x5254_0001, move |_h, msg, w, _l| {
         unsafe { session::on_message(msg, w) };
+        if msg == crate::instance::WM_INSTANCE {
+            match w {
+                crate::instance::HELLO_MSG => overlay::show(tr(T::ToastAlreadyRunning)),
+                crate::instance::QUIT_MSG => nwg::stop_thread_dispatch(),
+                _ => {}
+            }
+        }
         // The session retry timer doubles as a cheap refresh, so the tooltip
         // follows hotkey and Settings changes without waiting for the menu.
         if msg == WM_TIMER {
@@ -498,6 +505,10 @@ pub fn run() {
     if let Some(hwnd) = hwnd {
         unsafe { session::arm(hwnd) };
         focus::set_notify_window(hwnd.0 as isize);
+        crate::instance::listen(hwnd.0 as isize);
+    }
+    if let Some(notice) = crate::instance::take_notice() {
+        overlay::show(&notice);
     }
     // UIA focus hook for password-field detection (incl. browsers).
     unsafe { focus::arm() };

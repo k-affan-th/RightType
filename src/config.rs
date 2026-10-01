@@ -68,6 +68,8 @@ pub struct Config {
     /// The tray icon shows TH / EN.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tray_shows_language: bool,
+    /// Start RightType again if it crashes (see instance.rs).
+    pub restart_after_crash: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -118,6 +120,7 @@ impl Default for Config {
             selection_via_clipboard: false,
             capslock_switches_language: false,
             tray_shows_language: false,
+            restart_after_crash: true,
         }
     }
 }
@@ -158,6 +161,7 @@ pub fn apply(cfg: &Config) {
     crate::manual::set_clipboard_fallback(cfg.selection_via_clipboard);
     hook::set_caps_switches_language(cfg.capslock_switches_language);
     crate::tray::set_shows_language(cfg.tray_shows_language);
+    RESTART_AFTER_CRASH.store(cfg.restart_after_crash, std::sync::atomic::Ordering::Relaxed);
     crate::habits::set_enabled(cfg.predict_layout);
     righttype::layout::set_thai_variant(match cfg.thai_layout.as_deref() {
         Some("pattachote") => righttype::layout::ThaiVariant::Pattachote,
@@ -179,6 +183,10 @@ pub fn apply(cfg: &Config) {
             .collect(),
     );
 }
+
+/// Settings → restart after a crash. Takes effect at the next start.
+pub static RESTART_AFTER_CRASH: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
 
 /// The language the user picked, or `None` to follow Windows.
 static LANGUAGE: std::sync::Mutex<Option<Lang>> = std::sync::Mutex::new(None);
@@ -235,6 +243,7 @@ pub fn persist() {
         selection_via_clipboard: crate::manual::clipboard_fallback(),
         capslock_switches_language: hook::caps_switches_language(),
         tray_shows_language: crate::tray::shows_language(),
+        restart_after_crash: RESTART_AFTER_CRASH.load(std::sync::atomic::Ordering::Relaxed),
         predict_layout: crate::habits::is_enabled(),
         keep_stats: crate::stats::keeps_daily(),
         learned_folder: learn::folder().map(|p| p.to_string_lossy().into_owned()),
