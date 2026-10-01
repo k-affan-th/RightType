@@ -73,7 +73,15 @@ pub fn delta(rendered: &str, target: &str) -> Delta {
 pub fn chars_on_screen(expected: &str, before_caret: &str) -> Option<usize> {
     let e: Vec<char> = expected.chars().collect();
     let b: Vec<char> = before_caret.chars().collect();
-    let droppable = |c: char| ('\u{0E30}'..='\u{0E4E}').contains(&c);
+    // What sequence checking drops: marks above or below a letter, tone
+    // marks, and ำ (CI: `ะ้ำพำ` kept as `ะพำ`). Never a letter or a vowel that
+    // is written on the line (เ แ โ ใ ไ ะ า): those always land, so missing
+    // ones mean the box has not caught up.
+    let droppable = |c: char| {
+        matches!(c, '\u{0E31}' | '\u{0E33}')
+            || ('\u{0E34}'..='\u{0E3A}').contains(&c)
+            || ('\u{0E47}'..='\u{0E4E}').contains(&c)
+    };
     let (mut i, mut j) = (e.len(), b.len());
     while i > 0 {
         if j > 0 && e[i - 1] == b[j - 1] {
@@ -149,6 +157,9 @@ mod tests {
         // The box has not handled the latest keys yet.
         assert_eq!(chars_on_screen("l;ylf", "relogin "), None);
         assert_eq!(chars_on_screen("l;ylf", "l;y"), None);
+        // แ and ะ are never dropped: not there yet means not caught up (CI:
+        // `correct` was put before them, leaving `correct แะ`).
+        assert_eq!(chars_on_screen("แนพพำแะ", "แนพพำ"), None);
         // Only vowels and marks can be missing, never a letter.
         assert_eq!(chars_on_screen("ab", "b"), None);
         assert_eq!(chars_on_screen("ำ", ""), None);
