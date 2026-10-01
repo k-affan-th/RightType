@@ -39,7 +39,8 @@ struct Layout {
 fn layout(first_run: bool) -> Layout {
     if first_run {
         let example_y = 150;
-        let keys_y = example_y + 72 + 44;
+        // Room for the practice box under the example.
+        let keys_y = example_y + 72 + 70 + 44;
         let rows = 4;
         Layout {
             example_y: Some(example_y),
@@ -102,6 +103,17 @@ pub fn show(first_run: bool) {
             p.surface,
             0,
         );
+        // A box to try it in, right here: RightType works in its own
+        // window like in any other (Auto fixes the word at the space; in
+        // Manual, Shift+Backspace does).
+        s.label(
+            tr(T::WelcomeTry),
+            TextStyle::Dim,
+            (X, example_y + 84, CW, 20),
+            p.bg,
+            0,
+        );
+        s.edit("", (X, example_y + 106, CW, 34), 0);
         s.label(
             tr(T::HeadHotkeys),
             TextStyle::BodyStrong,
