@@ -1008,7 +1008,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         });
     }
 
-    // If focus or layout changed since the last key, the buffered word is stale.
+    // If focus or layout changed since the last key, the buffered word is stale
+    // (the focus worker's answer about this key's field first).
+    crate::focus::settle(Duration::from_millis(60));
     sync_context();
     note_english_variant(effective_layout());
 

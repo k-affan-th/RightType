@@ -118,6 +118,26 @@ pub fn set_notify_window(hwnd: isize) {
 }
 
 static WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<()>> = std::sync::OnceLock::new();
+/// Focus events seen, and how many of them the worker has answered.
+static ASKED: AtomicU64 = AtomicU64::new(0);
+static ANSWERED: AtomicU64 = AtomicU64::new(0);
+
+/// Before the keyboard hook handles a key: let the focus worker finish with
+/// the focus events that came before it, for at most `max`. The answers (a
+/// new field, a password field) must apply to the keys typed after the
+/// click; done in the background they arrived a few keys late and the first
+/// word of a field came out wrong (CI). Normally a few milliseconds; a hung
+/// app costs `max` per key, and its keys go nowhere meanwhile anyway.
+pub fn settle(max: std::time::Duration) {
+    let asked = ASKED.load(Ordering::Acquire);
+    if ANSWERED.load(Ordering::Acquire) >= asked {
+        return;
+    }
+    let until = std::time::Instant::now() + max;
+    while ANSWERED.load(Ordering::Acquire) < asked && std::time::Instant::now() < until {
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+}
 
 /// The focus questions (which element, is it a password field, does it
 /// complete inline) go to the app through UI Automation, which waits on the
@@ -136,13 +156,16 @@ fn start_worker() {
             while rx.recv().is_ok() {
                 // Focus events come in bursts: answer once for all of them.
                 while rx.try_recv().is_ok() {}
+                let asked = ASKED.load(Ordering::Acquire);
                 unsafe { on_focus_inner() };
+                ANSWERED.fetch_max(asked, Ordering::AcqRel);
             }
         });
 }
 
 /// Ask the focus worker to look again (never waits; a pending ask covers it).
 fn wake_worker() {
+    ASKED.fetch_add(1, Ordering::AcqRel);
     if let Some(tx) = WORKER.get() {
         let _ = tx.try_send(());
     }
