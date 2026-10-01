@@ -885,12 +885,6 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
 }
 
-/// Is this thread inside the keyboard hook, handling a key? (Waits on apps
-/// must then stay short: see `focus::TextBox`.)
-pub fn in_hook() -> bool {
-    PROCESSING.with(|p| p.get())
-}
-
 thread_local! {
     /// The hook is handling a key (see the re-entry note in the hook).
     static PROCESSING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };

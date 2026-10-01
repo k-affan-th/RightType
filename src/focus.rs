@@ -535,18 +535,6 @@ impl TextBox {
     }
 
     fn ask_within(&self, msg: u32, w: usize, l: isize, ms: u32) -> Option<usize> {
-        // Inside the keyboard hook, every wait of one replacement shares one
-        // budget (see `HOOK_BUDGET`).
-        let ms = match REPLACE_DEADLINE.with(|d| d.get()) {
-            Some(deadline) => {
-                let left = deadline.saturating_duration_since(std::time::Instant::now());
-                if left.is_zero() {
-                    return None;
-                }
-                ms.min(left.as_millis().max(1) as u32)
-            }
-            None => ms,
-        };
         // While this waits, Windows may hand the keyboard hook the next key
         // on this thread (see `waiting_on_app`).
         struct Waiting;
@@ -636,75 +624,6 @@ impl TextBox {
         }
     }
 
-    /// The replacement was sent but not answered in time. Give the box up to
-    /// 300 ms more, then read what is before the caret: the correction in
-    /// place is success; the old text unchanged means nothing happened (keys
-    /// may do it); anything else is unknown.
-    fn settle_after_slow_replace(
-        &self,
-        context: Option<&str>,
-        delete: usize,
-        text: &str,
-    ) -> Result<(), ReplaceError> {
-        use zeroize::Zeroize;
-        const WM_NULL: u32 = 0;
-        let unknown = ReplaceError::Unknown("no answer to the replacement");
-        let Some(context) = context else {
-            return Err(unknown);
-        };
-        // This runs inside the keyboard hook: keep the wait short (Windows
-        // drops a hook that holds keys too long).
-        if self.ask_within(WM_NULL, 0, 0, 300).is_none() {
-            return Err(unknown);
-        }
-        let Some((a, b)) = self.selection() else {
-            return Err(unknown);
-        };
-        if a != b {
-            return Err(unknown);
-        }
-        let Some(mut before) = self.text_before(a) else {
-            return Err(unknown);
-        };
-        let kept: String = {
-            let n = context.chars().count().saturating_sub(delete);
-            context.chars().take(n).collect()
-        };
-        let mut done = format!("{kept}{text}");
-        let result = if before.ends_with(done.as_str()) {
-            Ok(())
-        } else if before.ends_with(context) {
-            Err(ReplaceError::Untouched("the replacement did not happen"))
-        } else {
-            Err(unknown)
-        };
-        before.zeroize();
-        done.zeroize();
-        crate::hook::e2e_trace(format!(
-            "text box: slow replacement settled: {}",
-            result.is_ok()
-        ));
-        result
-    }
-
-    /// The box's text before position `caret`, if it can be located.
-    fn text_before(&self, caret: usize) -> Option<String> {
-        use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
-        use zeroize::Zeroize;
-        let len = self.ask(WM_GETTEXTLENGTH, 0, 0)?;
-        if len > 0xFFFF || caret > len {
-            return None;
-        }
-        let mut units = vec![0u16; len + 1];
-        let got = self
-            .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?
-            .min(len);
-        let usable = caret <= got && !(self.rich && units[..caret].contains(&(b'\n' as u16)));
-        let text = usable.then(|| String::from_utf16_lossy(&units[..caret]));
-        units.zeroize();
-        text
-    }
-
     /// Debug e2e trace: the caret, and the text before it, as the box holds
     /// them right before a replacement.
     #[cfg(debug_assertions)]
@@ -723,29 +642,6 @@ impl TextBox {
     }
 
     pub fn replace_before_caret(
-        &self,
-        delete: usize,
-        text: &str,
-        context: Option<&str>,
-    ) -> Result<(), ReplaceError> {
-        // In the keyboard hook, all the waits on the box together stay under
-        // what Windows allows a hook: past that it lets the key through
-        // itself (CI: a fresh Notepad slow to answer, and the `u` that
-        // finished `l;ylfu` landed after สวัสดี).
-        struct Budget;
-        impl Drop for Budget {
-            fn drop(&mut self) {
-                REPLACE_DEADLINE.with(|d| d.set(None));
-            }
-        }
-        let _budget = crate::hook::in_hook().then(|| {
-            REPLACE_DEADLINE.with(|d| d.set(Some(std::time::Instant::now() + HOOK_BUDGET)));
-            Budget
-        });
-        self.replace_within_budget(delete, text, context)
-    }
-
-    fn replace_within_budget(
         &self,
         delete: usize,
         text: &str,
@@ -783,9 +679,17 @@ impl TextBox {
             .ask(EM_REPLACESEL, 1, units.as_mut_ptr() as isize)
             .is_none()
         {
-            // A slow box may still do it (Windows 11 Notepad, CI): wait for
-            // it, then see what it holds rather than guess.
-            return self.settle_after_slow_replace(context, delete, text);
+            // Sent, not yet answered: a slow box (a Notepad just opened,
+            // Windows 11 Notepad). A sent message is handled before any key
+            // typed after it, so it will be done in order: count it as done.
+            // Waiting here for it held the keyboard hook past what Windows
+            // allows, and Windows then let the key through itself (CI:
+            // สวัสดีu); giving the run up made the next correction count
+            // characters that were no longer there (CI: ววันนี้).
+            crate::hook::e2e_trace(
+                "text box: replacement sent, not answered yet: counted as done".to_string(),
+            );
+            return Ok(());
         }
         let expected = from + units.len() - 1;
         match self.selection() {
@@ -799,15 +703,7 @@ impl TextBox {
 
 thread_local! {
     static WAITING_ON_APP: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
-    /// When the waits of a replacement made in the keyboard hook must end.
-    static REPLACE_DEADLINE: std::cell::Cell<Option<std::time::Instant>> =
-        const { std::cell::Cell::new(None) };
 }
-
-/// All the waits on a text box for one replacement in the keyboard hook.
-/// Windows' own limit for a hook (`LowLevelHooksTimeout`) is a few hundred
-/// milliseconds; the hook's other work fits in what is left.
-const HOOK_BUDGET: std::time::Duration = std::time::Duration::from_millis(200);
 
 /// This thread is waiting for a text box to answer (SendMessageTimeout).
 /// The wait lets Windows call the keyboard hook again for the next key; that
