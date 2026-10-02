@@ -32,8 +32,10 @@ static OPEN: AtomicIsize = AtomicIsize::new(0);
 /// The window that had focus when the palette last opened.
 static PREVIOUS: AtomicIsize = AtomicIsize::new(0);
 
-const W: i32 = 320;
-const ROW: i32 = 36;
+const W: i32 = 400;
+const ROW: i32 = 34;
+/// A section heading's height.
+const HEAD: i32 = 24;
 const PAD: i32 = 10;
 const WM_COMMAND: u32 = 0x0111;
 const WM_ACTIVATE: u32 = 0x0006;
@@ -42,6 +44,14 @@ const IDCANCEL: usize = 2;
 /// What a "selection" command does to the text.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TransformKind {
+    /// Only the words typed on the wrong keyboard (as "Fix this field").
+    Repair,
+    /// Thai in its standard form (`righttype::thai_text::normalize`).
+    Normalize,
+    /// Years พ.ศ. ↔ ค.ศ.
+    Era,
+    NumberWords,
+    BahtWords,
     Digits,
     Upper,
     Lower,
@@ -64,19 +74,193 @@ enum Command {
     TrayLanguage,
     /// CapsLock as a language key, on or off.
     CapsSwitch,
+    /// Common Thai misspellings put right, on or off.
+    Spelling,
     /// Rewrite the selection (digits, letter case).
     Transform(TransformKind),
+    /// A recent word (by its place in the hook's list, oldest first): flip
+    /// it, or every ticked one.
+    History(usize),
+    /// The calmer mode on offer (see `apps::note_rejection`): for now, or
+    /// for good.
+    OfferForNow(AppMode),
+    OfferKeep(AppMode),
+    /// Off (or back on) in the field that had focus.
+    FieldOff,
+    FieldOn,
     /// Keep a word the typist reversed lately as typed (by its place in
     /// `learn::reversed_words`).
     KeepAsTyped(usize),
+    /// Show a section's folded rows (options, more selection changes,
+    /// special characters).
+    More(Section),
+    /// Type a special character (by its place in `thai_text::SYMBOLS`).
+    Symbol(usize),
+    /// Type the copied text key by key (remote desktops, VMs).
+    TypeClipboard,
+    /// A word "Fix this field" would change (by its place in the review):
+    /// ticked words are fixed.
+    Review(usize),
+    /// Fix the ticked words of the review.
+    ApplyReview,
+    /// Hold Enter in chat apps when the message looks typed on the wrong
+    /// keyboard, on or off.
+    EnterGuard,
+    /// Ctrl+Backspace deletes one Thai word, on or off.
+    ThaiWordDelete,
+    /// English prefix words written with their hyphen, on or off.
+    Hyphens,
+}
+
+/// The palette's sections, top to bottom. Things done to text come first
+/// (numbered 1–9); settings come last, folded away.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Section {
+    /// The words "Fix this field" would change, to tick before fixing.
+    Review,
+    /// The words just typed.
+    Words,
+    /// Fixing text.
+    Fix,
+    /// The selected text.
+    Selection,
+    /// Special characters to type (folded until asked for or searched).
+    Symbols,
+    /// The app (and field) that had focus.
+    Here,
+    Mode,
+    /// Switches and Settings (folded until asked for or searched).
+    Options,
+}
+
+impl Section {
+    const ALL: [Section; 8] = [
+        Section::Review,
+        Section::Words,
+        Section::Fix,
+        Section::Selection,
+        Section::Symbols,
+        Section::Here,
+        Section::Mode,
+        Section::Options,
+    ];
+
+    /// Rows here get the numbers 1–9.
+    fn numbered(self) -> bool {
+        !matches!(
+            self,
+            Section::Mode | Section::Options | Section::Symbols | Section::Review
+        )
+    }
+
+    /// Its bit in `Palette::expanded`.
+    fn bit(self) -> u8 {
+        1 << (self as u8)
+    }
+
+    /// The heading's icon (a glyph of Windows' icon font).
+    fn icon(self) -> char {
+        match self {
+            Section::Review => '\u{E73E}',    // CheckMark
+            Section::Words => '\u{E81C}',     // History
+            Section::Symbols => '\u{E76E}',   // Emoji2
+            Section::Fix => '\u{E90F}',       // Repair
+            Section::Selection => '\u{E8B3}', // SelectAll
+            Section::Here => '\u{E7F4}',      // TVMonitor
+            Section::Mode => '\u{E9E9}',      // Equalizer
+            Section::Options => '\u{E713}',   // Settings
+        }
+    }
+}
+
+impl Command {
+    /// The row's icon (a glyph of Windows' icon font), so the eye finds a
+    /// row by its shape before reading it.
+    fn icon(self) -> char {
+        match self {
+            Command::History(_) => '\u{E8AB}',     // Switch
+            Command::KeepAsTyped(_) => '\u{E7A7}', // Undo
+            Command::FixText => '\u{E8A5}',        // Document
+            Command::FixField => '\u{E8AC}',       // Rename
+            Command::Transform(kind) => match kind {
+                TransformKind::Repair => '\u{E8AB}',    // Switch
+                TransformKind::Normalize => '\u{E8D2}', // Font
+                TransformKind::Era => '\u{E787}',       // Calendar
+                TransformKind::NumberWords | TransformKind::BahtWords => '\u{E8EF}', // Calculator
+                TransformKind::Digits => '\u{E8EF}',    // Calculator
+                TransformKind::Upper => '\u{E8E8}',     // FontIncrease
+                TransformKind::Lower => '\u{E8E7}',     // FontDecrease
+                TransformKind::Title => '\u{E8E9}',     // FontSize
+                TransformKind::SwapCase => '\u{E895}',  // Sync
+            },
+            Command::OfferForNow(_) => '\u{E916}', // Stopwatch
+            Command::OfferKeep(_) => '\u{E74E}',   // Save
+            Command::Pause => '\u{E769}',          // Pause
+            Command::Resume => '\u{E768}',         // Play
+            Command::FieldOff => '\u{E733}',       // Blocked
+            Command::FieldOn => '\u{E73E}',        // CheckMark
+            Command::AppOff | Command::AppDefault => '\u{E7E8}', // PowerButton
+            Command::Mode(mode) => match mode {
+                hook::Mode::Auto => '\u{E945}',    // LightningBolt
+                hook::Mode::Suggest => '\u{EA80}', // Lightbulb
+                _ => '\u{E765}',                   // KeyboardClassic
+            },
+            Command::More(_) => '\u{E712}',        // More
+            Command::Symbol(_) => '\u{E76E}',      // Emoji2
+            Command::TypeClipboard => '\u{E765}',  // KeyboardClassic
+            Command::Review(_) => '\u{E8AB}',      // Switch
+            Command::ApplyReview => '\u{E73E}',    // CheckMark
+            Command::EnterGuard => '\u{E8BD}',     // Message
+            Command::ThaiWordDelete => '\u{E75C}', // EraseTool
+            Command::Spelling => '\u{E82D}',       // Dictionary
+            Command::Hyphens => '\u{E738}',        // Remove (a dash)
+            Command::CapsSwitch => '\u{E72E}',     // Lock
+            Command::TrayLanguage => '\u{E774}',   // Globe
+            Command::Settings => '\u{E713}',       // Settings
+        }
+    }
+}
+
+/// One row: its section, text, hint at the right, and command.
+struct Entry {
+    section: Section,
+    /// Hidden until its section's "more" row is opened (or a search finds it).
+    folded: bool,
+    label: String,
+    hint: String,
+    command: Command,
+}
+
+impl Drop for Entry {
+    fn drop(&mut self) {
+        self.label.zeroize();
+    }
 }
 
 struct Palette {
     window: nwg::Window,
     surface: Rc<Surface>,
     items: Vec<(u16, Command)>,
+    /// Each item's section.
+    item_sections: Vec<Section>,
+    /// Each section's heading (a label).
+    headings: Vec<(Section, u16)>,
+    /// Sections whose folded rows are shown (`Section::bit`).
+    expanded: std::cell::Cell<u8>,
+    /// Each item is folded (see `Entry::folded`).
+    item_folded: Vec<bool>,
+    /// Opened to check the words "Fix this field" would change.
+    review: bool,
+    /// Which shown item each number key (1–9) runs.
+    numbers: RefCell<Vec<usize>>,
     /// Each item's text, for filtering and numbering.
-    labels: Vec<String>,
+    labels: RefCell<Vec<String>>,
+    /// The recent words listed (oldest first), wiped on close.
+    words: RefCell<Vec<String>>,
+    /// Where each recent word is on screen, when the app says.
+    boxes: Vec<Option<RECT>>,
+    /// Recent words ticked with Space (their places in `words`).
+    checked: RefCell<Vec<usize>>,
     /// The line above the list: how to use it, or what has been typed.
     header: u16,
     /// Items shown (indices into `items`), in order, after filtering.
@@ -90,6 +274,10 @@ struct Palette {
     app: Option<String>,
     handler: RefCell<Option<nwg::RawEventHandler>>,
 }
+
+/// The field that had focus when the palette was asked for (its UI
+/// Automation identity; 0 = unknown). Taken before the palette takes focus.
+static FIELD: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// The palette was asked for and is not open yet: its keys are kept for it.
 static OPENING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -158,53 +346,92 @@ pub fn key(vk: u16, ch: Option<char>) -> bool {
     true
 }
 
-/// Show the items that match the filter, numbered, packed from the top, and
-/// select the first.
+/// Show the items that match the filter under their headings, numbered,
+/// packed from the top, and select the first.
 fn refilter(p: &Palette) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        ShowWindow, SWP_NOMOVE, SWP_NOZORDER, SW_HIDE, SW_SHOW,
+    };
     let filter = p.filter.borrow().to_lowercase();
     // Typed on the wrong keyboard still finds it (`fxw` and `ซ่อม` alike).
     let other = righttype::layout::auto_convert(&filter).to_lowercase();
-    let visible: Vec<usize> = (0..p.items.len())
-        .filter(|&i| {
-            let label = p.labels[i].to_lowercase();
-            filter.is_empty() || label.contains(&filter) || label.contains(&other)
-        })
-        .collect();
-    for (i, (id, _)) in p.items.iter().enumerate() {
-        let hwnd = p.surface.hwnd_of(*id);
-        match visible.iter().position(|&v| v == i) {
-            Some(k) => {
-                let label = if k < 9 {
-                    format!("{}   {}", k + 1, p.labels[i])
+    let searching = !filter.is_empty();
+    let shows = |i: usize| {
+        let command = p.items[i].1;
+        let section = p.item_sections[i];
+        let open = p.expanded.get() & section.bit() != 0;
+        if let Command::More(_) = command {
+            return !searching && !open;
+        }
+        if p.item_folded[i] && !searching && !open {
+            return false;
+        }
+        let label = p.labels.borrow()[i].to_lowercase();
+        !searching || label.contains(&filter) || label.contains(&other)
+    };
+    let mut visible = Vec::new();
+    let mut numbers = Vec::new();
+    let mut y = PAD + 28;
+    for section in Section::ALL {
+        let rows: Vec<usize> = (0..p.items.len())
+            .filter(|&i| p.item_sections[i] == section && shows(i))
+            .collect();
+        let heading = p.headings.iter().find(|(s, _)| *s == section).map(|h| h.1);
+        if let Some(id) = heading {
+            let hwnd = p.surface.hwnd_of(id);
+            unsafe {
+                if rows.is_empty() {
+                    let _ = ShowWindow(hwnd, SW_HIDE);
                 } else {
-                    format!("    {}", p.labels[i])
-                };
-                p.surface.set_text(*id, &label);
-                unsafe {
                     let _ = SetWindowPos(
                         hwnd,
                         None,
-                        ui::px(PAD),
-                        ui::px(PAD + 28 + k as i32 * ROW),
+                        ui::px(PAD + 8),
+                        ui::px(y + 4),
                         0,
                         0,
-                        SWP_NOSIZE | windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER,
+                        SWP_NOSIZE | SWP_NOZORDER,
                     );
-                    let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
-                        hwnd,
-                        windows::Win32::UI::WindowsAndMessaging::SW_SHOW,
-                    );
+                    let _ = ShowWindow(hwnd, SW_SHOW);
+                    y += HEAD;
                 }
             }
-            None => unsafe {
-                let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
-                    hwnd,
-                    windows::Win32::UI::WindowsAndMessaging::SW_HIDE,
+        }
+        for i in rows {
+            let k = visible.len();
+            let number = (section.numbered() && numbers.len() < 9).then(|| {
+                numbers.push(k);
+                numbers.len()
+            });
+            let label = &p.labels.borrow()[i];
+            let text = match number {
+                Some(n) => format!("{n}\t{label}"),
+                None => format!("\t{label}"),
+            };
+            p.surface.set_text(p.items[i].0, &text);
+            unsafe {
+                let _ = SetWindowPos(
+                    p.surface.hwnd_of(p.items[i].0),
+                    None,
+                    ui::px(PAD),
+                    ui::px(y),
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOZORDER,
                 );
-            },
+                let _ = ShowWindow(p.surface.hwnd_of(p.items[i].0), SW_SHOW);
+            }
+            y += ROW;
+            visible.push(i);
         }
     }
-    let rows = visible.len().max(1) as i32;
+    for (i, (id, _)) in p.items.iter().enumerate() {
+        if !visible.contains(&i) {
+            unsafe {
+                let _ = ShowWindow(p.surface.hwnd_of(*id), SW_HIDE);
+            }
+        }
+    }
     unsafe {
         let _ = SetWindowPos(
             p.surface.hwnd,
@@ -212,9 +439,8 @@ fn refilter(p: &Palette) {
             0,
             0,
             ui::px(W),
-            ui::px(PAD * 2 + 28 + rows * ROW),
-            windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE
-                | windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER,
+            ui::px(y.max(PAD + 28 + ROW) + PAD),
+            SWP_NOMOVE | SWP_NOZORDER,
         );
     }
     let typed = p.filter.borrow();
@@ -228,7 +454,17 @@ fn refilter(p: &Palette) {
     );
     drop(typed);
     *p.visible.borrow_mut() = visible;
+    *p.numbers.borrow_mut() = numbers;
     select(p, 0);
+}
+
+/// The number shown on the `k`-th shown item, if it has one.
+fn number_of(p: &Palette, k: usize) -> Option<usize> {
+    p.numbers
+        .borrow()
+        .iter()
+        .position(|&v| v == k)
+        .map(|n| n + 1)
 }
 
 /// Select the `k`-th shown item (keyboard focus on it).
@@ -243,6 +479,84 @@ fn select(p: &Palette, k: usize) {
     unsafe {
         let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(p.surface.hwnd_of(id));
     }
+    drop(visible);
+    if p.filter.borrow().is_empty() {
+        let head = if p.review {
+            T::PaletteReviewHint
+        } else if matches!(selected_command(p), Some(Command::History(_))) {
+            T::PaletteHistoryHint
+        } else {
+            T::PaletteHead
+        };
+        p.surface.set_text(p.header, tr(head));
+    }
+    show_marks(p);
+}
+
+/// The command of the selected item.
+fn selected_command(p: &Palette) -> Option<Command> {
+    let visible = p.visible.borrow();
+    visible.get(p.selected.get()).map(|&i| p.items[i].1)
+}
+
+/// The recent words a press of Enter would flip now: the ticked ones, or
+/// the selected one.
+fn picked(p: &Palette) -> Vec<usize> {
+    let checked = p.checked.borrow();
+    if p.review {
+        return checked.clone();
+    }
+    if !checked.is_empty() {
+        let mut v = checked.clone();
+        v.sort_unstable();
+        return v;
+    }
+    match selected_command(p) {
+        Some(Command::History(i)) => vec![i],
+        _ => Vec::new(),
+    }
+}
+
+/// Tint, in the app, the words a press of Enter would flip.
+fn show_marks(p: &Palette) {
+    let boxes: Vec<RECT> = picked(p)
+        .iter()
+        .filter_map(|&i| p.boxes.get(i).copied().flatten())
+        .collect();
+    crate::marks::show(&boxes);
+}
+
+/// Tick or untick the selected recent word (Space).
+fn toggle_checked(p: &Palette) -> bool {
+    let word = match selected_command(p) {
+        Some(Command::History(word) | Command::Review(word)) => word,
+        _ => return false,
+    };
+    {
+        let mut checked = p.checked.borrow_mut();
+        match checked.iter().position(|&c| c == word) {
+            Some(at) => {
+                checked.remove(at);
+            }
+            None => checked.push(word),
+        }
+    }
+    let on = p.checked.borrow().contains(&word);
+    let k = p.selected.get();
+    let i = p.visible.borrow()[k];
+    let label = {
+        let mut labels = p.labels.borrow_mut();
+        let rest = labels[i].chars().skip(1).collect::<String>();
+        labels[i] = format!("{}{rest}", if on { '☑' } else { '☐' });
+        labels[i].clone()
+    };
+    let text = match number_of(p, k) {
+        Some(n) => format!("{n}\t{label}"),
+        None => format!("\t{label}"),
+    };
+    p.surface.set_text(p.items[i].0, &text);
+    show_marks(p);
+    true
 }
 
 /// One key from the hook (see [`key`]).
@@ -266,10 +580,15 @@ fn on_key(p: &Rc<Palette>, vk: u16, ch: Option<char>) {
             }
         }
         0x0D => run_shown(p, at),
+        // Space ticks a recent word (several can be flipped at once).
+        0x20 if p.filter.borrow().is_empty() && toggle_checked(p) => {}
         _ => match ch {
             // 1–9 run that line, unless a filter is being typed.
             Some(d @ '1'..='9') if p.filter.borrow().is_empty() => {
-                run_shown(p, d as usize - '1' as usize)
+                let shown = p.numbers.borrow().get(d as usize - '1' as usize).copied();
+                if let Some(k) = shown {
+                    run_shown(p, k);
+                }
             }
             Some(c) => {
                 p.filter.borrow_mut().push(c);
@@ -289,8 +608,59 @@ fn run_shown(p: &Rc<Palette>, k: usize) {
         return;
     };
     let command = p.items[i].1;
+    if let Command::More(section) = command {
+        // Open the section's folded rows in place; the first of them is
+        // selected.
+        p.expanded.set(p.expanded.get() | section.bit());
+        refilter(p);
+        let first = p
+            .visible
+            .borrow()
+            .iter()
+            .position(|&v| p.item_sections[v] == section && p.item_folded[v]);
+        if let Some(k) = first {
+            select(p, k);
+        }
+        return;
+    }
+    if let Command::Review(_) | Command::ApplyReview = command {
+        let keep: Vec<bool> = (0..p.words.borrow().len())
+            .map(|i| p.checked.borrow().contains(&i))
+            .collect();
+        close(p, true);
+        crate::manual::request_apply_review(keep);
+        return;
+    }
+    let words = if let Command::History(_) = command {
+        // Enter on a word flips the ticked ones (or this one if none is).
+        p.selected.set(k);
+        picked(p)
+    } else {
+        Vec::new()
+    };
     close(p, true);
-    run(command, p.app.as_deref());
+    if words.is_empty() {
+        run(command, p.app.as_deref());
+    } else {
+        flip_later(words);
+    }
+}
+
+thread_local! {
+    static TO_FLIP: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Flip the recent words `picked` once the app has the focus back.
+fn flip_later(picked: Vec<usize>) {
+    TO_FLIP.with(|t| *t.borrow_mut() = picked);
+    unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
+        let _ = KillTimer(None, id);
+        let picked = TO_FLIP.with(|t| std::mem::take(&mut *t.borrow_mut()));
+        hook::flip_picked(&picked);
+    }
+    unsafe {
+        SetTimer(None, 0, 150, Some(fire));
+    }
 }
 
 thread_local! {
@@ -303,6 +673,7 @@ pub fn request_open() {
     // Keys typed right after the hotkey belong to the palette, though it is
     // not open yet (CI: 'up' of 'upper' went into the page).
     OPENING.store(true, Ordering::Release);
+    FIELD.store(crate::focus::field_key(), Ordering::Release);
     unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
         let _ = KillTimer(None, id);
         open();
@@ -312,35 +683,151 @@ pub fn request_open() {
     }
 }
 
-/// The commands, in order, for the current state.
-fn commands(app: Option<&str>) -> Vec<(String, Command)> {
-    let mut list = vec![(tr(T::TrayFix).to_string(), Command::FixText)];
+/// The rows, in order, for the current state. `words` are the recent words
+/// (oldest first).
+fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
+    let mut list = Vec::new();
+    let mut add = |section, label: String, hint: &str, command| {
+        list.push(Entry {
+            section,
+            folded: false,
+            label,
+            hint: hint.to_string(),
+            command,
+        })
+    };
+    // The words just typed, newest first (at most five): flip one, or tick
+    // several with Space.
+    for (i, word) in words.iter().enumerate().rev().take(5) {
+        let mut flipped = hook::flipped(word);
+        add(
+            Section::Words,
+            format!("☐  {word}  →  {flipped}"),
+            "",
+            Command::History(i),
+        );
+        flipped.zeroize();
+    }
+    for (i, word) in crate::learn::reversed_words().iter().enumerate().take(3) {
+        add(
+            Section::Words,
+            trf(T::PaletteKeepAsTyped, &[("word", word)]),
+            "",
+            Command::KeepAsTyped(i),
+        );
+    }
     if app.is_some() {
-        list.push((tr(T::PaletteFixField).to_string(), Command::FixField));
-        list.push((
-            tr(T::PaletteSwapDigits).to_string(),
-            Command::Transform(TransformKind::Digits),
-        ));
+        add(
+            Section::Fix,
+            tr(T::PaletteFixField).to_string(),
+            "",
+            Command::FixField,
+        );
+        add(
+            Section::Fix,
+            tr(T::PaletteTypeClipboard).to_string(),
+            "",
+            Command::TypeClipboard,
+        );
+        // The first two are shown; the rest wait behind a "more" row.
         for (key, kind) in [
+            (T::PaletteRepairSelection, TransformKind::Repair),
+            (T::PaletteNormalize, TransformKind::Normalize),
+            (T::PaletteEra, TransformKind::Era),
+            (T::PaletteNumberWords, TransformKind::NumberWords),
+            (T::PaletteBahtWords, TransformKind::BahtWords),
+            (T::PaletteSwapDigits, TransformKind::Digits),
             (T::PaletteUpper, TransformKind::Upper),
             (T::PaletteLower, TransformKind::Lower),
             (T::PaletteTitle, TransformKind::Title),
             (T::PaletteSwapCase, TransformKind::SwapCase),
         ] {
-            list.push((tr(key).to_string(), Command::Transform(kind)));
+            add(
+                Section::Selection,
+                tr(key).to_string(),
+                "",
+                Command::Transform(kind),
+            );
+        }
+        add(
+            Section::Selection,
+            tr(T::PaletteMoreSelection).to_string(),
+            "▸",
+            Command::More(Section::Selection),
+        );
+        add(
+            Section::Symbols,
+            tr(T::PaletteMoreSymbols).to_string(),
+            "▸",
+            Command::More(Section::Symbols),
+        );
+        for (i, (symbol, th, en)) in righttype::thai_text::SYMBOLS.iter().enumerate() {
+            add(
+                Section::Symbols,
+                format!("{symbol}   {th} · {en}"),
+                "",
+                Command::Symbol(i),
+            );
+        }
+    }
+    // A calmer mode on offer for this app.
+    if let (Some(app), Some((exe, mode))) = (app, apps::offer()) {
+        if app == exe {
+            let name = tr(crate::tray::app_mode_name(mode));
+            add(
+                Section::Here,
+                trf(T::PaletteOfferForNow, &[("mode", name), ("app", app)]),
+                "",
+                Command::OfferForNow(mode),
+            );
+            add(
+                Section::Here,
+                trf(T::PaletteOfferKeep, &[("mode", name), ("app", app)]),
+                "",
+                Command::OfferKeep(mode),
+            );
         }
     }
     if session::is_paused() {
-        list.push((tr(T::TrayResume).to_string(), Command::Resume));
+        add(
+            Section::Here,
+            tr(T::TrayResume).to_string(),
+            "",
+            Command::Resume,
+        );
     } else if hook::is_enabled() {
-        list.push((tr(T::PalettePause).to_string(), Command::Pause));
+        add(
+            Section::Here,
+            tr(T::PalettePause).to_string(),
+            "",
+            Command::Pause,
+        );
+    }
+    let field = FIELD.load(Ordering::Acquire);
+    if app.is_some() && field != 0 {
+        if crate::focus::is_off(field) {
+            add(
+                Section::Here,
+                tr(T::PaletteFieldOn).to_string(),
+                "",
+                Command::FieldOn,
+            );
+        } else {
+            add(
+                Section::Here,
+                tr(T::PaletteFieldOff).to_string(),
+                "",
+                Command::FieldOff,
+            );
+        }
     }
     if let Some(app) = app {
-        if apps::lookup(app) == Some(AppMode::Off) {
-            list.push((trf(T::PaletteAppOn, &[("app", app)]), Command::AppDefault));
+        let (key, command) = if apps::lookup(app) == Some(AppMode::Off) {
+            (T::PaletteAppOnShort, Command::AppDefault)
         } else {
-            list.push((trf(T::PaletteAppOff, &[("app", app)]), Command::AppOff));
-        }
+            (T::PaletteAppOffShort, Command::AppOff)
+        };
+        add(Section::Here, tr(key).to_string(), "", command);
     }
     let now = hook::mode();
     for (mode, key) in [
@@ -348,38 +835,168 @@ fn commands(app: Option<&str>) -> Vec<(String, Command)> {
         (hook::Mode::Suggest, T::TraySuggest),
         (hook::Mode::Manual, T::TrayManual),
     ] {
-        let mark = if mode == now { "✓  " } else { "" };
-        list.push((format!("{mark}{}", tr(key)), Command::Mode(mode)));
+        let hint = if mode == now { tr(T::HintInUse) } else { "" };
+        add(
+            Section::Mode,
+            tr(key).to_string(),
+            hint,
+            Command::Mode(mode),
+        );
     }
-    for (i, word) in crate::learn::reversed_words().iter().enumerate().take(3) {
-        list.push((
-            trf(T::PaletteKeepAsTyped, &[("word", word)]),
-            Command::KeepAsTyped(i),
-        ));
+    // Stands in for the options until they are opened.
+    add(
+        Section::Mode,
+        tr(T::PaletteMoreOptions).to_string(),
+        "▸",
+        Command::More(Section::Options),
+    );
+    let state = |on: bool| tr(if on { T::HintOn } else { T::HintOff });
+    for (key, on, command) in [
+        (
+            T::PaletteSpelling,
+            hook::fixes_spelling(),
+            Command::Spelling,
+        ),
+        (T::PaletteHyphens, hook::fixes_hyphens(), Command::Hyphens),
+        (
+            T::PaletteCapsSwitch,
+            hook::caps_switches_language(),
+            Command::CapsSwitch,
+        ),
+        (
+            T::PaletteTrayLanguage,
+            crate::tray::shows_language(),
+            Command::TrayLanguage,
+        ),
+        (
+            T::PaletteThaiWordDelete,
+            hook::deletes_thai_words(),
+            Command::ThaiWordDelete,
+        ),
+        (
+            T::PaletteEnterGuard,
+            hook::guards_enter(),
+            Command::EnterGuard,
+        ),
+    ] {
+        add(Section::Options, tr(key).to_string(), state(on), command);
     }
-    let mark = if crate::tray::shows_language() {
-        "✓  "
-    } else {
-        ""
-    };
-    list.push((
-        format!("{mark}{}", tr(T::PaletteTrayLanguage)),
-        Command::TrayLanguage,
-    ));
-    let mark = if hook::caps_switches_language() {
-        "✓  "
-    } else {
-        ""
-    };
-    list.push((
-        format!("{mark}{}", tr(T::PaletteCapsSwitch)),
-        Command::CapsSwitch,
-    ));
-    list.push((tr(T::TraySettings).to_string(), Command::Settings));
+    // For apps that do not share their text (see `manual::fix_field`).
+    add(
+        Section::Options,
+        tr(T::PaletteFixWindow).to_string(),
+        "",
+        Command::FixText,
+    );
+    add(
+        Section::Options,
+        tr(T::TraySettings).to_string(),
+        "",
+        Command::Settings,
+    );
+    // Folded: the options, the special characters, and all but the first
+    // two changes to the selection.
+    let mut in_selection = 0;
+    for entry in &mut list {
+        if let Command::More(_) = entry.command {
+            continue;
+        }
+        entry.folded = match entry.section {
+            Section::Options | Section::Symbols => true,
+            Section::Selection => {
+                in_selection += 1;
+                in_selection > 2
+            }
+            _ => false,
+        };
+    }
     list
 }
 
+/// The rows for checking what "Fix this field" would change: each word,
+/// ticked, and the row that fixes the ticked ones.
+fn review_commands(changes: &[(String, String)]) -> Vec<Entry> {
+    let mut list: Vec<Entry> = changes
+        .iter()
+        .enumerate()
+        .map(|(i, (original, fixed))| Entry {
+            section: Section::Review,
+            folded: false,
+            label: format!("☑  {original}  →  {fixed}"),
+            hint: String::new(),
+            command: Command::Review(i),
+        })
+        .collect();
+    list.push(Entry {
+        section: Section::Review,
+        folded: false,
+        label: tr(T::PaletteApplyReview).to_string(),
+        hint: "Enter".to_string(),
+        command: Command::ApplyReview,
+    });
+    list
+}
+
+/// A section's heading; `reviewed` is how many words the review lists.
+fn heading(section: Section, app: Option<&str>, reviewed: usize) -> String {
+    match section {
+        Section::Review => trf(T::PaletteSecReview, &[("n", &reviewed.to_string())]),
+        Section::Symbols => tr(T::PaletteSecSymbols).to_string(),
+        Section::Words => tr(T::PaletteSecWords).to_string(),
+        Section::Fix => tr(T::PaletteSecFix).to_string(),
+        Section::Selection => tr(T::PaletteSecSelection).to_string(),
+        Section::Here => match app {
+            Some(app) => trf(T::PaletteSecHereApp, &[("app", app)]),
+            None => tr(T::PaletteSecHere).to_string(),
+        },
+        Section::Mode => tr(T::PaletteSecMode).to_string(),
+        Section::Options => tr(T::PaletteSecOptions).to_string(),
+    }
+}
+
 fn open() {
+    open_with(None);
+}
+
+/// What "Fix this field" would change, waiting for the palette to show it:
+/// each word (as typed, fixed) and where it is on screen.
+pub struct Review {
+    pub changes: Vec<(String, String)>,
+    pub boxes: Vec<Option<RECT>>,
+}
+
+impl Drop for Review {
+    fn drop(&mut self) {
+        for (a, b) in &mut self.changes {
+            a.zeroize();
+            b.zeroize();
+        }
+    }
+}
+
+static REVIEW: std::sync::Mutex<Option<Review>> = std::sync::Mutex::new(None);
+
+/// Show `review` in the palette, from any thread (the fix-field worker):
+/// the tray window's thread opens it.
+pub fn request_review(review: Review) {
+    if let Ok(mut r) = REVIEW.lock() {
+        *r = Some(review);
+    }
+    crate::tray::on_ui(crate::tray::UI_REVIEW);
+}
+
+/// Open the palette on the waiting review (the tray window's thread).
+pub fn open_review() {
+    let review = REVIEW.lock().ok().and_then(|mut r| r.take());
+    if review.is_some() {
+        if let Some(existing) = CURRENT.with(|c| c.borrow().clone()) {
+            close(&existing, false);
+        }
+        open_with(review);
+    }
+}
+
+fn open_with(review: Option<Review>) {
     // However this ends (opened, closed instead, or failed), it is no longer
     // opening: never leave the hook holding keys for a palette that is not
     // coming.
@@ -405,8 +1022,36 @@ fn open() {
     let caret = crate::caret::caret_rect();
     ui::refresh();
 
-    let list = commands(app.as_deref());
-    let h = PAD * 2 + 28 + list.len() as i32 * ROW;
+    let reviewing = review.as_ref().map_or(0, |r| r.changes.len());
+    let (words, boxes, list) = match &review {
+        // The words as typed stand in for the recent words: ticked, marked
+        // and wiped the same way.
+        Some(r) => (
+            r.changes.iter().map(|(a, _)| a.clone()).collect(),
+            r.boxes.clone(),
+            review_commands(&r.changes),
+        ),
+        None => {
+            // The recent words, and where they are, asked while the app
+            // still has the focus (before the palette exists).
+            let (words, spans) = hook::recent_words();
+            let boxes = if words.is_empty() {
+                Vec::new()
+            } else {
+                crate::focus::boxes_before_caret_within(
+                    spans,
+                    std::time::Duration::from_millis(150),
+                )
+            };
+            let list = commands(app.as_deref(), &words);
+            (words, boxes, list)
+        }
+    };
+    drop(review);
+    // Folded rows are not shown at first: the window is sized (and placed
+    // next to the caret) for the rest.
+    let shown = list.iter().filter(|e| !e.folded).count() as i32;
+    let h = PAD * 2 + 28 + shown * ROW + Section::ALL.len() as i32 * HEAD;
     let mut window = nwg::Window::default();
     if nwg::Window::builder()
         .flags(nwg::WindowFlags::POPUP)
@@ -427,17 +1072,32 @@ fn open() {
         p.surface,
         0,
     );
+    let headings: Vec<(Section, u16)> = Section::ALL
+        .iter()
+        .map(|&section| {
+            let id = surface.label(
+                &heading(section, app.as_deref(), reviewing),
+                TextStyle::Heading(section.icon()),
+                (PAD + 8, PAD + 28, W - 2 * PAD - 16, HEAD - 4),
+                p.surface,
+                0,
+            );
+            (section, id)
+        })
+        .collect();
     let items: Vec<(u16, Command)> = list
         .iter()
         .enumerate()
-        .map(|(i, (label, command))| {
-            let id = surface.list_item(
-                label,
+        .map(|(i, entry)| {
+            let id = surface.row(
+                &entry.label,
+                &entry.hint,
+                entry.command.icon(),
                 i == 0,
-                (PAD, PAD + 28 + i as i32 * ROW, W - 2 * PAD, ROW - 4),
+                (PAD, PAD + 28 + i as i32 * ROW, W - 2 * PAD, ROW - 2),
                 p.surface,
             );
-            (id, *command)
+            (id, entry.command)
         })
         .collect();
     ui::size_and_center(surface.hwnd, W, h);
@@ -470,7 +1130,17 @@ fn open() {
         window,
         surface,
         items,
-        labels: list.iter().map(|(label, _)| label.clone()).collect(),
+        item_sections: list.iter().map(|e| e.section).collect(),
+        headings,
+        expanded: std::cell::Cell::new(0),
+        item_folded: list.iter().map(|e| e.folded).collect(),
+        review: reviewing > 0,
+        numbers: RefCell::new(Vec::new()),
+        labels: RefCell::new(list.iter().map(|e| e.label.clone()).collect()),
+        words: RefCell::new(words),
+        boxes,
+        // Every word of a review starts ticked.
+        checked: RefCell::new((0..reviewing).collect()),
         header,
         visible: RefCell::new(Vec::new()),
         selected: std::cell::Cell::new(0),
@@ -489,10 +1159,9 @@ fn open() {
     let weak = Rc::downgrade(&palette);
     palette.surface.on_click(move |id| {
         if let Some(p) = weak.upgrade() {
-            if let Some((_, command)) = p.items.iter().find(|(i, _)| *i == id) {
-                let command = *command;
-                close(&p, true);
-                run(command, p.app.as_deref());
+            let shown = p.visible.borrow().iter().position(|&i| p.items[i].0 == id);
+            if let Some(k) = shown {
+                run_shown(&p, k);
             }
         }
     });
@@ -547,6 +1216,13 @@ fn close(p: &Rc<Palette>, refocus: bool) {
         Ordering::AcqRel,
         Ordering::Acquire,
     );
+    crate::marks::clear();
+    for word in p.words.borrow_mut().iter_mut() {
+        word.zeroize();
+    }
+    for label in p.labels.borrow_mut().iter_mut() {
+        label.zeroize();
+    }
     p.surface.detach();
     if let Some(h) = p.handler.borrow_mut().take() {
         let _ = nwg::unbind_raw_event_handler(&h);
@@ -561,12 +1237,19 @@ fn close(p: &Rc<Palette>, refocus: bool) {
 
 fn run(command: Command, app: Option<&str>) {
     match command {
+        // Handled in `run_shown`.
+        Command::History(_) => {}
         Command::FixText => crate::fixer::open(),
         Command::Settings => crate::settings::open(),
         Command::FixField => crate::manual::request_fix_field(PREVIOUS.load(Ordering::Acquire)),
         Command::Transform(kind) => {
             use righttype::layout as l;
             let f: fn(&str) -> String = match kind {
+                TransformKind::Repair => repair_words,
+                TransformKind::Normalize => righttype::thai_text::normalize,
+                TransformKind::Era => righttype::thai_text::swap_era,
+                TransformKind::NumberWords => righttype::thai_text::number_words,
+                TransformKind::BahtWords => righttype::thai_text::baht_words,
                 TransformKind::Digits => l::swap_digits,
                 TransformKind::Upper => l::upper_case,
                 TransformKind::Lower => l::lower_case,
@@ -602,6 +1285,29 @@ fn run(command: Command, app: Option<&str>) {
                 overlay::show(&trf(T::ToastAppMode, &[("mode", label), ("app", app)]));
             }
         }
+        Command::OfferForNow(mode) | Command::OfferKeep(mode) => {
+            if let Some(app) = app {
+                apps::close_offer();
+                let name = tr(crate::tray::app_mode_name(mode));
+                if matches!(command, Command::OfferKeep(_)) {
+                    apps::set(app, Some(mode));
+                    config::persist();
+                    overlay::show(&trf(T::ToastAppMode, &[("mode", name), ("app", app)]));
+                } else {
+                    apps::set_for_now(app, mode);
+                    overlay::show(&trf(T::ToastModeForNow, &[("mode", name), ("app", app)]));
+                }
+            }
+        }
+        Command::FieldOff | Command::FieldOn => {
+            let off = command == Command::FieldOff;
+            crate::focus::set_field_off(FIELD.load(Ordering::Acquire), off);
+            overlay::show(tr(if off {
+                T::ToastFieldOff
+            } else {
+                T::ToastFieldOn
+            }));
+        }
         Command::TrayLanguage => {
             crate::tray::set_shows_language(!crate::tray::shows_language());
             config::persist();
@@ -616,12 +1322,43 @@ fn run(command: Command, app: Option<&str>) {
                 T::ToastCapsSwitchOff
             }));
         }
+        Command::Hyphens => {
+            hook::set_fixes_hyphens(!hook::fixes_hyphens());
+            config::persist();
+        }
+        // Handled in `run_shown`.
+        Command::More(_) | Command::Review(_) | Command::ApplyReview => {}
+        Command::Symbol(i) => {
+            if let Some((symbol, _, _)) = righttype::thai_text::SYMBOLS.get(i) {
+                crate::manual::request_type(PREVIOUS.load(Ordering::Acquire), symbol);
+            }
+        }
+        Command::TypeClipboard => {
+            crate::manual::request_type_clipboard(PREVIOUS.load(Ordering::Acquire))
+        }
+        Command::EnterGuard => {
+            hook::set_guards_enter(!hook::guards_enter());
+            config::persist();
+        }
+        Command::ThaiWordDelete => {
+            hook::set_deletes_thai_words(!hook::deletes_thai_words());
+            config::persist();
+        }
+        Command::Spelling => {
+            hook::set_fixes_spelling(!hook::fixes_spelling());
+            config::persist();
+        }
         Command::Mode(mode) => {
             hook::set_mode(mode);
             config::persist();
             overlay::show(mode.label());
         }
     }
+}
+
+/// Only the words of `text` typed on the wrong keyboard, fixed.
+fn repair_words(text: &str) -> String {
+    righttype::repair::repair(text, righttype::dict::english(), righttype::dict::thai()).text
 }
 
 fn paint(g: &Gfx, _hdc: HDC, rc: RECT, _page: u8) {

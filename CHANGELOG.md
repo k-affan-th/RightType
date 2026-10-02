@@ -2,16 +2,109 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.1.0]
 
 ### Added
 
+- **Code mode** for code editors (VS Code, Cursor, Visual Studio,
+  JetBrains IDEs, Sublime Text, Notepad++ and others; on by default there,
+  changeable per app):
+  - names are never touched: `camelCase`, `snake_case`, `CONSTANT`, and
+    anything with digits or `_ . :: ->`;
+  - Thai keys typed for code come back as the English typed (`ฟหกด` →
+    `asdf`), even when that is not a dictionary word;
+  - English typed for Thai becomes Thai only inside a comment or a string;
+    where the editor does not share its text, it is offered as a hint;
+  - CapsLock is not treated as an accident (`MAX_SIZE` is meant).
+- **A calmer mode offered where fixes keep being taken back**: three in ten
+  minutes in one app, and RightType offers Suggest (or Manual) there —
+  **this time only** or **from now on** — from the palette (1 or 2).
+- **Settings → Apps is a table**: app, mode, set by (you, this time only,
+  default, safety), and where the program is. Select a row and pick a mode,
+  or right-click it (keep for good, remove, show the program file);
+  **+ Add an app that is open** lists running programs instead of typing a
+  name. Built-in safety apps are listed, locked.
+- **Recent words in the palette**: the last words typed, each with what it
+  would flip to. Tick several with Space and they are **tinted where they
+  are in the app** (when the app says where), then Enter flips exactly
+  those and leaves the words between them alone.
+- **Off in this field** (palette): RightType stays out of one field — a
+  search box, a code cell — and keeps working everywhere else in the app,
+  until it restarts.
+- **Ctrl+Backspace deletes one Thai word** (on by default): Windows takes
+  everything back to the last space, which in Thai is often a whole
+  sentence. Only when the text before the cursor ends in a run of Thai of
+  more than one word; otherwise the key is Windows' own. Ctrl can stay held
+  for the next word.
+- **A chat message typed on the wrong keyboard is not sent unread** (on by
+  default): in LINE, Teams, Discord, Slack, Telegram, WhatsApp, Messenger,
+  Signal, Zoom and Skype, Enter on a message where at least two words (and
+  at least half) look typed on the wrong keyboard is held once with a note;
+  Enter again sends it, Shift+Backspace fixes words. More apps can be added
+  as `chat_apps` in the config. Not in browsers (Enter there may not send).
+- **Snippets** (Settings → Snippets): a short trigger and Space becomes a
+  longer text, line breaks included. **Date and time fields** fill in when
+  the snippet is typed — `{วันที่}` 2 ตุลาคม 2569, `{วันที่เต็ม}`
+  วันพฤหัสบดีที่ 2 ตุลาคม พ.ศ. 2569, `{วันที่ย่อ}` 2 ต.ค. 69,
+  `{วันที่เลขไทย}` ๒ ตุลาคม ๒๕๖๙, `{วันที่ตัวเลข}` 02/10/2569, `{เวลา}`
+  14.30 น., `{date}` 2 October 2026, `{date-us}` October 2, 2026, `{iso}`
+  2026-10-02, `{time}` 14:30 — picked from a **Date / time** button. Each works on the Thai keyboard, the
+  English one, or **either** — matched by the keys pressed, so `;addr`
+  works with the Thai keyboard on too. Shift+Backspace right after puts the
+  trigger back. Not in password fields.
+- **Common Thai misspellings put right** (opt-in, Settings → General or the
+  palette): `อนุญาติ` → `อนุญาต`, `ผลลัพท์` → `ผลลัพธ์` and about 60 more,
+  only where the result reads better to the dictionary and never a word the
+  dictionary knows. Each fix shows in its own colour (purple) with what
+  changed; **Backspace right after puts the word back** instead of
+  deleting into it, and that word is left alone from then on.
+- **Screen readers** (Narrator, NVDA, JAWS) hear each fix ("Fixed:
+  สวัสดี"), tag and message, only while one is running.
+- **High Contrast**: Settings, the palette, tags and highlights use the
+  contrast theme's own colours.
+- **One RightType at a time, with no dialog**: opening it again shows
+  "already running" for a moment; opening another version or copy closes
+  the running one and takes over ("Now running 2.1.0, closed 2.0.1").
+- **Start again after a crash** (on by default, Settings → Privacy & about):
+  not after you quit it or end it in Task Manager, at most three times in a
+  row.
+- **Sync settings and snippets too** (opt-in): with a sync folder for the
+  learned words, modes, apps, hotkeys and snippets are shared by every PC
+  using that folder.
+- **Windows on ARM**: an arm64 installer and zip.
+- **English prefixes get their hyphen in prose** (on by default, in Auto):
+  `relogin` → `re-login`, `reenable` → `re-enable`, shown in the spelling
+  colour, Backspace right after puts it back. Never in Code mode or an
+  address bar; words the dictionary writes closed (`reinstall`, `reenter`)
+  are left alone.
 - **A preview while you type (Auto)**: before Auto is sure enough to fix a
   word, the cursor tag shows where the keys are heading — `l;yl` shows
   `→ สวัส` — so you can see a fix is coming without anything changing yet.
 - **Command palette** (`Ctrl`+`Alt`+`Space`) gains:
-  - **Fix this field**: every wrong-layout word in the field, fixed in one
-    go (read from the app, never through the clipboard; Ctrl+Z undoes it).
+  - **Fix this field, checked first**: the words it would change are listed
+    ticked and tinted where they are in the field; Space unticks one, Enter
+    fixes the ticked ones (Ctrl+Z undoes it). The field is read from the
+    app without selecting it and never through the clipboard; if the text
+    changed meanwhile nothing is fixed. More than 12 words are fixed at
+    once. An app that does not share its text gets the **Fix text** window
+    instead (now under Options in the palette, and in the tray).
+  - **Fix only the wrong-keyboard words** of the selection (the flip hotkey
+    still flips all of it).
+  - **Thai in standard form**: text from PDFs that looks right but is not
+    found by search (`นํ้า` → `น้ำ`, a tone mark before its vowel, old
+    fonts' private-use letters) put into the form Windows searches for.
+  - **Year พ.ศ. ↔ ค.ศ.** (`พ.ศ. 2569` ↔ `ค.ศ. 2026`), **number in Thai
+    words** (`1,250` → `หนึ่งพันสองร้อยห้าสิบ`) and **amount in words**
+    as on a cheque (`1,250.50` → `หนึ่งพันสองร้อยห้าสิบบาทห้าสิบสตางค์`).
+    These and the case/digit changes sit behind "More changes to the
+    selection".
+  - **Special characters** by name in either language: `฿` (baht), `ๆ`,
+    `ฯ`, `ฯลฯ`, `°`, `×`, `±`, `…`, `—`, `©`, `€` and more — type to search.
+  - **Type the copied text key by key**, for remote desktops, virtual
+    machines and forms that refuse paste: each character is the key that
+    types it on the keyboard in use; Esc stops it. At most 2,000
+    characters; the clipboard is read only when this is picked.
+  - **Icons** on every row and heading, from Windows' own icon font.
   - **Never convert “word”**: for words you took back lately while learning
     is off — one click and RightType leaves that word alone from then on.
   - **Thai digits ↔ 0–9**, **UPPER CASE**, **lower case**, **Title Case**
@@ -58,6 +151,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 
+- **A full-screen browser on some PCs was taken for a game** (Chrome after
+  F11 shows Windows no text cursor), so nothing was corrected there. A
+  full-screen window counts as a game only when the focus is not in a text
+  field. Found by the self-test on a real PC.
 - **Notepad, WordPad and other standard text boxes: English typed on the
   Thai layout could take two more characters with it when fixed**
   (`;yoouh there` came out as `วันนีthere`). These boxes drop Thai vowels
@@ -71,6 +168,14 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   typed as keys instead, which arrive after them.
 
 ### Changed
+
+- **The command palette is grouped**: the words just typed, fixing text,
+  the selected text, this app and field, and the mode, each under its own
+  heading; numbers 1–9 go to the things done to text, and the switches and
+  Settings are folded under one row until opened (or searched for). Rows
+  are left-aligned with their state (On/Off, in use) at the right, and every
+  row and heading has an icon from Windows' own icon font; the selected
+  row's icon takes the accent colour.
 
 - **Smoother tags and messages**: the pill now rises a few pixels into
   place while fading in (140 ms, ease-out) and fades out with an ease-in

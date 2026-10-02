@@ -81,6 +81,201 @@ def palette_by_keyboard(t):
     fs.run(t, "palette by keyboard: search, Enter", "hello", "HELLO", then=[steps])
 
 
+# Added to the sweep's config: a snippet and the misspelling fixes (2.1).
+SNIPPET_CONFIG = '''[[snippets]]
+trigger = ";sig"
+text = "Best regards"
+scope = "either"
+
+[[snippets]]
+trigger = ";today"
+text = "{iso}"
+scope = "either"
+'''
+
+
+def write_sweep_config(tables="", keys=""):
+    """The sweep's config. `keys` are more top-level keys; `tables` (TOML
+    tables such as [app_modes]) go after every top-level key: a key written
+    after a table header belongs to that table (and then the whole file is
+    refused)."""
+    fs.write_config(mode="auto", learn=False)
+    path = fs.DATA / "config.toml"
+    path.write_text(path.read_text(encoding="utf-8") + "fix_spelling = true\n" + keys + "\n"
+                    + tables + SNIPPET_CONFIG, encoding="utf-8")
+
+
+def snippets_and_spelling(t):
+    """2.1: a snippet on either keyboard, taken back with Shift+Backspace;
+    a common Thai misspelling put right, and put back by Backspace right
+    after."""
+    fs.run(t, "snippet expands", ";sig ", "Best regards")
+    fs.run(t, "snippet expands on the Thai keyboard (same keys)", ";sig ", "Best regards",
+           layout=HKL_TH)
+    fs.run(t, "snippet taken back with Shift+Backspace", ";sig ", ";sig", then=[flip])
+    import datetime
+    fs.run(t, "snippet with today's date", ";today ", datetime.date.today().isoformat())
+    # อนุญาติ (keys vo6Pk9b on the Thai keyboard) → อนุญาต.
+    fs.run(t, "common misspelling put right", "vo6Pk9b ", "อนุญาต", layout=HKL_TH)
+    fs.run(t, "Backspace right after puts the misspelling back", "vo6Pk9b ", "อนุญาติ",
+           layout=HKL_TH, then=[lambda: tap(BACK)])
+
+
+def palette_search(text, settle=1.2):
+    """Open the palette, search for `text`, Enter."""
+    def steps():
+        tap(fs.SPACE, fs.CTRL, fs.ALT)  # the palette's hotkey
+        time.sleep(1.0)
+        fs.type_keys(text)
+        time.sleep(0.4)
+        tap(ENTER)
+        time.sleep(settle)
+    return steps
+
+
+def select_line():
+    fs.select_word()
+    time.sleep(0.3)
+
+
+def palette_text_tools(t):
+    """2.1: the palette's text tools, in Manual mode so nothing is fixed as
+    typed: amounts and years rewritten, a special character typed, only the
+    wrong-keyboard words of a selection fixed, the copied text typed key by
+    key, and "Fix this field" checked word by word before fixing."""
+    fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
+    try:
+        fs.run(t, "palette: amount in words", "1250", "หนึ่งพันสองร้อยห้าสิบบาทถ้วน",
+               then=[select_line, palette_search("amount")])
+        fs.run(t, "palette: year BE to CE", "2569", "2026",
+               then=[select_line, palette_search("year")])
+        fs.run(t, "palette: special character by name", "25", "25°",
+               then=[palette_search("degree")])
+        fs.run(t, "palette: only the wrong-keyboard words of a selection",
+               "hello l;ylfu", "hello สวัสดี",
+               then=[select_line, palette_search("wrong-keyboard")])
+        put_on_clipboard("hi สวัสดี")
+        fs.run(t, "palette: copied text typed key by key", "", "hi สวัสดี",
+               then=[palette_search("key by key", settle=2.0)])
+        # Fix this field: the words are listed ticked; Enter fixes them, or
+        # Space first leaves the selected one as typed.
+        fs.run(t, "fix this field after checking", "l;ylfu 8iy[", "สวัสดี ครับ",
+               then=[palette_search("fix this", settle=1.5), lambda: tap(ENTER),
+                     lambda: time.sleep(1.5)])
+        fs.run(t, "fix this field with a word unticked", "l;ylfu 8iy[", "l;ylfu ครับ",
+               then=[palette_search("fix this", settle=1.5), lambda: tap(fs.SPACE),
+                     lambda: time.sleep(0.3), lambda: tap(ENTER), lambda: time.sleep(1.5)])
+    finally:
+        fs.set_mode("auto")
+
+
+def thai_word_delete(t):
+    """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
+    fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
+           layout=HKL_TH, then=[lambda: tap(BACK, CTRL)])
+    fs.run(t, "Ctrl+Backspace twice, Ctrl held", "l;ylfu8iy[l;ylfu", "สวัสดี",
+           layout=HKL_TH, then=[lambda: hold_ctrl_tap_twice(BACK)])
+
+
+def hold_ctrl_tap_twice(vk):
+    user32.keybd_event(CTRL, 0, 0, 0)
+    time.sleep(0.05)
+    for _ in range(2):
+        user32.keybd_event(vk, 0, 0, 0)
+        user32.keybd_event(vk, 0, 2, 0)
+        time.sleep(0.4)
+    user32.keybd_event(CTRL, 0, 2, 0)
+
+
+def enter_guard(t):
+    """2.1: in a chat app (Notepad stands in for one here), Enter on a
+    message typed on the wrong keyboard is held once."""
+    write_sweep_config(keys='chat_apps = ["notepad.exe"]\n')
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+        fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
+
+        def lines(keys, enters):
+            t.clear()
+            fs.type_keys(keys)
+            for _ in range(enters):
+                time.sleep(0.4)
+                tap(ENTER)
+            time.sleep(0.4)
+            fs.type_keys("x")
+            time.sleep(0.8)
+            return t.read().replace("\r\n", "\n").replace("\r", "\n")
+        fs.check(t.name, "Enter held on a wrong-keyboard message",
+                 lines("l;ylfu 8iy[", 1), "l;ylfu 8iy[x")
+        fs.check(t.name, "Enter again sends it anyway",
+                 lines("l;ylfu 8iy[", 2), "l;ylfu 8iy[\nx")
+        fs.check(t.name, "Enter not held on a right message",
+                 lines("hello world", 1), "hello world\nx")
+    finally:
+        fs.set_mode("auto")
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+    # A fresh RightType: give the problem report (checked after the sweep)
+    # a word to record again.
+    fs.run(t, "Auto again after the chat check", "l;ylfu ", "สวัสดี")
+
+
+def code_mode(t):
+    """2.1 Code mode, with the browser set to it: names stay, Thai keys
+    typed for code come back as the English typed, Thai only in comments."""
+    write_sweep_config('[app_modes]\n"chrome.exe" = "code"\n"msedge.exe" = "code"\n\n')
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+        fs.run(t, "code mode: a name stays", "getUserName ", "getUserName")
+        fs.run(t, "code mode: Thai keys typed for code", "asdf ", "asdf", layout=HKL_TH)
+        fs.run(t, "code mode: Thai-looking keys in code stay", "l;ylfu ", "l;ylfu")
+        fs.run(t, "code mode: Thai in a comment", "// l;ylfu ", "// สวัสดี")
+    finally:
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+    # A fresh RightType: give the problem report (checked after the sweep)
+    # a word to record again.
+    fs.run(t, "Auto again after Code mode", "l;ylfu ", "สวัสดี")
+
+
+def one_instance():
+    """2.1: a second launch of the same program leaves (the first keeps
+    running); another copy of the program takes over."""
+    first = fs.start_rt()
+    env = {**os.environ, "RIGHTTYPE_E2E_ACCEPT_INJECTED": "1",
+           "RIGHTTYPE_E2E_DATA_DIR": str(fs.DATA)}
+    second = subprocess.Popen([str(fs.EXE)], env=env)
+    try:
+        second.wait(timeout=8)
+        left = "left"
+    except subprocess.TimeoutExpired:
+        left = "still running"
+    fs.check("instance", "second launch of the same program leaves", left, "left")
+    fs.check("instance", "the first keeps running",
+             "running" if first.poll() is None else "ended", "running")
+    copy_dir = Path(os.environ.get("TEMP", ".")) / "rt-e2e-copy"
+    copy_dir.mkdir(exist_ok=True)
+    copy = copy_dir / "righttype.exe"
+    import shutil
+    shutil.copy2(fs.EXE, copy)
+    other = subprocess.Popen([str(copy)], env=env)
+    try:
+        first.wait(timeout=10)
+        old = "closed"
+    except subprocess.TimeoutExpired:
+        old = "still running"
+    time.sleep(1.0)
+    fs.check("instance", "another copy takes over: the old one closes", old, "closed")
+    fs.check("instance", "another copy takes over: the new one runs",
+             "running" if other.poll() is None else "ended", "running")
+    other.kill()
+    subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
+
+
 def full_screen_browser_still_works(t):
     """Full screen (F11) with a text cursor is not a game: still corrected."""
     tap(0x7A)  # F11
@@ -661,13 +856,40 @@ REAL_SENTENCES = [
     ("Thai sentence", "lj'wa]N,k.shsojvp ", "ส่งไฟล์มาให้หน่อย"),
     ("English then Thai", "hello l;ylfu8iy[ ", "hello สวัสดีครับ"),
     ("Thai then an English tech word", "l;ylfu8iy[ middleware ", "สวัสดีครับ middleware"),
-    ("English computer words", "relogin logout ", "relogin logout"),
+    # In prose the prefix takes its hyphen (2.1); not in an address bar.
+    ("English computer words", "relogin logout ", "re-login logout"),
 ]
+
+# Targets that are address bars: nothing there is rewritten as prose.
+ADDRESS_BARS = ("omnibox", "edge")
+
+
+def flip_back_several(t):
+    """Shift+Backspace pressed again reaches one word further back (up to
+    eight). In Manual mode, so the words stay as typed until flipped."""
+    fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
+    try:
+        fs.run(t, "Shift+Backspace once flips the last word", "l;ylfu 8iy[ ",
+               "l;ylfu ครับ", then=[flip], settle=1.0)
+        fs.run(t, "Shift+Backspace twice flips two words", "l;ylfu 8iy[ ",
+               "สวัสดี ครับ", then=[flip, flip], settle=1.0)
+        fs.run(t, "Shift+Backspace three times flips three words",
+               "l;ylfu 8iy[ l;ylfu ", "สวัสดี ครับ สวัสดี",
+               then=[flip, flip, flip], settle=1.0)
+        fs.run(t, "a caret move forgets the recent words", "l;ylfu ", "l;ylfu",
+               then=[lambda: tap(fs.END), flip], settle=1.0)
+    finally:
+        fs.set_mode("auto")
+
+
+def prose(t, expect):
+    """`expect` as it ends up in `t`: an address bar keeps `relogin`."""
+    return expect.replace("re-login", "relogin") if t.name in ADDRESS_BARS else expect
 
 
 def realistic(t):
     for name, keys, expect in REAL_SENTENCES:
-        fs.run(t, f"typed like a person: {name}", "", expect,
+        fs.run(t, f"typed like a person: {name}", "", prose(t, expect),
                then=[lambda keys=keys: human_keys(keys)], settle=1.2)
 
 
@@ -678,7 +900,9 @@ def sweep(t):
     run(t, "EN->TH then Thai typed natively", "l;ylfu giupo ", "สวัสดี เรียน")
     run(t, "TH->EN word", "correct ", "correct", layout=HKL_TH)
     # Not Thai: it only starts like three short Thai words (พำ สน เร).
-    run(t, "English computer word stays English", "relogin ", "relogin")
+    run(t, "English computer word stays English (hyphen in prose)", "relogin ",
+        prose(t, "re-login"))
+    run(t, "English word with its own spelling stays", "reinstall ", "reinstall")
     # A wrong correction is undone with one Shift+Backspace, wherever it
     # happened: in the middle of a word, after a long word was handed to the
     # Thai layout, or at the space.
@@ -691,6 +915,7 @@ def sweep(t):
     # Pressed once too often: with no older word to reach, the next press
     # puts the word back (it used to say "nothing to flip").
     run(t, "Shift+Backspace twice puts the word back", "reload ", "reload", then=[flip, flip])
+    flip_back_several(t)
     # Found on a real PC: keys typed quickly while a word was being rewritten
     # were lost. A person typing ~30 ms per key, word ended by a space.
     fs.run(t, "fast typing through a correction", "", "สวัสดีครับ",
@@ -699,9 +924,16 @@ def sweep(t):
     capslock_left_on(t)
     # Thai typed in a wrong order that looks right: two เ for แ (keys g g).
     fs.run(t, "two เ typed for แ is put right", "gg,; ", "แมว", layout=HKL_TH)
+    snippets_and_spelling(t)
+    if t.name in ("page", "notepad"):
+        thai_word_delete(t)
+        palette_text_tools(t)
+    if t.name == "notepad":
+        enter_guard(t)
     if t.name == "page":
         full_screen_browser_still_works(t)
         palette_by_keyboard(t)
+        code_mode(t)
     selection_leaves_clipboard_alone(t)
 
 
@@ -804,7 +1036,7 @@ def main():
         raise SystemExit("US English and Thai Kedmanee must both be installed")
 
     thai_capslock_probe()
-    fs.write_config(mode="auto", learn=False)
+    write_sweep_config()
     # Edge runs several rounds: RightType froze there in some runs and not
     # others (after a word boundary handled inside a focus callback), and one
     # clean round proves nothing.
@@ -860,6 +1092,8 @@ def main():
     finally:
         subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
 
+    if "instance" in want or not sys.argv[1:]:
+        one_instance()
     ui_timing()
 
     failed, known, fixed = [], [], []
@@ -888,6 +1122,10 @@ def main():
         print(f"  XPASS {label} — remove it from KNOWN_FAILING")
     for line in failed:
         print(f"  FAIL {line}")
+    # Each failing case's trace once more, last: a log cut to its end (as
+    # the CI tools show it) keeps these.
+    for label, part in fs.FAILED_TRACES:
+        print(f"\n--- failing case: {label} (its trace, last 6000 chars) ---\n{part}", flush=True)
     report = lib.HERE / "RightType-test-report.txt"
     lines = [f"SUMMARY {passed}/{len(fs.RESULTS)} passed"]
     lines += [f"FAIL {line}" for line in failed] + [f"KNOWN FAILING {x}" for x in known]

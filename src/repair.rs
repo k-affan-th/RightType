@@ -82,10 +82,75 @@ pub fn repair(text: &str, en: &Dictionary, th: &Dictionary) -> Repaired {
     out
 }
 
+/// Does a message of these `words` look typed on the wrong keyboard? At
+/// least two of its words, and at least half of them, would be fixed —
+/// one stray word is not enough to hold a message back.
+pub fn looks_mistyped(words: &[&str], en: &Dictionary, th: &Dictionary) -> bool {
+    let wrong = words
+        .iter()
+        .filter(|w| {
+            layout_of(w)
+                .and_then(|layout| policy::detect_token(w, layout, en, th))
+                .is_some_and(|d| d.corrected != **w)
+        })
+        .count();
+    wrong >= 2 && wrong * 2 >= words.len()
+}
+
+impl Repaired {
+    /// The text with only the changes `keep` says yes to (by their place in
+    /// [`Repaired::changes`]); the others go back to what was typed.
+    pub fn with_only(&self, keep: &[bool]) -> String {
+        let mut chars: Vec<char> = self.text.chars().collect();
+        // From the end, so earlier starts stay where they are.
+        for (i, change) in self.changes.iter().enumerate().rev() {
+            if keep.get(i).copied().unwrap_or(false) {
+                continue;
+            }
+            let len = change.fixed.chars().count();
+            let end = (change.start + len).min(chars.len());
+            chars.splice(change.start..end, change.original.chars());
+        }
+        let out = chars.iter().collect();
+        chars.iter_mut().for_each(|c| *c = '\0');
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::dict;
+
+    #[test]
+    fn a_message_on_the_wrong_keyboard_is_noticed() {
+        let (en, th) = (dict::english(), dict::thai());
+        assert!(looks_mistyped(&["l;ylfu", "8iy["], en, th));
+        assert!(looks_mistyped(&["l;ylfu", "8iy[", "ok"], en, th));
+        // One stray word, or right as typed: sent.
+        assert!(!looks_mistyped(&["l;ylfu"], en, th));
+        assert!(!looks_mistyped(
+            &["see", "you", "l;ylfu", "8iy[", "at", "the", "office"],
+            en,
+            th
+        ));
+        assert!(!looks_mistyped(&["สวัสดี", "ครับ"], en, th));
+        assert!(!looks_mistyped(&["hello", "world"], en, th));
+        assert!(!looks_mistyped(&[], en, th));
+    }
+
+    #[test]
+    fn only_the_kept_changes_are_made() {
+        let r = fix("l;ylfu 8iy[ hello l;ylfu");
+        assert_eq!(r.changes.len(), 3);
+        assert_eq!(r.with_only(&[true, true, true]), r.text);
+        assert_eq!(
+            r.with_only(&[false, true, false]),
+            "l;ylfu ครับ hello l;ylfu"
+        );
+        assert_eq!(r.with_only(&[true, false, true]), "สวัสดี 8iy[ hello สวัสดี");
+        assert_eq!(r.with_only(&[]), "l;ylfu 8iy[ hello l;ylfu");
+    }
 
     fn fix(text: &str) -> Repaired {
         repair(text, dict::english(), dict::thai())

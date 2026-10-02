@@ -68,6 +68,38 @@ pub struct Config {
     /// The tray icon shows TH / EN.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tray_shows_language: bool,
+    /// Keep the settings and snippets in the sync folder too (with the
+    /// learned words), so every PC using that folder shares them.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sync_settings: bool,
+    /// The typist's snippets (trigger → text, and which keyboard).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub snippets: Vec<SnippetConfig>,
+    /// Write English prefixes with their hyphen (`re-login`).
+    pub fix_hyphens: bool,
+    /// Ctrl+Backspace deletes one Thai word rather than the whole run.
+    pub delete_thai_words: bool,
+    /// Hold Enter in chat apps when the message looks typed on the wrong
+    /// keyboard.
+    pub guard_enter: bool,
+    /// More chat apps for that (program file names), besides the built-in
+    /// ones (`righttype::per_app::CHAT_APPS`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chat_apps: Vec<String>,
+    /// Put right common Thai misspellings (opt-in).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fix_spelling: bool,
+    /// Start RightType again if it crashes (see instance.rs).
+    pub restart_after_crash: bool,
+}
+
+/// One snippet as saved.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SnippetConfig {
+    pub trigger: String,
+    pub text: String,
+    /// `thai`, `english` or `either`.
+    pub scope: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -92,7 +124,8 @@ impl From<hook::Mode> for ConfigMode {
     fn from(value: hook::Mode) -> Self {
         match value {
             hook::Mode::Manual => ConfigMode::Manual,
-            hook::Mode::Auto => ConfigMode::Auto,
+            // Code is a per-app mode only.
+            hook::Mode::Auto | hook::Mode::Code => ConfigMode::Auto,
             hook::Mode::Suggest => ConfigMode::Suggest,
         }
     }
@@ -118,6 +151,14 @@ impl Default for Config {
             selection_via_clipboard: false,
             capslock_switches_language: false,
             tray_shows_language: false,
+            restart_after_crash: true,
+            fix_spelling: false,
+            fix_hyphens: true,
+            delete_thai_words: true,
+            guard_enter: true,
+            chat_apps: Vec::new(),
+            snippets: Vec::new(),
+            sync_settings: false,
         }
     }
 }
@@ -158,6 +199,26 @@ pub fn apply(cfg: &Config) {
     crate::manual::set_clipboard_fallback(cfg.selection_via_clipboard);
     hook::set_caps_switches_language(cfg.capslock_switches_language);
     crate::tray::set_shows_language(cfg.tray_shows_language);
+    SYNC_SETTINGS.store(cfg.sync_settings, std::sync::atomic::Ordering::Relaxed);
+    hook::set_fixes_spelling(cfg.fix_spelling);
+    hook::set_fixes_hyphens(cfg.fix_hyphens);
+    hook::set_deletes_thai_words(cfg.delete_thai_words);
+    hook::set_guards_enter(cfg.guard_enter);
+    hook::set_chat_apps(cfg.chat_apps.clone());
+    hook::set_snippets(
+        cfg.snippets
+            .iter()
+            .filter_map(|s| {
+                let scope = righttype::snippets::Scope::parse(&s.scope)?;
+                righttype::snippets::check(&s.trigger, &s.text, scope).ok()
+            })
+            .take(righttype::snippets::MAX_SNIPPETS)
+            .collect(),
+    );
+    RESTART_AFTER_CRASH.store(
+        cfg.restart_after_crash,
+        std::sync::atomic::Ordering::Relaxed,
+    );
     crate::habits::set_enabled(cfg.predict_layout);
     righttype::layout::set_thai_variant(match cfg.thai_layout.as_deref() {
         Some("pattachote") => righttype::layout::ThaiVariant::Pattachote,
@@ -179,6 +240,139 @@ pub fn apply(cfg: &Config) {
             .collect(),
     );
 }
+
+// ------------------------------------------------------------ sync folder
+
+/// Settings → Learned words → "Sync settings and snippets too".
+pub static SYNC_SETTINGS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// The shared file's time when we last wrote or read it.
+static SHARED_SEEN: std::sync::Mutex<Option<std::time::SystemTime>> = std::sync::Mutex::new(None);
+static SHARED_TICKS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+const SHARED_FILE: &str = "RightType settings.toml";
+
+/// What PCs sharing a sync folder share: how RightType behaves, never where
+/// this PC keeps things (the folder itself, first-run state, statistics).
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+struct Shared {
+    mode: Option<ConfigMode>,
+    custom_blacklist: Vec<String>,
+    app_modes: BTreeMap<String, String>,
+    hotkeys: BTreeMap<String, String>,
+    snippets: Vec<SnippetConfig>,
+    caret_hints: bool,
+    fix_spelling: bool,
+    capslock_switches_language: bool,
+    language: Option<String>,
+    thai_layout: Option<String>,
+}
+
+impl Shared {
+    fn of(cfg: &Config) -> Shared {
+        Shared {
+            mode: cfg.mode,
+            custom_blacklist: cfg.custom_blacklist.clone(),
+            app_modes: cfg.app_modes.clone(),
+            hotkeys: cfg.hotkeys.clone(),
+            snippets: cfg.snippets.clone(),
+            caret_hints: cfg.caret_hints,
+            fix_spelling: cfg.fix_spelling,
+            capslock_switches_language: cfg.capslock_switches_language,
+            language: cfg.language.clone(),
+            thai_layout: cfg.thai_layout.clone(),
+        }
+    }
+
+    fn put_into(self, cfg: &mut Config) {
+        cfg.mode = self.mode.or(cfg.mode);
+        cfg.custom_blacklist = self.custom_blacklist;
+        cfg.app_modes = self.app_modes;
+        cfg.hotkeys = self.hotkeys;
+        cfg.snippets = self.snippets;
+        cfg.caret_hints = self.caret_hints;
+        cfg.fix_spelling = self.fix_spelling;
+        cfg.capslock_switches_language = self.capslock_switches_language;
+        cfg.language = self.language;
+        cfg.thai_layout = self.thai_layout;
+    }
+}
+
+fn shared_path() -> Option<PathBuf> {
+    Some(learn::folder()?.join(SHARED_FILE))
+}
+
+fn shared_modified() -> Option<std::time::SystemTime> {
+    shared_path()
+        .and_then(|p| std::fs::metadata(p).ok())
+        .and_then(|m| m.modified().ok())
+}
+
+/// Write the shared settings to the sync folder, unless they are already
+/// what is there (so two PCs never bounce the file back and forth).
+fn write_shared(cfg: &Config) {
+    let Some(p) = shared_path() else {
+        return;
+    };
+    let Ok(text) = toml::to_string_pretty(&Shared::of(cfg)) else {
+        return;
+    };
+    if std::fs::read_to_string(&p).ok().as_deref() == Some(text.as_str()) {
+        return;
+    }
+    if std::fs::write(&p, text).is_ok() {
+        *SHARED_SEEN.lock().unwrap() = shared_modified();
+    }
+}
+
+/// Session timer tick (1.5 s): every few seconds, take on settings another
+/// PC wrote to the sync folder. Returns whether anything was taken on.
+pub fn tick_shared() -> bool {
+    if SHARED_TICKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 4 != 0
+        || !SYNC_SETTINGS.load(std::sync::atomic::Ordering::Relaxed)
+    {
+        return false;
+    }
+    let modified = shared_modified();
+    if modified.is_none() || modified == *SHARED_SEEN.lock().unwrap() {
+        return false;
+    }
+    *SHARED_SEEN.lock().unwrap() = modified;
+    let Some(shared) = shared_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| toml::from_str::<Shared>(&t).ok())
+    else {
+        return false;
+    };
+    let mut cfg = snapshot();
+    shared.put_into(&mut cfg);
+    apply(&cfg);
+    write_local(&cfg);
+    true
+}
+
+/// Sync settings too (or stop): writes them to the folder now when on.
+pub fn set_sync_settings(on: bool) {
+    SYNC_SETTINGS.store(on, std::sync::atomic::Ordering::Relaxed);
+    if on {
+        // What the folder already has wins (another PC set it up first).
+        *SHARED_SEEN.lock().unwrap() = None;
+        if shared_modified().is_none() || !tick_now() {
+            persist();
+        }
+    } else {
+        persist();
+    }
+}
+
+/// [`tick_shared`] without waiting for the timer.
+fn tick_now() -> bool {
+    SHARED_TICKS.store(0, std::sync::atomic::Ordering::Relaxed);
+    tick_shared()
+}
+
+/// Settings → restart after a crash. Takes effect at the next start.
+pub static RESTART_AFTER_CRASH: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
 
 /// The language the user picked, or `None` to follow Windows.
 static LANGUAGE: std::sync::Mutex<Option<Lang>> = std::sync::Mutex::new(None);
@@ -216,9 +410,19 @@ pub fn mark_onboarded() {
     }
 }
 
-/// Snapshot the current runtime state and write it to disk. Best-effort.
+/// Snapshot the current runtime state and write it to disk (and to the sync
+/// folder, when settings are synced). Best-effort.
 pub fn persist() {
-    let cfg = Config {
+    let cfg = snapshot();
+    write_local(&cfg);
+    if cfg.sync_settings {
+        write_shared(&cfg);
+    }
+}
+
+/// The running state as a config.
+fn snapshot() -> Config {
+    Config {
         // A pause is temporary: it must not be saved as "off".
         enabled: hook::is_enabled() || crate::session::is_paused(),
         mode: Some(hook::mode().into()),
@@ -235,6 +439,21 @@ pub fn persist() {
         selection_via_clipboard: crate::manual::clipboard_fallback(),
         capslock_switches_language: hook::caps_switches_language(),
         tray_shows_language: crate::tray::shows_language(),
+        fix_spelling: hook::fixes_spelling(),
+        fix_hyphens: hook::fixes_hyphens(),
+        delete_thai_words: hook::deletes_thai_words(),
+        guard_enter: hook::guards_enter(),
+        chat_apps: hook::chat_apps(),
+        sync_settings: SYNC_SETTINGS.load(std::sync::atomic::Ordering::Relaxed),
+        snippets: hook::snippets()
+            .into_iter()
+            .map(|s| SnippetConfig {
+                trigger: s.trigger,
+                text: s.text,
+                scope: s.scope.name().to_string(),
+            })
+            .collect(),
+        restart_after_crash: RESTART_AFTER_CRASH.load(std::sync::atomic::Ordering::Relaxed),
         predict_layout: crate::habits::is_enabled(),
         keep_stats: crate::stats::keeps_daily(),
         learned_folder: learn::folder().map(|p| p.to_string_lossy().into_owned()),
@@ -246,7 +465,10 @@ pub fn persist() {
         thai_layout: (righttype::layout::thai_variant()
             == righttype::layout::ThaiVariant::Pattachote)
             .then(|| "pattachote".to_string()),
-    };
+    }
+}
+
+fn write_local(cfg: &Config) {
     let Some(p) = config_path() else {
         return;
     };

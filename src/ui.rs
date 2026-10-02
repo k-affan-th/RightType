@@ -34,8 +34,9 @@ use windows::Win32::Graphics::Dwm::{
 use windows::Win32::Graphics::Gdi::{
     CreateFontW, CreateSolidBrush, DeleteObject, DrawTextW, FillRect, InvalidateRect, SelectObject,
     SetBkMode, SetTextColor, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET,
-    DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE,
-    DT_VCENTER, DT_WORDBREAK, HBRUSH, HDC, HFONT, HGDIOBJ, OUT_DEFAULT_PRECIS, TRANSPARENT,
+    DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_RIGHT,
+    DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK, HBRUSH, HDC, HFONT, HGDIOBJ, OUT_DEFAULT_PRECIS,
+    TRANSPARENT,
 };
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, HMONITOR, MONITORINFO, MONITOR_DEFAULTTONEAREST,
@@ -67,6 +68,7 @@ use zeroize::Zeroize;
 pub type Rgb = u32;
 
 /// Every colour the windows use.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Palette {
     /// Window background.
     pub bg: Rgb,
@@ -137,12 +139,32 @@ const LIGHT: Palette = Palette {
 };
 
 static DARK_MODE: AtomicBool = AtomicBool::new(true);
+/// Windows' High Contrast is on: every colour comes from the system's
+/// contrast theme instead (see [`contrast_palette`]).
+static HIGH_CONTRAST: AtomicBool = AtomicBool::new(false);
+/// The palette built from the contrast theme last time it was read. Kept
+/// (leaked) for the `'static` borrows of [`pal`]; a new one is made only when
+/// the theme's colours change.
+static CONTRAST_PAL: std::sync::atomic::AtomicPtr<Palette> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 static DPI: AtomicU32 = AtomicU32::new(96);
 
 /// Re-read the Windows theme and DPI. Call when a window opens: it will open
 /// on the monitor under the mouse (see [`size_and_center`]), at that monitor's
 /// DPI.
 pub fn refresh() {
+    let contrast = high_contrast();
+    HIGH_CONTRAST.store(contrast, Ordering::Relaxed);
+    if contrast {
+        let fresh = contrast_palette();
+        let old = CONTRAST_PAL.load(Ordering::Acquire);
+        if old.is_null() || unsafe { &*old } != &fresh {
+            CONTRAST_PAL.store(Box::into_raw(Box::new(fresh)), Ordering::Release);
+        }
+        DARK_MODE.store(luminance(pal().bg) < 0x80, Ordering::Relaxed);
+        DPI.store(monitor_dpi(cursor_monitor()), Ordering::Relaxed);
+        return;
+    }
     DARK_MODE.store(windows_prefers_dark(), Ordering::Relaxed);
     DPI.store(monitor_dpi(cursor_monitor()), Ordering::Relaxed);
 }
@@ -194,8 +216,76 @@ pub fn work_area(monitor: HMONITOR) -> RECT {
     wa
 }
 
+/// Is Windows' High Contrast on? Read live (cheap).
+pub fn high_contrast() -> bool {
+    use windows::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW};
+    use windows::Win32::UI::WindowsAndMessaging::SPI_GETHIGHCONTRAST;
+    let mut hc = HIGHCONTRASTW {
+        cbSize: std::mem::size_of::<HIGHCONTRASTW>() as u32,
+        ..Default::default()
+    };
+    unsafe {
+        SystemParametersInfoW(
+            SPI_GETHIGHCONTRAST,
+            hc.cbSize,
+            Some(&mut hc as *mut HIGHCONTRASTW as *mut c_void),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+        .is_ok()
+            && hc.dwFlags.contains(HCF_HIGHCONTRASTON)
+    }
+}
+
+/// A system colour as `0xRRGGBB`.
+pub fn sys_rgb(index: windows::Win32::Graphics::Gdi::SYS_COLOR_INDEX) -> Rgb {
+    let c = unsafe { windows::Win32::Graphics::Gdi::GetSysColor(index) };
+    ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF)
+}
+
+fn luminance(rgb: Rgb) -> u32 {
+    let (r, g, b) = ((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+    (r * 299 + g * 587 + b * 114) / 1000
+}
+
+/// The contrast theme's own colours, used as they are: text on window
+/// colour, the selection colours for anything picked or primary, and plain
+/// outlines instead of subtle fills (which a contrast theme does not have).
+fn contrast_palette() -> Palette {
+    use windows::Win32::Graphics::Gdi::{
+        COLOR_BTNFACE, COLOR_HIGHLIGHT, COLOR_HIGHLIGHTTEXT, COLOR_WINDOW, COLOR_WINDOWTEXT,
+    };
+    let window = sys_rgb(COLOR_WINDOW);
+    let text = sys_rgb(COLOR_WINDOWTEXT);
+    let hi = sys_rgb(COLOR_HIGHLIGHT);
+    Palette {
+        bg: window,
+        surface: window,
+        surface_hover: window,
+        inset: window,
+        border: text,
+        text,
+        text_dim: text,
+        accent: hi,
+        accent_hover: hi,
+        accent_pressed: hi,
+        on_accent: sys_rgb(COLOR_HIGHLIGHTTEXT),
+        button: sys_rgb(COLOR_BTNFACE),
+        button_hover: sys_rgb(COLOR_BTNFACE),
+        button_pressed: sys_rgb(COLOR_BTNFACE),
+        toggle_off: text,
+        keycap: window,
+        keycap_border: text,
+    }
+}
+
 /// The palette for the current theme.
 pub fn pal() -> &'static Palette {
+    if HIGH_CONTRAST.load(Ordering::Relaxed) {
+        let p = CONTRAST_PAL.load(Ordering::Acquire);
+        if !p.is_null() {
+            return unsafe { &*p };
+        }
+    }
     if is_dark() {
         &DARK
     } else {
@@ -262,6 +352,10 @@ pub struct Fonts {
     pub subtitle: HFONT,
     pub title: HFONT,
     pub display: HFONT,
+    /// Windows' icon font for palette rows and headings; `None` where the
+    /// system has none (before Windows 10).
+    pub icons: Option<HFONT>,
+    pub icons_small: Option<HFONT>,
 }
 
 impl Fonts {
@@ -273,6 +367,8 @@ impl Fonts {
             subtitle: make_font(17, 600),
             title: make_font(24, 600),
             display: make_font(34, 600),
+            icons: make_icon_font(16),
+            icons_small: make_icon_font(13),
         }
     }
 }
@@ -286,7 +382,11 @@ impl Drop for Fonts {
             self.subtitle,
             self.title,
             self.display,
-        ] {
+        ]
+        .into_iter()
+        .chain(self.icons)
+        .chain(self.icons_small)
+        {
             unsafe {
                 let _ = DeleteObject(HGDIOBJ(font.0));
             }
@@ -362,6 +462,73 @@ pub fn make_font_at(size: i32, weight: i32, dpi: u32) -> HFONT {
             PCWSTR(face.as_ptr()),
         )
     }
+}
+
+/// The icon font this Windows has: Segoe Fluent Icons (Windows 11), else
+/// Segoe MDL2 Assets (Windows 10). The glyphs used are in both, at the same
+/// code points.
+fn icon_face() -> Option<&'static str> {
+    static FACE: OnceLock<Option<&'static str>> = OnceLock::new();
+    *FACE.get_or_init(|| {
+        ["Segoe Fluent Icons", "Segoe MDL2 Assets"]
+            .into_iter()
+            .find(|&face| installed(face))
+    })
+}
+
+/// Whether GDI gives `face` itself when asked for it, rather than a stand-in.
+fn installed(face: &str) -> bool {
+    let wide: Vec<u16> = format!("{face}\0").encode_utf16().collect();
+    unsafe {
+        let font = CreateFontW(
+            -16,
+            0,
+            0,
+            0,
+            400,
+            0,
+            0,
+            0,
+            DEFAULT_CHARSET.0 as u32,
+            OUT_DEFAULT_PRECIS.0 as u32,
+            CLIP_DEFAULT_PRECIS.0 as u32,
+            CLEARTYPE_QUALITY.0 as u32,
+            0,
+            PCWSTR(wide.as_ptr()),
+        );
+        let hdc = windows::Win32::Graphics::Gdi::GetDC(None);
+        let old = SelectObject(hdc, HGDIOBJ(font.0));
+        let mut got = [0u16; 64];
+        let n = windows::Win32::Graphics::Gdi::GetTextFaceW(hdc, Some(&mut got));
+        SelectObject(hdc, old);
+        windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc);
+        let _ = DeleteObject(HGDIOBJ(font.0));
+        let n = (n.max(1) as usize - 1).min(got.len());
+        String::from_utf16_lossy(&got[..n]).eq_ignore_ascii_case(face)
+    }
+}
+
+/// The icon font at `size` 96-DPI pixels, if Windows has one.
+fn make_icon_font(size: i32) -> Option<HFONT> {
+    let face: Vec<u16> = format!("{}\0", icon_face()?).encode_utf16().collect();
+    Some(unsafe {
+        CreateFontW(
+            -px(size),
+            0,
+            0,
+            0,
+            400,
+            0,
+            0,
+            0,
+            DEFAULT_CHARSET.0 as u32,
+            OUT_DEFAULT_PRECIS.0 as u32,
+            CLIP_DEFAULT_PRECIS.0 as u32,
+            CLEARTYPE_QUALITY.0 as u32,
+            0,
+            PCWSTR(face.as_ptr()),
+        )
+    })
 }
 
 // ------------------------------------------------------------------ show
@@ -659,6 +826,23 @@ pub fn text_width_at(s: &str, size: i32, weight: i32, dpi: u32) -> i32 {
 }
 
 /// Height `s` needs when wrapped to `width` device pixels.
+/// The width of `s` on one line in `font`.
+pub fn measure_width(hdc: HDC, s: &str, font: HFONT) -> i32 {
+    let mut wide: Vec<u16> = s.encode_utf16().collect();
+    let mut m = RECT::default();
+    unsafe {
+        let old = SelectObject(hdc, HGDIOBJ(font.0));
+        DrawTextW(
+            hdc,
+            &mut wide,
+            &mut m,
+            DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX,
+        );
+        SelectObject(hdc, old);
+    }
+    m.right - m.left
+}
+
 pub fn measure(hdc: HDC, s: &str, width: i32, font: HFONT) -> i32 {
     let mut wide: Vec<u16> = s.encode_utf16().collect();
     let mut rc = RECT {
@@ -703,6 +887,9 @@ pub enum TextStyle {
     Small,
     /// `Shift + Backspace` drawn as key caps.
     Keys,
+    /// A palette heading: small dim text after an icon (a glyph of the icon
+    /// font, kept out of the text so a screen reader does not read it).
+    Heading(char),
 }
 
 #[derive(Clone)]
@@ -722,7 +909,33 @@ pub enum Kind {
     /// A navigation entry (a radio button).
     Nav,
     Edit,
+    /// A list with columns (a report-view list view); drawn by Windows in
+    /// the window's colours.
+    Table,
+    /// A palette row: left-aligned text with an optional number key cap in
+    /// front (`"3\tFix text"`; `"\tFix text"` without), and `hint` in dim
+    /// text at the right (a state, or what a key does). `icon` (a glyph of
+    /// the icon font) goes between the key cap and the text.
+    Row {
+        hint: String,
+        icon: char,
+    },
 }
+
+/// Something done to a table row with the mouse or keyboard.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TableEvent {
+    /// Right-click (or the context-menu key): show the row's actions here,
+    /// in screen pixels.
+    Menu { x: i32, y: i32 },
+    /// Delete pressed on the selected row.
+    Delete,
+    /// The selection moved.
+    Selected,
+}
+
+/// Receives table events.
+type TableHandler = Rc<dyn Fn(u16, TableEvent)>;
 
 pub struct Control {
     pub hwnd: HWND,
@@ -755,6 +968,7 @@ pub struct Surface {
     brushes: RefCell<HashMap<Rgb, HBRUSH>>,
     handler: RefCell<Option<nwg::RawEventHandler>>,
     on_click: RefCell<Option<ClickHandler>>,
+    on_table: RefCell<Option<TableHandler>>,
 }
 
 const WM_ERASEBKGND: u32 = 0x0014;
@@ -851,6 +1065,7 @@ impl Surface {
             brushes: RefCell::new(HashMap::new()),
             handler: RefCell::new(None),
             on_click: RefCell::new(None),
+            on_table: RefCell::new(None),
         });
         let weak = Rc::downgrade(&surface);
         let handler =
@@ -866,6 +1081,7 @@ impl Surface {
     /// Stop handling messages (call before closing the window).
     pub fn detach(&self) {
         self.on_click.borrow_mut().take();
+        self.on_table.borrow_mut().take();
         if let Some(h) = self.handler.borrow_mut().take() {
             let _ = nwg::unbind_raw_event_handler(&h);
         }
@@ -874,6 +1090,11 @@ impl Surface {
     /// Called with the control id when a button, toggle or radio is clicked.
     pub fn on_click(&self, f: impl Fn(u16) + 'static) {
         *self.on_click.borrow_mut() = Some(Rc::new(f));
+    }
+
+    /// Called with the table's id when one of its rows is acted on.
+    pub fn on_table(&self, f: impl Fn(u16, TableEvent) + 'static) {
+        *self.on_table.borrow_mut() = Some(Rc::new(f));
     }
 
     fn brush(&self, color: Rgb) -> HBRUSH {
@@ -935,6 +1156,10 @@ impl Surface {
             }
             WM_NOTIFY => {
                 let nm = &*(l as *const NmCustomDraw);
+                if let Some((Kind::Table, _)) = self.find(nm.hdr.hwnd_from) {
+                    self.table_notify(nm.hdr.hwnd_from, nm.hdr.id_from as u16, nm.hdr.code, l);
+                    return None;
+                }
                 if nm.hdr.code != windows::Win32::UI::Controls::NM_CUSTOMDRAW {
                     return None;
                 }
@@ -1008,7 +1233,9 @@ impl Surface {
     fn font_for(&self, kind: &Kind) -> HFONT {
         let f = self.fonts.borrow();
         match kind {
-            Kind::Edit | Kind::Secondary | Kind::Toggle { .. } => f.body,
+            Kind::Edit | Kind::Secondary | Kind::Toggle { .. } | Kind::Table | Kind::Row { .. } => {
+                f.body
+            }
             _ => f.body_strong,
         }
     }
@@ -1030,6 +1257,32 @@ impl Surface {
             TextStyle::Keys => {
                 self.paint_keys(hdc, &s, rc);
                 0
+            }
+            TextStyle::Heading(icon) => {
+                let mut t = rc;
+                if let Some(font) = f.icons_small {
+                    let ic = RECT {
+                        right: rc.left + px(16),
+                        ..rc
+                    };
+                    text(
+                        hdc,
+                        &icon.to_string(),
+                        ic,
+                        font,
+                        p.text_dim,
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE,
+                    );
+                    t.left += px(22);
+                }
+                text(
+                    hdc,
+                    &s,
+                    t,
+                    f.small,
+                    p.text_dim,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                )
             }
         };
     }
@@ -1271,7 +1524,98 @@ impl Surface {
                     DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
                 );
             }
-            Kind::Text(_) | Kind::Edit => {}
+            Kind::Row { hint, icon } => {
+                if focus || hot || pressed {
+                    g.fill_round(rc, radius, p.surface_hover);
+                }
+                if focus {
+                    let bar_h = (rc.bottom - rc.top) - px(14);
+                    let bar = RECT {
+                        left: rc.left + px(2),
+                        top: rc.top + px(7),
+                        right: rc.left + px(5),
+                        bottom: rc.top + px(7) + bar_h,
+                    };
+                    g.fill_round(bar, pxf(1.5), p.accent);
+                }
+                let (number, text_s) = label.split_once('\t').unwrap_or(("", &label));
+                let mut x = rc.left + px(12);
+                let cap_w = px(22);
+                if !number.is_empty() {
+                    let cap_h = px(20);
+                    let top = rc.top + ((rc.bottom - rc.top) - cap_h) / 2;
+                    let cap = RECT {
+                        left: x,
+                        top,
+                        right: x + cap_w,
+                        bottom: top + cap_h,
+                    };
+                    g.fill_round(cap, pxf(4.0), p.keycap_border);
+                    g.fill_round(inset(cap, px(1)), pxf(3.0), p.keycap);
+                    text(
+                        hdc,
+                        number,
+                        cap,
+                        f.small,
+                        p.text,
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+                    );
+                }
+                x += cap_w + px(10);
+                if let (Some(font), false) = (f.icons, *icon == '\0') {
+                    let ic = RECT {
+                        left: x,
+                        right: x + px(18),
+                        ..rc
+                    };
+                    // The selected row's icon in the accent colour: the eye
+                    // finds the row by it.
+                    text(
+                        hdc,
+                        &icon.to_string(),
+                        ic,
+                        font,
+                        if focus { p.accent } else { p.text_dim },
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+                    );
+                    x += px(18) + px(10);
+                }
+                let hint_w = if hint.is_empty() {
+                    0
+                } else {
+                    measure_width(hdc, hint, f.small) + px(12)
+                };
+                if !hint.is_empty() {
+                    let hr = RECT {
+                        left: rc.right - hint_w - px(4),
+                        right: rc.right - px(12),
+                        ..rc
+                    };
+                    text(
+                        hdc,
+                        hint,
+                        hr,
+                        f.small,
+                        p.text_dim,
+                        DT_RIGHT | DT_VCENTER | DT_SINGLELINE,
+                    );
+                }
+                let tr_rc = RECT {
+                    left: x,
+                    right: rc.right - hint_w - px(8),
+                    ..rc
+                };
+                text(
+                    hdc,
+                    text_s,
+                    tr_rc,
+                    f.body,
+                    p.text,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                );
+                return;
+            }
+            Kind::Text(_) | Kind::Edit | Kind::Table => {}
         }
         if focus {
             g.stroke_round(rc, radius + pxf(1.0), pxf(2.0), p.text);
@@ -1375,16 +1719,28 @@ impl Surface {
         )
     }
 
-    /// One entry of a list of commands (the palette): a push button that
-    /// joins the previous entry's group, so the arrow keys move between them.
-    pub fn list_item(&self, s: &str, first: bool, rc: (i32, i32, i32, i32), bg: Rgb) -> u16 {
+    /// One row of the palette (see [`Kind::Row`]): joins the previous row's
+    /// group, so the arrow keys move between them.
+    /// `icon` is a glyph of the icon font, or `'\0'` for none.
+    pub fn row(
+        &self,
+        s: &str,
+        hint: &str,
+        icon: char,
+        first: bool,
+        rc: (i32, i32, i32, i32),
+        bg: Rgb,
+    ) -> u16 {
         let group = if first { WS_GROUP } else { 0 };
         self.create(
             "BUTTON",
             s,
             BS_PUSHBUTTON | WS_TABSTOP | group,
             rc,
-            Kind::Secondary,
+            Kind::Row {
+                hint: hint.to_string(),
+                icon,
+            },
             bg,
             0,
         )
@@ -1446,6 +1802,27 @@ impl Surface {
         )
     }
 
+    /// A one-line text box.
+    pub fn line_edit(&self, s: &str, rc: (i32, i32, i32, i32), page: u8) -> u16 {
+        const ES_AUTOHSCROLL: u32 = 0x80;
+        let id = self.create(
+            "EDIT",
+            s,
+            ES_AUTOHSCROLL | WS_TABSTOP | WS_GROUP,
+            rc,
+            Kind::Edit,
+            pal().inset,
+            page,
+        );
+        if is_dark() {
+            let theme: Vec<u16> = "DarkMode_Explorer\0".encode_utf16().collect();
+            unsafe {
+                let _ = SetWindowTheme(self.hwnd_of(id), PCWSTR(theme.as_ptr()), PCWSTR::null());
+            }
+        }
+        id
+    }
+
     pub fn edit(&self, s: &str, rc: (i32, i32, i32, i32), page: u8) -> u16 {
         let id = self.create(
             "EDIT",
@@ -1464,6 +1841,209 @@ impl Surface {
             }
         }
         id
+    }
+
+    /// A table with `columns` (title, width in 96-DPI units); rows are put in
+    /// with [`Surface::set_rows`].
+    pub fn table(&self, columns: &[(&str, i32)], rc: (i32, i32, i32, i32), page: u8) -> u16 {
+        const LVS_REPORT: u32 = 0x1;
+        const LVS_SINGLESEL: u32 = 0x4;
+        const LVS_SHOWSELALWAYS: u32 = 0x8;
+        const LVS_NOSORTHEADER: u32 = 0x8000;
+        const WS_BORDER: u32 = 0x0080_0000;
+        const LVM_SETEXTENDEDLISTVIEWSTYLE: u32 = 0x1036;
+        const LVS_EX_FULLROWSELECT: usize = 0x20;
+        const LVS_EX_DOUBLEBUFFER: usize = 0x0001_0000;
+        const LVM_SETBKCOLOR: u32 = 0x1001;
+        const LVM_SETTEXTCOLOR: u32 = 0x1024;
+        const LVM_SETTEXTBKCOLOR: u32 = 0x1026;
+        const LVM_INSERTCOLUMNW: u32 = 0x1061;
+        let id = self.create(
+            "SysListView32",
+            "",
+            LVS_REPORT
+                | LVS_SINGLESEL
+                | LVS_SHOWSELALWAYS
+                | LVS_NOSORTHEADER
+                | WS_BORDER
+                | WS_TABSTOP
+                | WS_GROUP,
+            rc,
+            Kind::Table,
+            pal().inset,
+            page,
+        );
+        let hwnd = self.hwnd_of(id);
+        let p = pal();
+        unsafe {
+            let ex = LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER;
+            SendMessageW(
+                hwnd,
+                LVM_SETEXTENDEDLISTVIEWSTYLE,
+                WPARAM(ex),
+                LPARAM(ex as isize),
+            );
+            SendMessageW(
+                hwnd,
+                LVM_SETBKCOLOR,
+                WPARAM(0),
+                LPARAM(colorref(p.inset).0 as isize),
+            );
+            SendMessageW(
+                hwnd,
+                LVM_SETTEXTBKCOLOR,
+                WPARAM(0),
+                LPARAM(colorref(p.inset).0 as isize),
+            );
+            SendMessageW(
+                hwnd,
+                LVM_SETTEXTCOLOR,
+                WPARAM(0),
+                LPARAM(colorref(p.text).0 as isize),
+            );
+            if is_dark() {
+                let theme: Vec<u16> = "DarkMode_Explorer\0".encode_utf16().collect();
+                let _ = SetWindowTheme(hwnd, PCWSTR(theme.as_ptr()), PCWSTR::null());
+            }
+            for (i, (title, width)) in columns.iter().enumerate() {
+                let mut text: Vec<u16> = format!("{title}\0").encode_utf16().collect();
+                let col = windows::Win32::UI::Controls::LVCOLUMNW {
+                    mask: windows::Win32::UI::Controls::LVCF_TEXT
+                        | windows::Win32::UI::Controls::LVCF_WIDTH,
+                    cx: px(*width),
+                    pszText: windows::core::PWSTR(text.as_mut_ptr()),
+                    ..Default::default()
+                };
+                SendMessageW(
+                    hwnd,
+                    LVM_INSERTCOLUMNW,
+                    WPARAM(i),
+                    LPARAM(&col as *const _ as isize),
+                );
+            }
+        }
+        id
+    }
+
+    /// Replace a table's rows (each a cell per column), keeping the row
+    /// `select` selected.
+    pub fn set_rows(&self, id: u16, rows: &[Vec<String>], select: Option<usize>) {
+        const LVM_DELETEALLITEMS: u32 = 0x1009;
+        const LVM_INSERTITEMW: u32 = 0x104D;
+        const LVM_SETITEMTEXTW: u32 = 0x1074;
+        let hwnd = self.hwnd_of(id);
+        unsafe {
+            SendMessageW(hwnd, LVM_DELETEALLITEMS, WPARAM(0), LPARAM(0));
+            for (r, row) in rows.iter().enumerate() {
+                for (c, cell) in row.iter().enumerate() {
+                    let mut text: Vec<u16> = format!("{cell}\0").encode_utf16().collect();
+                    let item = windows::Win32::UI::Controls::LVITEMW {
+                        mask: windows::Win32::UI::Controls::LVIF_TEXT,
+                        iItem: r as i32,
+                        iSubItem: c as i32,
+                        pszText: windows::core::PWSTR(text.as_mut_ptr()),
+                        ..Default::default()
+                    };
+                    let msg = if c == 0 {
+                        LVM_INSERTITEMW
+                    } else {
+                        LVM_SETITEMTEXTW
+                    };
+                    let wparam = if c == 0 { 0 } else { r };
+                    SendMessageW(
+                        hwnd,
+                        msg,
+                        WPARAM(wparam),
+                        LPARAM(&item as *const _ as isize),
+                    );
+                }
+            }
+        }
+        if let Some(i) = select.filter(|&i| i < rows.len()) {
+            self.select_row(id, i);
+        }
+    }
+
+    /// Select (and scroll to) row `i` of a table.
+    pub fn select_row(&self, id: u16, i: usize) {
+        const LVM_SETITEMSTATE: u32 = 0x102B;
+        const LVM_ENSUREVISIBLE: u32 = 0x1013;
+        let hwnd = self.hwnd_of(id);
+        let state = windows::Win32::UI::Controls::LIST_VIEW_ITEM_STATE_FLAGS(
+            windows::Win32::UI::Controls::LVIS_SELECTED.0
+                | windows::Win32::UI::Controls::LVIS_FOCUSED.0,
+        );
+        let item = windows::Win32::UI::Controls::LVITEMW {
+            stateMask: state,
+            state,
+            ..Default::default()
+        };
+        unsafe {
+            SendMessageW(
+                hwnd,
+                LVM_SETITEMSTATE,
+                WPARAM(i),
+                LPARAM(&item as *const _ as isize),
+            );
+            SendMessageW(hwnd, LVM_ENSUREVISIBLE, WPARAM(i), LPARAM(0));
+        }
+    }
+
+    /// The selected row of a table.
+    pub fn selected_row(&self, id: u16) -> Option<usize> {
+        const LVM_GETNEXTITEM: u32 = 0x100C;
+        const LVNI_SELECTED: isize = 0x2;
+        let i = unsafe {
+            SendMessageW(
+                self.hwnd_of(id),
+                LVM_GETNEXTITEM,
+                WPARAM(usize::MAX),
+                LPARAM(LVNI_SELECTED),
+            )
+        }
+        .0;
+        usize::try_from(i).ok()
+    }
+
+    /// A table told its parent something (`WM_NOTIFY`).
+    unsafe fn table_notify(&self, hwnd: HWND, id: u16, code: u32, l: isize) {
+        const NM_RCLICK: u32 = (-5i32) as u32;
+        const LVN_KEYDOWN: u32 = (-155i32) as u32;
+        const LVN_ITEMCHANGED: u32 = (-101i32) as u32;
+        const VK_DELETE: u16 = 0x2E;
+        const VK_APPS: u16 = 0x5D;
+        #[repr(C)]
+        struct NmKey {
+            hdr: NmHdr,
+            vkey: u16,
+            flags: u32,
+        }
+        let event = match code {
+            NM_RCLICK => {
+                let mut pt = windows::Win32::Foundation::POINT::default();
+                let _ = GetCursorPos(&mut pt);
+                Some(TableEvent::Menu { x: pt.x, y: pt.y })
+            }
+            LVN_KEYDOWN => match (*(l as *const NmKey)).vkey {
+                VK_DELETE => Some(TableEvent::Delete),
+                VK_APPS => {
+                    let mut rc = RECT::default();
+                    let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(hwnd, &mut rc);
+                    Some(TableEvent::Menu {
+                        x: rc.left + px(40),
+                        y: rc.top + px(40),
+                    })
+                }
+                _ => None,
+            },
+            LVN_ITEMCHANGED => Some(TableEvent::Selected),
+            _ => None,
+        };
+        let Some(event) = event else { return };
+        let cb = self.on_table.borrow().clone();
+        if let Some(cb) = cb {
+            cb(id, event);
+        }
     }
 
     // --- state -----------------------------------------------------------

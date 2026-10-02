@@ -35,6 +35,7 @@ $notes = @"
 ไม่อยากติดตั้ง? ดาวน์โหลด ``$zip`` แตกไฟล์ แล้วเปิด ``righttype.exe`` ได้เลย
 มี winget? ``winget install k-affan-th.RightType`` แล้วอัปเดตด้วย ``winget upgrade k-affan-th.RightType``
 (ใช้ได้เมื่อ winget รับแพ็กเกจแล้ว)
+เครื่อง Windows on ARM (เช่น Surface Pro X, Copilot+ PC)? ใช้ ``RightType-$Version-arm64-setup.exe`` หรือ ``RightType-$Version-arm64.zip``
 ถอนการติดตั้ง: Settings → Apps → RightType
 
 ## Install
@@ -48,6 +49,7 @@ $notes = @"
 No installer wanted? Download ``$zip``, extract it and run ``righttype.exe``.
 With winget: ``winget install k-affan-th.RightType``, and later ``winget upgrade k-affan-th.RightType``
 (once winget has accepted the package).
+Windows on ARM (Surface Pro X, Copilot+ PCs)? Use ``RightType-$Version-arm64-setup.exe`` or ``RightType-$Version-arm64.zip``.
 Uninstall: Settings → Apps → RightType.
 
 ## What's new

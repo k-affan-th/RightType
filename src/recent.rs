@@ -241,6 +241,88 @@ impl Recent {
         })
     }
 
+    /// The words held, oldest first, as they are on screen (for the palette's
+    /// list of recent words). The caller wipes them when done.
+    pub fn words(&self) -> Vec<String> {
+        self.words.iter().map(|e| e.word.clone()).collect()
+    }
+
+    /// For each word (oldest first): how many characters from the caret back
+    /// to its start, and its length — where it is on screen.
+    pub fn spans(&self) -> Vec<(usize, usize)> {
+        let mut after = 0;
+        let mut out: Vec<(usize, usize)> = self
+            .words
+            .iter()
+            .rev()
+            .map(|e| {
+                let len = e.word.chars().count();
+                after += len + 1;
+                (after, len)
+            })
+            .collect();
+        out.reverse();
+        out
+    }
+
+    /// Flip exactly the words at `picked` (indices, oldest first) and leave
+    /// the others as they are: one step from the oldest picked word to the
+    /// caret. `None` when nothing valid is picked. After applying it, call
+    /// [`Recent::clear`]: the run of flips does not go on from a pick.
+    pub fn flip_picked(
+        &self,
+        picked: &[usize],
+        convert: impl Fn(&str) -> String,
+    ) -> Option<FlipStep> {
+        let first = *picked.iter().filter(|&&i| i < self.words.len()).min()?;
+        let last = self.words.len() - 1;
+        let mut restore = String::new();
+        let mut insert = String::new();
+        let mut backspaces = 0;
+        let mut learn = None;
+        let (mut was_thai, mut now_thai) = (false, false);
+        for (i, entry) in self.words.range(first..).enumerate() {
+            let index = first + i;
+            restore.push_str(&entry.word);
+            restore.push(entry.boundary);
+            backspaces += entry.word.chars().count() + 1;
+            if picked.contains(&index) {
+                let mut flipped = convert(&entry.word);
+                if entry.converted && flipped != entry.word && learn.is_none() {
+                    learn = Some(flipped.clone());
+                }
+                if index == first {
+                    was_thai = is_thai(&entry.word);
+                    now_thai = is_thai(&flipped);
+                }
+                insert.push_str(&flipped);
+                flipped.zeroize();
+            } else {
+                insert.push_str(&entry.word);
+            }
+            if index != last {
+                insert.push(entry.boundary);
+            }
+        }
+        let newest = insert
+            .rsplit([' ', '\r', '\t'])
+            .next()
+            .unwrap_or("")
+            .to_string();
+        Some(FlipStep {
+            backspaces,
+            insert,
+            boundary: self.words[last].boundary,
+            restore,
+            words: picked.len(),
+            learn,
+            newest,
+            was_thai,
+            now_thai,
+            reverts: false,
+        })
+    }
+
     /// The step from [`Recent::next_step`] is on screen now: record it.
     pub fn commit(&mut self, convert: impl Fn(&str) -> String) {
         let k = self.chain + 1;
@@ -419,6 +501,29 @@ mod tests {
         let step = recent.next_step(auto_convert).unwrap();
         assert!(step.reverts);
         assert_eq!(step.insert, auto_convert("reload"));
+    }
+
+    #[test]
+    fn picked_words_flip_and_the_rest_stay() {
+        // "สวัสดี hello ครับ" with the first and last typed on the US layout.
+        let (recent, mut screen) = typed(&["l;ylfu", "hello", "8iy["]);
+        assert_eq!(recent.spans(), vec![(18, 6), (11, 5), (5, 4)]);
+        let step = recent.flip_picked(&[0, 2], auto_convert).unwrap();
+        apply(&mut screen, &step);
+        assert_eq!(
+            screen,
+            format!("{} hello {} ", auto_convert("l;ylfu"), auto_convert("8iy["))
+        );
+        assert_eq!(step.restore, "l;ylfu hello 8iy[ ");
+        assert_eq!(step.words, 2);
+        // Only the middle one: the span starts there.
+        let (recent, mut screen) = typed(&["l;ylfu", "hello", "8iy["]);
+        let step = recent.flip_picked(&[1], auto_convert).unwrap();
+        assert_eq!(step.backspaces, "hello 8iy[ ".chars().count());
+        apply(&mut screen, &step);
+        assert_eq!(screen, format!("l;ylfu {} 8iy[ ", auto_convert("hello")));
+        assert!(recent.flip_picked(&[], auto_convert).is_none());
+        assert!(recent.flip_picked(&[7], auto_convert).is_none());
     }
 
     #[test]

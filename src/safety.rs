@@ -86,17 +86,21 @@ pub fn watch_full_screen() {
 }
 
 /// Ask Windows whether a full-screen program without a text cursor is in
-/// front: an exclusive-mode game or a presentation always; any other
-/// full-screen window only when its thread shows no caret (a borderless
-/// game does not; a full-screen browser or editor does).
+/// front: an exclusive-mode game or a presentation, or any other full-screen
+/// window whose thread shows no caret (a borderless game) — unless the focus
+/// is in a text field (a full-screen browser or editor).
 unsafe fn refresh_full_screen() -> bool {
     use windows::Win32::UI::Shell::{
         SHQueryUserNotificationState, QUNS_BUSY, QUNS_PRESENTATION_MODE,
         QUNS_RUNNING_D3D_FULL_SCREEN,
     };
     let state = SHQueryUserNotificationState().ok();
+    // Typing into a text field: a full-screen browser or editor (on a real
+    // PC, Chrome after F11 shows Windows no text cursor at all, and was
+    // taken for a game). The focus worker's answer, read from memory.
+    let typing_text = crate::focus::is_text_field();
     let now = match state {
-        Some(s) if s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE => true,
+        Some(s) if s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE => !typing_text,
         Some(s) if s == QUNS_BUSY => {
             let mut gui = GUITHREADINFO {
                 cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
@@ -104,7 +108,8 @@ unsafe fn refresh_full_screen() -> bool {
             };
             // The foreground thread's caret (idThread 0), read from the
             // system's own record: it does not wait on the app.
-            GetGUIThreadInfo(0, &mut gui).is_ok() && gui.hwndCaret.0.is_null()
+            let no_caret = GetGUIThreadInfo(0, &mut gui).is_ok() && gui.hwndCaret.0.is_null();
+            no_caret && !typing_text
         }
         _ => false,
     };

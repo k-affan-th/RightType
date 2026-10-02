@@ -183,7 +183,15 @@ class Chrome(Target):
         self.app, self.httpd = lib.start_edge(lib.HERE / "target.html", lib.CHROME_EXE)
         self.win = self.app.top_window()
         self.hwnd = self.win.handle
-        edits = {d.element_info.automation_id: d for d in self.win.descendants(control_type="Edit")}
+        # The page's fields can take a while to reach UI Automation on a busy
+        # runner (CI: KeyError 'out' right after the page loaded).
+        edits = {}
+        for _ in range(30):
+            edits = {d.element_info.automation_id: d
+                     for d in self.win.descendants(control_type="Edit")}
+            if "out" in edits and "pw" in edits:
+                break
+            time.sleep(0.5)
         self.box, self.pw = edits["out"], edits["pw"]
 
     def focus(self):
@@ -237,6 +245,13 @@ class Claude(Target):
 # --------------------------------------------------------------------------- cases
 
 RESULTS = []
+# Each failing case's own part of the trace (see `check`).
+FAILED_TRACES = []
+
+
+# Where the trace was at the last check: a failing case prints its own part
+# (the trace of a whole target is cut to its end, where the case may not be).
+_MARK = [0]
 
 
 def check(target, name, got, expect):
@@ -244,6 +259,16 @@ def check(target, name, got, expect):
     RESULTS.append((target, name, ok, got, expect))
     print(f"[{'PASS' if ok else 'FAIL'}] {target:7} {name}: got {got.strip()!r}"
           + ("" if ok else f" expected {expect.strip()!r}"), flush=True)
+    if LOG.exists():
+        if not ok:
+            part = log_since(_MARK[0])
+            print(f"--- trace of this case ({len(part)} chars, last 15000) ---", flush=True)
+            print(part[-15000:], flush=True)
+            print("--- end of this case's trace ---", flush=True)
+            # Printed again after the summary, where a log cut to its end
+            # still has it.
+            FAILED_TRACES.append((f"{target}: {name}", part[-6000:]))
+        _MARK[0] = log_size()
     return ok
 
 

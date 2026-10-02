@@ -1,5 +1,12 @@
 # Build the release artifact set: exe + portable zip (+ Inno setup if ISCC exists).
-# Usage: pwsh -File packaging\build_release.ps1
+# Usage: pwsh -File packaging\build_release.ps1 [-Arch x64|arm64]
+#
+# x64 (the default) is built for the machine's own target; arm64 is
+# cross-built (rustup target add aarch64-pc-windows-msvc, and Visual Studio's
+# ARM64 build tools) and packaged as RightType-<version>-arm64-setup.exe and
+# RightType-<version>-arm64.zip.
+
+param([ValidateSet("x64", "arm64")][string]$Arch = "x64")
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
@@ -11,16 +18,22 @@ $verLine = Select-String -Path "$root\Cargo.toml" -Pattern '^version\s*=\s*"([^"
 if (-not $verLine) { throw "version not found in Cargo.toml" }
 $ver = $verLine.Matches[0].Groups[1].Value
 
-cargo build --release --features winos
+if ($Arch -eq "arm64") {
+    cargo build --release --features winos --target aarch64-pc-windows-msvc
+    $exeDir = "target\aarch64-pc-windows-msvc\release"
+} else {
+    cargo build --release --features winos
+    $exeDir = "target\release"
+}
 if ($LASTEXITCODE -ne 0) { throw "build failed" }
 
 $dist = Join-Path $root "dist"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
 # Portable payload
-$stage = Join-Path $dist "RightType-$ver-portable"
+$stage = Join-Path $dist "RightType-$ver-$Arch-portable"
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
-Copy-Item "$root\target\release\righttype.exe" $stage -Force
+Copy-Item "$root\$exeDir\righttype.exe" $stage -Force
 Copy-Item "$root\packaging\install.ps1" $stage -Force
 Copy-Item "$root\packaging\uninstall.ps1" $stage -Force
 Copy-Item "$root\README.md" $stage -Force
@@ -28,7 +41,7 @@ Copy-Item "$root\CHANGELOG.md" $stage -Force
 Copy-Item "$root\LICENSE-MIT" $stage -Force
 Copy-Item "$root\LICENSE-APACHE" $stage -Force
 Copy-Item "$root\assets\fonts\OFL.txt" "$stage\FONT-LICENSE-OFL.txt" -Force
-Compress-Archive -Path "$stage\*" -DestinationPath "$dist\RightType-$ver-x64.zip" -Force
+Compress-Archive -Path "$stage\*" -DestinationPath "$dist\RightType-$ver-$Arch.zip" -Force
 Remove-Item $stage -Recurse -Force
 
 
@@ -43,7 +56,7 @@ $isccCandidates = @(
 )
 $iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($iscc) {
-    & $iscc "/DMyAppVersion=$ver" "$root\packaging\RightType.iss"
+    & $iscc "/DMyAppVersion=$ver" "/DArch=$Arch" "/DExeDir=$exeDir" "$root\packaging\RightType.iss"
     if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
 } else {
     Write-Host "Inno Setup not found — skipped setup.exe (zip + scripts are ready)."

@@ -6,9 +6,16 @@
 
 #define MyAppName "RightType"
 #ifndef MyAppVersion
-  #define MyAppVersion "2.0.1"
+  #define MyAppVersion "2.1.0"
 #endif
 #define MyAppExe "righttype.exe"
+; x64 (default) or arm64; build_release.ps1 -Arch passes it, with where the exe is.
+#ifndef Arch
+  #define Arch "x64"
+#endif
+#ifndef ExeDir
+  #define ExeDir "target\release"
+#endif
 
 [Setup]
 AppId={{8C6B9A2E-52C1-4E63-9B7A-7C1F4A2B9D33}
@@ -17,10 +24,17 @@ AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\RightType
 PrivilegesRequired=lowest
 OutputDir=..\dist
+#if Arch == "arm64"
+OutputBaseFilename=RightType-{#MyAppVersion}-arm64-setup
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+#else
 OutputBaseFilename=RightType-{#MyAppVersion}-setup
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+#endif
 Compression=lzma2
 SolidCompression=yes
-ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExe}
 SetupIconFile=..\assets\icon.ico
 ; Thai on Thai Windows, English elsewhere; ask only when neither matches.
@@ -46,7 +60,7 @@ en.Launch=Launch RightType
 th.Launch=เปิด RightType เลย
 
 [Files]
-Source: "..\target\release\{#MyAppExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\{#ExeDir}\{#MyAppExe}"; DestDir: "{app}"; Flags: ignoreversion
 ; The embedded interface typeface (IBM Plex Sans Thai) is SIL OFL: ship its licence.
 Source: "..\assets\fonts\OFL.txt"; DestDir: "{app}"; DestName: "FONT-LICENSE-OFL.txt"; Flags: ignoreversion
 

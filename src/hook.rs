@@ -74,6 +74,8 @@ pub enum Mode {
     Manual = 0,
     Auto = 1,
     Suggest = 2,
+    /// Per-app only: code editors (see `righttype::code`).
+    Code = 3,
 }
 
 impl Mode {
@@ -81,7 +83,7 @@ impl Mode {
         match self {
             Self::Manual => Self::Auto,
             Self::Auto => Self::Suggest,
-            Self::Suggest => Self::Manual,
+            Self::Suggest | Self::Code => Self::Manual,
         }
     }
 
@@ -92,6 +94,7 @@ impl Mode {
             Self::Manual => T::ToastModeManual,
             Self::Auto => T::ToastModeAuto,
             Self::Suggest => T::ToastModeSuggest,
+            Self::Code => T::ToastModeCode,
         })
     }
 }
@@ -236,14 +239,19 @@ pub fn mode() -> Mode {
 }
 
 /// The mode that applies in the app being typed in: its own per-app mode, or
-/// the global one. `None` when RightType is switched off in this app.
+/// the global one. `None` when RightType is switched off in this app or in
+/// this field.
 fn mode_here() -> Option<Mode> {
+    if crate::focus::field_is_off() {
+        return None;
+    }
     let own = STATE.with(|s| s.borrow().app_exe.as_deref().and_then(crate::apps::lookup));
     match own {
         Some(AppMode::Off) => None,
         Some(AppMode::Auto) => Some(Mode::Auto),
         Some(AppMode::Suggest) => Some(Mode::Suggest),
         Some(AppMode::Manual) => Some(Mode::Manual),
+        Some(AppMode::Code) => Some(Mode::Code),
         None => Some(mode()),
     }
 }
@@ -254,6 +262,7 @@ impl From<Mode> for AppMode {
             Mode::Auto => AppMode::Auto,
             Mode::Suggest => AppMode::Suggest,
             Mode::Manual => AppMode::Manual,
+            Mode::Code => AppMode::Code,
         }
     }
 }
@@ -283,6 +292,7 @@ unsafe fn cycle_mode() {
                             Mode::Auto => T::ModeAuto,
                             Mode::Suggest => T::ModeSuggest,
                             Mode::Manual => T::ModeManual,
+                            Mode::Code => T::ModeCode,
                         }),
                     ),
                     ("app", &exe),
@@ -477,6 +487,197 @@ enum UndoKind {
     /// Shift+Backspace) puts the capitals back and turns CapsLock on again:
     /// they were meant (code, acronyms).
     CapsAccident,
+    /// RightType put right a common Thai misspelling (this one). Undoing it
+    /// (Shift+Backspace, Ctrl+Shift+CapsLock, or Backspace right after)
+    /// puts back what was typed, and that word is not fixed again this run.
+    /// The misspelling is kept in `SPELLING_FIXED` until the fix is undone
+    /// or another word is fixed.
+    Spelling,
+    /// A snippet was expanded. Undoing it puts the trigger back; nothing is
+    /// learned.
+    Snippet,
+}
+
+/// The typist's snippets (Settings → Snippets).
+static SNIPPETS: std::sync::RwLock<Vec<righttype::snippets::Snippet>> =
+    std::sync::RwLock::new(Vec::new());
+
+pub fn snippets() -> Vec<righttype::snippets::Snippet> {
+    SNIPPETS.read().map(|l| l.clone()).unwrap_or_default()
+}
+
+pub fn set_snippets(list: Vec<righttype::snippets::Snippet>) {
+    if let Ok(mut l) = SNIPPETS.write() {
+        *l = list;
+    }
+}
+
+/// Put a snippet's `text` in place of its trigger `word`, then the boundary
+/// `vk`. Line breaks are typed as Enter.
+/// The local date and time, for a snippet's date and time fields.
+pub(crate) fn snippet_now() -> righttype::snippets::Now {
+    let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+    righttype::snippets::Now {
+        year: t.wYear as u32,
+        month: t.wMonth as u32,
+        day: t.wDay as u32,
+        weekday: t.wDayOfWeek as u32,
+        hour: t.wHour as u32,
+        minute: t.wMinute as u32,
+    }
+}
+
+unsafe fn expand_snippet(word: &str, vk: u16, text: &str) -> bool {
+    // Its date and time fields, for now.
+    let now = snippet_now();
+    let filled = zeroize::Zeroizing::new(righttype::snippets::fill(text, &now));
+    let text = filled.as_str();
+    let shown = policy::shown_with_caps(word, caps_on());
+    inject::expect_before_caret(&shown);
+    let lines: Vec<&str> = text.split('\n').collect();
+    for (i, line) in lines.iter().enumerate() {
+        let delete = if i == 0 { word.chars().count() } else { 0 };
+        let then = if i + 1 < lines.len() { VK_RETURN.0 } else { vk };
+        if !inject::apply(delete, line, Some(then)) {
+            crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+            return false;
+        }
+    }
+    let mut restore = format!("{shown}{}", boundary_literal(vk));
+    set_undo(text.chars().count() + 1, &restore, UndoKind::Snippet);
+    restore.zeroize();
+    true
+}
+
+/// Put right common Thai misspellings (opt-in; `righttype::spelling`).
+static FIX_SPELLING: AtomicBool = AtomicBool::new(false);
+
+pub fn fixes_spelling() -> bool {
+    FIX_SPELLING.load(Ordering::Relaxed)
+}
+
+pub fn set_fixes_spelling(on: bool) {
+    FIX_SPELLING.store(on, Ordering::Relaxed);
+}
+
+/// Write English prefixes with their hyphen (`relogin` → `re-login`; on by
+/// default; `righttype::english::hyphenated`).
+static FIX_HYPHENS: AtomicBool = AtomicBool::new(true);
+
+pub fn fixes_hyphens() -> bool {
+    FIX_HYPHENS.load(Ordering::Relaxed)
+}
+
+pub fn set_fixes_hyphens(on: bool) {
+    FIX_HYPHENS.store(on, Ordering::Relaxed);
+}
+
+/// Ctrl+Backspace after Thai deletes one Thai word (Windows takes the whole
+/// run of Thai, which has no spaces between words). On by default.
+static DELETE_THAI_WORDS: AtomicBool = AtomicBool::new(true);
+
+pub fn deletes_thai_words() -> bool {
+    DELETE_THAI_WORDS.load(Ordering::Relaxed)
+}
+
+pub fn set_deletes_thai_words(on: bool) {
+    DELETE_THAI_WORDS.store(on, Ordering::Relaxed);
+}
+
+/// In a chat app, Enter on a message that looks typed on the wrong keyboard
+/// is held once (see `guard_enter`). On by default.
+static GUARD_ENTER: AtomicBool = AtomicBool::new(true);
+
+pub fn guards_enter() -> bool {
+    GUARD_ENTER.load(Ordering::Relaxed)
+}
+
+pub fn set_guards_enter(on: bool) {
+    GUARD_ENTER.store(on, Ordering::Relaxed);
+}
+
+/// Chat apps added in the config (see `righttype::per_app::is_chat_app`).
+static CHAT_APPS: std::sync::RwLock<Vec<String>> = std::sync::RwLock::new(Vec::new());
+
+pub fn chat_apps() -> Vec<String> {
+    CHAT_APPS.read().map(|a| a.clone()).unwrap_or_default()
+}
+
+pub fn set_chat_apps(apps: Vec<String>) {
+    if let Ok(mut a) = CHAT_APPS.write() {
+        *a = apps;
+    }
+}
+
+/// How long a held Enter waits for the second press that sends anyway.
+const ENTER_HELD_FOR: Duration = Duration::from_secs(5);
+
+thread_local! {
+    /// Enter was held here (this window) at this moment: the next Enter
+    /// soon after sends.
+    static ENTER_HELD: std::cell::Cell<Option<(isize, Instant)>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Hold this Enter? In a chat app (with the guard on, not in Code mode),
+/// when the words of the message so far look typed on the wrong keyboard
+/// and this is not the second Enter that sends anyway.
+unsafe fn hold_enter(mode_now: Mode) -> bool {
+    let hwnd = GetForegroundWindow().0 as isize;
+    let held = ENTER_HELD.with(|h| h.take());
+    if held.is_some_and(|(w, at)| w == hwnd && at.elapsed() < ENTER_HELD_FOR) {
+        return false;
+    }
+    if !guards_enter() || mode_now == Mode::Code {
+        return false;
+    }
+    let chat = STATE
+        .with(|s| s.borrow().app_exe.clone())
+        .is_some_and(|exe| {
+            CHAT_APPS
+                .read()
+                .is_ok_and(|extra| righttype::per_app::is_chat_app(&exe, &extra))
+        });
+    if !chat {
+        return false;
+    }
+    let mut words = STATE.with(|s| {
+        let st = s.borrow();
+        let mut w = st.recent.words();
+        let current = st.buf.current();
+        if !current.is_empty() {
+            w.push(current.to_string());
+        }
+        w
+    });
+    let refs: Vec<&str> = words.iter().map(|w| w.as_str()).collect();
+    let hold = righttype::repair::looks_mistyped(
+        &refs,
+        righttype::dict::english(),
+        righttype::dict::thai(),
+    );
+    drop(refs);
+    words.iter_mut().for_each(|w| w.zeroize());
+    if hold {
+        ENTER_HELD.with(|h| h.set(Some((hwnd, Instant::now()))));
+        trace_note("enter held: the message looks typed on the wrong keyboard");
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastEnterHeld));
+    }
+    hold
+}
+
+/// A Backspace this soon after a spelling fix takes the fix back instead of
+/// deleting: someone surprised by a changed word reaches for Backspace, and
+/// deleting into a fix they did not expect leaves a mess.
+const SPELLING_GRACE: Duration = Duration::from_millis(1500);
+
+thread_local! {
+    /// When the last spelling fix was made (for [`SPELLING_GRACE`]).
+    static SPELLING_AT: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+    /// Misspellings the typist took a fix back for: left alone from now on.
+    static SPELLING_KEPT: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// The misspelling the last spelling fix put right.
+    static SPELLING_FIXED: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
 impl Drop for UndoRecord {
@@ -497,6 +698,33 @@ fn set_undo(injected_len: usize, restore_text: &str, kind: UndoKind) {
         created_at: Instant::now(),
     });
     STATE.with(|s| s.borrow_mut().undo = record);
+}
+
+/// A fix RightType made here was taken back. Enough of them in one app
+/// offer a calmer mode there (see `apps::note_rejection`).
+fn note_rejection() {
+    use righttype::i18n::{tr, trf, T};
+    let Some(exe) = STATE.with(|s| s.borrow().app_exe.clone()) else {
+        return;
+    };
+    let Some(mode) = mode_here() else {
+        return;
+    };
+    if let Some(calmer) = crate::apps::note_rejection(&exe, mode.into()) {
+        diag::note(
+            "fixes taken back three times in one app: calmer mode offered",
+            &[],
+        );
+        let keys = hotkeys().chord(Action::Palette).format();
+        crate::overlay::show(&trf(
+            T::ToastOfferMode,
+            &[
+                ("app", &exe),
+                ("mode", tr(crate::tray::app_mode_name(calmer))),
+                ("keys", &keys),
+            ],
+        ));
+    }
 }
 
 /// Ctrl+Shift+CapsLock: revert the most recent correction, if any. One-shot —
@@ -522,8 +750,18 @@ unsafe fn undo_last_correction() {
         let restored = rec.restore_text.trim_end_matches(['\r', '\t', ' ']);
         // The word counted was the correction; the one kept is the original.
         habit_correction(!has_thai(restored), has_thai(restored));
+        if !matches!(rec.kind, UndoKind::Manual | UndoKind::Snippet) {
+            note_rejection();
+        }
+        let mut kept_spelling = None;
         match rec.kind {
-            UndoKind::Manual => {}
+            UndoKind::Manual | UndoKind::Snippet => {}
+            UndoKind::Spelling => {
+                let wrong = SPELLING_FIXED.with(|f| std::mem::take(&mut *f.borrow_mut()));
+                SPELLING_KEPT.with(|k| k.borrow_mut().push(wrong.clone()));
+                SPELLING_AT.with(|t| t.set(None));
+                kept_spelling = Some(wrong);
+            }
             UndoKind::CapsAccident => {
                 if !caps_on() {
                     inject::toggle_capslock();
@@ -539,7 +777,13 @@ unsafe fn undo_last_correction() {
         }
         // The typist meant what they typed: keep typing it in its own layout.
         activate_layout(layout_of(restored));
-        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo));
+        match kept_spelling {
+            Some(wrong) => crate::overlay::show_at(
+                &righttype::i18n::trf(righttype::i18n::T::ToastSpellingKept, &[("word", &wrong)]),
+                crate::caret::hint_anchor(),
+            ),
+            None => crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo)),
+        }
     } else {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrUndoInject));
     }
@@ -732,7 +976,21 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
             // passing those through turned a Shift+Backspace into a plain
             // Backspace — CI, Edge.)
             let nested = PROCESSING.with(|p| p.get());
+            // The key being handled (or one already passed through) handed
+            // to the hook again: Windows does that when the hook is slow to
+            // return. It is the same key press (same time stamp), and was
+            // passed on or is being decided already (CI: `เรียนo`, the `o`
+            // that finished `giupo` typed after the fix).
+            let event = (kb.vkCode, kb.time, wparam.0 as u32);
+            if nested && SEEN.with(|s| s.borrow().contains(&event)) {
+                e2e_trace(format!(
+                    "key vk={:#x} handed to the hook again: dropped",
+                    kb.vkCode
+                ));
+                return LRESULT(1);
+            }
             if nested && crate::focus::waiting_on_app() {
+                SEEN.with(|s| s.borrow_mut().push(event));
                 NESTED_KEY.with(|n| n.set(true));
                 e2e_trace(format!(
                     "key vk={:#x} arrived while busy: passed through",
@@ -748,6 +1006,13 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
                 }
             }
             PROCESSING.with(|p| p.set(true));
+            if !nested {
+                SEEN.with(|s| {
+                    let mut s = s.borrow_mut();
+                    s.clear();
+                    s.push(event);
+                });
+            }
             let done = Done(nested);
             let swallow = process(wparam.0 as u32, kb);
             drop(done);
@@ -774,6 +1039,9 @@ thread_local! {
     static PROCESSING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// A key arrived while one was being handled.
     static NESTED_KEY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The key being handled and those passed through while it was:
+    /// `(virtual key, time stamp, message)`.
+    static SEEN: RefCell<Vec<(u32, u32, u32)>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Computer-driven Windows E2E necessarily uses `SendInput`, which Windows marks
@@ -1119,6 +1387,57 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return false;
     };
 
+    // Ctrl+Backspace after Thai: one Thai word, not the whole run (Thai has
+    // no spaces between words, so Windows takes everything back to the last
+    // space). Only when the text before the caret says so; otherwise the key
+    // is Windows' own.
+    if vk == VK_BACK.0
+        && action.is_none()
+        && is_down(VK_CONTROL)
+        && !is_down(VK_SHIFT)
+        && !is_down(VK_MENU)
+        && deletes_thai_words()
+        && STATE.with(|s| s.borrow().owned.is_none())
+    {
+        let before = crate::focus::text_before_caret_within(80, Duration::from_millis(60));
+        let n = before
+            .as_ref()
+            .and_then(|t| righttype::segment::last_word_to_delete(t, righttype::dict::thai()));
+        drop(before);
+        e2e_trace(format!("ctrl+backspace: thai word of {n:?} characters"));
+        if let Some(n) = n {
+            STATE.with(|s| {
+                let mut st = s.borrow_mut();
+                st.buf.clear();
+                st.mark = TokenMark::Plain;
+                st.recent.clear();
+                st.undo = None;
+            });
+            // The Backspaces go without Ctrl (`apply` lets go of it, or the
+            // app would take a word for each); the typist still holds it.
+            if inject::apply(n, "", None) {
+                inject::hold_again(VK_CONTROL.0);
+                return true;
+            }
+        }
+    }
+
+    // Enter in a chat app, on a message typed on the wrong keyboard: held
+    // once, so it is not sent unreadable (Enter again sends it).
+    if vk == VK_RETURN.0 && action.is_none() && !repeat {
+        if !is_down(VK_SHIFT)
+            && !is_down(VK_CONTROL)
+            && !is_down(VK_MENU)
+            && STATE.with(|s| s.borrow().owned.is_none())
+            && hold_enter(mode_now)
+        {
+            return true;
+        }
+    } else if !is_modifier(vk) {
+        // Any other key: the next Enter is looked at afresh.
+        ENTER_HELD.with(|h| h.set(None));
+    }
+
     // The text hotkeys (CapsLock chords by default).
     {
         if action == Some(Action::Undo) {
@@ -1128,6 +1447,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             // has no Undo record yet (that is written when the run anchors), so
             // withdrawing our rendering *is* the undo.
             if withdraw_owned_run() {
+                note_rejection();
                 STATE.with(|s| {
                     let mut st = s.borrow_mut();
                     // Keep the token but mark it decided: without this the very
@@ -1225,6 +1545,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // manual path's backspace count would be wrong. Withdraw our rendering
         // first; the typist asked for the raw keystrokes back.
         if withdraw_owned_run() {
+            note_rejection();
             // The typist rejected our reading mid-word. Leave the rest of this
             // token alone, and learn it once it is complete.
             STATE.with(|s| s.borrow_mut().mark = TokenMark::Decided { learn: true });
@@ -1246,6 +1567,26 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         }
         return false;
     };
+
+    // Backspace right after a spelling fix takes the fix back.
+    if key == Key::Backspace
+        && SPELLING_AT
+            .with(|t| t.take())
+            .is_some_and(|at| at.elapsed() < SPELLING_GRACE)
+        && STATE.with(|s| {
+            s.borrow()
+                .undo
+                .as_ref()
+                .is_some_and(|u| matches!(u.kind, UndoKind::Spelling))
+        })
+    {
+        diag::note("Backspace right after a spelling fix: fix taken back", &[]);
+        undo_last_correction();
+        return true;
+    }
+    if matches!(key, Key::Char(_) | Key::Boundary) {
+        SPELLING_AT.with(|t| t.set(None));
+    }
 
     // Any text reaching the app moves the caret past a correction's Undo
     // window: the record counts characters from the end, so replaying it now
@@ -1363,6 +1704,27 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
 
     let active_layout = policy::supported_layout_id(layout_id(effective_layout()));
+
+    // A snippet's trigger: its text instead, in every mode.
+    let snippet = active_layout.and_then(|layout| {
+        SNIPPETS
+            .read()
+            .ok()
+            .and_then(|l| righttype::snippets::find(&l, &word, layout).cloned())
+    });
+    if let Some(mut snippet) = snippet {
+        diag::note(
+            "snippet expanded",
+            &[("text", Shape::of(&snippet.text).into())],
+        );
+        let done = expand_snippet(&word, vk, &snippet.text);
+        snippet.text.zeroize();
+        STATE.with(|s| s.borrow_mut().recent.clear());
+        word.zeroize();
+        // Expanded: the boundary was typed after the text, swallow the key.
+        return done;
+    }
+
     let converted = mark == TokenMark::Converted;
     let mut detection = if converted {
         // D-009: the whole token, including the part converted before the
@@ -1420,6 +1782,72 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         crate::learn::observe(&word);
     }
 
+    // Code mode (code editors): names stay, Thai only in comments and
+    // strings, and Thai keys typed for code come back as the English typed.
+    let mut code_hint = false;
+    if mode_now == Mode::Code && !seed_run {
+        if let Some(layout) = active_layout {
+            let line_matters = match layout {
+                policy::InputLayout::UsQwerty => {
+                    detection.is_some() && !righttype::code::looks_like_identifier(&word)
+                }
+                policy::InputLayout::ThaiKedmanee => {
+                    detection.is_none()
+                        && righttype::code::thai_keys_look_like_code(&word, dict::thai())
+                }
+            };
+            let prose = if line_matters {
+                crate::focus::text_before_caret_within(160, Duration::from_millis(80))
+                    .map(|t| righttype::code::line_is_prose(&t))
+            } else {
+                None
+            };
+            let verdict = righttype::code::verdict(
+                &word,
+                layout,
+                detection.as_ref().map(|d| d.corrected.as_str()),
+                prose,
+                dict::thai(),
+            );
+            diag::note(
+                "code mode",
+                &[
+                    (
+                        "line",
+                        match prose {
+                            Some(true) => "comment or string",
+                            Some(false) => "code",
+                            None => "unknown",
+                        }
+                        .into(),
+                    ),
+                    (
+                        "verdict",
+                        match &verdict {
+                            righttype::code::Verdict::Fix(_) => "fix",
+                            righttype::code::Verdict::Hint(_) => "hint",
+                            righttype::code::Verdict::Leave => "leave",
+                        }
+                        .into(),
+                    ),
+                ],
+            );
+            let corrected = match verdict {
+                righttype::code::Verdict::Fix(c) => Some(c),
+                righttype::code::Verdict::Hint(c) => {
+                    code_hint = true;
+                    Some(c)
+                }
+                righttype::code::Verdict::Leave => None,
+            };
+            detection = corrected.map(|corrected| righttype::detect::Detection {
+                corrected,
+                confidence: righttype::detect::Confidence::High,
+                evidence: righttype::detect::Evidence::ExactDictionary,
+            });
+        }
+    }
+
     // CapsLock left on by accident (`hELLO`, or Thai typed with every key
     // shifted): in Auto the word is put as meant and CapsLock turned off.
     // Thai typed in a wrong order that looks right (เเ for แ, ํา for ำ, a
@@ -1438,13 +1866,55 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             });
         }
     }
+    // A common Thai misspelling (opt-in): put right in Auto, with its own
+    // message and the way back.
+    let mut spelling: Option<(String, String)> = None;
+    if detection.is_none()
+        && !seed_run
+        && mode_now == Mode::Auto
+        && fixes_spelling()
+        && policy::supported_layout_id(layout_id(effective_layout()))
+            == Some(policy::InputLayout::ThaiKedmanee)
+    {
+        if let Some((fixed, wrong, right)) = righttype::spelling::fix(&word, dict::thai()) {
+            if !SPELLING_KEPT.with(|k| k.borrow().iter().any(|w| w == wrong)) {
+                detection = Some(righttype::detect::Detection {
+                    corrected: fixed,
+                    confidence: righttype::detect::Confidence::High,
+                    evidence: righttype::detect::Evidence::ExactDictionary,
+                });
+                spelling = Some((wrong.to_string(), right.to_string()));
+            }
+        }
+    }
+    // An English prefix written as style has it (`relogin` → `re-login`), in
+    // Auto, in prose: not in code, nor in an address bar.
+    if detection.is_none()
+        && !seed_run
+        && mode_now == Mode::Auto
+        && fixes_hyphens()
+        && !crate::focus::completes_inline()
+        && policy::supported_layout_id(layout_id(effective_layout()))
+            == Some(policy::InputLayout::UsQwerty)
+        && !SPELLING_KEPT.with(|k| k.borrow().contains(&word))
+    {
+        if let Some(fixed) = righttype::english::hyphenated(&word, dict::english()) {
+            spelling = Some((word.clone(), fixed.clone()));
+            detection = Some(righttype::detect::Detection {
+                corrected: fixed,
+                confidence: righttype::detect::Confidence::High,
+                evidence: righttype::detect::Evidence::ExactDictionary,
+            });
+        }
+    }
+
     // CapsLock left on by accident (`hELLO`, or Thai typed with every key
     // shifted). Auto puts it right and turns CapsLock off, with a way back:
     // capitals may be meant (code, acronyms), and one Shift+Backspace (or
     // Ctrl+Shift+CapsLock) restores them and CapsLock. Manual and Suggest
     // offer it as a hint that Tab takes.
     let mut caps_accident = false;
-    if detection.is_none() && !seed_run && caps_on() {
+    if detection.is_none() && !seed_run && caps_on() && mode_now != Mode::Code {
         let layout_now = policy::supported_layout_id(layout_id(effective_layout()));
         if let Some(meant) = layout_now.and_then(|l| policy::caps_accident(&word, l, dict::thai()))
         {
@@ -1461,6 +1931,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // Shift+Backspace.
     let mode_for_word = if caps_accident && mode_now != Mode::Auto {
         Mode::Suggest
+    } else if mode_now == Mode::Code {
+        if code_hint {
+            Mode::Suggest
+        } else {
+            Mode::Auto
+        }
     } else {
         mode_now
     };
@@ -1468,7 +1944,29 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         (Mode::Auto, Some(d)) => {
             let mut corrected = d.corrected.clone();
             let done = maybe_correct(&word, Some(vk), d);
-            if done && !caps_accident && crate::caret::is_enabled() {
+            if done {
+                let mut said =
+                    righttype::i18n::trf(righttype::i18n::T::SayFixed, &[("word", &corrected)]);
+                crate::overlay::announce(&said);
+                said.zeroize();
+            }
+            if let (true, Some((wrong, right))) = (done, spelling.as_ref()) {
+                STATE.with(|s| {
+                    if let Some(u) = s.borrow_mut().undo.as_mut() {
+                        u.kind = UndoKind::Spelling;
+                    }
+                });
+                SPELLING_FIXED.with(|f| *f.borrow_mut() = wrong.clone());
+                SPELLING_AT.with(|t| t.set(Some(Instant::now())));
+                diag::note("common misspelling put right", &[]);
+                crate::overlay::show_at(
+                    &righttype::i18n::trf(
+                        righttype::i18n::T::ToastSpellingFixed,
+                        &[("wrong", wrong.as_str()), ("right", right.as_str())],
+                    ),
+                    crate::caret::hint_anchor(),
+                );
+            } else if done && !caps_accident && crate::caret::is_enabled() {
                 // The first few fixes of a session show how to take one back.
                 if UNDO_TIPS_LEFT
                     .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
@@ -1932,10 +2430,12 @@ unsafe fn flip_back_recent() {
     // Right after a CapsLock fix, Shift+Backspace is its way back (flipping
     // `Hello` to Thai would be no use).
     if STATE.with(|s| {
-        s.borrow()
-            .undo
-            .as_ref()
-            .is_some_and(|u| u.kind == UndoKind::CapsAccident)
+        s.borrow().undo.as_ref().is_some_and(|u| {
+            matches!(
+                u.kind,
+                UndoKind::CapsAccident | UndoKind::Spelling | UndoKind::Snippet
+            )
+        })
     }) {
         undo_last_correction();
         return;
@@ -1975,6 +2475,7 @@ unsafe fn flip_back_recent() {
     // "that was a real word" there is.
     if let Some(word) = step.learn.as_deref() {
         crate::learn::learn_now(word);
+        note_rejection();
     }
     habit_correction(step.was_thai, step.now_thai);
     activate_layout(layout_of(&step.newest));
@@ -1995,6 +2496,65 @@ unsafe fn flip_back_recent() {
             righttype::i18n::T::ToastFlippedOneBack
         }));
     }
+}
+
+/// The recent words (oldest first, as on screen) and where each is before
+/// the caret, for the palette's list. The caller wipes the words.
+pub fn recent_words() -> (Vec<String>, Vec<(usize, usize)>) {
+    STATE.with(|s| {
+        let st = s.borrow();
+        (st.recent.words(), st.recent.spans())
+    })
+}
+
+/// A word as it would be after a flip (the palette shows it).
+pub fn flipped(word: &str) -> String {
+    convert_shown(word)
+}
+
+/// The palette's "flip these": flip the recent words at `picked` (oldest
+/// first) and leave the others, in the window they were typed in.
+///
+/// # Safety
+/// UI (hook) thread.
+pub unsafe fn flip_picked(picked: &[usize]) {
+    use righttype::i18n::{tr, trf, T};
+    let same_window = STATE.with(|s| s.borrow().last_hwnd) == GetForegroundWindow().0 as isize;
+    let step = STATE.with(|s| s.borrow().recent.flip_picked(picked, convert_shown));
+    let Some(step) = step.filter(|_| same_window) else {
+        crate::overlay::show(tr(T::ToastNothingToFlip));
+        return;
+    };
+    if !inject::apply(
+        step.backspaces,
+        &step.insert,
+        Some(boundary_vk(step.boundary)),
+    ) {
+        crate::overlay::show(tr(T::ErrCorrectionInject));
+        STATE.with(|s| s.borrow_mut().recent.clear());
+        return;
+    }
+    // The words on screen are no longer the ones recorded: start afresh.
+    STATE.with(|s| s.borrow_mut().recent.clear());
+    set_undo(
+        step.insert.chars().count() + 1,
+        &step.restore,
+        UndoKind::Manual,
+    );
+    crate::stats::record_manual();
+    if let Some(word) = step.learn.as_deref() {
+        crate::learn::learn_now(word);
+        note_rejection();
+    }
+    activate_layout(layout_of(&step.newest));
+    diag::note(
+        "palette: picked recent words flipped",
+        &[("words", step.words.into())],
+    );
+    crate::overlay::show(&trf(
+        T::ToastFlippedWords,
+        &[("n", &step.words.to_string())],
+    ));
 }
 
 /// Flip a word as the app shows it. With CapsLock on, English on screen is in
@@ -2162,6 +2722,18 @@ where
     // counted once, at its boundary.
     if matches!(reading, policy::Reading::Thai(_)) && STATE.with(|s| s.borrow().seed.guarding()) {
         reading = policy::Reading::AsTyped;
+    }
+    // A snippet's trigger being typed stays as typed, to be found at its
+    // boundary (`;today` spells Thai keys).
+    if matches!(reading, policy::Reading::Thai(_)) && !holding {
+        let starts = policy::supported_layout_id(layout_id(effective_layout())).is_some_and(|l| {
+            SNIPPETS
+                .read()
+                .is_ok_and(|list| righttype::snippets::starts_a_trigger(&list, &run, l))
+        });
+        if starts {
+            reading = policy::Reading::AsTyped;
+        }
     }
     e2e_trace(format!(
         "reconcile run={run:?} holding={holding} -> {reading:?}"

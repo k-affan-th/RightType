@@ -24,7 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, S
 use crate::ui::{self, card, divider, field, pal, rect, track, Gfx, Surface, TextStyle};
 use crate::{config, hook, learn, overlay, safety, startup};
 use righttype::hotkeys::{Action, Hotkeys, Refusal};
-use righttype::per_app;
+use righttype::per_app::AppMode;
 use zeroize::Zeroize;
 
 /// The open settings window, if any.
@@ -32,7 +32,7 @@ static OPEN: AtomicIsize = AtomicIsize::new(0);
 
 /// Client size and layout, in 96-DPI units.
 const W: i32 = 760;
-const H: i32 = 636;
+const H: i32 = 700;
 const X0: i32 = 232;
 const CW: i32 = 504;
 
@@ -41,13 +41,15 @@ const PAGE_HOTKEYS: u8 = 2;
 const PAGE_LEARNED: u8 = 3;
 const PAGE_BLOCKED: u8 = 4;
 const PAGE_ABOUT: u8 = 5;
-/// Sidebar entries, in page order.
-const NAV: [T; 5] = [
-    T::NavGeneral,
-    T::NavHotkeys,
-    T::NavLearned,
-    T::NavBlocked,
-    T::NavAbout,
+const PAGE_SNIPPETS: u8 = 6;
+/// Sidebar entries, top to bottom, and their pages.
+const NAV: [(T, u8); 6] = [
+    (T::NavGeneral, PAGE_GENERAL),
+    (T::NavHotkeys, PAGE_HOTKEYS),
+    (T::NavLearned, PAGE_LEARNED),
+    (T::NavSnippets, PAGE_SNIPPETS),
+    (T::NavBlocked, PAGE_BLOCKED),
+    (T::NavAbout, PAGE_ABOUT),
 ];
 
 /// Toggle rows on the General page: y of each row inside the behaviour card.
@@ -55,6 +57,8 @@ const ROW_H: i32 = 64;
 const CARD_B_Y: i32 = 282;
 /// The per-field language card on the Apps page.
 const PREDICT_Y: i32 = 548;
+/// The restart-after-a-crash card on the Privacy & about page.
+const RESTART_Y: i32 = 486;
 /// The Thai keyboard picker on the Hotkeys page.
 const KEYBOARD_Y: i32 = 516;
 
@@ -81,7 +85,17 @@ pub fn hotkey_rows() -> Vec<(T, String)> {
 }
 
 struct Ids {
-    nav: [u16; 5],
+    nav: [u16; 6],
+    snip_table: u16,
+    snip_trigger: u16,
+    snip_text: u16,
+    /// Puts a date or time field into the text.
+    snip_date: u16,
+    /// Thai, English, either.
+    snip_scope: [u16; 3],
+    snip_save: u16,
+    snip_remove: u16,
+    snip_status: u16,
     lang_en: u16,
     lang_th: u16,
     mode_auto: u16,
@@ -92,6 +106,7 @@ struct Ids {
     startup: u16,
     learn: u16,
     caret_hints: u16,
+    spelling: u16,
     learned: u16,
     edit_learned: u16,
     learned_list: u16,
@@ -105,10 +120,14 @@ struct Ids {
     pattachote: u16,
     save_learned: u16,
     clear_learned: u16,
-    list: u16,
-    save_list: u16,
-    app_modes: u16,
+    apps_table: u16,
+    /// Mode buttons for the selected app, in [`APP_MODE_CHOICES`] order.
+    app_seg: [u16; 5],
+    apps_add: u16,
+    apps_keep: u16,
+    apps_remove: u16,
     apps_status: u16,
+    restart: u16,
     import_learned: u16,
     export_learned: u16,
     check_updates: u16,
@@ -117,12 +136,45 @@ struct Ids {
     folder_label: u16,
     sync_folder: u16,
     this_pc: u16,
+    sync_settings: u16,
+}
+
+/// The modes offered for an app on the Apps page, in button order.
+const APP_MODE_CHOICES: [AppMode; 5] = [
+    AppMode::Auto,
+    AppMode::Suggest,
+    AppMode::Manual,
+    AppMode::Code,
+    AppMode::Off,
+];
+
+/// Where an Apps-page row's mode comes from.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum RowSource {
+    ForNow,
+    Chosen,
+    Blocked,
+    Default,
+    Safety,
+}
+
+/// One row of the Apps table.
+#[derive(Clone)]
+struct AppRow {
+    exe: String,
+    /// `None` for a blocked app (off, and hotkeys too).
+    mode: Option<AppMode>,
+    source: RowSource,
 }
 
 struct SettingsWindow {
     window: nwg::Window,
     surface: Rc<Surface>,
     ids: Ids,
+    /// The Apps table's rows, as shown.
+    apps: RefCell<Vec<AppRow>>,
+    /// Where each running program lives, read when the window opened.
+    paths: RefCell<std::collections::HashMap<String, String>>,
     handler: RefCell<Option<nwg::EventHandler>>,
     raw: RefCell<Option<nwg::RawEventHandler>>,
 }
@@ -135,7 +187,7 @@ pub fn open() {
 /// Open on a given page (1 = General … 5 = Privacy & about); debug harness use.
 #[cfg(debug_assertions)]
 pub fn open_page(page: u8) {
-    open_on(page.clamp(PAGE_GENERAL, PAGE_ABOUT));
+    open_on(page.clamp(PAGE_GENERAL, PAGE_SNIPPETS));
 }
 
 fn open_on(page: u8) {
@@ -171,8 +223,8 @@ fn open_on(page: u8) {
         p.bg,
         0,
     );
-    let mut nav = [0u16; 5];
-    for (i, label) in NAV.iter().enumerate() {
+    let mut nav = [0u16; 6];
+    for (i, (label, _)) in NAV.iter().enumerate() {
         nav[i] = s.nav(tr(*label), i == 0, (12, 84 + i as i32 * 40, 196, 36));
     }
     s.label(
@@ -237,7 +289,8 @@ fn open_on(page: u8) {
     let startup = s.toggle(tr(T::RowStartup), tr(T::SubStartup), row(1), p.surface, g);
     let learn = s.toggle(tr(T::RowLearn), tr(T::SubLearn), row(2), p.surface, g);
     let caret_hints = s.toggle(tr(T::RowCaret), tr(T::SubCaret), row(3), p.surface, g);
-    let learned_y = CARD_B_Y + 4 * ROW_H + 14;
+    let spelling = s.toggle(tr(T::RowSpelling), tr(T::SubSpelling), row(4), p.surface, g);
+    let learned_y = CARD_B_Y + 5 * ROW_H + 14;
     let learned = s.label(
         "",
         TextStyle::Dim,
@@ -360,6 +413,13 @@ fn open_on(page: u8) {
         p.bg,
         l,
     );
+    let sync_settings = s.toggle(
+        tr(T::RowSyncSettings),
+        tr(T::SubSyncSettings),
+        (X0 + 4, 576, CW - 8, 64),
+        p.surface,
+        l,
+    );
     let clear_learned = s.button(
         tr(T::BtnClearAll),
         false,
@@ -375,7 +435,91 @@ fn open_on(page: u8) {
         l,
     );
 
-    // --- Apps: per-app modes and blocked apps -------------------------------
+    // --- Snippets -----------------------------------------------------------
+    let n = PAGE_SNIPPETS;
+    s.label(
+        tr(T::NavSnippets),
+        TextStyle::Title,
+        (X0, 18, CW, 36),
+        p.bg,
+        n,
+    );
+    s.label(
+        tr(T::SnippetsIntro),
+        TextStyle::Dim,
+        (X0, 58, CW, 40),
+        p.bg,
+        n,
+    );
+    let snip_table = s.table(
+        &[
+            (tr(T::ColTrigger), 110),
+            (tr(T::ColText), 270),
+            (tr(T::ColKeyboard), 110),
+        ],
+        (X0, 102, CW, 210),
+        n,
+    );
+    s.label(
+        tr(T::ColTrigger),
+        TextStyle::Small,
+        (X0, 324, 150, 18),
+        p.bg,
+        n,
+    );
+    let snip_trigger = s.line_edit("", (X0 + 4, 348, 142, 24), n);
+    s.label(
+        tr(T::ColText),
+        TextStyle::Small,
+        (X0 + 160, 324, CW - 160, 18),
+        p.bg,
+        n,
+    );
+    let snip_text = s.edit("", (X0 + 164, 348, CW - 168 - 126, 60), n);
+    let snip_date = s.button(
+        tr(T::BtnInsertDate),
+        false,
+        (X0 + CW - 120, 348, 120, 32),
+        p.bg,
+        n,
+    );
+    let mut snip_scope = [0u16; 3];
+    for (i, key) in [T::ScopeThai, T::ScopeEnglish, T::ScopeEither]
+        .iter()
+        .enumerate()
+    {
+        snip_scope[i] = s.segment(
+            tr(*key),
+            i == 0,
+            (X0 + 4 + i as i32 * 104, 426, 102, 32),
+            p.inset,
+            n,
+        );
+    }
+    let snip_save = s.button(
+        tr(T::BtnSaveSnippet),
+        true,
+        (X0 + CW - 232, 424, 118, 34),
+        p.bg,
+        n,
+    );
+    let snip_remove = s.button(
+        tr(T::BtnRemoveApp),
+        false,
+        (X0 + CW - 108, 424, 108, 34),
+        p.bg,
+        n,
+    );
+    let snip_status = s.label("", TextStyle::Small, (X0, 466, CW, 22), p.bg, n);
+    s.label(
+        tr(T::SnippetsNote),
+        TextStyle::Small,
+        (X0, 492, CW, 60),
+        p.bg,
+        n,
+    );
+
+    // --- Apps: a table of every app with a mode of its own ------------------
     let b = PAGE_BLOCKED;
     s.label(
         tr(T::NavBlocked),
@@ -384,56 +528,42 @@ fn open_on(page: u8) {
         p.bg,
         b,
     );
-    s.label(
-        tr(T::HeadAppModes),
-        TextStyle::BodyStrong,
-        (X0, 66, CW, 20),
+    s.label(tr(T::AppsIntro), TextStyle::Dim, (X0, 58, CW, 40), p.bg, b);
+    let apps_table = s.table(
+        &[
+            (tr(T::ColApp), 150),
+            (tr(T::ColMode), 104),
+            (tr(T::ColSetBy), 120),
+            (tr(T::ColWhere), 300),
+        ],
+        (X0, 102, CW, 232),
+        b,
+    );
+    let seg_w = CW / 5;
+    let mut app_seg = [0u16; 5];
+    for (i, mode) in APP_MODE_CHOICES.iter().enumerate() {
+        app_seg[i] = s.segment(
+            tr(crate::tray::app_mode_name(*mode)),
+            i == 0,
+            (X0 + 4 + i as i32 * seg_w, 346, seg_w - 2, 32),
+            p.inset,
+            b,
+        );
+    }
+    let apps_add = s.button(tr(T::BtnAddApp), false, (X0, 392, 210, 34), p.bg, b);
+    let apps_keep = s.button(tr(T::BtnKeepMode), false, (X0 + 216, 392, 150, 34), p.bg, b);
+    let apps_remove = s.button(
+        tr(T::BtnRemoveApp),
+        false,
+        (X0 + CW - 120, 392, 120, 34),
         p.bg,
         b,
     );
-    s.label(
-        tr(T::AppModesIntro),
-        TextStyle::Dim,
-        (X0, 90, CW, 44),
-        p.bg,
-        b,
-    );
-    let app_modes = s.edit(
-        &per_app::format_list(&crate::apps::all()),
-        (X0 + 10, 146, CW - 20, 96),
-        b,
-    );
-    s.label(
-        tr(T::HeadBlocked),
-        TextStyle::BodyStrong,
-        (X0, 270, CW, 20),
-        p.bg,
-        b,
-    );
-    s.label(
-        tr(T::BlockedAdd),
-        TextStyle::Dim,
-        (X0, 294, CW, 44),
-        p.bg,
-        b,
-    );
-    let list = s.edit(
-        &safety::custom_list().join("\r\n"),
-        (X0 + 10, 350, CW - 20, 72),
-        b,
-    );
-    let apps_status = s.label("", TextStyle::Small, (X0, 452, CW - 160, 36), p.bg, b);
-    let save_list = s.button(
-        tr(T::BtnSaveList),
-        true,
-        (X0 + CW - 140, 448, 140, 34),
-        p.bg,
-        b,
-    );
+    let apps_status = s.label("", TextStyle::Small, (X0, 432, CW, 22), p.bg, b);
     s.label(
         tr(T::BlockedAlways),
         TextStyle::Small,
-        (X0, 492, CW, 40),
+        (X0, 458, CW, 40),
         p.bg,
         b,
     );
@@ -504,9 +634,24 @@ fn open_on(page: u8) {
         p.bg,
         a,
     );
+    let restart = s.toggle(
+        tr(T::RowRestart),
+        tr(T::SubRestart),
+        (X0 + 4, RESTART_Y + 4, CW - 8, 64),
+        p.surface,
+        a,
+    );
 
     let ids = Ids {
         nav,
+        snip_table,
+        snip_trigger,
+        snip_text,
+        snip_date,
+        snip_scope,
+        snip_save,
+        snip_remove,
+        snip_status,
         lang_en,
         lang_th,
         mode_auto,
@@ -517,6 +662,7 @@ fn open_on(page: u8) {
         startup,
         learn,
         caret_hints,
+        spelling,
         learned,
         edit_learned,
         learned_list,
@@ -529,10 +675,13 @@ fn open_on(page: u8) {
         pattachote,
         save_learned,
         clear_learned,
-        list,
-        save_list,
-        app_modes,
+        apps_table,
+        app_seg,
+        apps_add,
+        apps_keep,
+        apps_remove,
         apps_status,
+        restart,
         import_learned,
         export_learned,
         check_updates,
@@ -541,6 +690,7 @@ fn open_on(page: u8) {
         folder_label,
         sync_folder,
         this_pc,
+        sync_settings,
     };
 
     ui::size_and_center(surface.hwnd, W, H);
@@ -549,12 +699,18 @@ fn open_on(page: u8) {
         window,
         surface,
         ids,
+        apps: RefCell::new(Vec::new()),
+        paths: RefCell::new(crate::apps::running().into_iter().collect()),
         handler: RefCell::new(None),
         raw: RefCell::new(None),
     });
+    fill_apps(&win, None);
+    fill_snippets(&win, None);
+    win.surface.set_checked(win.ids.snip_scope[2], true);
     sync(&win);
-    win.surface
-        .set_checked(win.ids.nav[(page - 1) as usize], true);
+    if let Some(i) = NAV.iter().position(|(_, p)| *p == page) {
+        win.surface.set_checked(win.ids.nav[i], true);
+    }
     win.surface.show_page(page);
     if let Some(h) = win.window.handle.hwnd() {
         crate::ui::present(HWND(h as _), "settings", started);
@@ -567,6 +723,16 @@ fn open_on(page: u8) {
     win.surface.on_click(move |id| {
         if let Some(win) = weak.upgrade() {
             clicked(&win, id);
+        }
+    });
+    let weak = Rc::downgrade(&win);
+    win.surface.on_table(move |id, event| {
+        if let Some(win) = weak.upgrade() {
+            if id == win.ids.snip_table {
+                snippet_table_event(&win, event);
+            } else {
+                app_table_event(&win, event);
+            }
         }
     });
     let win_h = win.clone();
@@ -604,14 +770,24 @@ fn sync(win: &SettingsWindow) {
         tr(match mode {
             hook::Mode::Auto => T::DescAuto,
             hook::Mode::Suggest => T::DescSuggest,
-            hook::Mode::Manual => T::DescManual,
+            hook::Mode::Manual | hook::Mode::Code => T::DescManual,
         }),
     );
     s.set_checked(ids.enabled, hook::is_enabled());
     s.set_checked(ids.startup, startup::is_enabled());
     s.set_checked(ids.learn, learn::is_enabled());
     s.set_checked(ids.caret_hints, crate::caret::is_enabled());
+    s.set_checked(ids.spelling, hook::fixes_spelling());
+    s.set_checked(
+        ids.sync_settings,
+        config::SYNC_SETTINGS.load(Ordering::Relaxed),
+    );
     s.set_checked(ids.predict, crate::habits::is_enabled());
+    s.set_checked(
+        ids.restart,
+        config::RESTART_AFTER_CRASH.load(Ordering::Relaxed),
+    );
+    sync_app_choice(win);
     let pattachote =
         righttype::layout::thai_variant() == righttype::layout::ThaiVariant::Pattachote;
     s.set_checked(ids.kedmanee, !pattachote);
@@ -636,7 +812,7 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     let ids = &win.ids;
     let s = &win.surface;
     if let Some(i) = ids.nav.iter().position(|&n| n == id) {
-        s.show_page(i as u8 + 1);
+        s.show_page(NAV[i].1);
         return;
     }
     if id == ids.edit_learned {
@@ -669,6 +845,20 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     } else if id == ids.clear_habits {
         crate::habits::clear();
         overlay::show(tr(T::ToastHabitsCleared));
+    } else if id == ids.sync_settings {
+        let on = s.checked(ids.sync_settings);
+        if on && learn::folder().is_none() {
+            s.set_checked(ids.sync_settings, false);
+            s.set_text(ids.learned_status, tr(T::SyncNeedsFolder));
+            return;
+        }
+        config::set_sync_settings(on);
+        // Settings from the folder may have changed what this window shows.
+        fill_apps(win, None);
+        fill_snippets(win, None);
+    } else if id == ids.spelling {
+        hook::set_fixes_spelling(s.checked(ids.spelling));
+        config::persist();
     } else if id == ids.caret_hints {
         crate::caret::set_enabled(s.checked(ids.caret_hints));
         config::persist();
@@ -697,29 +887,23 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         };
         s.set_text(ids.learned_status, &status);
         overlay::show(tr(T::ToastSaved));
-    } else if id == ids.save_list {
-        let entries: Vec<String> = s
-            .text_of(ids.list)
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty())
-            .map(str::to_lowercase)
-            .collect();
-        safety::set_custom_list(entries);
-        let (modes, skipped) = per_app::parse_list(&s.text_of(ids.app_modes));
-        crate::apps::set_all(modes);
-        // Show the list as it was kept: normalised, sorted, bad lines gone.
-        s.set_text(ids.app_modes, &per_app::format_list(&crate::apps::all()));
-        s.set_text(
-            ids.apps_status,
-            &if skipped == 0 {
-                tr(T::AppsSaved).to_string()
-            } else {
-                trf(T::AppsSkipped, &[("k", &skipped.to_string())])
-            },
-        );
+    } else if let Some(i) = ids.app_seg.iter().position(|&b| b == id) {
+        set_app_mode(win, APP_MODE_CHOICES[i]);
+    } else if id == ids.snip_date {
+        insert_date_field(win);
+    } else if id == ids.snip_save {
+        save_snippet(win);
+    } else if id == ids.snip_remove {
+        remove_snippet(win);
+    } else if id == ids.apps_add {
+        add_app(win);
+    } else if id == ids.apps_keep {
+        keep_app(win);
+    } else if id == ids.apps_remove {
+        remove_app(win);
+    } else if id == ids.restart {
+        config::RESTART_AFTER_CRASH.store(s.checked(ids.restart), Ordering::Relaxed);
         config::persist();
-        overlay::show(tr(T::ToastSaved));
     } else if id == ids.sync_folder || id == ids.this_pc {
         let folder = if id == ids.sync_folder {
             match pick_folder(win) {
@@ -784,6 +968,470 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         }
     }
     sync(win);
+}
+
+// --------------------------------------------------------- Snippets page
+
+const SCOPES: [righttype::snippets::Scope; 3] = [
+    righttype::snippets::Scope::Thai,
+    righttype::snippets::Scope::English,
+    righttype::snippets::Scope::Either,
+];
+
+/// Fill the Snippets table, selecting the snippet `trigger` when given.
+fn fill_snippets(win: &SettingsWindow, trigger: Option<&str>) {
+    let list = hook::snippets();
+    let cells: Vec<Vec<String>> = list
+        .iter()
+        .map(|sn| {
+            let text: String = sn.text.replace('\n', " ⏎ ");
+            let scope = tr(match sn.scope {
+                righttype::snippets::Scope::Thai => T::ScopeThai,
+                righttype::snippets::Scope::English => T::ScopeEnglish,
+                righttype::snippets::Scope::Either => T::ScopeEither,
+            });
+            vec![sn.trigger.clone(), text, scope.to_string()]
+        })
+        .collect();
+    let select = trigger.and_then(|t| list.iter().position(|sn| sn.trigger == t));
+    win.surface.set_rows(win.ids.snip_table, &cells, select);
+}
+
+fn snippet_table_event(win: &Rc<SettingsWindow>, event: ui::TableEvent) {
+    match event {
+        ui::TableEvent::Delete => remove_snippet(win),
+        ui::TableEvent::Selected | ui::TableEvent::Menu { .. } => {
+            let Some(i) = win.surface.selected_row(win.ids.snip_table) else {
+                return;
+            };
+            let Some(sn) = hook::snippets().into_iter().nth(i) else {
+                return;
+            };
+            let s = &win.surface;
+            s.set_text(win.ids.snip_trigger, &sn.trigger);
+            s.set_text(win.ids.snip_text, &sn.text.replace('\n', "\r\n"));
+            for (k, scope) in SCOPES.iter().enumerate() {
+                s.set_checked(win.ids.snip_scope[k], *scope == sn.scope);
+            }
+        }
+    }
+}
+
+/// Add the snippet in the boxes, or replace the one with its trigger.
+fn save_snippet(win: &SettingsWindow) {
+    use righttype::snippets::{check, Problem, MAX_SNIPPETS};
+    let s = &win.surface;
+    let scope = (0..3)
+        .find(|&k| s.checked(win.ids.snip_scope[k]))
+        .map_or(righttype::snippets::Scope::Either, |k| SCOPES[k]);
+    let mut text = s.text_of(win.ids.snip_text);
+    let checked = check(&s.text_of(win.ids.snip_trigger), &text, scope);
+    text.zeroize();
+    let snippet = match checked {
+        Ok(sn) => sn,
+        Err(problem) => {
+            s.set_text(
+                win.ids.snip_status,
+                tr(match problem {
+                    Problem::TriggerLength => T::SnipTriggerLength,
+                    Problem::TriggerSpace => T::SnipTriggerSpace,
+                    Problem::TextEmpty => T::SnipTextEmpty,
+                    Problem::TextLong => T::SnipTextLong,
+                }),
+            );
+            return;
+        }
+    };
+    let mut list = hook::snippets();
+    let trigger = snippet.trigger.clone();
+    match list.iter().position(|sn| sn.trigger == trigger) {
+        Some(i) => list[i] = snippet,
+        None if list.len() >= MAX_SNIPPETS => {
+            s.set_text(win.ids.snip_status, tr(T::SnipTooMany));
+            return;
+        }
+        None => list.push(snippet),
+    }
+    hook::set_snippets(list);
+    config::persist();
+    fill_snippets(win, Some(&trigger));
+    s.set_text(win.ids.snip_status, tr(T::AppsSaved));
+}
+
+fn remove_snippet(win: &SettingsWindow) {
+    let s = &win.surface;
+    let Some(i) = s.selected_row(win.ids.snip_table) else {
+        s.set_text(win.ids.snip_status, tr(T::AppsPickFirst));
+        return;
+    };
+    let mut list = hook::snippets();
+    if i < list.len() {
+        list.remove(i);
+    }
+    hook::set_snippets(list);
+    config::persist();
+    fill_snippets(win, None);
+    s.set_text(win.ids.snip_trigger, "");
+    s.set_text(win.ids.snip_text, "");
+    s.set_text(win.ids.snip_status, tr(T::SnipRemoved));
+}
+
+// ------------------------------------------------------------- Apps page
+
+/// Every app with a mode of its own: for now, chosen, blocked, code editors
+/// by default, then the built-in safety list.
+fn app_rows() -> Vec<AppRow> {
+    use crate::apps::Source;
+    let mut rows: Vec<AppRow> = crate::apps::rows()
+        .into_iter()
+        .map(|(exe, mode, source)| AppRow {
+            exe,
+            mode: Some(mode),
+            source: match source {
+                Source::ForNow => RowSource::ForNow,
+                Source::Chosen => RowSource::Chosen,
+                Source::Default => RowSource::Default,
+            },
+        })
+        .collect();
+    for exe in safety::custom_list() {
+        rows.retain(|r| r.exe != exe);
+        rows.push(AppRow {
+            exe,
+            mode: None,
+            source: RowSource::Blocked,
+        });
+    }
+    for exe in safety::BLACKLIST {
+        rows.retain(|r| r.exe != *exe);
+        rows.push(AppRow {
+            exe: exe.to_string(),
+            mode: None,
+            source: RowSource::Safety,
+        });
+    }
+    rows.sort_by(|a, b| (a.source, &a.exe).cmp(&(b.source, &b.exe)));
+    rows
+}
+
+/// Rebuild the Apps table, selecting `exe` when given (else keeping the
+/// selected row's place).
+fn fill_apps(win: &SettingsWindow, exe: Option<&str>) {
+    let s = &win.surface;
+    let keep = s.selected_row(win.ids.apps_table);
+    let rows = app_rows();
+    let paths = win.paths.borrow();
+    let cells: Vec<Vec<String>> = rows
+        .iter()
+        .map(|r| {
+            let mode = match (r.mode, r.source) {
+                (_, RowSource::Safety) => tr(T::ModeAlwaysOff).to_string(),
+                (None, _) => tr(T::ModeBlocked).to_string(),
+                (Some(m), _) => tr(crate::tray::app_mode_name(m)).to_string(),
+            };
+            let by = tr(match r.source {
+                RowSource::ForNow => T::SetByForNow,
+                RowSource::Chosen => T::SetByYou,
+                RowSource::Blocked => T::SetByYouBlocked,
+                RowSource::Default => T::SetByDefault,
+                RowSource::Safety => T::SetBySafety,
+            });
+            let place = paths.get(&r.exe).cloned().unwrap_or_else(|| "—".into());
+            vec![r.exe.clone(), mode, by.to_string(), place]
+        })
+        .collect();
+    drop(paths);
+    let select = exe
+        .and_then(|e| rows.iter().position(|r| r.exe == e))
+        .or(keep);
+    *win.apps.borrow_mut() = rows;
+    s.set_rows(win.ids.apps_table, &cells, select);
+    sync_app_choice(win);
+}
+
+/// The selected row of the Apps table.
+fn selected_app(win: &SettingsWindow) -> Option<AppRow> {
+    let i = win.surface.selected_row(win.ids.apps_table)?;
+    win.apps.borrow().get(i).cloned()
+}
+
+/// Show the selected app's mode on the mode buttons.
+fn sync_app_choice(win: &SettingsWindow) {
+    let row = selected_app(win);
+    for (i, id) in win.ids.app_seg.iter().enumerate() {
+        let on = row.as_ref().is_some_and(|r| match r.mode {
+            Some(m) => m == APP_MODE_CHOICES[i],
+            None => APP_MODE_CHOICES[i] == AppMode::Off,
+        });
+        win.surface.set_checked(*id, on);
+    }
+}
+
+fn app_table_event(win: &Rc<SettingsWindow>, event: ui::TableEvent) {
+    match event {
+        ui::TableEvent::Selected => sync_app_choice(win),
+        ui::TableEvent::Delete => remove_app(win),
+        ui::TableEvent::Menu { x, y } => app_menu(win, x, y),
+    }
+}
+
+/// Give the selected app `mode` (chosen, saved).
+fn set_app_mode(win: &SettingsWindow, mode: AppMode) {
+    let Some(row) = selected_app(win) else {
+        win.surface
+            .set_text(win.ids.apps_status, tr(T::AppsPickFirst));
+        sync_app_choice(win);
+        return;
+    };
+    if row.source == RowSource::Safety {
+        win.surface
+            .set_text(win.ids.apps_status, tr(T::AppsBuiltIn));
+        sync_app_choice(win);
+        return;
+    }
+    if row.source == RowSource::Blocked {
+        let rest: Vec<String> = safety::custom_list()
+            .into_iter()
+            .filter(|e| *e != row.exe)
+            .collect();
+        safety::set_custom_list(rest);
+    }
+    crate::apps::set(&row.exe, Some(mode));
+    config::persist();
+    fill_apps(win, Some(&row.exe));
+    win.surface.set_text(
+        win.ids.apps_status,
+        &trf(
+            T::ToastAppMode,
+            &[
+                ("mode", tr(crate::tray::app_mode_name(mode))),
+                ("app", &row.exe),
+            ],
+        ),
+    );
+}
+
+/// The selected app goes back to the general mode (or its default).
+fn remove_app(win: &SettingsWindow) {
+    let Some(row) = selected_app(win) else {
+        win.surface
+            .set_text(win.ids.apps_status, tr(T::AppsPickFirst));
+        return;
+    };
+    match row.source {
+        RowSource::Safety | RowSource::Default => {
+            win.surface
+                .set_text(win.ids.apps_status, tr(T::AppsBuiltIn));
+            return;
+        }
+        RowSource::ForNow => crate::apps::clear_for_now(&row.exe),
+        RowSource::Chosen => crate::apps::set(&row.exe, None),
+        RowSource::Blocked => {
+            let rest: Vec<String> = safety::custom_list()
+                .into_iter()
+                .filter(|e| *e != row.exe)
+                .collect();
+            safety::set_custom_list(rest);
+        }
+    }
+    config::persist();
+    fill_apps(win, None);
+    win.surface.set_text(
+        win.ids.apps_status,
+        &trf(T::AppsRemoved, &[("app", &row.exe)]),
+    );
+}
+
+/// Keep the selected app's mode for now for good.
+fn keep_app(win: &SettingsWindow) {
+    let Some(row) = selected_app(win).filter(|r| r.source == RowSource::ForNow) else {
+        win.surface
+            .set_text(win.ids.apps_status, tr(T::AppsKeepWhat));
+        return;
+    };
+    crate::apps::keep(&row.exe);
+    config::persist();
+    fill_apps(win, Some(&row.exe));
+    win.surface.set_text(win.ids.apps_status, tr(T::AppsSaved));
+}
+
+/// Pick a program that has a window open now and add it to the table (with
+/// the general mode, to change from there).
+fn add_app(win: &SettingsWindow) {
+    let have: Vec<String> = win.apps.borrow().iter().map(|r| r.exe.clone()).collect();
+    let running: Vec<(String, String)> = crate::apps::running()
+        .into_iter()
+        .filter(|(exe, _)| !have.contains(exe))
+        .collect();
+    {
+        let mut paths = win.paths.borrow_mut();
+        for (exe, path) in &running {
+            paths.insert(exe.clone(), path.clone());
+        }
+    }
+    if running.is_empty() {
+        win.surface
+            .set_text(win.ids.apps_status, tr(T::AppsNoneRunning));
+        return;
+    }
+    let labels: Vec<String> = running.iter().map(|(exe, _)| exe.clone()).collect();
+    let rc = unsafe {
+        let mut rc = windows::Win32::Foundation::RECT::default();
+        let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(
+            win.surface.hwnd_of(win.ids.apps_add),
+            &mut rc,
+        );
+        rc
+    };
+    let Some(i) = popup(win, &labels, rc.left, rc.bottom) else {
+        return;
+    };
+    let exe = &running[i].0;
+    crate::apps::set(exe, Some(hook::mode().into()));
+    config::persist();
+    fill_apps(win, Some(exe));
+    win.surface
+        .set_text(win.ids.apps_status, &trf(T::AppsAdded, &[("app", exe)]));
+}
+
+/// Right-click on a row: its actions.
+fn app_menu(win: &Rc<SettingsWindow>, x: i32, y: i32) {
+    let Some(row) = selected_app(win) else {
+        return;
+    };
+    if row.source == RowSource::Safety {
+        win.surface
+            .set_text(win.ids.apps_status, tr(T::AppsBuiltIn));
+        return;
+    }
+    let mut labels: Vec<String> = APP_MODE_CHOICES
+        .iter()
+        .map(|m| {
+            let mark = if row.mode == Some(*m) { "✓  " } else { "" };
+            format!("{mark}{}", tr(crate::tray::app_mode_name(*m)))
+        })
+        .collect();
+    let keep = row.source == RowSource::ForNow;
+    if keep {
+        labels.push(tr(T::BtnKeepMode).to_string());
+    }
+    let removable = row.source != RowSource::Default;
+    if removable {
+        labels.push(tr(T::BtnRemoveApp).to_string());
+    }
+    let path = win.paths.borrow().get(&row.exe).cloned();
+    if path.is_some() {
+        labels.push(tr(T::BtnShowFile).to_string());
+    }
+    let Some(i) = popup(win, &labels, x, y) else {
+        return;
+    };
+    let n = APP_MODE_CHOICES.len();
+    if i < n {
+        set_app_mode(win, APP_MODE_CHOICES[i]);
+        return;
+    }
+    let mut rest = i - n;
+    if keep {
+        if rest == 0 {
+            keep_app(win);
+            return;
+        }
+        rest -= 1;
+    }
+    if removable {
+        if rest == 0 {
+            remove_app(win);
+            return;
+        }
+        rest -= 1;
+    }
+    if rest == 0 {
+        if let Some(path) = path {
+            show_in_folder(&path);
+        }
+    }
+}
+
+/// The date and time fields, each with what it gives today, under the
+/// button; the one picked goes into the snippet's text at the caret.
+fn insert_date_field(win: &SettingsWindow) {
+    use righttype::snippets::{fill, FIELDS};
+    use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, SendMessageW};
+    let now = crate::hook::snippet_now();
+    let labels: Vec<String> = FIELDS
+        .iter()
+        .map(|(name, _, _)| format!("{name}\t{}", fill(name, &now)))
+        .collect();
+    let mut rc = windows::Win32::Foundation::RECT::default();
+    unsafe {
+        let _ = GetWindowRect(win.surface.hwnd_of(win.ids.snip_date), &mut rc);
+    }
+    let Some(i) = popup(win, &labels, rc.left, rc.bottom) else {
+        return;
+    };
+    let field: Vec<u16> = format!("{}\0", FIELDS[i].0).encode_utf16().collect();
+    let edit = win.surface.hwnd_of(win.ids.snip_text);
+    unsafe {
+        const EM_REPLACESEL: u32 = 0x00C2;
+        let _ = SendMessageW(
+            edit,
+            EM_REPLACESEL,
+            windows::Win32::Foundation::WPARAM(1),
+            windows::Win32::Foundation::LPARAM(field.as_ptr() as isize),
+        );
+        let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(edit);
+    }
+}
+
+/// A popup menu of `labels` at screen `(x, y)`; the index picked.
+fn popup(win: &SettingsWindow, labels: &[String], x: i32, y: i32) -> Option<usize> {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        AppendMenuW, CreatePopupMenu, DestroyMenu, TrackPopupMenu, MF_STRING, TPM_RETURNCMD,
+        TPM_RIGHTBUTTON,
+    };
+    unsafe {
+        let menu = CreatePopupMenu().ok()?;
+        for (i, label) in labels.iter().enumerate() {
+            let text: Vec<u16> = format!("{label}\0").encode_utf16().collect();
+            let _ = AppendMenuW(menu, MF_STRING, i + 1, PCWSTR(text.as_ptr()));
+        }
+        let picked = TrackPopupMenu(
+            menu,
+            TPM_RETURNCMD | TPM_RIGHTBUTTON,
+            x,
+            y,
+            0,
+            win.surface.hwnd,
+            None,
+        );
+        let _ = DestroyMenu(menu);
+        usize::try_from(picked.0)
+            .ok()
+            .filter(|&p| p > 0)
+            .map(|p| p - 1)
+    }
+}
+
+/// Open Explorer with `path` selected.
+fn show_in_folder(path: &str) {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let verb: Vec<u16> = "open\0".encode_utf16().collect();
+    let exe: Vec<u16> = "explorer.exe\0".encode_utf16().collect();
+    let args: Vec<u16> = format!("/select,\"{path}\"\0").encode_utf16().collect();
+    unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR(verb.as_ptr()),
+            PCWSTR(exe.as_ptr()),
+            PCWSTR(args.as_ptr()),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        );
+    }
 }
 
 /// Where new versions are published. Opened in the browser: RightType itself
@@ -932,7 +1580,7 @@ fn captured(win: &SettingsWindow) {
 /// Switch page as if its sidebar entry had been clicked.
 fn go_to(win: &SettingsWindow, page: u8) {
     for (i, nav) in win.ids.nav.iter().enumerate() {
-        win.surface.set_checked(*nav, i as u8 + 1 == page);
+        win.surface.set_checked(*nav, NAV[i].1 == page);
     }
     win.surface.show_page(page);
 }
@@ -959,8 +1607,8 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
         PAGE_GENERAL => {
             card(g, rect(X0, 98, CW, 132));
             track(g, rect(X0 + 16, 110, CW - 32, 48));
-            card(g, rect(X0, CARD_B_Y, CW, 4 * ROW_H + 64));
-            for i in 1..=4 {
+            card(g, rect(X0, CARD_B_Y, CW, 5 * ROW_H + 64));
+            for i in 1..=5 {
                 divider(hdc, X0 + 16, CARD_B_Y + i * ROW_H + 2, CW - 32);
             }
         }
@@ -973,13 +1621,19 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
         }
         PAGE_LEARNED => {
             field(g, rect(X0, 142, CW, 268));
+            card(g, rect(X0, 572, CW, 72));
+        }
+        PAGE_SNIPPETS => {
+            field(g, rect(X0, 344, 150, 32));
+            field(g, rect(X0 + 160, 344, CW - 160, 68));
+            track(g, rect(X0, 422, 3 * 104 + 6, 40));
         }
         PAGE_BLOCKED => {
-            field(g, rect(X0, 138, CW, 112));
-            field(g, rect(X0, 342, CW, 88));
+            track(g, rect(X0, 342, CW, 40));
             card(g, rect(X0, PREDICT_Y, CW, 76));
         }
         PAGE_ABOUT => {
+            card(g, rect(X0, RESTART_Y, CW, 72));
             card(g, rect(X0, 68, CW, 4 * 56 + 8));
             for i in 0..4 {
                 let y = 74 + i * 56;

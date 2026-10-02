@@ -36,10 +36,88 @@ static FIELD_STATUS: AtomicU8 = AtomicU8::new(FIELD_UNKNOWN);
 /// The focused field completes what is typed in place — a browser address
 /// bar, which selects its suggestion after the caret. See [`completes_inline`].
 static INLINE_COMPLETION: AtomicBool = AtomicBool::new(false);
+/// The focused element is a place to type text (UI Automation says Edit or
+/// Document). Lets a full-screen browser or editor be told from a game even
+/// where Windows shows no text cursor for it.
+static TEXT_FIELD: AtomicBool = AtomicBool::new(false);
+
+/// Is the focused element a text field (per UI Automation)?
+pub fn is_text_field() -> bool {
+    TEXT_FIELD.load(Ordering::Relaxed)
+}
+
 /// Changes whenever Windows reports that the focused UI element changed.  The
 /// keyboard hook uses this to invalidate text that belongs to an old caret,
 /// including two controls inside the same top-level window.
 static FOCUS_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// The focused field's identity (a hash of its UI Automation runtime id; 0
+/// when unknown), for "Off in this field".
+static FIELD_KEY: AtomicU64 = AtomicU64::new(0);
+/// Fields RightType was switched off in (palette → "Off in this field").
+/// Identities only, in memory: gone when RightType exits.
+static FIELDS_OFF: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+/// At most this many fields are remembered as off; the oldest goes first.
+const MAX_FIELDS_OFF: usize = 32;
+
+/// The focused field's identity, or 0 when UI Automation does not say.
+pub fn field_key() -> u64 {
+    FIELD_KEY.load(Ordering::Relaxed)
+}
+
+/// Is RightType switched off in the focused field?
+pub fn field_is_off() -> bool {
+    is_off(field_key())
+}
+
+/// Is RightType switched off in the field `key`?
+pub fn is_off(key: u64) -> bool {
+    key != 0 && FIELDS_OFF.lock().is_ok_and(|f| f.contains(&key))
+}
+
+/// Switch RightType off (or back on) in the field `key`.
+pub fn set_field_off(key: u64, off: bool) {
+    if key == 0 {
+        return;
+    }
+    let Ok(mut fields) = FIELDS_OFF.lock() else {
+        return;
+    };
+    fields.retain(|&k| k != key);
+    if off {
+        if fields.len() == MAX_FIELDS_OFF {
+            fields.remove(0);
+        }
+        fields.push(key);
+    }
+}
+
+/// A field's identity: its runtime id, hashed (FNV-1a). Unique while the
+/// element exists; a page that rebuilds its fields gives them new ones.
+unsafe fn runtime_key(element: &IUIAutomationElement) -> u64 {
+    use windows::Win32::System::Ole::{
+        SafeArrayDestroy, SafeArrayGetElement, SafeArrayGetLBound, SafeArrayGetUBound,
+    };
+    let Ok(sa) = element.GetRuntimeId() else {
+        return 0;
+    };
+    if sa.is_null() {
+        return 0;
+    }
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    if let (Ok(lo), Ok(hi)) = (SafeArrayGetLBound(sa, 1), SafeArrayGetUBound(sa, 1)) {
+        for i in lo..=hi {
+            let mut v = 0i32;
+            if SafeArrayGetElement(sa, &i, &mut v as *mut i32 as *mut _).is_ok() {
+                for b in v.to_le_bytes() {
+                    hash = (hash ^ u64::from(b)).wrapping_mul(0x100_0000_01b3);
+                }
+            }
+        }
+    }
+    let _ = SafeArrayDestroy(sa);
+    hash.max(1)
+}
 
 thread_local! {
     static UIA: RefCell<Option<IUIAutomation>> = const { RefCell::new(None) };
@@ -94,6 +172,7 @@ pub unsafe fn arm() {
     }
     start_worker();
     wake_worker();
+    let _ = context_worker();
     let hook = SetWinEventHook(
         EVENT_OBJECT_FOCUS,
         EVENT_OBJECT_FOCUS,
@@ -121,6 +200,10 @@ static WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<()>> = std::sync:
 /// Focus events seen, and how many of them the worker has answered.
 static ASKED: AtomicU64 = AtomicU64::new(0);
 static ANSWERED: AtomicU64 = AtomicU64::new(0);
+/// When the oldest unanswered focus question was asked.
+static ASKED_AT: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+/// How long after a focus change keys may wait for the focus answer.
+const SETTLE_LIMIT: std::time::Duration = std::time::Duration::from_millis(150);
 
 /// Before the keyboard hook handles a key: let the focus worker finish with
 /// the focus events that came before it, for at most `max`. The answers (a
@@ -133,7 +216,19 @@ pub fn settle(max: std::time::Duration) {
     if ANSWERED.load(Ordering::Acquire) >= asked {
         return;
     }
-    let until = std::time::Instant::now() + max;
+    // A question open longer than this is an app slow to answer (CI: 3.7 s
+    // for a Notepad just started). Waiting for it on every key then made
+    // keys queue up until Windows skipped the hook for some (`l;ylfu` seen
+    // as `l;yu`): wait only while the question is fresh.
+    let open_for = ASKED_AT
+        .lock()
+        .ok()
+        .and_then(|at| *at)
+        .map_or(std::time::Duration::ZERO, |at| at.elapsed());
+    if open_for > SETTLE_LIMIT {
+        return;
+    }
+    let until = std::time::Instant::now() + max.min(SETTLE_LIMIT - open_for);
     while ANSWERED.load(Ordering::Acquire) < asked && std::time::Instant::now() < until {
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
@@ -165,6 +260,12 @@ fn start_worker() {
 
 /// Ask the focus worker to look again (never waits; a pending ask covers it).
 fn wake_worker() {
+    // The oldest question still open is the one `settle` measures from.
+    if ANSWERED.load(Ordering::Acquire) >= ASKED.load(Ordering::Acquire) {
+        if let Ok(mut at) = ASKED_AT.lock() {
+            *at = Some(std::time::Instant::now());
+        }
+    }
     ASKED.fetch_add(1, Ordering::AcqRel);
     if let Some(tx) = WORKER.get() {
         let _ = tx.try_send(());
@@ -251,6 +352,7 @@ unsafe fn moves_to_another_field() -> bool {
         };
         let Ok(element) = uia.GetFocusedElement() else {
             FIELD.with(|f| *f.borrow_mut() = None);
+            FIELD_KEY.store(0, Ordering::Relaxed);
             return true;
         };
         let same = FIELD.with(|f| {
@@ -265,6 +367,7 @@ unsafe fn moves_to_another_field() -> bool {
         if same || row {
             return false;
         }
+        FIELD_KEY.store(runtime_key(&element), Ordering::Relaxed);
         FIELD.with(|f| *f.borrow_mut() = Some(element));
         true
     })
@@ -283,6 +386,7 @@ fn is_list_row(control_type: UIA_CONTROLTYPE_ID) -> bool {
 
 unsafe fn refresh_status() {
     let mut inline = false;
+    let mut text_field = false;
     let uia = uia_here();
     let status = UIA.with(|_| {
         uia.as_ref()
@@ -297,6 +401,10 @@ unsafe fn refresh_status() {
                     .map(|b| b.to_string())
                     .unwrap_or_default();
                 inline = is_inline_completing(&class, &id);
+                text_field = el.CurrentControlType().is_ok_and(|t| {
+                    t == windows::Win32::UI::Accessibility::UIA_EditControlTypeId
+                        || t == windows::Win32::UI::Accessibility::UIA_DocumentControlTypeId
+                });
                 el.CurrentIsPassword().ok().map(|b| b.as_bool())
             })
             .map(|is_password| {
@@ -308,8 +416,11 @@ unsafe fn refresh_status() {
             })
             .unwrap_or(FIELD_UNKNOWN)
     });
-    crate::hook::e2e_trace(format!("field status={status} inline={inline}"));
+    crate::hook::e2e_trace(format!(
+        "field status={status} inline={inline} text_field={text_field}"
+    ));
     FIELD_STATUS.store(status, Ordering::Relaxed);
+    TEXT_FIELD.store(text_field, Ordering::Relaxed);
     INLINE_COMPLETION.store(inline, Ordering::Relaxed);
 }
 
@@ -397,6 +508,96 @@ fn uia_selected_text() -> Option<zeroize::Zeroizing<String>> {
         }
         Some(text)
     }
+}
+
+/// The whole text of the focused field, without selecting it: through UI
+/// Automation, or from a standard text box. Read up to just past `max`
+/// characters, so the caller can tell the field is longer; `None` for a
+/// password field, or when the app does not say.
+/// Any thread but the keyboard hook's.
+pub fn field_text(max: usize) -> Option<zeroize::Zeroizing<String>> {
+    use windows::Win32::UI::Accessibility::{IUIAutomationTextPattern, UIA_TextPatternId};
+    use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
+    use zeroize::Zeroize;
+    let from_uia = || unsafe {
+        let element = uia_here()?.GetFocusedElement().ok()?;
+        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            return None;
+        }
+        let pattern = element
+            .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+            .ok()?;
+        let text = pattern.DocumentRange().ok()?.GetText(max as i32 + 1).ok()?;
+        Some(zeroize::Zeroizing::new(text.to_string()))
+    };
+    let from_box = || {
+        let tb = TextBox::focused().ok()?;
+        let len = tb.ask(WM_GETTEXTLENGTH, 0, 0)?;
+        let len = len.min(max * 2 + 2);
+        let mut units = vec![0u16; len + 1];
+        let got = tb
+            .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?
+            .min(len);
+        let text = zeroize::Zeroizing::new(String::from_utf16_lossy(&units[..got]));
+        units.zeroize();
+        Some(text)
+    };
+    from_uia().or_else(from_box)
+}
+
+/// Where pieces of the focused field are on screen: for each `(start,
+/// len)` in characters from the field's start, its box in screen pixels,
+/// or `None`. Through UI Automation; empty when the app does not say. Any
+/// thread but the keyboard hook's.
+pub fn field_boxes(spans: &[(usize, usize)]) -> Vec<Option<windows::Win32::Foundation::RECT>> {
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationTextPattern, TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
+        TextUnit_Character, UIA_TextPatternId,
+    };
+    let none = || vec![None; spans.len()];
+    let start = || unsafe {
+        let element = uia_here()?.GetFocusedElement().ok()?;
+        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            return None;
+        }
+        let pattern = element
+            .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+            .ok()?;
+        let range = pattern.DocumentRange().ok()?;
+        // An empty range at the start.
+        range
+            .MoveEndpointByRange(
+                TextPatternRangeEndpoint_End,
+                &range,
+                TextPatternRangeEndpoint_Start,
+            )
+            .ok()?;
+        Some(range)
+    };
+    let Some(origin) = start() else {
+        return none();
+    };
+    spans
+        .iter()
+        .map(|&(at, len)| unsafe {
+            let r = origin.Clone().ok()?;
+            let moved = r
+                .MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, at as i32)
+                .ok()?;
+            if moved != at as i32 {
+                return None;
+            }
+            r.MoveEndpointByRange(
+                TextPatternRangeEndpoint_Start,
+                &r,
+                TextPatternRangeEndpoint_End,
+            )
+            .ok()?;
+            r.MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, len as i32)
+                .ok()?;
+            union_of_boxes(&r)
+        })
+        .collect()
 }
 
 /// The focused standard Windows text box (Edit, RichEdit: classic and
@@ -535,75 +736,6 @@ impl TextBox {
         }
     }
 
-    /// The replacement was sent but not answered in time. Give the box up to
-    /// 300 ms more, then read what is before the caret: the correction in
-    /// place is success; the old text unchanged means nothing happened (keys
-    /// may do it); anything else is unknown.
-    fn settle_after_slow_replace(
-        &self,
-        context: Option<&str>,
-        delete: usize,
-        text: &str,
-    ) -> Result<(), ReplaceError> {
-        use zeroize::Zeroize;
-        const WM_NULL: u32 = 0;
-        let unknown = ReplaceError::Unknown("no answer to the replacement");
-        let Some(context) = context else {
-            return Err(unknown);
-        };
-        // This runs inside the keyboard hook: keep the wait short (Windows
-        // drops a hook that holds keys too long).
-        if self.ask_within(WM_NULL, 0, 0, 300).is_none() {
-            return Err(unknown);
-        }
-        let Some((a, b)) = self.selection() else {
-            return Err(unknown);
-        };
-        if a != b {
-            return Err(unknown);
-        }
-        let Some(mut before) = self.text_before(a) else {
-            return Err(unknown);
-        };
-        let kept: String = {
-            let n = context.chars().count().saturating_sub(delete);
-            context.chars().take(n).collect()
-        };
-        let mut done = format!("{kept}{text}");
-        let result = if before.ends_with(done.as_str()) {
-            Ok(())
-        } else if before.ends_with(context) {
-            Err(ReplaceError::Untouched("the replacement did not happen"))
-        } else {
-            Err(unknown)
-        };
-        before.zeroize();
-        done.zeroize();
-        crate::hook::e2e_trace(format!(
-            "text box: slow replacement settled: {}",
-            result.is_ok()
-        ));
-        result
-    }
-
-    /// The box's text before position `caret`, if it can be located.
-    fn text_before(&self, caret: usize) -> Option<String> {
-        use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
-        use zeroize::Zeroize;
-        let len = self.ask(WM_GETTEXTLENGTH, 0, 0)?;
-        if len > 0xFFFF || caret > len {
-            return None;
-        }
-        let mut units = vec![0u16; len + 1];
-        let got = self
-            .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?
-            .min(len);
-        let usable = caret <= got && !(self.rich && units[..caret].contains(&(b'\n' as u16)));
-        let text = usable.then(|| String::from_utf16_lossy(&units[..caret]));
-        units.zeroize();
-        text
-    }
-
     /// Debug e2e trace: the caret, and the text before it, as the box holds
     /// them right before a replacement.
     #[cfg(debug_assertions)]
@@ -654,14 +786,23 @@ impl TextBox {
         }
         let mut units: zeroize::Zeroizing<Vec<u16>> =
             zeroize::Zeroizing::new(text.encode_utf16().chain(std::iter::once(0)).collect());
-        // wParam 1: the replacement can be undone (Ctrl+Z in the app).
+        // wParam 1: the replacement can be undone (Ctrl+Z in the app). A
+        // short wait: an answer only confirms what the box will do anyway.
         if self
-            .ask(EM_REPLACESEL, 1, units.as_mut_ptr() as isize)
+            .ask_within(EM_REPLACESEL, 1, units.as_mut_ptr() as isize, 100)
             .is_none()
         {
-            // A slow box may still do it (Windows 11 Notepad, CI): wait for
-            // it, then see what it holds rather than guess.
-            return self.settle_after_slow_replace(context, delete, text);
+            // Sent, not yet answered: a slow box (a Notepad just opened,
+            // Windows 11 Notepad). A sent message is handled before any key
+            // typed after it, so it will be done in order: count it as done.
+            // Waiting here for it held the keyboard hook past what Windows
+            // allows, and Windows then let the key through itself (CI:
+            // สวัสดีu); giving the run up made the next correction count
+            // characters that were no longer there (CI: ววันนี้).
+            crate::hook::e2e_trace(
+                "text box: replacement sent, not answered yet: counted as done".to_string(),
+            );
+            return Ok(());
         }
         let expected = from + units.len() - 1;
         match self.selection() {
@@ -735,12 +876,196 @@ fn edit_selected_text() -> Option<zeroize::Zeroizing<String>> {
     text
 }
 
-/// The last `n` characters before the caret in the focused field, asked of
-/// the app (UI Automation, or a standard text box's own messages) — for
-/// checking a correction just typed ([`crate::verify`]). `None` when the app
-/// does not say, text is selected, or the field is a password field. Worker
-/// threads only (cross-process calls).
-pub fn text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
+/// A question for the context worker: how many characters, and where to
+/// answer.
+enum ContextAsk {
+    Text(
+        usize,
+        std::sync::mpsc::SyncSender<Option<zeroize::Zeroizing<String>>>,
+    ),
+    Boxes(
+        Vec<(usize, usize)>,
+        std::sync::mpsc::SyncSender<Vec<Option<windows::Win32::Foundation::RECT>>>,
+    ),
+}
+static CONTEXT_WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<ContextAsk>> =
+    std::sync::OnceLock::new();
+
+/// Up to `n` characters before the caret, for the keyboard hook, which must not make the
+/// cross-process calls itself: asked of a worker, waiting at most `max`
+/// (`None` past that — the caller treats it as "cannot tell"). Code mode
+/// asks this at a word's end, only for a word it would otherwise fix.
+pub fn text_before_caret_within(
+    n: usize,
+    max: std::time::Duration,
+) -> Option<zeroize::Zeroizing<String>> {
+    let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+    context_worker()
+        .try_send(ContextAsk::Text(n, reply_tx))
+        .ok()?;
+    reply_rx.recv_timeout(max).ok().flatten()
+}
+
+fn context_worker() -> &'static std::sync::mpsc::SyncSender<ContextAsk> {
+    CONTEXT_WORKER.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<ContextAsk>(1);
+        let _ = std::thread::Builder::new()
+            .name("context".into())
+            .spawn(move || {
+                // Ready before the first question: making the UI Automation
+                // client takes longer than the hook waits for an answer.
+                let _ = uia_here();
+                while let Ok(ask) = rx.recv() {
+                    match ask {
+                        ContextAsk::Text(n, reply) => {
+                            let _ = reply.try_send(text_before_caret_up_to(n));
+                        }
+                        ContextAsk::Boxes(spans, reply) => {
+                            let _ = reply.try_send(boxes_before_caret(&spans));
+                        }
+                    }
+                }
+            });
+        tx
+    })
+}
+
+/// Where pieces of the text before the caret are on screen: for each
+/// `(start, len)` — starting `start` characters before the caret, `len`
+/// long — its box in screen pixels, or `None`. Asked of the app through UI
+/// Automation on a worker, waiting at most `max`; empty when the app does
+/// not say. For showing which words a palette command would change.
+pub fn boxes_before_caret_within(
+    spans: Vec<(usize, usize)>,
+    max: std::time::Duration,
+) -> Vec<Option<windows::Win32::Foundation::RECT>> {
+    let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+    if context_worker()
+        .try_send(ContextAsk::Boxes(spans, reply_tx))
+        .is_err()
+    {
+        return Vec::new();
+    }
+    reply_rx.recv_timeout(max).unwrap_or_default()
+}
+
+fn boxes_before_caret(spans: &[(usize, usize)]) -> Vec<Option<windows::Win32::Foundation::RECT>> {
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationTextPattern, TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
+        TextUnit_Character, UIA_TextPatternId,
+    };
+    let none = || vec![None; spans.len()];
+    let Some(uia) = uia_here() else {
+        return none();
+    };
+    unsafe {
+        let Ok(element) = uia.GetFocusedElement() else {
+            return none();
+        };
+        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            return none();
+        }
+        let Ok(pattern) =
+            element.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+        else {
+            return none();
+        };
+        let Some(caret) = pattern
+            .GetSelection()
+            .ok()
+            .filter(|s| s.Length().unwrap_or(0) > 0)
+            .and_then(|s| s.GetElement(0).ok())
+        else {
+            return none();
+        };
+        // An empty range at the caret.
+        let _ = caret.MoveEndpointByRange(
+            TextPatternRangeEndpoint_End,
+            &caret,
+            TextPatternRangeEndpoint_Start,
+        );
+        spans
+            .iter()
+            .map(|&(start, len)| {
+                let r = caret.Clone().ok()?;
+                let moved = r
+                    .MoveEndpointByUnit(
+                        TextPatternRangeEndpoint_Start,
+                        TextUnit_Character,
+                        -(start as i32),
+                    )
+                    .ok()?;
+                if moved != -(start as i32) {
+                    return None;
+                }
+                r.MoveEndpointByRange(
+                    TextPatternRangeEndpoint_End,
+                    &r,
+                    TextPatternRangeEndpoint_Start,
+                )
+                .ok()?;
+                r.MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, len as i32)
+                    .ok()?;
+                union_of_boxes(&r)
+            })
+            .collect()
+    }
+}
+
+/// One box around every line of `range`.
+fn union_of_boxes(
+    range: &windows::Win32::UI::Accessibility::IUIAutomationTextRange,
+) -> Option<windows::Win32::Foundation::RECT> {
+    unsafe {
+        let array = range.GetBoundingRectangles().ok()?;
+        if array.is_null() {
+            return None;
+        }
+        let count = (*array).rgsabound[0].cElements as usize;
+        let data = (*array).pvData as *const f64;
+        let mut out: Option<windows::Win32::Foundation::RECT> = None;
+        if !data.is_null() {
+            for k in 0..count / 4 {
+                let (x, y, w, h) = (
+                    *data.add(4 * k),
+                    *data.add(4 * k + 1),
+                    *data.add(4 * k + 2),
+                    *data.add(4 * k + 3),
+                );
+                if w <= 0.0 || h <= 0.0 {
+                    continue;
+                }
+                let r = windows::Win32::Foundation::RECT {
+                    left: x as i32,
+                    top: y as i32,
+                    right: (x + w) as i32,
+                    bottom: (y + h) as i32,
+                };
+                out = Some(match out {
+                    None => r,
+                    Some(o) => windows::Win32::Foundation::RECT {
+                        left: o.left.min(r.left),
+                        top: o.top.min(r.top),
+                        right: o.right.max(r.right),
+                        bottom: o.bottom.max(r.bottom),
+                    },
+                });
+            }
+        }
+        let _ = windows::Win32::System::Ole::SafeArrayDestroy(array);
+        out
+    }
+}
+
+/// Up to `n` characters before the caret in the focused field, asked of
+/// the app (UI Automation, or a standard text box's own messages): all of
+/// it when the field holds fewer. `None` when the app does not say, text is
+/// selected, or the field is a password field. Worker threads only
+/// (cross-process calls). For checking a correction just typed
+/// ([`crate::verify`]) and Code mode's look at the line. Some apps
+/// count a character as a whole cluster (Chrome: ว and ั are one), so the
+/// text may be longer than `n` — compare its end, not its length.
+pub fn text_before_caret_up_to(n: usize) -> Option<zeroize::Zeroizing<String>> {
     uia_text_before_caret(n).or_else(|| edit_text_before_caret(n))
 }
 
@@ -767,12 +1092,10 @@ fn uia_text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
             return None;
         }
         let back = i32::try_from(n).ok()?;
-        let moved = range
+        // Fewer characters before the caret than asked: all of them.
+        range
             .MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Character, -back)
             .ok()?;
-        if moved != -back {
-            return None;
-        }
         let text = zeroize::Zeroizing::new(range.GetText(-1).ok()?.to_string());
         Some(text)
     }
@@ -804,7 +1127,7 @@ fn edit_text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
         tail
     });
     units.zeroize();
-    text.filter(|t| t.chars().count() == n)
+    text
 }
 
 /// The text cursor of the focused element, from UI Automation, in screen

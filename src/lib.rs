@@ -18,6 +18,7 @@
 //! - [`per_app`] — per-app correction modes and their text form.
 //! - [`detect`] — layout-mismatch detection over completed words.
 //! - [`diag`] — recent decisions, with no typed text, for a problem report.
+//! - [`code`] — Code mode: what to fix in a code editor.
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
 //! - [`segment`] — Thai word segmentation (maximal matching) for space-less Thai.
 //! - [`motion`] — how the overlay pill fades and rises in and out.
@@ -25,9 +26,12 @@
 //! - [`repair`] — fixing a whole piece of finished text (the Fix text window).
 //! - [`recent`] — the last few completed words, for flipping back several at once.
 //! - [`usage`] — daily correction counts for the opt-in weekly view.
+//! - [`spelling`] — common Thai misspellings, put right (opt-in).
+//! - [`snippets`] — a short trigger becomes a longer text, on either keyboard.
 //! - [`sim`] — the hook's Auto pipeline replayed on a string, for benchmarks and tests.
 
 pub mod buffer;
+pub mod code;
 pub mod detect;
 pub mod diag;
 pub mod dict;
@@ -45,4 +49,7 @@ pub mod repair;
 pub mod secret;
 pub mod segment;
 pub mod sim;
+pub mod snippets;
+pub mod spelling;
+pub mod thai_text;
 pub mod usage;

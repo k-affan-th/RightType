@@ -37,13 +37,19 @@ copy it back fixed), **Settings**, **Statistics**, **Hotkeys & help**, **Save a 
 letter counts, never as text), and **Quit**.
 The tooltip shows the current mode, and the icon turns grey while RightType is off.
 
-**Settings** has five pages — General (mode, on/off, start with Windows, learning),
+**Settings** has six pages — General (mode, on/off, start with Windows, learning,
+fixing common Thai misspellings),
 Hotkeys, Learned words (see, add, remove, clear, import or export what RightType
-has learned, or keep the list in a sync folder such as OneDrive), Apps (a mode per app, e.g. `code.exe = manual`, apps to stay out
-of, and an opt-in **guess each field's language** that switches the keyboard as
-you click into a field you always use for one language — only word counts are
-kept) and Privacy & about (with a **Check for updates** button that opens the
-Releases page in your browser — RightType itself never goes online). Changes take effect the moment you make
+has learned, or keep the list — and, if you like, your settings and snippets — in a
+sync folder such as OneDrive), **Snippets** (a short trigger such as `;addr` and
+Space becomes a longer text, on the Thai keyboard, the English one or either),
+Apps (a **table** of every app with a mode of its own — pick a mode or right-click a
+row; **Code mode** is the default in code editors: names are never touched and Thai
+appears only in comments and strings — plus an opt-in **guess each field's
+language** that switches the keyboard as you click into a field you always use for
+one language — only word counts are kept) and Privacy & about (with a **Check for
+updates** button that opens the Releases page in your browser — RightType itself
+never goes online — and **start again after a crash**). Changes take effect the moment you make
 them. The interface is in **English or Thai** (it follows the Windows display
 language; switch it at the bottom of the Settings sidebar), follows the Windows
 **light/dark** app theme, and stays sharp at any display scaling.
@@ -59,7 +65,8 @@ with a hotkey:
 | `Tab` or `Alt`+`CapsLock` | Accept the current Suggest hint (Tab only right after it appears; otherwise Tab is Tab) |
 | `Ctrl`+`Shift`+`CapsLock` | Undo the last correction (selection undo requires the same focused context) |
 | `Ctrl`+`Alt`+`CapsLock` | Enable/disable RightType immediately |
-| `Ctrl`+`Alt`+`Space` | Command palette: fix text, pause, off in this app, switch mode, settings |
+| `Ctrl`+`Alt`+`Space` | Command palette: your recent words (tick several with Space — they are tinted in the app — and Enter flips exactly those), **fix this field** (the words are listed and tinted first; untick any), fix only the wrong-keyboard words of a selection, Thai text in standard form, year พ.ศ. ↔ ค.ศ., numbers and baht amounts in words, special characters by name, **type the copied text key by key** (remote desktops, VMs), pause, off in this app or **this field**, switch mode, settings |
+| `Ctrl`+`Backspace` | After Thai: deletes one Thai word, not the whole run back to the last space |
 
 Every hotkey can be changed in Settings → Hotkeys (click **Change**, press the new keys).
 
@@ -139,7 +146,8 @@ A keyboard tool sees everything you type. RightType is designed so secrets never
 - **No telemetry, zero network code** — verifiable in `Cargo.lock`; there is no HTTP,
   update, or analytics crate anywhere in the dependency tree.
 - **Nothing typed is written to disk** — the only files are app settings
-  (`%APPDATA%\RightType\config.toml`) and, only if you turn them on: the learned
+  (`%APPDATA%\RightType\config.toml`, with the snippets you write yourself) and,
+  only if you turn them on: the learned
   words (`learned.txt`, "Learn new words"), two numbers per day for the 7-day
   chart (`stats.toml`) and per-field word counts for guessing a field's language
   (`contexts.toml`). All are **off by default**, and learning never runs in the
@@ -171,12 +179,15 @@ rather than a blanket ban on every individual BIP39 word.
 (once winget has accepted the release).
 
 **Installer (recommended, per-user, no admin):** download
-`RightType-2.0.1-setup.exe` from the
+`RightType-2.1.0-setup.exe` from the
 [latest release](https://github.com/k-affan-th/RightType/releases/latest) and run it.
 It installs RightType, offers a desktop shortcut and start-at-login, and registers
 a normal Windows uninstaller (Settings -> Apps -> RightType).
 
-**Portable zip:** extract `RightType-2.0.1-x64.zip` and run `righttype.exe` where it
+**Windows on ARM** (Surface Pro X, Copilot+ PCs): use `RightType-2.1.0-arm64-setup.exe`
+or `RightType-2.1.0-arm64.zip`.
+
+**Portable zip:** extract `RightType-2.1.0-x64.zip` and run `righttype.exe` where it
 sits. Put an empty file named `portable` next to it and settings and learned
 words stay in a `data` folder beside it (for a USB stick) instead of
 `%APPDATA%\RightType`. Or install it per-user from the extracted folder:
@@ -192,7 +203,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -Autostart
 - Verify what you downloaded against `SHA256.txt` before running it:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\RightType-2.0.1-setup.exe
+Get-FileHash -Algorithm SHA256 .\RightType-2.1.0-setup.exe
 ```
 - Unsigned builds show a SmartScreen prompt — "More info → Run anyway".
   Code signing is planned for a later release.

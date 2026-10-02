@@ -259,6 +259,19 @@ pub fn release_held(inputs: &mut Vec<INPUT>) {
     }
 }
 
+/// Press `vk` (a modifier) again if the typist still holds it but Windows
+/// no longer thinks so, after [`apply`] let go of it: the next key of a
+/// held Ctrl+Backspace must still come with Ctrl.
+///
+/// # Safety
+/// Calls `SendInput`.
+pub unsafe fn hold_again(vk: u16) {
+    use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+    if GetAsyncKeyState(vk as i32) as u16 & 0x8000 == 0 {
+        send(&[key(vk, false)]);
+    }
+}
+
 /// A virtual-key press or release.
 fn key(vk: u16, up: bool) -> INPUT {
     INPUT {

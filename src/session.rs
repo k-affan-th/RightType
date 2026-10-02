@@ -210,6 +210,7 @@ pub unsafe fn on_message(msg: u32, wparam: usize) {
             crate::habits::tick();
             crate::stats::tick();
             crate::learn::tick();
+            crate::config::tick_shared();
             crate::palette::close_if_left();
             #[cfg(debug_assertions)]
             crate::report::e2e_write();
