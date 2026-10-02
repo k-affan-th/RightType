@@ -572,6 +572,97 @@ pub fn set_fixes_hyphens(on: bool) {
     FIX_HYPHENS.store(on, Ordering::Relaxed);
 }
 
+/// What to do about a key that changes how the next keys type (NumLock off
+/// on the keypad, Insert): nothing, say so, or put it right.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum KeyGuard {
+    Off,
+    Warn,
+    /// The keypad: turn NumLock on and type the digit. Insert: hold it back.
+    Fix,
+}
+
+impl KeyGuard {
+    pub fn name(self) -> &'static str {
+        match self {
+            KeyGuard::Off => "off",
+            KeyGuard::Warn => "warn",
+            KeyGuard::Fix => "fix",
+        }
+    }
+
+    pub fn parse(s: &str) -> KeyGuard {
+        match s.trim() {
+            "off" => KeyGuard::Off,
+            "fix" | "block" => KeyGuard::Fix,
+            _ => KeyGuard::Warn,
+        }
+    }
+
+    fn from_u8(v: u8) -> KeyGuard {
+        match v {
+            0 => KeyGuard::Off,
+            2 => KeyGuard::Fix,
+            _ => KeyGuard::Warn,
+        }
+    }
+}
+
+static NUMLOCK_MODE: AtomicU8 = AtomicU8::new(1);
+static INSERT_MODE: AtomicU8 = AtomicU8::new(1);
+
+pub fn numlock_mode() -> KeyGuard {
+    KeyGuard::from_u8(NUMLOCK_MODE.load(Ordering::Relaxed))
+}
+
+pub fn set_numlock_mode(mode: KeyGuard) {
+    NUMLOCK_MODE.store(mode as u8, Ordering::Relaxed);
+}
+
+pub fn insert_mode() -> KeyGuard {
+    KeyGuard::from_u8(INSERT_MODE.load(Ordering::Relaxed))
+}
+
+pub fn set_insert_mode(mode: KeyGuard) {
+    INSERT_MODE.store(mode as u8, Ordering::Relaxed);
+}
+
+/// The digit a numeric-keypad key types with NumLock on, for the key it
+/// sends with NumLock off (`extended` keys are the separate arrow and
+/// editing keys, not the keypad).
+fn keypad_digit(vk: u16, extended: bool) -> Option<char> {
+    if extended {
+        return None;
+    }
+    Some(match vk {
+        0x2D => '0', // Insert
+        0x23 => '1', // End
+        0x28 => '2', // Down
+        0x22 => '3', // Page Down
+        0x25 => '4', // Left
+        0x0C => '5', // Clear
+        0x27 => '6', // Right
+        0x24 => '7', // Home
+        0x26 => '8', // Up
+        0x21 => '9', // Page Up
+        _ => return None,
+    })
+}
+
+/// A warning shown at most once a minute.
+static NUM_WARNED: std::sync::Mutex<Option<Instant>> = std::sync::Mutex::new(None);
+
+fn warn_once(last: &std::sync::Mutex<Option<Instant>>, tag: &str, message: righttype::i18n::T) {
+    let mut last = last.lock().unwrap();
+    if last.is_some_and(|at| at.elapsed() < Duration::from_secs(60)) {
+        return;
+    }
+    *last = Some(Instant::now());
+    trace_note("keypad with NumLock off: said so");
+    crate::overlay::badge_at_caret(tag);
+    crate::overlay::show(righttype::i18n::tr(message));
+}
+
 /// Ctrl+Backspace after Thai deletes one Thai word (Windows takes the whole
 /// run of Thai, which has no spaces between words). On by default.
 static DELETE_THAI_WORDS: AtomicBool = AtomicBool::new(true);
@@ -1386,6 +1477,56 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         });
         return false;
     };
+
+    // Keys that change how the next keys type, without a sign of it: the
+    // numeric keypad with NumLock off (it moves the caret instead of typing
+    // digits), and Insert (overtype in the apps that have it). Only in a text
+    // field, and only plain presses.
+    if action.is_none()
+        && !is_down(VK_CONTROL)
+        && !is_down(VK_MENU)
+        && !repeat
+        && crate::focus::is_text_field()
+    {
+        let extended = kb.flags.0 & 0x01 != 0;
+        if let Some(digit) = keypad_digit(vk, extended) {
+            if !is_down(VK_SHIFT) && GetKeyState(0x90) & 1 == 0 {
+                match numlock_mode() {
+                    KeyGuard::Fix => {
+                        // NumLock on, and the digit the typist meant.
+                        inject::toggle_numlock();
+                        let mut s = [0u8; 4];
+                        if inject::apply(0, digit.encode_utf8(&mut s), None) {
+                            trace_note("keypad with NumLock off: turned it on");
+                            crate::overlay::badge_at_caret("NUM");
+                            return true;
+                        }
+                    }
+                    KeyGuard::Warn => {
+                        warn_once(&NUM_WARNED, "NUM", righttype::i18n::T::ToastNumLockOff)
+                    }
+                    KeyGuard::Off => {}
+                }
+            }
+        } else if vk == VK_INSERT.0 && extended && !is_down(VK_SHIFT) {
+            match insert_mode() {
+                KeyGuard::Fix => {
+                    trace_note("Insert held back in a text field");
+                    crate::overlay::show(righttype::i18n::tr(
+                        righttype::i18n::T::ToastInsertBlocked,
+                    ));
+                    return true;
+                }
+                KeyGuard::Warn => {
+                    trace_note("Insert pressed in a text field: said so");
+                    crate::overlay::show(righttype::i18n::tr(
+                        righttype::i18n::T::ToastInsertPressed,
+                    ))
+                }
+                KeyGuard::Off => {}
+            }
+        }
+    }
 
     // Ctrl+Backspace after Thai: one Thai word, not the whole run (Thai has
     // no spaces between words, so Windows takes everything back to the last

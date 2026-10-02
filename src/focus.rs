@@ -126,6 +126,20 @@ thread_local! {
     static FIELD: RefCell<Option<IUIAutomationElement>> = const { RefCell::new(None) };
 }
 
+/// Where the focused password field is on screen (for the TH / CAPS tag
+/// next to it); set when focus moves into one.
+static PASSWORD_BOX: std::sync::Mutex<Option<windows::Win32::Foundation::RECT>> =
+    std::sync::Mutex::new(None);
+
+/// The focused password field's box, when focus is in one and the app
+/// said where it is.
+pub fn password_box() -> Option<windows::Win32::Foundation::RECT> {
+    if FIELD_STATUS.load(Ordering::Relaxed) != FIELD_PASSWORD {
+        return None;
+    }
+    *PASSWORD_BOX.lock().unwrap()
+}
+
 /// Is the currently focused element a password field (per UIA)?
 pub fn is_password_field() -> bool {
     status_is_protected(FIELD_STATUS.load(Ordering::Relaxed))
@@ -405,7 +419,13 @@ unsafe fn refresh_status() {
                     t == windows::Win32::UI::Accessibility::UIA_EditControlTypeId
                         || t == windows::Win32::UI::Accessibility::UIA_DocumentControlTypeId
                 });
-                el.CurrentIsPassword().ok().map(|b| b.as_bool())
+                let is_password = el.CurrentIsPassword().ok().map(|b| b.as_bool());
+                if is_password == Some(true) {
+                    if let Ok(r) = el.CurrentBoundingRectangle() {
+                        *PASSWORD_BOX.lock().unwrap() = Some(r);
+                    }
+                }
+                is_password
             })
             .map(|is_password| {
                 if is_password {

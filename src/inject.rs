@@ -205,7 +205,18 @@ pub fn expect_before_caret(text: &str) {
     CONTEXT.with(|c| *c.borrow_mut() = Some(zeroize::Zeroizing::new(text.to_string())));
 }
 
+/// Press NumLock once (ours: the hook lets it through untouched).
+///
+/// # Safety
+/// Calls `SendInput`.
+pub unsafe fn toggle_numlock() {
+    let _ = send(&[key(0x90, false), key(0x90, true)]);
+}
+
 /// Press CapsLock once (ours: the hook lets it through untouched).
+///
+/// # Safety
+/// Calls `SendInput`.
 pub unsafe fn toggle_capslock() {
     let _ = send(&[key(0x14, false), key(0x14, true)]);
 }

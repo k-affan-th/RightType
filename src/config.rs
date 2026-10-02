@@ -86,6 +86,12 @@ pub struct Config {
     /// ones (`righttype::per_app::CHAT_APPS`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chat_apps: Vec<String>,
+    /// TH / CAPS tag at a password field.
+    pub password_hint: bool,
+    /// The keypad with NumLock off: "off", "warn" or "fix".
+    pub numlock: String,
+    /// Insert in a text field: "off", "warn" or "fix" (held back).
+    pub insert_key: String,
     /// Put right common Thai misspellings (opt-in).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fix_spelling: bool,
@@ -157,6 +163,9 @@ impl Default for Config {
             delete_thai_words: true,
             guard_enter: true,
             chat_apps: Vec::new(),
+            password_hint: true,
+            numlock: "warn".into(),
+            insert_key: "warn".into(),
             snippets: Vec::new(),
             sync_settings: false,
         }
@@ -205,6 +214,9 @@ pub fn apply(cfg: &Config) {
     hook::set_deletes_thai_words(cfg.delete_thai_words);
     hook::set_guards_enter(cfg.guard_enter);
     hook::set_chat_apps(cfg.chat_apps.clone());
+    crate::pwhint::set_enabled(cfg.password_hint);
+    hook::set_numlock_mode(hook::KeyGuard::parse(&cfg.numlock));
+    hook::set_insert_mode(hook::KeyGuard::parse(&cfg.insert_key));
     hook::set_snippets(
         cfg.snippets
             .iter()
@@ -444,6 +456,9 @@ fn snapshot() -> Config {
         delete_thai_words: hook::deletes_thai_words(),
         guard_enter: hook::guards_enter(),
         chat_apps: hook::chat_apps(),
+        password_hint: crate::pwhint::is_enabled(),
+        numlock: hook::numlock_mode().name().into(),
+        insert_key: hook::insert_mode().name().into(),
         sync_settings: SYNC_SETTINGS.load(std::sync::atomic::Ordering::Relaxed),
         snippets: hook::snippets()
             .into_iter()

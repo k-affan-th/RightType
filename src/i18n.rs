@@ -282,6 +282,14 @@ texts! {
     HkReset => "All hotkeys are back to the defaults.", "คืนปุ่มลัดทั้งหมดเป็นค่าเดิมแล้ว";
     PaletteHead => "↑↓ Enter · 1–9 · type to search · Esc", "↑↓ Enter · 1–9 · พิมพ์เพื่อค้นหา · Esc";
     PaletteFiltering => "Search: {text}", "ค้นหา: {text}";
+    PalettePasswordHint => "TH / CAPS tag at password fields", "แท็ก TH / CAPS ที่ช่องรหัสผ่าน";
+    PaletteNumLock => "Keypad with NumLock off (warn / fix)", "แป้นตัวเลขตอน NumLock ปิด (เตือน / แก้ให้)";
+    PaletteInsertKey => "Insert key in text (warn / hold back)", "ปุ่ม Insert ในช่องข้อความ (เตือน / ไม่ให้ทำงาน)";
+    HintWarn => "Warn", "เตือน";
+    HintFix => "Fix", "แก้ให้";
+    ToastNumLockOff => "NumLock is off: the keypad moves the cursor instead of typing digits", "NumLock ปิดอยู่: แป้นตัวเลขด้านขวาจะเลื่อนเคอร์เซอร์แทนการพิมพ์ตัวเลข";
+    ToastInsertPressed => "Insert pressed: some apps now type over the text · press it again to go back", "กด Insert แล้ว: บางแอปจะพิมพ์ทับข้อความ · กดอีกครั้งเพื่อกลับ";
+    ToastInsertBlocked => "Insert held back (it turns on typing over the text)", "ไม่ให้ Insert ทำงาน (ปุ่มนี้เปิดการพิมพ์ทับข้อความ)";
     PaletteSecReview => "Check before fixing · {n} words", "ตรวจก่อนแก้ · {n} คำ";
     PaletteReviewHint => "Space ticks or unticks · Enter fixes the ticked · Esc leaves it", "Space ติ๊ก/เอาออก · Enter แก้คำที่ติ๊ก · Esc ไม่แก้";
     PaletteApplyReview => "Fix the ticked words", "แก้คำที่ติ๊กไว้";

@@ -47,6 +47,8 @@ mod overlay;
 #[cfg(feature = "winos")]
 mod palette;
 #[cfg(feature = "winos")]
+mod pwhint;
+#[cfg(feature = "winos")]
 mod ram;
 #[cfg(feature = "winos")]
 mod report;

@@ -108,6 +108,11 @@ enum Command {
     EnterGuard,
     /// Ctrl+Backspace deletes one Thai word, on or off.
     ThaiWordDelete,
+    /// TH / CAPS tag at password fields, on or off.
+    PasswordHint,
+    /// The keypad with NumLock off, Insert: off → warn → fix.
+    NumLock,
+    InsertKey,
     /// English prefix words written with their hyphen, on or off.
     Hyphens,
 }
@@ -212,6 +217,8 @@ impl Command {
             Command::ApplyReview => '\u{E73E}',    // CheckMark
             Command::EnterGuard => '\u{E8BD}',     // Message
             Command::ThaiWordDelete => '\u{E75C}', // EraseTool
+            Command::PasswordHint => '\u{E72E}',   // Lock
+            Command::NumLock | Command::InsertKey => '\u{E765}', // KeyboardClassic
             Command::Spelling => '\u{E82D}',       // Dictionary
             Command::Hyphens => '\u{E738}',        // Remove (a dash)
             Command::CapsSwitch => '\u{E72E}',     // Lock
@@ -878,9 +885,33 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             hook::guards_enter(),
             Command::EnterGuard,
         ),
+        (
+            T::PalettePasswordHint,
+            crate::pwhint::is_enabled(),
+            Command::PasswordHint,
+        ),
     ] {
         add(Section::Options, tr(key).to_string(), state(on), command);
     }
+    let guard = |g: hook::KeyGuard| {
+        tr(match g {
+            hook::KeyGuard::Off => T::HintOff,
+            hook::KeyGuard::Warn => T::HintWarn,
+            hook::KeyGuard::Fix => T::HintFix,
+        })
+    };
+    add(
+        Section::Options,
+        tr(T::PaletteNumLock).to_string(),
+        guard(hook::numlock_mode()),
+        Command::NumLock,
+    );
+    add(
+        Section::Options,
+        tr(T::PaletteInsertKey).to_string(),
+        guard(hook::insert_mode()),
+        Command::InsertKey,
+    );
     // For apps that do not share their text (see `manual::fix_field`).
     add(
         Section::Options,
@@ -1342,6 +1373,23 @@ fn run(command: Command, app: Option<&str>) {
         }
         Command::ThaiWordDelete => {
             hook::set_deletes_thai_words(!hook::deletes_thai_words());
+            config::persist();
+        }
+        Command::PasswordHint => {
+            crate::pwhint::set_enabled(!crate::pwhint::is_enabled());
+            config::persist();
+        }
+        Command::NumLock | Command::InsertKey => {
+            let next = |g: hook::KeyGuard| match g {
+                hook::KeyGuard::Off => hook::KeyGuard::Warn,
+                hook::KeyGuard::Warn => hook::KeyGuard::Fix,
+                hook::KeyGuard::Fix => hook::KeyGuard::Off,
+            };
+            if command == Command::NumLock {
+                hook::set_numlock_mode(next(hook::numlock_mode()));
+            } else {
+                hook::set_insert_mode(next(hook::insert_mode()));
+            }
             config::persist();
         }
         Command::Spelling => {

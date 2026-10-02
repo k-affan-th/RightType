@@ -169,6 +169,74 @@ def palette_text_tools(t):
         fs.set_mode("auto")
 
 
+def hold_flip(seconds=0.8):
+    """Shift+Backspace held: the key's down repeated, as a held key does."""
+    user32.keybd_event(SHIFT, 0, 0, 0)
+    time.sleep(0.05)
+    user32.keybd_event(BACK, 0, 0, 0)
+    for _ in range(int(seconds / 0.1)):
+        time.sleep(0.1)
+        user32.keybd_event(BACK, 0, 0, 0)
+    user32.keybd_event(BACK, 0, 2, 0)
+    user32.keybd_event(SHIFT, 0, 2, 0)
+
+
+def traced(steps, what):
+    """Run `steps`; did the trace say `what` meanwhile?"""
+    start = fs.log_size()
+    steps()
+    time.sleep(0.6)
+    return "yes" if what in fs.log_since(start) else "no"
+
+
+def keyboard_states(t):
+    """2.2: addresses and numbers typed with the Thai keyboard on come back;
+    Shift+Backspace held flips the whole run; the keypad with NumLock off
+    and Insert are pointed out."""
+    fs.run(t, "email typed on the Thai keyboard", "name@gmail.com ", "name@gmail.com",
+           layout=HKL_TH)
+    fs.run(t, "web address typed on the Thai keyboard", "www.google.co.th ",
+           "www.google.co.th", layout=HKL_TH)
+    fs.run(t, "number typed on the Thai keyboard", "100 ", "100", layout=HKL_TH)
+    fs.run(t, "time typed on the Thai keyboard", "10:30 ", "10:30", layout=HKL_TH)
+    fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
+    try:
+        fs.run(t, "Shift+Backspace held flips the whole run", "l;ylfu 8iy[ l;ylfu ",
+               "สวัสดี ครับ สวัสดี", then=[hold_flip], settle=1.0)
+    finally:
+        fs.set_mode("auto")
+    t.clear()
+    numlock_on = bool(user32.GetKeyState(0x90) & 1)
+    if numlock_on:
+        tap(0x90)
+    try:
+        # Keypad 1 with NumLock off sends End (not extended).
+        fs.check(t.name, "keypad with NumLock off is pointed out",
+                 traced(lambda: tap(0x23), "NumLock off: said so"), "yes")
+    finally:
+        if numlock_on:
+            tap(0x90)
+    # Insert from the editing keys is an extended key.
+    def insert():
+        user32.keybd_event(0x2D, 0, 1, 0)
+        user32.keybd_event(0x2D, 0, 3, 0)
+    fs.check(t.name, "Insert in a text field is pointed out",
+             traced(insert, "Insert pressed in a text field"), "yes")
+    insert()  # back to how it was
+
+
+def password_tag(t):
+    """2.2: the TH tag at a password field with the Thai keyboard on."""
+    def steps():
+        t.pw.set_focus()
+        time.sleep(0.3)
+        t.layout(HKL_TH)
+        time.sleep(0.8)
+    fs.check(t.name, "TH tag at a password field", traced(steps, "password tag: TH"), "yes")
+    t.layout(HKL_EN)
+    t.focus()
+
+
 def thai_word_delete(t):
     """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
     fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
@@ -926,11 +994,13 @@ def sweep(t):
     fs.run(t, "two เ typed for แ is put right", "gg,; ", "แมว", layout=HKL_TH)
     snippets_and_spelling(t)
     if t.name in ("page", "notepad"):
+        keyboard_states(t)
         thai_word_delete(t)
         palette_text_tools(t)
     if t.name == "notepad":
         enter_guard(t)
     if t.name == "page":
+        password_tag(t)
         full_screen_browser_still_works(t)
         palette_by_keyboard(t)
         code_mode(t)

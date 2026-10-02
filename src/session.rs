@@ -220,7 +220,10 @@ pub unsafe fn on_message(msg: u32, wparam: usize) {
                 check_liveness();
             }
         }
-        crate::focus::WM_FOCUS_MOVED => crate::habits::on_focus(),
+        crate::focus::WM_FOCUS_MOVED => {
+            crate::habits::on_focus();
+            crate::pwhint::on_focus();
+        }
         WM_POWERBROADCAST if wparam == PBT_APMRESUMEAUTOMATIC || wparam == PBT_APMRESUMESUSPEND => {
             crate::hook::e2e_trace(format!("session: power resume ({wparam:#x}) reinstall"));
             righttype::diag::note("session: power resume, reinstall", &[]);
