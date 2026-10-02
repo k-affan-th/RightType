@@ -331,6 +331,12 @@ texts! {
     HealthCaps => "CapsLock", "ปุ่ม CapsLock";
     HealthCapsOn => "On: letters come out in capitals.", "เปิดอยู่: ตัวอักษรจะเป็นตัวพิมพ์ใหญ่";
     HealthOff => "Off.", "ปิดอยู่";
+    HealthChatter => "Keys typing twice", "ปุ่มเบิ้ล";
+    HealthChatterOk => "None seen since RightType started.", "ยังไม่พบตั้งแต่เปิด RightType";
+    HealthChatterBad => "{keys} typed twice by itself ({n} times): a worn or dusty switch.", "{keys} พิมพ์ซ้ำเอง ({n} ครั้ง) สวิตช์อาจสึกหรือมีฝุ่น";
+    HealthChatterFiltered => "Filtered: {keys}. A second press right after letting go is dropped.", "กรองอยู่: {keys} การกดซ้ำทันทีหลังปล่อยจะไม่ถูกนับ";
+    HealthFilterThem => "Filter", "กรองให้";
+    HealthStopFilter => "Stop filtering", "เลิกกรอง";
     NavLearned => "Learned words", "คำที่เรียนรู้";
     NavBlocked => "Apps", "แอป";
     NavAbout => "Privacy & about", "ความเป็นส่วนตัว";

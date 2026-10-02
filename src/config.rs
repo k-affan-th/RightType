@@ -106,6 +106,10 @@ pub struct Config {
     pub guard_switch: bool,
     /// Offer the rest of a long Thai word, for Tab (opt-in).
     pub complete_thai: bool,
+    /// Keys whose bounces (a second press a few ms after the release) are
+    /// dropped: scan codes, plus 0x100 for extended keys.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub debounce_keys: Vec<u16>,
     /// Put right common Thai misspellings (opt-in).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fix_spelling: bool,
@@ -185,6 +189,7 @@ impl Default for Config {
             fix_addresses: true,
             guard_switch: false,
             complete_thai: false,
+            debounce_keys: Vec::new(),
             snippets: Vec::new(),
             sync_settings: false,
         }
@@ -248,6 +253,12 @@ pub fn apply(cfg: &Config) {
     righttype::policy::set_fixes_addresses(cfg.fix_addresses);
     hook::set_guards_switch(cfg.guard_switch);
     hook::set_completes_thai(cfg.complete_thai);
+    hook::set_debounce_keys(
+        cfg.debounce_keys
+            .iter()
+            .map(|k| (k & 0xFF, k & 0x100 != 0))
+            .collect(),
+    );
     hook::set_snippets(
         cfg.snippets
             .iter()
@@ -503,6 +514,10 @@ fn snapshot() -> Config {
         fix_addresses: righttype::policy::fixes_addresses(),
         guard_switch: hook::guards_switch(),
         complete_thai: hook::completes_thai(),
+        debounce_keys: hook::debounce_keys()
+            .iter()
+            .map(|(scan, ext)| scan | if *ext { 0x100 } else { 0 })
+            .collect(),
         sync_settings: SYNC_SETTINGS.load(std::sync::atomic::Ordering::Relaxed),
         snippets: hook::snippets()
             .into_iter()

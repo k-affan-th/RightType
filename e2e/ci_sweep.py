@@ -374,6 +374,35 @@ def keyboard_health(t):
     fs.check(t.name, "health check turns CapsLock off", result, "yes")
 
 
+def key_bounce(t):
+    """2.3: a key that types twice by itself (pressed again a few ms after
+    letting go): counted, and dropped for a key chosen to be filtered (h)."""
+    write_sweep_config(keys="debounce_keys = [0x23]\n")  # h
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.clear()
+        t.focus()
+        time.sleep(0.4)
+        def bounce(vk):
+            fs.key(vk)
+            time.sleep(0.06)
+            fs.key(vk, True)
+            time.sleep(0.005)  # a bounce: no finger is this quick
+            fs.key(vk)
+            time.sleep(0.02)
+            fs.key(vk, True)
+            time.sleep(0.3)
+        fs.check(t.name, "a bounce of a filtered key is dropped",
+                 traced(lambda: bounce(ord("H")), "key bounce dropped"), "yes")
+        fs.check(t.name, "a bounce of another key is counted",
+                 traced(lambda: bounce(ord("J")), "key bounce: scan 0x24"), "yes")
+        time.sleep(0.4)
+        fs.check(t.name, "the filtered key typed once", t.read().strip(), "hjj")
+    finally:
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+
+
 def thai_word_delete(t):
     """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
     fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
@@ -1281,6 +1310,7 @@ def sweep(t):
         keyboard_map(t)
         keyboard_lock(t)
         keyboard_health(t)
+        key_bounce(t)
         enter_guard(t)
         app_keyboards(t)
     if t.name == "page":

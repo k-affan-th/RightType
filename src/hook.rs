@@ -1160,6 +1160,26 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         {
             return LRESULT(1);
         }
+        // A key that types twice by itself: counted, and dropped for the
+        // keys the typist chose to filter. Hardware only (and the e2e
+        // test's keys): other programs' keys do not bounce.
+        if kb.dwExtraInfo != INJECT_TAG
+            && ((kb.flags.0 & LLKHF_INJECTED.0) == 0 || debug_e2e_accepts_injected())
+        {
+            let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+            let key = (kb.scanCode as u16, kb.flags.0 & 0x01 != 0);
+            match CHATTER.with(|c| c.borrow_mut().observe(key, down, kb.time)) {
+                righttype::chatter::Verdict::Pass => {}
+                righttype::chatter::Verdict::Bounce => {
+                    e2e_trace(format!("key bounce: scan {:#x}", key.0));
+                    diag::note("key bounce", &[]);
+                }
+                righttype::chatter::Verdict::Drop => {
+                    e2e_trace(format!("key bounce dropped: scan {:#x}", key.0));
+                    return LRESULT(1);
+                }
+            }
+        }
         // Skip anything we generated: our tag is authoritative and timing-free.
         let externally_injected = (kb.flags.0 & LLKHF_INJECTED.0) != 0;
         let ours = kb.dwExtraInfo == INJECT_TAG
@@ -1257,6 +1277,25 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         }
     }
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
+thread_local! {
+    /// Keys that type twice by themselves (see righttype::chatter).
+    static CHATTER: RefCell<righttype::chatter::Chatter> =
+        RefCell::new(righttype::chatter::Chatter::new());
+}
+
+pub fn set_debounce_keys(keys: Vec<righttype::chatter::KeyId>) {
+    CHATTER.with(|c| c.borrow_mut().set_filtered(keys));
+}
+
+pub fn debounce_keys() -> Vec<righttype::chatter::KeyId> {
+    CHATTER.with(|c| c.borrow().filtered().to_vec())
+}
+
+/// Keys seen bouncing (scan code and extended flag) and how often.
+pub fn chatter_suspects() -> Vec<(righttype::chatter::KeyId, u32)> {
+    CHATTER.with(|c| c.borrow().suspects())
 }
 
 /// The most one key may spend in the hook, waits included. Windows lets a

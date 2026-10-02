@@ -22,7 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 /// How many checks there are (one row each).
-pub const COUNT: usize = 7;
+pub const COUNT: usize = 8;
 
 /// What a fix does.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -35,6 +35,9 @@ pub enum Fix {
     AltShift,
     TypingSettings,
     CapsOff,
+    /// Drop these keys' bounces (and keep the ones already filtered).
+    Debounce(Vec<(u16, bool)>),
+    StopDebounce,
 }
 
 pub struct Check {
@@ -55,6 +58,7 @@ pub fn run() -> Vec<Check> {
         switch_keys(),
         autocorrect(),
         caps_lock(),
+        chatter(),
     ]
 }
 
@@ -254,6 +258,48 @@ fn caps_lock() -> Check {
     }
 }
 
+fn key_names(keys: &[(u16, bool)]) -> String {
+    keys.iter()
+        .map(|(scan, ext)| {
+            righttype::keyboard::index_of(*scan, *ext)
+                .map(|i| righttype::keyboard::KEYS[i].label)
+                .filter(|l| !l.is_empty())
+                .unwrap_or("Space")
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn chatter() -> Check {
+    let filtered = crate::hook::debounce_keys();
+    let new: Vec<((u16, bool), u32)> = crate::hook::chatter_suspects()
+        .into_iter()
+        .filter(|(k, _)| !filtered.contains(k))
+        .collect();
+    if !new.is_empty() {
+        let keys: Vec<(u16, bool)> = new.iter().map(|(k, _)| *k).collect();
+        let times: u32 = new.iter().map(|(_, n)| n).sum();
+        return Check {
+            title: T::HealthChatter,
+            ok: false,
+            status: trf(
+                T::HealthChatterBad,
+                &[("keys", &key_names(&keys)), ("n", &times.to_string())],
+            ),
+            fix: Some((T::HealthFilterThem, Fix::Debounce(keys))),
+        };
+    }
+    if filtered.is_empty() {
+        return ok(T::HealthChatter, tr(T::HealthChatterOk).to_string());
+    }
+    Check {
+        title: T::HealthChatter,
+        ok: true,
+        status: trf(T::HealthChatterFiltered, &[("keys", &key_names(&filtered))]),
+        fix: Some((T::HealthStopFilter, Fix::StopDebounce)),
+    }
+}
+
 /// Make the fix (UI thread).
 pub fn apply(fix: &Fix) {
     crate::hook::e2e_trace(format!("health: fix {fix:?}"));
@@ -294,6 +340,21 @@ pub fn apply(fix: &Fix) {
             Fix::LanguageSettings => open("ms-settings:regionlanguage"),
             Fix::TypingSettings => open("ms-settings:typing"),
             Fix::CapsOff => crate::inject::toggle_capslock(),
+            Fix::Debounce(keys) => {
+                let mut all = crate::hook::debounce_keys();
+                all.extend(
+                    keys.iter()
+                        .filter(|k| !all.contains(k))
+                        .copied()
+                        .collect::<Vec<_>>(),
+                );
+                crate::hook::set_debounce_keys(all);
+                crate::config::persist();
+            }
+            Fix::StopDebounce => {
+                crate::hook::set_debounce_keys(Vec::new());
+                crate::config::persist();
+            }
         }
     }
 }

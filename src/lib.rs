@@ -31,6 +31,7 @@
 //! - [`sim`] — the hook's Auto pipeline replayed on a string, for benchmarks and tests.
 
 pub mod buffer;
+pub mod chatter;
 pub mod code;
 pub mod compat;
 pub mod detect;
