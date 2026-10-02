@@ -1119,6 +1119,10 @@ def main():
         print(f"  XPASS {label} — remove it from KNOWN_FAILING")
     for line in failed:
         print(f"  FAIL {line}")
+    # Each failing case's trace once more, last: a log cut to its end (as
+    # the CI tools show it) keeps these.
+    for label, part in fs.FAILED_TRACES:
+        print(f"\n--- failing case: {label} (its trace, last 6000 chars) ---\n{part}", flush=True)
     report = lib.HERE / "RightType-test-report.txt"
     lines = [f"SUMMARY {passed}/{len(fs.RESULTS)} passed"]
     lines += [f"FAIL {line}" for line in failed] + [f"KNOWN FAILING {x}" for x in known]

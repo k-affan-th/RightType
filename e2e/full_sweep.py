@@ -237,6 +237,8 @@ class Claude(Target):
 # --------------------------------------------------------------------------- cases
 
 RESULTS = []
+# Each failing case's own part of the trace (see `check`).
+FAILED_TRACES = []
 
 
 # Where the trace was at the last check: a failing case prints its own part
@@ -255,6 +257,9 @@ def check(target, name, got, expect):
             print(f"--- trace of this case ({len(part)} chars, last 15000) ---", flush=True)
             print(part[-15000:], flush=True)
             print("--- end of this case's trace ---", flush=True)
+            # Printed again after the summary, where a log cut to its end
+            # still has it.
+            FAILED_TRACES.append((f"{target}: {name}", part[-6000:]))
         _MARK[0] = log_size()
     return ok
 
