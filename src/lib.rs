@@ -32,6 +32,7 @@
 
 pub mod buffer;
 pub mod code;
+pub mod compat;
 pub mod detect;
 pub mod diag;
 pub mod dict;

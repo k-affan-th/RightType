@@ -907,9 +907,25 @@ enum ContextAsk {
         Vec<(usize, usize)>,
         std::sync::mpsc::SyncSender<Vec<Option<windows::Win32::Foundation::RECT>>>,
     ),
+    /// Is text selected in the focused field?
+    Selected(std::sync::mpsc::SyncSender<bool>),
 }
 static CONTEXT_WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<ContextAsk>> =
     std::sync::OnceLock::new();
+
+/// Is text selected in the focused field (through UI Automation)? Asked
+/// of the context worker, waiting at most `max`; `false` when the app does
+/// not say in time.
+pub fn has_selection_within(max: std::time::Duration) -> bool {
+    let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+    if context_worker()
+        .try_send(ContextAsk::Selected(reply_tx))
+        .is_err()
+    {
+        return false;
+    }
+    reply_rx.recv_timeout(max).unwrap_or(false)
+}
 
 /// Up to `n` characters before the caret, for the keyboard hook, which must not make the
 /// cross-process calls itself: asked of a worker, waiting at most `max`
@@ -939,6 +955,9 @@ fn context_worker() -> &'static std::sync::mpsc::SyncSender<ContextAsk> {
                     match ask {
                         ContextAsk::Text(n, reply) => {
                             let _ = reply.try_send(text_before_caret_up_to(n));
+                        }
+                        ContextAsk::Selected(reply) => {
+                            let _ = reply.try_send(uia_selected_text().is_some());
                         }
                         ContextAsk::Boxes(spans, reply) => {
                             let _ = reply.try_send(boxes_before_caret(&spans));

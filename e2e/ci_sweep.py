@@ -598,6 +598,75 @@ class SkipTarget(Exception):
     """The app this target needs is not on this machine."""
 
 
+class Word(fs.Target):
+    """Microsoft Word, where it is installed (not on CI): it rewrites words
+    as they are typed (a capital at a sentence's start, AutoCorrect), which
+    RightType's check-after-write must not take for garbling."""
+
+    name = "word"
+
+    def __init__(self):
+        from pywinauto import Desktop
+        import shutil
+        exe = shutil.which("winword.exe")
+        if not exe:
+            for root in (os.environ.get("ProgramFiles", ""), os.environ.get("ProgramFiles(x86)", "")):
+                for sub in ("Microsoft Office\\root\\Office16", "Microsoft Office\\Office16"):
+                    candidate = Path(root) / sub / "WINWORD.EXE"
+                    if candidate.exists():
+                        exe = str(candidate)
+        if not exe:
+            raise SkipTarget("Microsoft Word is not installed here")
+        self.proc = subprocess.Popen([exe, "/q", "/n"])
+        self.win = None
+        for _ in range(60):
+            time.sleep(0.5)
+            for w in Desktop(backend="uia").windows(top_level_only=True):
+                if w.element_info.class_name == "OpusApp":
+                    self.win = w
+                    break
+            if self.win:
+                break
+        if not self.win:
+            raise SystemExit("Word did not open a window")
+        self.hwnd = self.win.handle
+        time.sleep(2)
+
+    def focus(self):
+        self.win.set_focus()
+        time.sleep(0.3)
+
+    def read(self):
+        for d in self.win.descendants(control_type="Document"):
+            try:
+                return d.iface_text.DocumentRange.GetText(-1) or ""
+            except Exception:
+                continue
+        return ""
+
+    def close(self):
+        try:
+            self.proc.kill()
+        except Exception:
+            pass
+        subprocess.run(["taskkill", "/IM", "winword.exe", "/F"], capture_output=True)
+
+
+def word_sweep(t):
+    """2.2: RightType next to Word's own rewriting."""
+    t.focus()
+    fs.run(t, "EN->TH word in Word", "l;ylfu ", "สวัสดี")
+    fs.run(t, "email on the Thai keyboard in Word", "name@gmail.com ", "name@gmail.com",
+           layout=HKL_TH)
+    # Word capitalises the first word of a sentence after RightType wrote it.
+    t.clear()
+    t.layout(HKL_TH)
+    fs.type_keys("correct ")
+    time.sleep(1.2)
+    fs.check(t.name, "TH->EN word, Word may capitalise it", t.read().strip().lower(), "correct")
+    t.layout(HKL_EN)
+
+
 class Notepad11(Notepad):
     """Windows 11's Notepad (the Store app: a RichEdit box in a WinUI
     window), not the classic one CI has in System32. Thai typed there by
@@ -1096,7 +1165,8 @@ def report_has_no_typed_text(target, results):
 
 
 def main():
-    want = set(sys.argv[1:]) or {"page", "omnibox", "edge", "notepad", "notepad11", "hang"}
+    want = set(sys.argv[1:]) or {"page", "omnibox", "edge", "notepad", "notepad11", "word",
+                                 "hang"}
     # Thai must be loaded for this session (CI installs it just before).
     user32.LoadKeyboardLayoutW("0000041E", 0)
     user32.LoadKeyboardLayoutW("00000409", 0)
@@ -1111,7 +1181,7 @@ def main():
     # others (after a word boundary handled inside a focus callback), and one
     # clean round proves nothing.
     targets = [("page", Page), ("omnibox", Omnibox)] + [("edge", EdgeOmnibox)] * EDGE_ROUNDS + [
-        ("notepad", Notepad), ("notepad11", Notepad11), ("hang", HangPage)]
+        ("notepad", Notepad), ("notepad11", Notepad11), ("word", Word), ("hang", HangPage)]
     sections = {}
     try:
         for key, make in targets:
@@ -1149,7 +1219,8 @@ def main():
                 tap(fs.CAPS)
             results_before = len(fs.RESULTS)
             try:
-                {"edge": edge_sweep, "hang": hang_sweep, "notepad11": notepad11_sweep}.get(key, sweep)(t)
+                {"edge": edge_sweep, "hang": hang_sweep, "notepad11": notepad11_sweep,
+                 "word": word_sweep}.get(key, sweep)(t)
             finally:
                 # A target may restart RightType (CURRENT holds the one running).
                 print(f"RightType after {key}: {rt_health(CURRENT[0])}", flush=True)

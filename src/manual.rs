@@ -213,6 +213,11 @@ unsafe fn fix_field(hwnd: isize) {
     }
     let Some(text) = focus::field_text(MAX_FIELD_CHARS) else {
         crate::hook::trace_note("fix field: the app does not share its text");
+        // Google Docs shares it once its screen-reader support is on.
+        if righttype::compat::is_google_docs(&window_title(hwnd)) {
+            overlay::show(tr(T::ToastGoogleDocsTip));
+            return;
+        }
         crate::tray::on_ui(crate::tray::UI_FIX_WINDOW);
         overlay::show(tr(T::ToastOpenedFixWindow));
         return;
@@ -259,6 +264,14 @@ unsafe fn fix_field(hwnd: isize) {
         c.original.zeroize();
         c.fixed.zeroize();
     }
+}
+
+/// A window's title (only looked at, never kept).
+fn window_title(hwnd: isize) -> String {
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowTextW;
+    let mut buf = [0u16; 256];
+    let n = unsafe { GetWindowTextW(HWND(hwnd as *mut _), &mut buf) } as usize;
+    String::from_utf16_lossy(&buf[..n.min(buf.len())])
 }
 
 /// Each change as (typed, fixed).

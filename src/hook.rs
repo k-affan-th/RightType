@@ -1539,6 +1539,8 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         && !is_down(VK_MENU)
         && deletes_thai_words()
         && STATE.with(|s| s.borrow().owned.is_none())
+        // Browsers, Electron apps and Office already delete one Thai word.
+        && !current_app().is_some_and(|e| righttype::compat::breaks_thai_words(&e))
     {
         let before = crate::focus::text_before_caret_within(80, Duration::from_millis(60));
         let n = before

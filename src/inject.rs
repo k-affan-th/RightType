@@ -111,7 +111,13 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     //    caret: Delete clears it (and does nothing otherwise, since the word
     //    being replaced always ends at the caret), so each Backspace then
     //    removes a typed character.
-    if backspaces > 0 && crate::focus::completes_inline() {
+    // Excel's AutoComplete selects the rest of a cell the same way; there
+    // Delete is sent only when something is selected, since a cell may
+    // hold text after the caret.
+    let excel_completion = backspaces > 0
+        && crate::hook::current_app().is_some_and(|e| righttype::compat::completes_inline(&e))
+        && crate::focus::has_selection_within(std::time::Duration::from_millis(40));
+    if backspaces > 0 && (crate::focus::completes_inline() || excel_completion) {
         inputs.push(key(VK_DELETE.0, false));
         inputs.push(key(VK_DELETE.0, true));
     }

@@ -641,6 +641,17 @@ fn open_on(page: u8) {
         p.surface,
         a,
     );
+    // Two corrections of one word, Windows' after RightType's, look like a
+    // RightType fault: say where that comes from.
+    if ui::windows_autocorrects() {
+        s.label(
+            tr(T::AboutWindowsAutocorrect),
+            TextStyle::Small,
+            (X0, RESTART_Y + 84, CW, 40),
+            p.bg,
+            a,
+        );
+    }
 
     let ids = Ids {
         nav,

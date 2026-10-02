@@ -282,6 +282,8 @@ texts! {
     HkReset => "All hotkeys are back to the defaults.", "คืนปุ่มลัดทั้งหมดเป็นค่าเดิมแล้ว";
     PaletteHead => "↑↓ Enter · 1–9 · type to search · Esc", "↑↓ Enter · 1–9 · พิมพ์เพื่อค้นหา · Esc";
     PaletteFiltering => "Search: {text}", "ค้นหา: {text}";
+    AboutWindowsAutocorrect => "Windows' own autocorrect for the keyboard is on (Settings → Time & language → Typing): it may change an English word again after RightType.", "การแก้คำอัตโนมัติของ Windows เปิดอยู่ (Settings → Time & language → Typing) อาจแก้คำอังกฤษซ้ำหลัง RightType";
+    ToastGoogleDocsTip => "Google Docs shares its text only with screen-reader support on: Tools → Accessibility", "Google Docs ให้อ่านข้อความเมื่อเปิดการรองรับโปรแกรมอ่านหน้าจอ: เครื่องมือ → การช่วยเหลือพิเศษ";
     PalettePasswordHint => "TH / CAPS tag at password fields", "แท็ก TH / CAPS ที่ช่องรหัสผ่าน";
     PaletteNumLock => "Keypad with NumLock off (warn / fix)", "แป้นตัวเลขตอน NumLock ปิด (เตือน / แก้ให้)";
     PaletteInsertKey => "Insert key in text (warn / hold back)", "ปุ่ม Insert ในช่องข้อความ (เตือน / ไม่ให้ทำงาน)";
