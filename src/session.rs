@@ -220,7 +220,14 @@ pub unsafe fn on_message(msg: u32, wparam: usize) {
                 check_liveness();
             }
         }
-        crate::focus::WM_FOCUS_MOVED => crate::habits::on_focus(),
+        crate::focus::WM_FOCUS_MOVED => {
+            // An app's own keyboard comes before the per-field guess.
+            if !crate::keyboards::on_focus() {
+                crate::habits::on_focus();
+            }
+            crate::pwhint::on_focus();
+        }
+        crate::focus::WM_APP_TO_FRONT => crate::keyboards::on_front(),
         WM_POWERBROADCAST if wparam == PBT_APMRESUMEAUTOMATIC || wparam == PBT_APMRESUMESUSPEND => {
             crate::hook::e2e_trace(format!("session: power resume ({wparam:#x}) reinstall"));
             righttype::diag::note("session: power resume, reinstall", &[]);

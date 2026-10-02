@@ -323,6 +323,34 @@ impl Recent {
         })
     }
 
+    /// Flip, in one step, every word the current run of flips has not
+    /// reached yet (`Shift`+`Backspace` held): the whole run of words comes
+    /// back. `None` when every word is flipped already. Apply it, then call
+    /// [`Recent::commit_rest`].
+    pub fn rest_step(&self, convert: impl Fn(&str) -> String) -> Option<FlipStep> {
+        let len = self.words.len();
+        if self.chain >= len {
+            return None;
+        }
+        let todo: Vec<usize> = (0..len - self.chain).collect();
+        let mut step = self.flip_picked(&todo, convert)?;
+        step.words = len;
+        Some(step)
+    }
+
+    /// The step from [`Recent::rest_step`] is on screen now: record it. The
+    /// next press puts every word back.
+    pub fn commit_rest(&mut self, convert: impl Fn(&str) -> String) {
+        let len = self.words.len();
+        for entry in self.words.iter_mut().take(len - self.chain.min(len)) {
+            let flipped = convert(&entry.word);
+            let old = std::mem::replace(&mut entry.word, flipped);
+            entry.before = Some(old);
+            entry.converted = false;
+        }
+        self.chain = len;
+    }
+
     /// The step from [`Recent::next_step`] is on screen now: record it.
     pub fn commit(&mut self, convert: impl Fn(&str) -> String) {
         let k = self.chain + 1;
@@ -533,5 +561,28 @@ mod tests {
         recent.commit(auto_convert);
         recent.push("c", ' ', false);
         assert_eq!(recent.next_step(auto_convert).unwrap().words, 1);
+    }
+
+    #[test]
+    fn held_flip_takes_the_whole_run_and_one_press_puts_it_back() {
+        let (mut recent, mut screen) = typed(&["l;ylfu", "8iy[", "l;ylfu"]);
+        // One press: the newest word.
+        let step = recent.next_step(auto_convert).unwrap();
+        apply(&mut screen, &step);
+        recent.commit(auto_convert);
+        assert_eq!(screen, "l;ylfu 8iy[ สวัสดี ");
+        // Held: the rest, in one step.
+        let step = recent.rest_step(auto_convert).unwrap();
+        assert_eq!(step.words, 3);
+        apply(&mut screen, &step);
+        recent.commit_rest(auto_convert);
+        assert_eq!(screen, "สวัสดี ครับ สวัสดี ");
+        assert!(recent.rest_step(auto_convert).is_none());
+        // The next press puts everything back.
+        let step = recent.next_step(auto_convert).unwrap();
+        assert!(step.reverts);
+        apply(&mut screen, &step);
+        recent.commit(auto_convert);
+        assert_eq!(screen, "l;ylfu 8iy[ l;ylfu ");
     }
 }

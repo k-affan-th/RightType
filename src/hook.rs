@@ -333,6 +333,8 @@ struct HookState {
     /// Focus generation supplied by the UIA WinEvent hook. This catches focus
     /// changes between controls in the same top-level window.
     last_focus_generation: u64,
+    /// When the context last changed (the run was dropped).
+    context_since: Instant,
     /// Whether the current foreground app is blacklisted (wallet / password
     /// manager / terminal). Recomputed only when the window changes — opening the
     /// process every keystroke would be wasteful.
@@ -378,6 +380,7 @@ impl HookState {
             last_hwnd: 0,
             last_hkl: 0,
             last_focus_generation: 0,
+            context_since: Instant::now(),
             sensitive_app: false,
             app_exe: None,
             undo: None,
@@ -570,6 +573,198 @@ pub fn fixes_hyphens() -> bool {
 
 pub fn set_fixes_hyphens(on: bool) {
     FIX_HYPHENS.store(on, Ordering::Relaxed);
+}
+
+/// What to do about a key that changes how the next keys type (NumLock off
+/// on the keypad, Insert): nothing, say so, or put it right.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum KeyGuard {
+    Off,
+    Warn,
+    /// The keypad: turn NumLock on and type the digit. Insert: hold it back.
+    Fix,
+}
+
+impl KeyGuard {
+    pub fn name(self) -> &'static str {
+        match self {
+            KeyGuard::Off => "off",
+            KeyGuard::Warn => "warn",
+            KeyGuard::Fix => "fix",
+        }
+    }
+
+    pub fn parse(s: &str) -> KeyGuard {
+        match s.trim() {
+            "off" => KeyGuard::Off,
+            "fix" | "block" => KeyGuard::Fix,
+            _ => KeyGuard::Warn,
+        }
+    }
+
+    fn from_u8(v: u8) -> KeyGuard {
+        match v {
+            0 => KeyGuard::Off,
+            2 => KeyGuard::Fix,
+            _ => KeyGuard::Warn,
+        }
+    }
+}
+
+static NUMLOCK_MODE: AtomicU8 = AtomicU8::new(1);
+static INSERT_MODE: AtomicU8 = AtomicU8::new(1);
+
+pub fn numlock_mode() -> KeyGuard {
+    KeyGuard::from_u8(NUMLOCK_MODE.load(Ordering::Relaxed))
+}
+
+pub fn set_numlock_mode(mode: KeyGuard) {
+    NUMLOCK_MODE.store(mode as u8, Ordering::Relaxed);
+}
+
+pub fn insert_mode() -> KeyGuard {
+    KeyGuard::from_u8(INSERT_MODE.load(Ordering::Relaxed))
+}
+
+pub fn set_insert_mode(mode: KeyGuard) {
+    INSERT_MODE.store(mode as u8, Ordering::Relaxed);
+}
+
+/// The digit a numeric-keypad key types with NumLock on, for the key it
+/// sends with NumLock off (`extended` keys are the separate arrow and
+/// editing keys, not the keypad).
+fn keypad_digit(vk: u16, extended: bool) -> Option<char> {
+    if extended {
+        return None;
+    }
+    Some(match vk {
+        0x2D => '0', // Insert
+        0x23 => '1', // End
+        0x28 => '2', // Down
+        0x22 => '3', // Page Down
+        0x25 => '4', // Left
+        0x0C => '5', // Clear
+        0x27 => '6', // Right
+        0x24 => '7', // Home
+        0x26 => '8', // Up
+        0x21 => '9', // Page Up
+        _ => return None,
+    })
+}
+
+/// A warning shown at most once a minute.
+static NUM_WARNED: std::sync::Mutex<Option<Instant>> = std::sync::Mutex::new(None);
+
+fn warn_once(last: &std::sync::Mutex<Option<Instant>>, tag: &str, message: righttype::i18n::T) {
+    let mut last = last.lock().unwrap();
+    if last.is_some_and(|at| at.elapsed() < Duration::from_secs(60)) {
+        return;
+    }
+    *last = Some(Instant::now());
+    trace_note("keypad with NumLock off: said so");
+    crate::overlay::badge_at_caret(tag);
+    crate::overlay::show(righttype::i18n::tr(message));
+}
+
+/// Offer the rest of a long Thai word (Tab takes it): opt-in.
+static COMPLETE_THAI: AtomicBool = AtomicBool::new(false);
+
+pub fn completes_thai() -> bool {
+    COMPLETE_THAI.load(Ordering::Relaxed)
+}
+
+pub fn set_completes_thai(on: bool) {
+    COMPLETE_THAI.store(on, Ordering::Relaxed);
+}
+
+/// How long a completion on offer can be taken.
+const COMPLETION_OPEN: Duration = Duration::from_secs(5);
+
+struct Completion {
+    /// What Tab types: the letters after those typed.
+    rest: String,
+    hwnd: isize,
+    focus_generation: u64,
+    created: Instant,
+}
+
+impl Drop for Completion {
+    fn drop(&mut self) {
+        self.rest.zeroize();
+    }
+}
+
+thread_local! {
+    static COMPLETION: RefCell<Option<Completion>> = const { RefCell::new(None) };
+}
+
+/// The Thai word being typed (at least three letters) has one sure way on
+/// (`righttype::dict::Dictionary::sure_completion`): show it, for Tab.
+fn offer_completion() {
+    let run = STATE.with(|s| s.borrow().buf.current().to_string());
+    let typed = run.chars().count();
+    let thai = run.chars().all(|c| ('\u{0E01}'..='\u{0E4E}').contains(&c));
+    if typed < 3 || !thai || STATE.with(|s| s.borrow().seed.guarding()) {
+        let mut run = run;
+        run.zeroize();
+        return;
+    }
+    if let Some(mut whole) = dict::thai().sure_completion(&run, 2) {
+        let rest: String = whole.chars().skip(typed).collect();
+        let mut hint = format!("→ {whole}  ·  Tab");
+        crate::overlay::show_at(&hint, crate::caret::hint_anchor());
+        hint.zeroize();
+        whole.zeroize();
+        COMPLETION.with(|c| {
+            *c.borrow_mut() = Some(Completion {
+                rest,
+                hwnd: unsafe { GetForegroundWindow() }.0 as isize,
+                focus_generation: crate::focus::generation(),
+                created: Instant::now(),
+            })
+        });
+    }
+    let mut run = run;
+    run.zeroize();
+}
+
+/// Why the last word was fixed or left (a `righttype::why::Why`).
+static LAST_WHY: AtomicU8 = AtomicU8::new(0);
+
+pub fn last_why() -> righttype::why::Why {
+    righttype::why::Why::from_u8(LAST_WHY.load(Ordering::Relaxed))
+}
+
+/// The grave key types its character instead of switching the language.
+static GRAVE_TYPES: AtomicBool = AtomicBool::new(false);
+
+pub fn grave_types() -> bool {
+    GRAVE_TYPES.load(Ordering::Relaxed)
+}
+
+pub fn set_grave_types(on: bool) {
+    GRAVE_TYPES.store(on, Ordering::Relaxed);
+}
+
+/// A language switch that comes with a shortcut is undone.
+static GUARD_SWITCH: AtomicBool = AtomicBool::new(false);
+
+pub fn guards_switch() -> bool {
+    GUARD_SWITCH.load(Ordering::Relaxed)
+}
+
+pub fn set_guards_switch(on: bool) {
+    GUARD_SWITCH.store(on, Ordering::Relaxed);
+}
+
+/// A switch this soon after a Ctrl/Alt + Shift shortcut came with it.
+const SHORTCUT_SWITCH_WINDOW: Duration = Duration::from_millis(700);
+
+thread_local! {
+    /// The last Ctrl/Alt + Shift + key shortcut: when, and the keyboard
+    /// layout it was pressed on.
+    static SHORTCUT: std::cell::Cell<Option<(Instant, isize)>> =
+        const { std::cell::Cell::new(None) };
 }
 
 /// Ctrl+Backspace after Thai deletes one Thai word (Windows takes the whole
@@ -1191,6 +1386,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         false
     };
     if !down {
+        if vk == VK_BACK.0 {
+            FLIP_DOWN.with(|f| f.set(None));
+        }
         if vk == VK_CAPITAL.0 {
             if let Some(at) = CAPS_DOWN_AT.with(|c| c.take()) {
                 caps_released(at);
@@ -1200,10 +1398,22 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return false;
     }
     e2e_trace(format!("key vk={vk:#x} repeat={repeat}"));
+    // Shift+Backspace still held: its repeats are the flip's, with or
+    // without Shift. A flip sends Shift-up with its keys, so the next
+    // repeats arrive as plain Backspace and deleted the words just flipped
+    // (CI: `l;ylfu 8iy[`). Swallowed until Backspace is released.
+    if vk == VK_BACK.0 && repeat && FLIP_DOWN.with(|f| f.get()).is_some() {
+        flip_held_repeat();
+        return true;
+    }
     if capture_key(vk) {
         return true;
     }
     let action = hotkeys().action_for(vk, is_down(VK_CONTROL), is_down(VK_SHIFT), is_down(VK_MENU));
+    if !is_modifier(vk) && is_down(VK_SHIFT) && (is_down(VK_CONTROL) || is_down(VK_MENU)) {
+        let hkl = STATE.with(|s| s.borrow().last_hkl);
+        SHORTCUT.with(|c| c.set(Some((Instant::now(), hkl))));
+    }
 
     // The command palette is open and in front: its keys are its own
     // (arrows, Enter, 1–9, typing to search, Esc), so it works without a
@@ -1216,6 +1426,35 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         let ch = translate(vk, kb.scanCode as u16);
         if crate::palette::key(vk, ch) {
             return true;
+        }
+    }
+
+    // Tab (alone) takes a Thai completion on offer; any other key drops it.
+    let completion = COMPLETION.with(|c| c.borrow_mut().take());
+    if let Some(offer) = completion {
+        let fresh = offer.hwnd == GetForegroundWindow().0 as isize
+            && offer.focus_generation == crate::focus::generation()
+            && offer.created.elapsed() < COMPLETION_OPEN;
+        if vk == VK_TAB.0
+            && fresh
+            && !is_down(VK_SHIFT)
+            && !is_down(VK_CONTROL)
+            && !is_down(VK_MENU)
+            && !crate::focus::is_password_field()
+        {
+            crate::overlay::dismiss();
+            if inject::apply(0, &offer.rest, None) {
+                trace_note("Thai completion taken with Tab");
+                // The word is whole and right: nothing left to decide.
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    st.buf.clear();
+                    st.mark = TokenMark::Plain;
+                });
+                return true;
+            }
+        } else if !is_modifier(vk) {
+            crate::overlay::dismiss();
         }
     }
 
@@ -1322,6 +1561,14 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return true;
     }
 
+    // The keyboard map types only what is clicked on it: it opens everywhere.
+    if action == Some(Action::KeyMap) {
+        if !repeat {
+            crate::keymap::request_toggle();
+        }
+        return true;
+    }
+
     // The command palette never touches text either: it opens everywhere.
     // Opened after this callback returns, never inside the hook.
     if action == Some(Action::Palette) {
@@ -1387,6 +1634,76 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return false;
     };
 
+    // The grave key types its character (`, ~, or _ % on the Thai keyboard)
+    // instead of switching the language, when the typist asked for that:
+    // Windows' Thai setup makes it the language key, and code and Markdown
+    // need it.
+    if vk == 0xC0 && grave_types() && action.is_none() && !is_down(VK_CONTROL) && !is_down(VK_MENU)
+    {
+        let us = if is_down(VK_SHIFT) { "~" } else { "`" };
+        let thai = policy::supported_layout_id(layout_id(effective_layout()))
+            == Some(policy::InputLayout::ThaiKedmanee);
+        let ch = if thai {
+            righttype::layout::en_to_th(us)
+        } else {
+            us.to_string()
+        };
+        STATE.with(|s| s.borrow_mut().buf.clear());
+        if inject::apply(0, &ch, None) {
+            return true;
+        }
+    }
+
+    // Keys that change how the next keys type, without a sign of it: the
+    // numeric keypad with NumLock off (it moves the caret instead of typing
+    // digits), and Insert (overtype in the apps that have it). Only in a text
+    // field, and only plain presses.
+    if action.is_none()
+        && !is_down(VK_CONTROL)
+        && !is_down(VK_MENU)
+        && !repeat
+        && crate::focus::is_text_field()
+    {
+        let extended = kb.flags.0 & 0x01 != 0;
+        if let Some(digit) = keypad_digit(vk, extended) {
+            if !is_down(VK_SHIFT) && GetKeyState(0x90) & 1 == 0 {
+                match numlock_mode() {
+                    KeyGuard::Fix => {
+                        // NumLock on, and the digit the typist meant.
+                        inject::toggle_numlock();
+                        let mut s = [0u8; 4];
+                        if inject::apply(0, digit.encode_utf8(&mut s), None) {
+                            trace_note("keypad with NumLock off: turned it on");
+                            crate::overlay::badge_at_caret("NUM");
+                            return true;
+                        }
+                    }
+                    KeyGuard::Warn => {
+                        warn_once(&NUM_WARNED, "NUM", righttype::i18n::T::ToastNumLockOff)
+                    }
+                    KeyGuard::Off => {}
+                }
+            }
+        } else if vk == VK_INSERT.0 && extended && !is_down(VK_SHIFT) {
+            match insert_mode() {
+                KeyGuard::Fix => {
+                    trace_note("Insert held back in a text field");
+                    crate::overlay::show(righttype::i18n::tr(
+                        righttype::i18n::T::ToastInsertBlocked,
+                    ));
+                    return true;
+                }
+                KeyGuard::Warn => {
+                    trace_note("Insert pressed in a text field: said so");
+                    crate::overlay::show(righttype::i18n::tr(
+                        righttype::i18n::T::ToastInsertPressed,
+                    ))
+                }
+                KeyGuard::Off => {}
+            }
+        }
+    }
+
     // Ctrl+Backspace after Thai: one Thai word, not the whole run (Thai has
     // no spaces between words, so Windows takes everything back to the last
     // space). Only when the text before the caret says so; otherwise the key
@@ -1398,6 +1715,8 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         && !is_down(VK_MENU)
         && deletes_thai_words()
         && STATE.with(|s| s.borrow().owned.is_none())
+        // Browsers, Electron apps and Office already delete one Thai word.
+        && !current_app().is_some_and(|e| righttype::compat::breaks_thai_words(&e))
     {
         let before = crate::focus::text_before_caret_within(80, Duration::from_millis(60));
         let n = before
@@ -1536,11 +1855,15 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                 ],
             );
         }
-        // Holding the keys acts once: each flip reaches one word further back,
-        // so auto-repeat would run through all of them in a blink.
+        // Holding the keys flips the rest of the run in one go, once (after
+        // FLIP_HOLD, timed from the press: the repeat delay is the typist's
+        // own setting); the other repeats do nothing, or auto-repeat would
+        // run back and forth through the words.
         if repeat {
+            flip_held_repeat();
             return true;
         }
+        FLIP_DOWN.with(|f| f.set(Some((Instant::now(), false))));
         // While we own the run the screen does not match the buffer, so the
         // manual path's backspace count would be wrong. Withdraw our rendering
         // first; the typist asked for the raw keystrokes back.
@@ -1623,6 +1946,16 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                 == Some(policy::InputLayout::UsQwerty)
         {
             show_live_hint();
+        }
+        // A long Thai word on its way: offer the rest, when every word that
+        // starts like this goes on the same way (opt-in).
+        if matches!(key, Key::Char(_))
+            && completes_thai()
+            && mode_now != Mode::Code
+            && policy::supported_layout_id(layout_id(effective_layout()))
+                == Some(policy::InputLayout::ThaiKedmanee)
+        {
+            offer_completion();
         }
         if may_reconcile
             && mode_now == Mode::Auto
@@ -1887,6 +2220,26 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             }
         }
     }
+    // One of the typist's own misspellings (Settings → Snippets, "My
+    // typo"): put right in Auto like the built-in ones.
+    if detection.is_none()
+        && !seed_run
+        && mode_now == Mode::Auto
+        && !SPELLING_KEPT.with(|k| k.borrow().contains(&word))
+    {
+        let right = SNIPPETS
+            .read()
+            .ok()
+            .and_then(|l| righttype::snippets::find_typo(&l, &word).map(str::to_string));
+        if let Some(right) = right {
+            spelling = Some((word.clone(), right.clone()));
+            detection = Some(righttype::detect::Detection {
+                corrected: right,
+                confidence: righttype::detect::Confidence::High,
+                evidence: righttype::detect::Evidence::ExactDictionary,
+            });
+        }
+    }
     // An English prefix written as style has it (`relogin` → `re-login`), in
     // Auto, in prose: not in code, nor in an address bar.
     if detection.is_none()
@@ -1940,6 +2293,29 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     } else {
         mode_now
     };
+    // Why, for the palette's "Why?" (the reason only, never the word).
+    let why = {
+        use righttype::why::{self, Why};
+        if seed_run {
+            Why::KeptSeed
+        } else {
+            match (&detection, mode_for_word) {
+                (Some(_), Mode::Auto) if spelling.is_some() => Why::FixedSpelling,
+                (Some(_), Mode::Auto) if caps_accident => Why::FixedCaps,
+                (Some(_), Mode::Auto) if mode_now == Mode::Code => Why::FixedCode,
+                (Some(d), Mode::Auto) => why::fixed(
+                    &d.corrected,
+                    d.evidence == righttype::detect::Evidence::ExactDictionary,
+                ),
+                (Some(_), Mode::Suggest) => Why::Suggested,
+                (Some(_), _) => Why::KeptManual,
+                (None, _) => active_layout
+                    .map(|l| why::kept(&word, l, dict::english(), dict::thai()))
+                    .unwrap_or(Why::KeptUnknown),
+            }
+        }
+    };
+    LAST_WHY.store(why as u8, Ordering::Relaxed);
     let swallow = match (mode_for_word, detection) {
         (Mode::Auto, Some(d)) => {
             let mut corrected = d.corrected.clone();
@@ -2258,17 +2634,36 @@ fn thai_keyboards() -> Vec<(u16, righttype::layout::ThaiVariant)> {
         Some(String::from_utf16_lossy(&buf[..len]))
     }
 
+    // Windows' own Thai keyboards, and any other installed for Thai (a
+    // keyboard installed from a file, such as Manoonchai, gets an
+    // identifier like `A000041E`).
+    let mut klids: Vec<String> = ["0001041E", "0002041E", "0003041E"]
+        .iter()
+        .map(|k| k.to_string())
+        .collect();
+    for k in installed_keyboard_ids() {
+        if k.to_ascii_uppercase().ends_with("041E")
+            && !klids.iter().any(|o| o.eq_ignore_ascii_case(&k))
+        {
+            klids.push(k);
+        }
+    }
     let mut out = Vec::new();
-    for klid in ["0001041E", "0002041E", "0003041E"] {
+    for klid in klids {
         let key = format!("SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts\\{klid}");
         let Some(file) = read(&key, "Layout File") else {
             continue;
         };
         let file = file.to_ascii_uppercase();
+        let text = read(&key, "Layout Text")
+            .unwrap_or_default()
+            .to_ascii_uppercase();
         let variant = if file.starts_with("KBDTH0") || file.starts_with("KBDTH2") {
             ThaiVariant::Kedmanee
         } else if file.starts_with("KBDTH1") || file.starts_with("KBDTH3") {
             ThaiVariant::Pattachote
+        } else if file.contains("MANOON") || text.contains("MANOONCHAI") {
+            ThaiVariant::Manoonchai
         } else {
             continue;
         };
@@ -2281,6 +2676,54 @@ fn thai_keyboards() -> Vec<(u16, righttype::layout::ThaiVariant)> {
         if let Ok(high) = u16::from_str_radix(&klid[..4], 16) {
             out.push((high, variant));
         }
+    }
+    out
+}
+
+/// The keyboard identifiers (`0000041E`, `A000041E`, …) Windows lists under
+/// `Keyboard Layouts`.
+fn installed_keyboard_ids() -> Vec<String> {
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, HKEY, HKEY_LOCAL_MACHINE, KEY_READ,
+    };
+    let path: Vec<u16> = "SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts\0"
+        .encode_utf16()
+        .collect();
+    let mut key = HKEY::default();
+    let mut out = Vec::new();
+    unsafe {
+        if RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(path.as_ptr()),
+            0,
+            KEY_READ,
+            &mut key,
+        )
+        .is_err()
+        {
+            return out;
+        }
+        for i in 0..2048u32 {
+            let mut name = [0u16; 64];
+            let mut len = name.len() as u32;
+            if RegEnumKeyExW(
+                key,
+                i,
+                windows::core::PWSTR(name.as_mut_ptr()),
+                &mut len,
+                None,
+                windows::core::PWSTR::null(),
+                None,
+                None,
+            )
+            .is_err()
+            {
+                break;
+            }
+            out.push(String::from_utf16_lossy(&name[..len as usize]));
+        }
+        let _ = RegCloseKey(key);
     }
     out
 }
@@ -2455,6 +2898,10 @@ unsafe fn flip_back_recent() {
         STATE.with(|s| s.borrow_mut().recent.commit(convert_shown));
         return;
     }
+    // The deleted characters, so a text box that has not caught up with
+    // the last keys is not edited (CI, Windows 11 Notepad: the flip read
+    // `l;ylfu ` before `8iy[ ` reached the box).
+    inject::expect_before_caret(&step.restore);
     if !inject::apply(
         step.backspaces,
         &step.insert,
@@ -2498,6 +2945,67 @@ unsafe fn flip_back_recent() {
     }
 }
 
+/// How long Shift+Backspace is held before the rest of the run is flipped.
+const FLIP_HOLD: Duration = Duration::from_millis(400);
+
+thread_local! {
+    /// When Shift+Backspace went down, and whether holding it has acted.
+    static FLIP_DOWN: std::cell::Cell<Option<(Instant, bool)>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// A repeat of a held Shift+Backspace: once it has been held for
+/// FLIP_HOLD, flip the rest of the run (once); otherwise nothing.
+unsafe fn flip_held_repeat() {
+    let held = FLIP_DOWN.with(|f| {
+        f.get()
+            .filter(|(at, done)| !done && at.elapsed() >= FLIP_HOLD)
+            .is_some()
+    });
+    if held {
+        FLIP_DOWN.with(|f| f.set(f.get().map(|(at, _)| (at, true))));
+        flip_rest_of_run();
+    }
+}
+
+/// Shift+Backspace held: flip every word of the run the presses have not
+/// reached yet, in one step. Undo (or one more press) puts them back.
+unsafe fn flip_rest_of_run() {
+    if !STATE.with(|s| s.borrow().buf.current().is_empty()) {
+        return;
+    }
+    let Some(step) = STATE.with(|s| s.borrow().recent.rest_step(convert_shown)) else {
+        return;
+    };
+    e2e_trace(format!("flip: held, {} words", step.words));
+    // The deleted characters, so a text box that has not caught up with
+    // the last keys is not edited (CI, Windows 11 Notepad: the flip read
+    // `l;ylfu ` before `8iy[ ` reached the box).
+    inject::expect_before_caret(&step.restore);
+    if !inject::apply(
+        step.backspaces,
+        &step.insert,
+        Some(boundary_vk(step.boundary)),
+    ) {
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+        STATE.with(|s| s.borrow_mut().recent.clear());
+        return;
+    }
+    STATE.with(|s| s.borrow_mut().recent.commit_rest(convert_shown));
+    set_undo(
+        step.insert.chars().count() + 1,
+        &step.restore,
+        UndoKind::Manual,
+    );
+    crate::stats::record_manual();
+    habit_correction(step.was_thai, step.now_thai);
+    activate_layout(layout_of(&step.newest));
+    crate::overlay::show(&righttype::i18n::trf(
+        righttype::i18n::T::ToastFlippedWords,
+        &[("n", &step.words.to_string())],
+    ));
+}
+
 /// The recent words (oldest first, as on screen) and where each is before
 /// the caret, for the palette's list. The caller wipes the words.
 pub fn recent_words() -> (Vec<String>, Vec<(usize, usize)>) {
@@ -2525,6 +3033,10 @@ pub unsafe fn flip_picked(picked: &[usize]) {
         crate::overlay::show(tr(T::ToastNothingToFlip));
         return;
     };
+    // The deleted characters, so a text box that has not caught up with
+    // the last keys is not edited (CI, Windows 11 Notepad: the flip read
+    // `l;ylfu ` before `8iy[ ` reached the box).
+    inject::expect_before_caret(&step.restore);
     if !inject::apply(
         step.backspaces,
         &step.insert,
@@ -2985,11 +3497,36 @@ unsafe fn sync_context() {
     });
 
     let focus_generation = crate::focus::generation();
+    let mut undo_switch = None;
     let window_changed = STATE.with(|s| {
         let mut st = s.borrow_mut();
         let changed = st.last_hwnd != hwnd_i;
         let lang_changed = st.last_hkl != hkl_i;
-        let focus_changed = st.last_focus_generation != focus_generation;
+        // A switch the typist did not mean: it came with a shortcut
+        // (Ctrl/Alt + Shift + a key), not on its own, and was not ours.
+        if lang_changed && st.pending_hkl.is_none() && st.last_hwnd == hwnd_i && guards_switch() {
+            let came_with = SHORTCUT.with(|c| c.get()).filter(|(at, before)| {
+                at.elapsed() < SHORTCUT_SWITCH_WINDOW && *before == st.last_hkl
+            });
+            if let Some((_, before)) = came_with {
+                undo_switch = policy::supported_layout_id(layout_id(HKL(before as *mut _)));
+            }
+        }
+        let mut focus_changed = st.last_focus_generation != focus_generation;
+        // A slow app can answer the focus question long after the move (CI:
+        // 15 s). When the context was already reset after the move happened
+        // (the window or keyboard changed since), the keys typed since are
+        // in the new field: dropping them then stranded the first letter
+        // (`lวัสดี`).
+        if focus_changed
+            && !changed
+            && !lang_changed
+            && crate::focus::moved_at().is_some_and(|at| at < st.context_since)
+        {
+            e2e_trace("focus answer came late: the run already started after the move".into());
+            st.last_focus_generation = focus_generation;
+            focus_changed = false;
+        }
         if changed || lang_changed || focus_changed {
             e2e_trace(format!(
                 "context changed: window={changed} layout={lang_changed} ({:X} -> {hkl_i:X}) focus={focus_changed}",
@@ -3022,9 +3559,15 @@ unsafe fn sync_context() {
             st.last_hwnd = hwnd_i;
             st.last_hkl = hkl_i;
             st.last_focus_generation = focus_generation;
+            st.context_since = Instant::now();
         }
         changed
     });
+    if let Some(layout) = undo_switch {
+        trace_note("language switch with a shortcut: undone");
+        activate_layout(layout);
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastSwitchUndone));
+    }
     // Re-evaluate the (heavier) app blacklist only when the window changed.
     if window_changed {
         let exe = safety::foreground_exe(hwnd);

@@ -297,6 +297,36 @@ pub fn is_dark() -> bool {
     DARK_MODE.load(Ordering::Relaxed)
 }
 
+/// A DWORD of the current user's registry, if it is there.
+pub fn user_dword(key: &str, value: &str) -> Option<u32> {
+    let key: Vec<u16> = format!("{key}\0").encode_utf16().collect();
+    let value: Vec<u16> = format!("{value}\0").encode_utf16().collect();
+    let mut data: u32 = 0;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            PCWSTR(key.as_ptr()),
+            PCWSTR(value.as_ptr()),
+            RRF_RT_REG_DWORD,
+            None,
+            Some(&mut data as *mut u32 as *mut c_void),
+            Some(&mut size),
+        )
+    };
+    status.is_ok().then_some(data)
+}
+
+/// Windows' own autocorrect for the hardware keyboard (Settings → Time &
+/// language → Typing) is on: it may change an English word again after
+/// RightType wrote it.
+pub fn windows_autocorrects() -> bool {
+    user_dword(
+        "Software\\Microsoft\\Input\\Settings",
+        "EnableHwkbAutocorrection",
+    ) == Some(1)
+}
+
 /// `AppsUseLightTheme` = 0 means the user chose dark apps. Missing = light,
 /// the Windows default.
 fn windows_prefers_dark() -> bool {

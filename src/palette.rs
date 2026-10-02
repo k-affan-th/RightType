@@ -48,6 +48,8 @@ enum TransformKind {
     Repair,
     /// Thai in its standard form (`righttype::thai_text::normalize`).
     Normalize,
+    /// Thai spacing (`righttype::thai_text::tidy_spacing`).
+    Spacing,
     /// Years พ.ศ. ↔ ค.ศ.
     Era,
     NumberWords,
@@ -108,6 +110,23 @@ enum Command {
     EnterGuard,
     /// Ctrl+Backspace deletes one Thai word, on or off.
     ThaiWordDelete,
+    /// TH / CAPS tag at password fields, on or off.
+    PasswordHint,
+    /// The keypad with NumLock off, Insert: off → warn → fix.
+    NumLock,
+    InsertKey,
+    /// The keyboard this app starts with: not set → Thai → English →
+    /// English outside text.
+    AppKeyboard,
+    GraveTypes,
+    FixAddresses,
+    GuardSwitch,
+    /// Why the last word was fixed or left as typed.
+    Why,
+    /// Offer the rest of a long Thai word for Tab, on or off.
+    CompleteThai,
+    /// Open the keyboard map.
+    KeyMap,
     /// English prefix words written with their hyphen, on or off.
     Hyphens,
 }
@@ -185,6 +204,7 @@ impl Command {
             Command::Transform(kind) => match kind {
                 TransformKind::Repair => '\u{E8AB}',    // Switch
                 TransformKind::Normalize => '\u{E8D2}', // Font
+                TransformKind::Spacing => '\u{E8E4}',   // AlignLeft
                 TransformKind::Era => '\u{E787}',       // Calendar
                 TransformKind::NumberWords | TransformKind::BahtWords => '\u{E8EF}', // Calculator
                 TransformKind::Digits => '\u{E8EF}',    // Calculator
@@ -212,11 +232,19 @@ impl Command {
             Command::ApplyReview => '\u{E73E}',    // CheckMark
             Command::EnterGuard => '\u{E8BD}',     // Message
             Command::ThaiWordDelete => '\u{E75C}', // EraseTool
-            Command::Spelling => '\u{E82D}',       // Dictionary
-            Command::Hyphens => '\u{E738}',        // Remove (a dash)
-            Command::CapsSwitch => '\u{E72E}',     // Lock
-            Command::TrayLanguage => '\u{E774}',   // Globe
-            Command::Settings => '\u{E713}',       // Settings
+            Command::PasswordHint => '\u{E72E}',   // Lock
+            Command::NumLock | Command::InsertKey | Command::AppKeyboard => '\u{E765}', // KeyboardClassic
+            Command::GraveTypes => '\u{E8C8}',                                          // Copy
+            Command::FixAddresses => '\u{E774}',                                        // Globe
+            Command::GuardSwitch => '\u{E72E}',                                         // Lock
+            Command::Why => '\u{E946}',                                                 // Info
+            Command::CompleteThai => '\u{E8C8}',                                        // Copy
+            Command::KeyMap => '\u{E765}',       // KeyboardClassic
+            Command::Spelling => '\u{E82D}',     // Dictionary
+            Command::Hyphens => '\u{E738}',      // Remove (a dash)
+            Command::CapsSwitch => '\u{E72E}',   // Lock
+            Command::TrayLanguage => '\u{E774}', // Globe
+            Command::Settings => '\u{E713}',     // Settings
         }
     }
 }
@@ -733,6 +761,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
         for (key, kind) in [
             (T::PaletteRepairSelection, TransformKind::Repair),
             (T::PaletteNormalize, TransformKind::Normalize),
+            (T::PaletteSpacing, TransformKind::Spacing),
             (T::PaletteEra, TransformKind::Era),
             (T::PaletteNumberWords, TransformKind::NumberWords),
             (T::PaletteBahtWords, TransformKind::BahtWords),
@@ -760,6 +789,12 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             tr(T::PaletteMoreSymbols).to_string(),
             "▸",
             Command::More(Section::Symbols),
+        );
+        add(
+            Section::Symbols,
+            tr(T::PaletteKeyMap).to_string(),
+            "",
+            Command::KeyMap,
         );
         for (i, (symbol, th, en)) in righttype::thai_text::SYMBOLS.iter().enumerate() {
             add(
@@ -821,7 +856,19 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             );
         }
     }
+    add(
+        Section::Here,
+        tr(T::PaletteWhy).to_string(),
+        "",
+        Command::Why,
+    );
     if let Some(app) = app {
+        add(
+            Section::Here,
+            tr(T::PaletteAppKeyboard).to_string(),
+            tr(keyboard_name(apps::keyboard(app))),
+            Command::AppKeyboard,
+        );
         let (key, command) = if apps::lookup(app) == Some(AppMode::Off) {
             (T::PaletteAppOnShort, Command::AppDefault)
         } else {
@@ -878,9 +925,53 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             hook::guards_enter(),
             Command::EnterGuard,
         ),
+        (
+            T::PalettePasswordHint,
+            crate::pwhint::is_enabled(),
+            Command::PasswordHint,
+        ),
+        (
+            T::PaletteGraveTypes,
+            hook::grave_types(),
+            Command::GraveTypes,
+        ),
+        (
+            T::PaletteFixAddresses,
+            righttype::policy::fixes_addresses(),
+            Command::FixAddresses,
+        ),
+        (
+            T::PaletteCompleteThai,
+            hook::completes_thai(),
+            Command::CompleteThai,
+        ),
+        (
+            T::PaletteGuardSwitch,
+            hook::guards_switch(),
+            Command::GuardSwitch,
+        ),
     ] {
         add(Section::Options, tr(key).to_string(), state(on), command);
     }
+    let guard = |g: hook::KeyGuard| {
+        tr(match g {
+            hook::KeyGuard::Off => T::HintOff,
+            hook::KeyGuard::Warn => T::HintWarn,
+            hook::KeyGuard::Fix => T::HintFix,
+        })
+    };
+    add(
+        Section::Options,
+        tr(T::PaletteNumLock).to_string(),
+        guard(hook::numlock_mode()),
+        Command::NumLock,
+    );
+    add(
+        Section::Options,
+        tr(T::PaletteInsertKey).to_string(),
+        guard(hook::insert_mode()),
+        Command::InsertKey,
+    );
     // For apps that do not share their text (see `manual::fix_field`).
     add(
         Section::Options,
@@ -898,7 +989,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
     // two changes to the selection.
     let mut in_selection = 0;
     for entry in &mut list {
-        if let Command::More(_) = entry.command {
+        if let Command::More(_) | Command::KeyMap = entry.command {
             continue;
         }
         entry.folded = match entry.section {
@@ -1247,6 +1338,7 @@ fn run(command: Command, app: Option<&str>) {
             let f: fn(&str) -> String = match kind {
                 TransformKind::Repair => repair_words,
                 TransformKind::Normalize => righttype::thai_text::normalize,
+                TransformKind::Spacing => righttype::thai_text::tidy_spacing,
                 TransformKind::Era => righttype::thai_text::swap_era,
                 TransformKind::NumberWords => righttype::thai_text::number_words,
                 TransformKind::BahtWords => righttype::thai_text::baht_words,
@@ -1330,7 +1422,11 @@ fn run(command: Command, app: Option<&str>) {
         Command::More(_) | Command::Review(_) | Command::ApplyReview => {}
         Command::Symbol(i) => {
             if let Some((symbol, _, _)) = righttype::thai_text::SYMBOLS.get(i) {
-                crate::manual::request_type(PREVIOUS.load(Ordering::Acquire), symbol);
+                crate::manual::request_type(
+                    PREVIOUS.load(Ordering::Acquire),
+                    symbol.to_string(),
+                    true,
+                );
             }
         }
         Command::TypeClipboard => {
@@ -1344,6 +1440,70 @@ fn run(command: Command, app: Option<&str>) {
             hook::set_deletes_thai_words(!hook::deletes_thai_words());
             config::persist();
         }
+        Command::AppKeyboard => {
+            if let Some(app) = app {
+                use righttype::per_app::AppKeyboard as K;
+                let next = match apps::keyboard(app) {
+                    None => Some(K::Thai),
+                    Some(K::Thai) => Some(K::English),
+                    Some(K::English) => Some(K::EnglishOutsideText),
+                    Some(K::EnglishOutsideText) => None,
+                };
+                apps::set_keyboard(app, next);
+                config::persist();
+                overlay::show(&format!("{} · {}", tr(keyboard_name(next)), app));
+            }
+        }
+        Command::Why => {
+            let key = if crate::focus::is_password_field() {
+                T::WhyHerePassword
+            } else if app.is_some_and(|a| apps::lookup(a) == Some(AppMode::Off)) {
+                T::WhyHereOff
+            } else {
+                let why = hook::last_why();
+                hook::e2e_trace(format!("why: {why:?}"));
+                why.message()
+            };
+            overlay::show(tr(key));
+        }
+        Command::GraveTypes => {
+            let on = !hook::grave_types();
+            hook::set_grave_types(on);
+            config::persist();
+            if on {
+                overlay::show(tr(T::ToastGraveTypes));
+            }
+        }
+        Command::FixAddresses => {
+            righttype::policy::set_fixes_addresses(!righttype::policy::fixes_addresses());
+            config::persist();
+        }
+        Command::KeyMap => crate::keymap::request_toggle(),
+        Command::CompleteThai => {
+            hook::set_completes_thai(!hook::completes_thai());
+            config::persist();
+        }
+        Command::GuardSwitch => {
+            hook::set_guards_switch(!hook::guards_switch());
+            config::persist();
+        }
+        Command::PasswordHint => {
+            crate::pwhint::set_enabled(!crate::pwhint::is_enabled());
+            config::persist();
+        }
+        Command::NumLock | Command::InsertKey => {
+            let next = |g: hook::KeyGuard| match g {
+                hook::KeyGuard::Off => hook::KeyGuard::Warn,
+                hook::KeyGuard::Warn => hook::KeyGuard::Fix,
+                hook::KeyGuard::Fix => hook::KeyGuard::Off,
+            };
+            if command == Command::NumLock {
+                hook::set_numlock_mode(next(hook::numlock_mode()));
+            } else {
+                hook::set_insert_mode(next(hook::insert_mode()));
+            }
+            config::persist();
+        }
         Command::Spelling => {
             hook::set_fixes_spelling(!hook::fixes_spelling());
             config::persist();
@@ -1353,6 +1513,17 @@ fn run(command: Command, app: Option<&str>) {
             config::persist();
             overlay::show(mode.label());
         }
+    }
+}
+
+/// The name of an app's keyboard setting.
+pub fn keyboard_name(k: Option<righttype::per_app::AppKeyboard>) -> T {
+    use righttype::per_app::AppKeyboard as K;
+    match k {
+        None => T::KeyboardNone,
+        Some(K::Thai) => T::KeyboardThai,
+        Some(K::English) => T::KeyboardEnglish,
+        Some(K::EnglishOutsideText) => T::KeyboardOutsideText,
     }
 }
 

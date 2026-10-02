@@ -86,6 +86,26 @@ pub struct Config {
     /// ones (`righttype::per_app::CHAT_APPS`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chat_apps: Vec<String>,
+    /// TH / CAPS tag at a password field.
+    pub password_hint: bool,
+    /// The keypad with NumLock off: "off", "warn" or "fix".
+    pub numlock: String,
+    /// Insert in a text field: "off", "warn" or "fix" (held back).
+    pub insert_key: String,
+    /// The keyboard each app starts with: "th", "en" or "en-outside-text".
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub app_keyboards: BTreeMap<String, String>,
+    /// The grave key (`) types its character instead of switching the
+    /// language (Windows' Thai keyboard setting).
+    pub grave_types: bool,
+    /// Web addresses, email addresses and numbers typed with the Thai
+    /// keyboard on are put back.
+    pub fix_addresses: bool,
+    /// A language switch that comes with a shortcut (Ctrl/Alt + Shift + a
+    /// key) is undone.
+    pub guard_switch: bool,
+    /// Offer the rest of a long Thai word, for Tab (opt-in).
+    pub complete_thai: bool,
     /// Put right common Thai misspellings (opt-in).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fix_spelling: bool,
@@ -157,6 +177,14 @@ impl Default for Config {
             delete_thai_words: true,
             guard_enter: true,
             chat_apps: Vec::new(),
+            password_hint: true,
+            numlock: "warn".into(),
+            insert_key: "warn".into(),
+            app_keyboards: BTreeMap::new(),
+            grave_types: false,
+            fix_addresses: true,
+            guard_switch: false,
+            complete_thai: false,
             snippets: Vec::new(),
             sync_settings: false,
         }
@@ -205,6 +233,21 @@ pub fn apply(cfg: &Config) {
     hook::set_deletes_thai_words(cfg.delete_thai_words);
     hook::set_guards_enter(cfg.guard_enter);
     hook::set_chat_apps(cfg.chat_apps.clone());
+    crate::pwhint::set_enabled(cfg.password_hint);
+    hook::set_numlock_mode(hook::KeyGuard::parse(&cfg.numlock));
+    hook::set_insert_mode(hook::KeyGuard::parse(&cfg.insert_key));
+    crate::apps::set_all_keyboards(
+        cfg.app_keyboards
+            .iter()
+            .filter_map(|(exe, k)| {
+                righttype::per_app::AppKeyboard::parse(k).map(|k| (exe.to_lowercase(), k))
+            })
+            .collect(),
+    );
+    hook::set_grave_types(cfg.grave_types);
+    righttype::policy::set_fixes_addresses(cfg.fix_addresses);
+    hook::set_guards_switch(cfg.guard_switch);
+    hook::set_completes_thai(cfg.complete_thai);
     hook::set_snippets(
         cfg.snippets
             .iter()
@@ -222,6 +265,7 @@ pub fn apply(cfg: &Config) {
     crate::habits::set_enabled(cfg.predict_layout);
     righttype::layout::set_thai_variant(match cfg.thai_layout.as_deref() {
         Some("pattachote") => righttype::layout::ThaiVariant::Pattachote,
+        Some("manoonchai") => righttype::layout::ThaiVariant::Manoonchai,
         _ => righttype::layout::ThaiVariant::Kedmanee,
     });
     hook::set_hotkeys(righttype::hotkeys::Hotkeys::from_config(
@@ -265,6 +309,8 @@ struct Shared {
     capslock_switches_language: bool,
     language: Option<String>,
     thai_layout: Option<String>,
+    #[serde(default)]
+    app_keyboards: BTreeMap<String, String>,
 }
 
 impl Shared {
@@ -280,6 +326,7 @@ impl Shared {
             capslock_switches_language: cfg.capslock_switches_language,
             language: cfg.language.clone(),
             thai_layout: cfg.thai_layout.clone(),
+            app_keyboards: cfg.app_keyboards.clone(),
         }
     }
 
@@ -294,6 +341,7 @@ impl Shared {
         cfg.capslock_switches_language = self.capslock_switches_language;
         cfg.language = self.language;
         cfg.thai_layout = self.thai_layout;
+        cfg.app_keyboards = self.app_keyboards;
     }
 }
 
@@ -444,6 +492,17 @@ fn snapshot() -> Config {
         delete_thai_words: hook::deletes_thai_words(),
         guard_enter: hook::guards_enter(),
         chat_apps: hook::chat_apps(),
+        password_hint: crate::pwhint::is_enabled(),
+        numlock: hook::numlock_mode().name().into(),
+        insert_key: hook::insert_mode().name().into(),
+        app_keyboards: crate::apps::all_keyboards()
+            .into_iter()
+            .map(|(exe, k)| (exe, k.name().to_string()))
+            .collect(),
+        grave_types: hook::grave_types(),
+        fix_addresses: righttype::policy::fixes_addresses(),
+        guard_switch: hook::guards_switch(),
+        complete_thai: hook::completes_thai(),
         sync_settings: SYNC_SETTINGS.load(std::sync::atomic::Ordering::Relaxed),
         snippets: hook::snippets()
             .into_iter()
@@ -462,9 +521,11 @@ fn snapshot() -> Config {
             .into_iter()
             .map(|(k, v)| (k.to_string(), v))
             .collect(),
-        thai_layout: (righttype::layout::thai_variant()
-            == righttype::layout::ThaiVariant::Pattachote)
-            .then(|| "pattachote".to_string()),
+        thai_layout: match righttype::layout::thai_variant() {
+            righttype::layout::ThaiVariant::Kedmanee => None,
+            righttype::layout::ThaiVariant::Pattachote => Some("pattachote".to_string()),
+            righttype::layout::ThaiVariant::Manoonchai => Some("manoonchai".to_string()),
+        },
     }
 }
 

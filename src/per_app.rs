@@ -53,6 +53,71 @@ impl AppMode {
     }
 }
 
+/// The keyboard an app starts with (Settings → Apps).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppKeyboard {
+    /// Switched to Thai when the app comes to the front.
+    Thai,
+    /// Switched to English when the app comes to the front.
+    English,
+    /// English while the focus is not on text being edited (single-key
+    /// shortcuts in Figma, Photoshop, Blender), the keyboard in use when it
+    /// is.
+    EnglishOutsideText,
+}
+
+impl AppKeyboard {
+    pub const ALL: [AppKeyboard; 3] = [
+        AppKeyboard::Thai,
+        AppKeyboard::English,
+        AppKeyboard::EnglishOutsideText,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            AppKeyboard::Thai => "th",
+            AppKeyboard::English => "en",
+            AppKeyboard::EnglishOutsideText => "en-outside-text",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<AppKeyboard> {
+        match s.trim().to_lowercase().as_str() {
+            "th" | "thai" | "ไทย" => Some(AppKeyboard::Thai),
+            "en" | "english" | "อังกฤษ" => Some(AppKeyboard::English),
+            "en-outside-text" | "shortcuts" => Some(AppKeyboard::EnglishOutsideText),
+            _ => None,
+        }
+    }
+}
+
+/// Programs offered first for "English outside text": their tools are
+/// single keys.
+pub const SHORTCUT_APPS: &[&str] = &[
+    "figma.exe",
+    "photoshop.exe",
+    "illustrator.exe",
+    "blender.exe",
+    "krita.exe",
+    "gimp-2.10.exe",
+    "adobe premiere pro.exe",
+    "afterfx.exe",
+    "resolve.exe",
+];
+
+/// What the keyboard should do as focus moves in an app set to
+/// [`AppKeyboard::EnglishOutsideText`]: `editing` is whether focus is on
+/// text being edited, `thai` whether the Thai keyboard is on now, and
+/// `put_away` whether Thai was put away here before. Returns the switch to
+/// make, if any: `Some(false)` English, `Some(true)` Thai back.
+pub fn outside_text_switch(editing: bool, thai: bool, put_away: bool) -> Option<bool> {
+    match (editing, thai, put_away) {
+        (false, true, _) => Some(false),
+        (true, false, true) => Some(true),
+        _ => None,
+    }
+}
+
 /// Fixes taken back in one app before RightType offers a calmer mode there.
 pub const REJECTIONS_FOR_OFFER: usize = 3;
 /// …within this long.
@@ -199,5 +264,20 @@ mod tests {
             parse_list("code.exe\nC:\\\\x.exe = auto\nfoo.exe = fast\nok.exe = auto");
         assert_eq!(skipped, 3);
         assert_eq!(modes.len(), 1);
+    }
+
+    #[test]
+    fn keyboards_parse_and_switch_around_text() {
+        for k in AppKeyboard::ALL {
+            assert_eq!(AppKeyboard::parse(k.name()), Some(k));
+        }
+        assert_eq!(AppKeyboard::parse("ไทย"), Some(AppKeyboard::Thai));
+        // Out of text with Thai on: English. Back in text: Thai again, only
+        // if it was put away here.
+        assert_eq!(outside_text_switch(false, true, false), Some(false));
+        assert_eq!(outside_text_switch(true, false, true), Some(true));
+        assert_eq!(outside_text_switch(true, false, false), None);
+        assert_eq!(outside_text_switch(false, false, true), None);
+        assert_eq!(outside_text_switch(true, true, true), None);
     }
 }

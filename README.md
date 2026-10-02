@@ -67,6 +67,8 @@ with a hotkey:
 | `Ctrl`+`Alt`+`CapsLock` | Enable/disable RightType immediately |
 | `Ctrl`+`Alt`+`Space` | Command palette: your recent words (tick several with Space — they are tinted in the app — and Enter flips exactly those), **fix this field** (the words are listed and tinted first; untick any), fix only the wrong-keyboard words of a selection, Thai text in standard form, year พ.ศ. ↔ ค.ศ., numbers and baht amounts in words, special characters by name, **type the copied text key by key** (remote desktops, VMs), pause, off in this app or **this field**, switch mode, settings |
 | `Ctrl`+`Backspace` | After Thai: deletes one Thai word, not the whole run back to the last space |
+| `Shift`+`Backspace` held | Flips the rest of the words in one go |
+| `Ctrl`+`Alt`+`K` | Keyboard map: click a key to type it |
 
 Every hotkey can be changed in Settings → Hotkeys (click **Change**, press the new keys).
 
@@ -179,15 +181,15 @@ rather than a blanket ban on every individual BIP39 word.
 (once winget has accepted the release).
 
 **Installer (recommended, per-user, no admin):** download
-`RightType-2.1.0-setup.exe` from the
+`RightType-2.2.0-setup.exe` from the
 [latest release](https://github.com/k-affan-th/RightType/releases/latest) and run it.
 It installs RightType, offers a desktop shortcut and start-at-login, and registers
 a normal Windows uninstaller (Settings -> Apps -> RightType).
 
-**Windows on ARM** (Surface Pro X, Copilot+ PCs): use `RightType-2.1.0-arm64-setup.exe`
-or `RightType-2.1.0-arm64.zip`.
+**Windows on ARM** (Surface Pro X, Copilot+ PCs): use `RightType-2.2.0-arm64-setup.exe`
+or `RightType-2.2.0-arm64.zip`.
 
-**Portable zip:** extract `RightType-2.1.0-x64.zip` and run `righttype.exe` where it
+**Portable zip:** extract `RightType-2.2.0-x64.zip` and run `righttype.exe` where it
 sits. Put an empty file named `portable` next to it and settings and learned
 words stay in a `data` folder beside it (for a USB stick) instead of
 `%APPDATA%\RightType`. Or install it per-user from the extracted folder:
@@ -203,7 +205,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -Autostart
 - Verify what you downloaded against `SHA256.txt` before running it:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\RightType-2.1.0-setup.exe
+Get-FileHash -Algorithm SHA256 .\RightType-2.2.0-setup.exe
 ```
 - Unsigned builds show a SmartScreen prompt — "More info → Run anyway".
   Code signing is planned for a later release.

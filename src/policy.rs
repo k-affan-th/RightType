@@ -10,6 +10,7 @@ use crate::english;
 use crate::layout::{en_to_th, th_to_en, ThaiVariant};
 use crate::secret::{self, SecretKind};
 use crate::segment;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::RwLock;
 
 /// Shortest in-flight token the live path will consider at all. Two-character
@@ -65,6 +66,18 @@ pub fn supported_layout_id(hkl: u32) -> Option<InputLayout> {
             .then_some(InputLayout::ThaiKedmanee);
     }
     None
+}
+
+/// Web addresses, email addresses and numbers typed with the Thai keyboard
+/// on are put back (on by default; the typist can turn it off).
+static FIXES_ADDRESSES: AtomicBool = AtomicBool::new(true);
+
+pub fn fixes_addresses() -> bool {
+    FIXES_ADDRESSES.load(Ordering::Relaxed)
+}
+
+pub fn set_fixes_addresses(on: bool) {
+    FIXES_ADDRESSES.store(on, Ordering::Relaxed);
 }
 
 /// The Thai keyboards other than the default one, by the high word of their
@@ -168,7 +181,12 @@ pub fn detect_token(
             if !has_thai || has_latin {
                 return None;
             }
-            detect::detect(token, en, th)
+            // Thai text on screen is Thai, whatever its keys spell.
+            let is_thai = th.contains(token) || segment::is_fully_known(token, th);
+            (!is_thai && fixes_addresses())
+                .then(|| thai_layout_address(token).or_else(|| thai_layout_number(token, th)))
+                .flatten()
+                .or_else(|| detect::detect(token, en, th))
                 .or_else(|| thai_layout_compound(token, th))
                 .or_else(|| thai_layout_technical(token, en, th))
                 .or_else(|| thai_layout_trailing_mark(token, th))
@@ -274,6 +292,49 @@ fn us_layout_thai_with_punctuation(
 /// so `คำสำคัญ:` arrives as `คำสำคัญซ`. Fixed only when the text before that
 /// letter is complete, known Thai and the whole token is not — so a real word
 /// ending in ซ (`ก๊าซ`) is left alone.
+/// An email or web address typed with the Thai keyboard on: `@` is `๑` and
+/// `.` is `ใ` there, so `name@gmail.com` shows as `ืฟทำ๑เทฟรสใแนท`. Judged by
+/// the keys pressed, not the dictionary: the whole token, read as English
+/// keys, is an address.
+fn thai_layout_address(token: &str) -> Option<Detection> {
+    let keys = crate::layout::th_to_en(token.trim());
+    let address = english::is_email(&keys) || english::is_web_address(&keys);
+    address.then_some(Detection {
+        corrected: keys,
+        confidence: Confidence::High,
+        evidence: Evidence::ExactDictionary,
+    })
+}
+
+/// A number typed with the Thai keyboard on: the number row gives
+/// `ๅ / - ภ ถ ุ ึ ค ต จ`, so `100` shows as `ๅจจ` and `10:30` as `ๅจซ-จ`.
+/// The keys must make a number — digits (at least two), with `, . : / -`
+/// between groups, and an optional `%`, `$` or `฿` — and the screen must
+/// not be a Thai word.
+fn thai_layout_number(token: &str, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    let keys = crate::layout::th_to_en(token);
+    let core = keys
+        .strip_prefix(['$', '฿'])
+        .unwrap_or(&keys)
+        .strip_suffix('%')
+        .unwrap_or_else(|| keys.strip_prefix(['$', '฿']).unwrap_or(&keys));
+    let digits = core.chars().filter(char::is_ascii_digit).count();
+    let shaped = !core.is_empty()
+        && core.starts_with(|c: char| c.is_ascii_digit())
+        && core.ends_with(|c: char| c.is_ascii_digit())
+        && core
+            .chars()
+            .all(|c| c.is_ascii_digit() || ",.:/-".contains(c))
+        && !core.contains(",,")
+        && !core.contains("..");
+    (digits >= 2 && shaped && !th.contains(token)).then_some(Detection {
+        corrected: keys,
+        confidence: Confidence::High,
+        evidence: Evidence::ExactDictionary,
+    })
+}
+
 fn thai_layout_trailing_mark(token: &str, th: &Dictionary) -> Option<Detection> {
     let token = token.trim();
     let last = token.chars().last()?;
@@ -1005,5 +1066,61 @@ mod tests {
         assert_eq!(on_us(&typed).as_deref(), Some("ดีมาก\""));
         // Thai typed on the English layout whose keys are punctuation.
         assert_eq!(on_us("c[[").as_deref(), Some("แบบ"));
+    }
+
+    #[test]
+    fn addresses_typed_on_the_thai_keyboard_come_back() {
+        let (en, th) = (crate::dict::english(), crate::dict::thai());
+        for address in [
+            "name@gmail.com",
+            "www.google.co.th",
+            "https://chula.ac.th",
+            "example.com",
+        ] {
+            let typed = crate::layout::en_to_th(address);
+            let d = detect_token(&typed, InputLayout::ThaiKedmanee, en, th);
+            assert_eq!(d.map(|d| d.corrected).as_deref(), Some(address), "{typed}");
+        }
+        // Numbers come back as typed on the number row.
+        for number in [
+            "100",
+            "1,250",
+            "3.50",
+            "100%",
+            "10:30",
+            "2/10",
+            "081-234-5678",
+            "$5.99",
+        ] {
+            let typed = crate::layout::en_to_th(number);
+            let d = detect_token(&typed, InputLayout::ThaiKedmanee, en, th);
+            assert_eq!(d.map(|d| d.corrected).as_deref(), Some(number), "{typed}");
+        }
+        // One digit, or a Thai word made of number-row letters, stays.
+        for word in [
+            crate::layout::en_to_th("1"),
+            "ภาค".to_string(),
+            "จุด".to_string(),
+        ] {
+            assert!(thai_layout_number(&word, th).is_none(), "{word}");
+        }
+        // No Thai dictionary word reads as an address or a number (the
+        // other Thai keyboards: examples/false_positive_audit.rs).
+        for word in include_str!("../assets/th_words.txt").lines() {
+            let d = detect_token(word, InputLayout::ThaiKedmanee, en, th);
+            let keys = d.map(|d| d.corrected).unwrap_or_default();
+            assert!(
+                !crate::english::is_email(&keys) && !crate::english::is_web_address(&keys),
+                "{word} -> {keys}"
+            );
+        }
+        for word in include_str!("../assets/th_words.txt").lines() {
+            assert!(thai_layout_address(word).is_none(), "{word}");
+        }
+        // Thai words stay Thai.
+        for word in ["สวัสดี", "ใจ", "เกม", "ใน"] {
+            let d = detect_token(word, InputLayout::ThaiKedmanee, en, th);
+            assert!(d.is_none(), "{word}");
+        }
     }
 }

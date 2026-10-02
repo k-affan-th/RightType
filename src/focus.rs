@@ -126,6 +126,20 @@ thread_local! {
     static FIELD: RefCell<Option<IUIAutomationElement>> = const { RefCell::new(None) };
 }
 
+/// Where the focused password field is on screen (for the TH / CAPS tag
+/// next to it); set when focus moves into one.
+static PASSWORD_BOX: std::sync::Mutex<Option<windows::Win32::Foundation::RECT>> =
+    std::sync::Mutex::new(None);
+
+/// The focused password field's box, when focus is in one and the app
+/// said where it is.
+pub fn password_box() -> Option<windows::Win32::Foundation::RECT> {
+    if FIELD_STATUS.load(Ordering::Relaxed) != FIELD_PASSWORD {
+        return None;
+    }
+    *PASSWORD_BOX.lock().unwrap()
+}
+
 /// Is the currently focused element a password field (per UIA)?
 pub fn is_password_field() -> bool {
     status_is_protected(FIELD_STATUS.load(Ordering::Relaxed))
@@ -191,6 +205,25 @@ pub unsafe fn arm() {
 static NOTIFY_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 /// Posted to [`NOTIFY_HWND`] when the caret moved to another field.
 pub const WM_FOCUS_MOVED: u32 = 0x8000 + 0x551;
+/// Posted to [`NOTIFY_HWND`] when another window came to the front, even
+/// to the field it had before (an app's own keyboard applies then).
+pub const WM_APP_TO_FRONT: u32 = 0x8000 + 0x552;
+/// The foreground window when the focus worker last looked.
+static LAST_FOREGROUND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+fn notify(msg: u32) {
+    let hwnd = NOTIFY_HWND.load(Ordering::Acquire);
+    if hwnd != 0 {
+        let _ = unsafe {
+            windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                HWND(hwnd as *mut _),
+                msg,
+                windows::Win32::Foundation::WPARAM(0),
+                windows::Win32::Foundation::LPARAM(0),
+            )
+        };
+    }
+}
 
 pub fn set_notify_window(hwnd: isize) {
     NOTIFY_HWND.store(hwnd, Ordering::Release);
@@ -258,8 +291,22 @@ fn start_worker() {
         });
 }
 
+/// When the newest focus event came, and when the event behind the last
+/// move to another field came (the move happened then, however late the
+/// answer).
+static LAST_EVENT_AT: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+static MOVE_EVENT_AT: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+/// When the focus event behind the latest [`generation`] came.
+pub fn moved_at() -> Option<std::time::Instant> {
+    MOVE_EVENT_AT.lock().ok().and_then(|at| *at)
+}
+
 /// Ask the focus worker to look again (never waits; a pending ask covers it).
 fn wake_worker() {
+    if let Ok(mut at) = LAST_EVENT_AT.lock() {
+        *at = Some(std::time::Instant::now());
+    }
     // The oldest question still open is the one `settle` measures from.
     if ANSWERED.load(Ordering::Acquire) >= ASKED.load(Ordering::Acquire) {
         if let Ok(mut at) = ASKED_AT.lock() {
@@ -306,8 +353,12 @@ unsafe extern "system" fn on_focus(
 /// On the focus worker thread.
 unsafe fn on_focus_inner() {
     let started = std::time::Instant::now();
+    let event_at = LAST_EVENT_AT.lock().ok().and_then(|at| *at);
     let moved = moves_to_another_field();
     if moved {
+        if let Ok(mut at) = MOVE_EVENT_AT.lock() {
+            *at = event_at;
+        }
         FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
         refresh_status();
     }
@@ -315,6 +366,13 @@ unsafe fn on_focus_inner() {
         "focus event handled in {} ms (moved={moved})",
         started.elapsed().as_millis()
     ));
+    // Back to an app whose field still has focus is no move to another
+    // field, but the app came to the front (CI: Notepad, back from the
+    // taskbar, kept the Thai keyboard set for it as English).
+    let foreground = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize;
+    if LAST_FOREGROUND.swap(foreground, Ordering::AcqRel) != foreground {
+        notify(WM_APP_TO_FRONT);
+    }
     if !moved {
         return;
     }
@@ -324,15 +382,7 @@ unsafe fn on_focus_inner() {
     );
     // After the password check above: the habit switch never runs in one.
     // It changes the hook's state, so it runs on the UI thread.
-    let hwnd = NOTIFY_HWND.load(Ordering::Acquire);
-    if hwnd != 0 {
-        let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
-            HWND(hwnd as *mut _),
-            WM_FOCUS_MOVED,
-            windows::Win32::Foundation::WPARAM(0),
-            windows::Win32::Foundation::LPARAM(0),
-        );
-    }
+    notify(WM_FOCUS_MOVED);
 }
 
 /// Whether a focus event means the caret went to another field.
@@ -373,6 +423,26 @@ unsafe fn moves_to_another_field() -> bool {
     })
 }
 
+/// Does `el` show a text caret now (UI Automation's caret range is
+/// active)? A page or canvas that is only looked at has none.
+unsafe fn has_active_caret(el: &IUIAutomationElement) -> bool {
+    use windows::Win32::UI::Accessibility::{IUIAutomationTextPattern2, UIA_TextPattern2Id};
+    let Ok(pattern) = el.GetCurrentPatternAs::<IUIAutomationTextPattern2>(UIA_TextPattern2Id)
+    else {
+        return false;
+    };
+    let mut active = windows::Win32::Foundation::BOOL(0);
+    pattern.GetCaretRange(&mut active).is_ok() && active.as_bool()
+}
+
+/// Is focus on text being edited (an edit box, or a document with a
+/// caret), as opposed to a canvas, a button or a page only read?
+pub fn is_editing() -> bool {
+    EDITING.load(Ordering::Relaxed)
+}
+
+static EDITING: AtomicBool = AtomicBool::new(false);
+
 /// Rows of a list, menu, grid or tree: what a suggestion dropdown is made of.
 fn is_list_row(control_type: UIA_CONTROLTYPE_ID) -> bool {
     [
@@ -387,6 +457,7 @@ fn is_list_row(control_type: UIA_CONTROLTYPE_ID) -> bool {
 unsafe fn refresh_status() {
     let mut inline = false;
     let mut text_field = false;
+    let mut editing = false;
     let uia = uia_here();
     let status = UIA.with(|_| {
         uia.as_ref()
@@ -401,11 +472,20 @@ unsafe fn refresh_status() {
                     .map(|b| b.to_string())
                     .unwrap_or_default();
                 inline = is_inline_completing(&class, &id);
-                text_field = el.CurrentControlType().is_ok_and(|t| {
+                let kind = el.CurrentControlType().ok();
+                text_field = kind.is_some_and(|t| {
                     t == windows::Win32::UI::Accessibility::UIA_EditControlTypeId
                         || t == windows::Win32::UI::Accessibility::UIA_DocumentControlTypeId
                 });
-                el.CurrentIsPassword().ok().map(|b| b.as_bool())
+                editing = kind == Some(windows::Win32::UI::Accessibility::UIA_EditControlTypeId)
+                    || has_active_caret(&el);
+                let is_password = el.CurrentIsPassword().ok().map(|b| b.as_bool());
+                if is_password == Some(true) {
+                    if let Ok(r) = el.CurrentBoundingRectangle() {
+                        *PASSWORD_BOX.lock().unwrap() = Some(r);
+                    }
+                }
+                is_password
             })
             .map(|is_password| {
                 if is_password {
@@ -421,6 +501,7 @@ unsafe fn refresh_status() {
     ));
     FIELD_STATUS.store(status, Ordering::Relaxed);
     TEXT_FIELD.store(text_field, Ordering::Relaxed);
+    EDITING.store(editing, Ordering::Relaxed);
     INLINE_COMPLETION.store(inline, Ordering::Relaxed);
 }
 
@@ -676,8 +757,12 @@ impl TextBox {
 
     /// The selection, in UTF-16 positions (16 bits each: EM_GETSEL's limit).
     fn selection(&self) -> Option<(usize, usize)> {
+        self.selection_within(300)
+    }
+
+    fn selection_within(&self, ms: u32) -> Option<(usize, usize)> {
         const EM_GETSEL: u32 = 0x00B0;
-        let sel = self.ask(EM_GETSEL, 0, 0)?;
+        let sel = self.ask_within(EM_GETSEL, 0, 0, ms)?;
         Some((sel & 0xFFFF, (sel >> 16) & 0xFFFF))
     }
 
@@ -761,8 +846,13 @@ impl TextBox {
     ) -> Result<(), ReplaceError> {
         const EM_SETSEL: u32 = 0x00B1;
         const EM_REPLACESEL: u32 = 0x00C2;
+        // This runs inside the keyboard hook: every wait here counts toward
+        // the time Windows gives the hook, after which it lets the key
+        // through itself (CI: `lสวัสดี`, the first word after start, when a
+        // 300 ms wait for the caret went unanswered). Short waits, so the
+        // whole replacement stays well inside it.
         let (start, end) = self
-            .selection()
+            .selection_within(STEP_MS)
             .ok_or(ReplaceError::Untouched("no answer"))?;
         if start != end {
             return Err(ReplaceError::Untouched("text is selected"));
@@ -777,11 +867,11 @@ impl TextBox {
         let from = start - delete;
         #[cfg(debug_assertions)]
         self.trace_around(start, delete);
-        self.ask(EM_SETSEL, from, start as isize)
+        self.ask_within(EM_SETSEL, from, start as isize, STEP_MS)
             .ok_or(ReplaceError::Untouched("could not select"))?;
-        if self.selection() != Some((from, start)) {
+        if self.selection_within(STEP_MS) != Some((from, start)) {
             // Put the caret back where it was before giving the job to keys.
-            let _ = self.ask(EM_SETSEL, start, start as isize);
+            let _ = self.ask_within(EM_SETSEL, start, start as isize, STEP_MS);
             return Err(ReplaceError::Untouched("selection did not take"));
         }
         let mut units: zeroize::Zeroizing<Vec<u16>> =
@@ -789,7 +879,7 @@ impl TextBox {
         // wParam 1: the replacement can be undone (Ctrl+Z in the app). A
         // short wait: an answer only confirms what the box will do anyway.
         if self
-            .ask_within(EM_REPLACESEL, 1, units.as_mut_ptr() as isize, 100)
+            .ask_within(EM_REPLACESEL, 1, units.as_mut_ptr() as isize, STEP_MS)
             .is_none()
         {
             // Sent, not yet answered: a slow box (a Notepad just opened,
@@ -805,7 +895,7 @@ impl TextBox {
             return Ok(());
         }
         let expected = from + units.len() - 1;
-        match self.selection() {
+        match self.selection_within(STEP_MS) {
             Some((a, b)) if a == expected && b == expected => Ok(()),
             _ => Err(ReplaceError::Unknown(
                 "caret not where the replacement should leave it",
@@ -813,6 +903,10 @@ impl TextBox {
         }
     }
 }
+
+/// The longest one message to a text box may wait while the keyboard hook
+/// is replacing a word (see [`TextBox::replace_before_caret`]).
+const STEP_MS: u32 = 80;
 
 thread_local! {
     static WAITING_ON_APP: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
@@ -887,9 +981,25 @@ enum ContextAsk {
         Vec<(usize, usize)>,
         std::sync::mpsc::SyncSender<Vec<Option<windows::Win32::Foundation::RECT>>>,
     ),
+    /// Is text selected in the focused field?
+    Selected(std::sync::mpsc::SyncSender<bool>),
 }
 static CONTEXT_WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<ContextAsk>> =
     std::sync::OnceLock::new();
+
+/// Is text selected in the focused field (through UI Automation)? Asked
+/// of the context worker, waiting at most `max`; `false` when the app does
+/// not say in time.
+pub fn has_selection_within(max: std::time::Duration) -> bool {
+    let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+    if context_worker()
+        .try_send(ContextAsk::Selected(reply_tx))
+        .is_err()
+    {
+        return false;
+    }
+    reply_rx.recv_timeout(max).unwrap_or(false)
+}
 
 /// Up to `n` characters before the caret, for the keyboard hook, which must not make the
 /// cross-process calls itself: asked of a worker, waiting at most `max`
@@ -919,6 +1029,9 @@ fn context_worker() -> &'static std::sync::mpsc::SyncSender<ContextAsk> {
                     match ask {
                         ContextAsk::Text(n, reply) => {
                             let _ = reply.try_send(text_before_caret_up_to(n));
+                        }
+                        ContextAsk::Selected(reply) => {
+                            let _ = reply.try_send(uia_selected_text().is_some());
                         }
                         ContextAsk::Boxes(spans, reply) => {
                             let _ = reply.try_send(boxes_before_caret(&spans));

@@ -2,6 +2,63 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.2.0]
+
+### Added
+
+- **Addresses and numbers typed with the Thai keyboard on come back**:
+  `ืฟทำ๑เทฟรสใแนท` → `name@gmail.com`, `www.` and `http` addresses and
+  domains such as `.com` and `.co.th`; `ๅจจ` → `100`, also `1,250`
+  `3.50` `100%` `10:30` `2/10` `081-234-5678`. Judged by the keys pressed;
+  Thai text on screen (a dictionary word, or known words in a row) is never
+  read as one. On by default; the command palette turns it off.
+- **Hold Shift+Backspace** (half a second) to flip the rest of the words in
+  one go; one more press, or Undo, puts them all back.
+- **TH / CAPS tag at password fields** when the Thai keyboard or CapsLock
+  is on — the usual reason a password is refused. Only the keyboard's
+  language and CapsLock are looked at; not in apps on the safety list.
+- **The keypad with NumLock off** (it moves the cursor instead of typing
+  digits) is pointed out; or, by choice, NumLock is turned on and the digit
+  typed. **Insert** (typing over the text) is pointed out, or held back.
+- **A keyboard per app** (Settings → Apps, the new Keyboard column, or the
+  palette): Thai or English when the app comes to the front, or **English
+  outside text** for apps whose tools are single keys (Figma, Photoshop,
+  Blender): English while there is no text cursor, the Thai keyboard back
+  in text.
+- **The grave key (`) can type its character** instead of switching the
+  language (opt-in), for code and Markdown on Windows set up for Thai.
+- **A language switch that comes with a shortcut** (Ctrl/Alt + Shift + a
+  key) is put back (opt-in).
+- Palette: **Thai spacing** for the selection by the Royal Institute's
+  rules (ๆ, ฯลฯ, ฯ, brackets, runs of spaces); only spaces move.
+- Palette: **Why?** — why the last word was fixed or left as typed (an
+  English word, Thai already, Manual mode, a possible recovery phrase…).
+- Snippets: **My typo** — a word you often misspell and its right spelling,
+  fixed like the built-in misspellings (Backspace right after undoes it).
+- **Complete long Thai words with Tab** (opt-in): offered only when every
+  dictionary word that starts so goes on the same way (`ประชาสัมพั` →
+  `ประชาสัมพันธ์`), so the offer is never a guess.
+- **Keyboard map** (`Ctrl`+`Alt`+`K`, or the palette): the Thai keyboard in
+  use key by key, Shift for the upper characters; click a key to type it
+  where you are (the map never takes the focus).
+- **Manoonchai**, a third Thai keyboard (Settings → Hotkeys), with its own
+  check that no dictionary word is changed.
+
+### Changed
+
+- **Works alongside apps that rewrite text**: Word, Outlook and Google Docs
+  capitalise, curl quotes and AutoCorrect a word after RightType writes it;
+  the check-after-write no longer reads that as garbling (or slows those
+  apps down).
+- Ctrl+Backspace by Thai word is left to programs that already do it
+  (browsers, Electron apps, Office, LibreOffice); RightType does it where
+  they do not (Notepad, classic programs).
+- Excel's AutoComplete is cleared before a correction when something is
+  selected.
+- Fix this field in Google Docs says how to let Docs share its text
+  (Tools → Accessibility → screen reader support).
+- Privacy & about notes when Windows' own keyboard autocorrect is on.
+
 ## [2.1.0]
 
 ### Added

@@ -32,6 +32,7 @@
 
 pub mod buffer;
 pub mod code;
+pub mod compat;
 pub mod detect;
 pub mod diag;
 pub mod dict;
@@ -53,3 +54,4 @@ pub mod snippets;
 pub mod spelling;
 pub mod thai_text;
 pub mod usage;
+pub mod why;

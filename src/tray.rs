@@ -471,6 +471,7 @@ pub fn run() {
             "welcome" => crate::onboard::show(true),
             "help" => crate::onboard::show(false),
             "overlay" => overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastModeAuto)),
+            "keymap" => crate::keymap::request_toggle(),
             "badge" => overlay::badge_at(
                 "TH",
                 windows::Win32::Foundation::RECT {

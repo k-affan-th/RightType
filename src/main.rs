@@ -35,6 +35,10 @@ mod inject;
 #[cfg(feature = "winos")]
 mod instance;
 #[cfg(feature = "winos")]
+mod keyboards;
+#[cfg(feature = "winos")]
+mod keymap;
+#[cfg(feature = "winos")]
 mod learn;
 #[cfg(feature = "winos")]
 mod manual;
@@ -46,6 +50,8 @@ mod onboard;
 mod overlay;
 #[cfg(feature = "winos")]
 mod palette;
+#[cfg(feature = "winos")]
+mod pwhint;
 #[cfg(feature = "winos")]
 mod ram;
 #[cfg(feature = "winos")]

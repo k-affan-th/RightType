@@ -137,6 +137,16 @@ pub fn after_keys(expected: &str, exe: Option<String>) {
                 crate::hook::trace_note("verify: correction shown as sent");
                 return;
             }
+            // Word, Outlook, Google Docs and the like rewrite a word once it
+            // is typed (a capital, curly quotes, their AutoCorrect list):
+            // that is theirs to do, not garbling.
+            let (en, th) = (righttype::dict::english(), righttype::dict::thai());
+            if righttype::compat::rewritten_by_app(&expected, &shown, |w| {
+                en.contains(w) || th.contains(w)
+            }) {
+                crate::hook::trace_note("verify: the app rewrote it (its own AutoCorrect)");
+                return;
+            }
             let mut sent: Vec<char> = expected.chars().collect();
             let mut got: Vec<char> = shown.chars().collect();
             // The part that should be the correction: the last `n`.

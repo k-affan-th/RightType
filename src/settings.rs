@@ -60,7 +60,7 @@ const PREDICT_Y: i32 = 548;
 /// The restart-after-a-crash card on the Privacy & about page.
 const RESTART_Y: i32 = 486;
 /// The Thai keyboard picker on the Hotkeys page.
-const KEYBOARD_Y: i32 = 516;
+const KEYBOARD_Y: i32 = 568;
 
 /// The label of each hotkey action.
 pub fn action_label(action: Action) -> T {
@@ -72,6 +72,7 @@ pub fn action_label(action: Action) -> T {
         Action::Accept => T::HkAccept,
         Action::Panic => T::HkPanic,
         Action::Palette => T::HkPalette,
+        Action::KeyMap => T::HkKeyMap,
     }
 }
 
@@ -92,7 +93,7 @@ struct Ids {
     /// Puts a date or time field into the text.
     snip_date: u16,
     /// Thai, English, either.
-    snip_scope: [u16; 3],
+    snip_scope: [u16; 4],
     snip_save: u16,
     snip_remove: u16,
     snip_status: u16,
@@ -118,6 +119,7 @@ struct Ids {
     keys_reset: u16,
     kedmanee: u16,
     pattachote: u16,
+    manoonchai: u16,
     save_learned: u16,
     clear_learned: u16,
     apps_table: u16,
@@ -153,6 +155,8 @@ const APP_MODE_CHOICES: [AppMode; 5] = [
 enum RowSource {
     ForNow,
     Chosen,
+    /// No mode of its own, only a keyboard.
+    KeyboardOnly,
     Blocked,
     Default,
     Safety,
@@ -359,14 +363,21 @@ fn open_on(page: u8) {
     let kedmanee = s.segment(
         "Kedmanee",
         true,
-        (X0 + CW - 20 - 2 * 130, KEYBOARD_Y + 4, 130, 32),
+        (X0 + CW - 20 - 3 * 104, KEYBOARD_Y + 4, 104, 32),
         p.inset,
         h,
     );
     let pattachote = s.segment(
         "Pattachote",
         false,
-        (X0 + CW - 20 - 130, KEYBOARD_Y + 4, 130, 32),
+        (X0 + CW - 20 - 2 * 104, KEYBOARD_Y + 4, 104, 32),
+        p.inset,
+        h,
+    );
+    let manoonchai = s.segment(
+        "Manoonchai",
+        false,
+        (X0 + CW - 20 - 104, KEYBOARD_Y + 4, 104, 32),
         p.inset,
         h,
     );
@@ -483,15 +494,15 @@ fn open_on(page: u8) {
         p.bg,
         n,
     );
-    let mut snip_scope = [0u16; 3];
-    for (i, key) in [T::ScopeThai, T::ScopeEnglish, T::ScopeEither]
+    let mut snip_scope = [0u16; 4];
+    for (i, key) in [T::ScopeThai, T::ScopeEnglish, T::ScopeEither, T::ScopeTypo]
         .iter()
         .enumerate()
     {
         snip_scope[i] = s.segment(
             tr(*key),
             i == 0,
-            (X0 + 4 + i as i32 * 104, 426, 102, 32),
+            (X0 + 4 + i as i32 * 72, 426, 70, 32),
             p.inset,
             n,
         );
@@ -499,14 +510,14 @@ fn open_on(page: u8) {
     let snip_save = s.button(
         tr(T::BtnSaveSnippet),
         true,
-        (X0 + CW - 232, 424, 118, 34),
+        (X0 + CW - 206, 424, 106, 34),
         p.bg,
         n,
     );
     let snip_remove = s.button(
         tr(T::BtnRemoveApp),
         false,
-        (X0 + CW - 108, 424, 108, 34),
+        (X0 + CW - 94, 424, 94, 34),
         p.bg,
         n,
     );
@@ -514,7 +525,7 @@ fn open_on(page: u8) {
     s.label(
         tr(T::SnippetsNote),
         TextStyle::Small,
-        (X0, 492, CW, 60),
+        (X0, 492, CW, 110),
         p.bg,
         n,
     );
@@ -533,8 +544,9 @@ fn open_on(page: u8) {
         &[
             (tr(T::ColApp), 150),
             (tr(T::ColMode), 104),
+            (tr(T::ColKeyboard), 110),
             (tr(T::ColSetBy), 120),
-            (tr(T::ColWhere), 300),
+            (tr(T::ColWhere), 190),
         ],
         (X0, 102, CW, 232),
         b,
@@ -641,6 +653,17 @@ fn open_on(page: u8) {
         p.surface,
         a,
     );
+    // Two corrections of one word, Windows' after RightType's, look like a
+    // RightType fault: say where that comes from.
+    if ui::windows_autocorrects() {
+        s.label(
+            tr(T::AboutWindowsAutocorrect),
+            TextStyle::Small,
+            (X0, RESTART_Y + 84, CW, 40),
+            p.bg,
+            a,
+        );
+    }
 
     let ids = Ids {
         nav,
@@ -673,6 +696,7 @@ fn open_on(page: u8) {
         keys_reset,
         kedmanee,
         pattachote,
+        manoonchai,
         save_learned,
         clear_learned,
         apps_table,
@@ -788,10 +812,19 @@ fn sync(win: &SettingsWindow) {
         config::RESTART_AFTER_CRASH.load(Ordering::Relaxed),
     );
     sync_app_choice(win);
-    let pattachote =
-        righttype::layout::thai_variant() == righttype::layout::ThaiVariant::Pattachote;
-    s.set_checked(ids.kedmanee, !pattachote);
-    s.set_checked(ids.pattachote, pattachote);
+    let variant = righttype::layout::thai_variant();
+    s.set_checked(
+        ids.kedmanee,
+        variant == righttype::layout::ThaiVariant::Kedmanee,
+    );
+    s.set_checked(
+        ids.pattachote,
+        variant == righttype::layout::ThaiVariant::Pattachote,
+    );
+    s.set_checked(
+        ids.manoonchai,
+        variant == righttype::layout::ThaiVariant::Manoonchai,
+    );
     s.set_text(
         ids.folder_label,
         &match learn::folder() {
@@ -932,9 +965,11 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
             ids.keys_status,
             &trf(T::HkPress, &[("v", tr(action_label(action)))]),
         );
-    } else if id == ids.kedmanee || id == ids.pattachote {
+    } else if id == ids.kedmanee || id == ids.pattachote || id == ids.manoonchai {
         righttype::layout::set_thai_variant(if id == ids.pattachote {
             righttype::layout::ThaiVariant::Pattachote
+        } else if id == ids.manoonchai {
+            righttype::layout::ThaiVariant::Manoonchai
         } else {
             righttype::layout::ThaiVariant::Kedmanee
         });
@@ -972,10 +1007,11 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
 
 // --------------------------------------------------------- Snippets page
 
-const SCOPES: [righttype::snippets::Scope; 3] = [
+const SCOPES: [righttype::snippets::Scope; 4] = [
     righttype::snippets::Scope::Thai,
     righttype::snippets::Scope::English,
     righttype::snippets::Scope::Either,
+    righttype::snippets::Scope::Typo,
 ];
 
 /// Fill the Snippets table, selecting the snippet `trigger` when given.
@@ -989,6 +1025,7 @@ fn fill_snippets(win: &SettingsWindow, trigger: Option<&str>) {
                 righttype::snippets::Scope::Thai => T::ScopeThai,
                 righttype::snippets::Scope::English => T::ScopeEnglish,
                 righttype::snippets::Scope::Either => T::ScopeEither,
+                righttype::snippets::Scope::Typo => T::ScopeTypo,
             });
             vec![sn.trigger.clone(), text, scope.to_string()]
         })
@@ -1021,7 +1058,7 @@ fn snippet_table_event(win: &Rc<SettingsWindow>, event: ui::TableEvent) {
 fn save_snippet(win: &SettingsWindow) {
     use righttype::snippets::{check, Problem, MAX_SNIPPETS};
     let s = &win.surface;
-    let scope = (0..3)
+    let scope = (0..SCOPES.len())
         .find(|&k| s.checked(win.ids.snip_scope[k]))
         .map_or(righttype::snippets::Scope::Either, |k| SCOPES[k]);
     let mut text = s.text_of(win.ids.snip_text);
@@ -1094,6 +1131,16 @@ fn app_rows() -> Vec<AppRow> {
             },
         })
         .collect();
+    // Apps with only a keyboard of their own.
+    for exe in crate::apps::all_keyboards().into_keys() {
+        if !rows.iter().any(|r| r.exe == exe) {
+            rows.push(AppRow {
+                exe,
+                mode: Some(hook::mode().into()),
+                source: RowSource::KeyboardOnly,
+            });
+        }
+    }
     for exe in safety::custom_list() {
         rows.retain(|r| r.exe != exe);
         rows.push(AppRow {
@@ -1126,18 +1173,23 @@ fn fill_apps(win: &SettingsWindow, exe: Option<&str>) {
         .map(|r| {
             let mode = match (r.mode, r.source) {
                 (_, RowSource::Safety) => tr(T::ModeAlwaysOff).to_string(),
+                (_, RowSource::KeyboardOnly) => "—".to_string(),
                 (None, _) => tr(T::ModeBlocked).to_string(),
                 (Some(m), _) => tr(crate::tray::app_mode_name(m)).to_string(),
             };
             let by = tr(match r.source {
                 RowSource::ForNow => T::SetByForNow,
-                RowSource::Chosen => T::SetByYou,
+                RowSource::Chosen | RowSource::KeyboardOnly => T::SetByYou,
                 RowSource::Blocked => T::SetByYouBlocked,
                 RowSource::Default => T::SetByDefault,
                 RowSource::Safety => T::SetBySafety,
             });
             let place = paths.get(&r.exe).cloned().unwrap_or_else(|| "—".into());
-            vec![r.exe.clone(), mode, by.to_string(), place]
+            let keyboard = match crate::apps::keyboard(&r.exe) {
+                None => "—".to_string(),
+                k => tr(crate::palette::keyboard_name(k)).to_string(),
+            };
+            vec![r.exe.clone(), mode, keyboard, by.to_string(), place]
         })
         .collect();
     drop(paths);
@@ -1226,6 +1278,7 @@ fn remove_app(win: &SettingsWindow) {
         }
         RowSource::ForNow => crate::apps::clear_for_now(&row.exe),
         RowSource::Chosen => crate::apps::set(&row.exe, None),
+        RowSource::KeyboardOnly => {}
         RowSource::Blocked => {
             let rest: Vec<String> = safety::custom_list()
                 .into_iter()
@@ -1234,6 +1287,8 @@ fn remove_app(win: &SettingsWindow) {
             safety::set_custom_list(rest);
         }
     }
+    // Removing an app forgets its keyboard too.
+    crate::apps::set_keyboard(&row.exe, None);
     config::persist();
     fill_apps(win, None);
     win.surface.set_text(
@@ -1311,6 +1366,19 @@ fn app_menu(win: &Rc<SettingsWindow>, x: i32, y: i32) {
             format!("{mark}{}", tr(crate::tray::app_mode_name(*m)))
         })
         .collect();
+    // The keyboard the app starts with.
+    let keyboards: Vec<Option<righttype::per_app::AppKeyboard>> = std::iter::once(None)
+        .chain(righttype::per_app::AppKeyboard::ALL.map(Some))
+        .collect();
+    let current = crate::apps::keyboard(&row.exe);
+    for k in &keyboards {
+        let mark = if *k == current { "✓  " } else { "" };
+        labels.push(format!(
+            "{mark}{}: {}",
+            tr(T::ColKeyboard),
+            tr(crate::palette::keyboard_name(*k))
+        ));
+    }
     let keep = row.source == RowSource::ForNow;
     if keep {
         labels.push(tr(T::BtnKeepMode).to_string());
@@ -1331,7 +1399,13 @@ fn app_menu(win: &Rc<SettingsWindow>, x: i32, y: i32) {
         set_app_mode(win, APP_MODE_CHOICES[i]);
         return;
     }
-    let mut rest = i - n;
+    if i < n + keyboards.len() {
+        crate::apps::set_keyboard(&row.exe, keyboards[i - n]);
+        config::persist();
+        fill_apps(win, Some(&row.exe));
+        return;
+    }
+    let mut rest = i - n - keyboards.len();
     if keep {
         if rest == 0 {
             keep_app(win);
@@ -1613,7 +1687,7 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             }
         }
         PAGE_HOTKEYS => {
-            track(g, rect(X0 + CW - 24 - 2 * 130, KEYBOARD_Y, 2 * 130 + 8, 40));
+            track(g, rect(X0 + CW - 24 - 3 * 104, KEYBOARD_Y, 3 * 104 + 8, 40));
             card(g, rect(X0, 68, CW, Action::ALL.len() as i32 * 52 + 8));
             for i in 1..Action::ALL.len() as i32 {
                 divider(hdc, X0 + 16, 74 + i * 52 - 1, CW - 32);

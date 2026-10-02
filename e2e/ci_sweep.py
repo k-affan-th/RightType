@@ -91,6 +91,11 @@ scope = "either"
 trigger = ";today"
 text = "{iso}"
 scope = "either"
+
+[[snippets]]
+trigger = "teh"
+text = "the"
+scope = "typo"
 '''
 
 
@@ -101,7 +106,8 @@ def write_sweep_config(tables="", keys=""):
     refused)."""
     fs.write_config(mode="auto", learn=False)
     path = fs.DATA / "config.toml"
-    path.write_text(path.read_text(encoding="utf-8") + "fix_spelling = true\n" + keys + "\n"
+    path.write_text(path.read_text(encoding="utf-8") + "fix_spelling = true\ncomplete_thai = true\n"
+                    + keys + "\n"
                     + tables + SNIPPET_CONFIG, encoding="utf-8")
 
 
@@ -169,6 +175,127 @@ def palette_text_tools(t):
         fs.set_mode("auto")
 
 
+def hold_flip(seconds=0.8):
+    """Shift+Backspace held: the key's down repeated, as a held key does."""
+    user32.keybd_event(SHIFT, 0, 0, 0)
+    time.sleep(0.05)
+    user32.keybd_event(BACK, 0, 0, 0)
+    for _ in range(int(seconds / 0.1)):
+        time.sleep(0.1)
+        user32.keybd_event(BACK, 0, 0, 0)
+    user32.keybd_event(BACK, 0, 2, 0)
+    user32.keybd_event(SHIFT, 0, 2, 0)
+
+
+def traced(steps, what):
+    """Run `steps`; did the trace say `what` meanwhile?"""
+    start = fs.log_size()
+    steps()
+    time.sleep(0.6)
+    return "yes" if what in fs.log_since(start) else "no"
+
+
+def keyboard_states(t):
+    """2.2: addresses and numbers typed with the Thai keyboard on come back;
+    Shift+Backspace held flips the whole run; the keypad with NumLock off
+    and Insert are pointed out."""
+    fs.run(t, "email typed on the Thai keyboard", "name@gmail.com ", "name@gmail.com",
+           layout=HKL_TH)
+    fs.run(t, "web address typed on the Thai keyboard", "www.google.co.th ",
+           "www.google.co.th", layout=HKL_TH)
+    fs.run(t, "number typed on the Thai keyboard", "100 ", "100", layout=HKL_TH)
+    fs.run(t, "time typed on the Thai keyboard", "10:30 ", "10:30", layout=HKL_TH)
+    fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
+    try:
+        fs.run(t, "Shift+Backspace held flips the whole run", "l;ylfu 8iy[ l;ylfu ",
+               "สวัสดี ครับ สวัสดี", then=[hold_flip], settle=1.0)
+    finally:
+        fs.set_mode("auto")
+    t.clear()
+    # Keypad 1 with NumLock off sends End without the extended flag (`tap`
+    # sends the separate End key, extended).
+    def keypad_1():
+        fs.key(0x23)
+        fs.key(0x23, True)
+        time.sleep(0.07)
+    # This process's view of NumLock (GetKeyState) can be stale, so: try,
+    # and if nothing was said, switch NumLock over and try once more; put it
+    # back afterwards.
+    said = traced(keypad_1, "NumLock off: said so")
+    toggled = said != "yes"
+    if toggled:
+        tap(0x90)
+    try:
+        if toggled:
+            said = traced(keypad_1, "NumLock off: said so")
+        fs.check(t.name, "keypad with NumLock off is pointed out", said, "yes")
+    finally:
+        if toggled:
+            tap(0x90)
+    # Insert from the editing keys is an extended key.
+    def insert():
+        user32.keybd_event(0x2D, 0, 1, 0)
+        user32.keybd_event(0x2D, 0, 3, 0)
+    fs.check(t.name, "Insert in a text field is pointed out",
+             traced(insert, "Insert pressed in a text field"), "yes")
+    insert()  # back to how it was
+
+
+def password_tag(t):
+    """2.2: the TH tag at a password field with the Thai keyboard on."""
+    def steps():
+        t.pw.set_focus()
+        time.sleep(0.3)
+        t.layout(HKL_TH)
+        time.sleep(0.8)
+    fs.check(t.name, "TH tag at a password field", traced(steps, "password tag: TH"), "yes")
+    t.layout(HKL_EN)
+    t.focus()
+
+
+def thai_text_tools(t):
+    """2.2: Thai spacing from the palette; "why?" for the last word; a
+    misspelling of one's own put right; the rest of a long Thai word taken
+    with Tab."""
+    fs.run(t, "own misspelling put right", "teh ", "the")
+    fs.run(t, "own misspelling put back by Backspace right after", "teh ", "teh",
+           then=[lambda: tap(BACK)])
+    fs.check(t.name, "why? says an English word was left as typed",
+             traced(lambda: (fs.type_keys("hello "), time.sleep(0.5),
+                             palette_search("why")()), "why: KeptEnglish"), "yes")
+    fs.run(t, "rest of a long Thai word with Tab", "xit=kly,ry", "ประชาสัมพันธ์",
+           layout=HKL_TH, then=[lambda: tap(0x09)])
+    fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
+    try:
+        fs.run(t, "Thai spacing from the palette", "gfHdqg]jo", "เด็ก ๆ เล่น",
+               layout=HKL_TH, then=[select_line, lambda: t.layout(HKL_EN),
+                                    palette_search("spacing")])
+    finally:
+        fs.set_mode("auto")
+
+
+def keyboard_map(t):
+    """2.2: the keyboard map types the key clicked on it, where the typist
+    is, without taking the focus."""
+    from pywinauto import Desktop
+    t.clear()
+    t.focus()
+    tap(ord("K"), CTRL, fs.ALT)
+    time.sleep(1.2)
+    typed = "no window"
+    try:
+        win = Desktop(backend="uia").window(title="Keyboard map")
+        win.child_window(title="ส", control_type="Button").invoke()
+        time.sleep(1.0)
+        typed = t.read().strip()
+    except Exception as e:
+        typed = f"failed: {e}"
+    finally:
+        tap(ord("K"), CTRL, fs.ALT)  # closed again
+        time.sleep(0.5)
+    fs.check(t.name, "keyboard map types the key clicked", typed, "ส")
+
+
 def thai_word_delete(t):
     """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
     fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
@@ -220,6 +347,79 @@ def enter_guard(t):
     # A fresh RightType: give the problem report (checked after the sweep)
     # a word to record again.
     fs.run(t, "Auto again after the chat check", "l;ylfu ", "สวัสดี")
+
+
+def keyboard_of(hwnd):
+    """The keyboard layout (low word) of the window's thread."""
+    tid = user32.GetWindowThreadProcessId(hwnd, None)
+    return user32.GetKeyboardLayout(tid) & 0xFFFF
+
+
+def app_keyboards(t):
+    """2.2: the keyboard an app starts with; English outside text; the grave
+    key typing its character; a switch that came with a shortcut undone.
+    Notepad stands in for the app."""
+    write_sweep_config(keys='grave_types = true\nguard_switch = true\n',
+                       tables='[app_keyboards]\n"notepad.exe" = "en"\n\n')
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+        t.layout(HKL_TH)
+        # Away and back: Notepad comes to the front again.
+        user32.SetForegroundWindow(user32.FindWindowW("Shell_TrayWnd", None))
+        time.sleep(0.8)
+        t.focus()
+        time.sleep(1.0)
+        fs.check(t.name, "app keyboard: English on coming to the front",
+                 f"{keyboard_of(t.hwnd):04X}", "0409")
+        fs.run(t, "grave key types ` on the English keyboard", "", "`",
+               then=[lambda: tap(0xC0)])
+        fs.run(t, "grave key types _ on the Thai keyboard", "", "_",
+               layout=HKL_TH, then=[lambda: tap(0xC0)])
+        # A switch right after Ctrl+Shift+a key (not ours) is put back once a
+        # key shows RightType the new layout.
+        t.clear()
+        t.layout(HKL_EN)
+        def shortcut_then_switch():
+            tap(ord("X"), CTRL, SHIFT)
+            user32.PostMessageW(t.hwnd, 0x0050, 0, HKL_TH)
+            time.sleep(0.2)
+            tap(fs.SPACE)
+            time.sleep(0.6)
+        fs.check(t.name, "language switch with a shortcut is undone",
+                 traced(shortcut_then_switch, "language switch with a shortcut: undone"), "yes")
+    finally:
+        t.layout(HKL_EN)
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+    fs.run(t, "Auto again after the keyboard checks", "l;ylfu ", "สวัสดี")
+
+
+def outside_text(t):
+    """2.2: in an app set to "English outside text", the button (no caret)
+    gets English, and the text box the Thai keyboard back."""
+    if not getattr(t, "tool", None):
+        return
+    write_sweep_config(tables='[app_keyboards]\n"chrome.exe" = "en-outside-text"\n\n')
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+        t.layout(HKL_TH)
+        t.tool.set_focus()
+        time.sleep(1.0)
+        fs.check(t.name, "English outside text: a button gets English",
+                 f"{keyboard_of(t.hwnd):04X}", "0409")
+        t.box.set_focus()
+        time.sleep(1.0)
+        fs.check(t.name, "English outside text: the text box gets Thai back",
+                 f"{keyboard_of(t.hwnd):04X}", "041E")
+    finally:
+        t.layout(HKL_EN)
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+    fs.run(t, "Auto again after English outside text", "l;ylfu ", "สวัสดี")
 
 
 def code_mode(t):
@@ -528,6 +728,75 @@ class Notepad(fs.Target):
 
 class SkipTarget(Exception):
     """The app this target needs is not on this machine."""
+
+
+class Word(fs.Target):
+    """Microsoft Word, where it is installed (not on CI): it rewrites words
+    as they are typed (a capital at a sentence's start, AutoCorrect), which
+    RightType's check-after-write must not take for garbling."""
+
+    name = "word"
+
+    def __init__(self):
+        from pywinauto import Desktop
+        import shutil
+        exe = shutil.which("winword.exe")
+        if not exe:
+            for root in (os.environ.get("ProgramFiles", ""), os.environ.get("ProgramFiles(x86)", "")):
+                for sub in ("Microsoft Office\\root\\Office16", "Microsoft Office\\Office16"):
+                    candidate = Path(root) / sub / "WINWORD.EXE"
+                    if candidate.exists():
+                        exe = str(candidate)
+        if not exe:
+            raise SkipTarget("Microsoft Word is not installed here")
+        self.proc = subprocess.Popen([exe, "/q", "/n"])
+        self.win = None
+        for _ in range(60):
+            time.sleep(0.5)
+            for w in Desktop(backend="uia").windows(top_level_only=True):
+                if w.element_info.class_name == "OpusApp":
+                    self.win = w
+                    break
+            if self.win:
+                break
+        if not self.win:
+            raise SystemExit("Word did not open a window")
+        self.hwnd = self.win.handle
+        time.sleep(2)
+
+    def focus(self):
+        self.win.set_focus()
+        time.sleep(0.3)
+
+    def read(self):
+        for d in self.win.descendants(control_type="Document"):
+            try:
+                return d.iface_text.DocumentRange.GetText(-1) or ""
+            except Exception:
+                continue
+        return ""
+
+    def close(self):
+        try:
+            self.proc.kill()
+        except Exception:
+            pass
+        subprocess.run(["taskkill", "/IM", "winword.exe", "/F"], capture_output=True)
+
+
+def word_sweep(t):
+    """2.2: RightType next to Word's own rewriting."""
+    t.focus()
+    fs.run(t, "EN->TH word in Word", "l;ylfu ", "สวัสดี")
+    fs.run(t, "email on the Thai keyboard in Word", "name@gmail.com ", "name@gmail.com",
+           layout=HKL_TH)
+    # Word capitalises the first word of a sentence after RightType wrote it.
+    t.clear()
+    t.layout(HKL_TH)
+    fs.type_keys("correct ")
+    time.sleep(1.2)
+    fs.check(t.name, "TH->EN word, Word may capitalise it", t.read().strip().lower(), "correct")
+    t.layout(HKL_EN)
 
 
 class Notepad11(Notepad):
@@ -926,11 +1195,17 @@ def sweep(t):
     fs.run(t, "two เ typed for แ is put right", "gg,; ", "แมว", layout=HKL_TH)
     snippets_and_spelling(t)
     if t.name in ("page", "notepad"):
+        keyboard_states(t)
+        thai_text_tools(t)
         thai_word_delete(t)
         palette_text_tools(t)
     if t.name == "notepad":
+        keyboard_map(t)
         enter_guard(t)
+        app_keyboards(t)
     if t.name == "page":
+        password_tag(t)
+        outside_text(t)
         full_screen_browser_still_works(t)
         palette_by_keyboard(t)
         code_mode(t)
@@ -1014,8 +1289,15 @@ def report_has_no_typed_text(target, results):
         return
     # Text the checks typed or read (not the clipboard checks' own sentinel,
     # whose words are not typed, and "clipboard" is in RightType's messages).
+    # Nor the answers of checks that typed nothing ("yes", "True"): those
+    # are the sweep's words, and the report says "yes" of its own.
+    answers = {"yes", "no", "True", "False"}
+    # Words of RightType's own report messages ("put back to the keys"):
+    # the typo check types `teh` for "the".
+    own = {"the"}
     words = {w for _, name, _, got, expect in results if "clipboard" not in name
-             for w in (got + " " + expect).split() if len(w) >= 3}
+             and got not in answers and expect not in answers
+             for w in (got + " " + expect).split() if len(w) >= 3 and w not in own}
     # Whole words: "correct" is part of the report's own word "correction".
     import re
     leaked = sorted(w for w in words
@@ -1026,7 +1308,8 @@ def report_has_no_typed_text(target, results):
 
 
 def main():
-    want = set(sys.argv[1:]) or {"page", "omnibox", "edge", "notepad", "notepad11", "hang"}
+    want = set(sys.argv[1:]) or {"page", "omnibox", "edge", "notepad", "notepad11", "word",
+                                 "hang"}
     # Thai must be loaded for this session (CI installs it just before).
     user32.LoadKeyboardLayoutW("0000041E", 0)
     user32.LoadKeyboardLayoutW("00000409", 0)
@@ -1041,7 +1324,7 @@ def main():
     # others (after a word boundary handled inside a focus callback), and one
     # clean round proves nothing.
     targets = [("page", Page), ("omnibox", Omnibox)] + [("edge", EdgeOmnibox)] * EDGE_ROUNDS + [
-        ("notepad", Notepad), ("notepad11", Notepad11), ("hang", HangPage)]
+        ("notepad", Notepad), ("notepad11", Notepad11), ("word", Word), ("hang", HangPage)]
     sections = {}
     try:
         for key, make in targets:
@@ -1079,7 +1362,8 @@ def main():
                 tap(fs.CAPS)
             results_before = len(fs.RESULTS)
             try:
-                {"edge": edge_sweep, "hang": hang_sweep, "notepad11": notepad11_sweep}.get(key, sweep)(t)
+                {"edge": edge_sweep, "hang": hang_sweep, "notepad11": notepad11_sweep,
+                 "word": word_sweep}.get(key, sweep)(t)
             finally:
                 # A target may restart RightType (CURRENT holds the one running).
                 print(f"RightType after {key}: {rt_health(CURRENT[0])}", flush=True)

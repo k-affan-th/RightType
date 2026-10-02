@@ -58,7 +58,10 @@ def key(vk, up=False, ext=False):
 
 
 SHIFT, CTRL, ALT, BACK, SPACE, CAPS, DELETE, HOME, END = 0x10, 0x11, 0x12, 0x08, 0x20, 0x14, 0x2E, 0x24, 0x23
-EXTENDED = {DELETE, HOME, END}
+# The separate editing and arrow keys are extended keys; without the flag
+# they read as the numeric keypad with NumLock off (Insert, PgUp, PgDn, the
+# arrows too).
+EXTENDED = {DELETE, HOME, END, 0x2D, 0x21, 0x22, 0x25, 0x26, 0x27, 0x28}
 
 
 def tap(vk, *mods, pause=0.07):
@@ -193,6 +196,9 @@ class Chrome(Target):
                 break
             time.sleep(0.5)
         self.box, self.pw = edits["out"], edits["pw"]
+        buttons = [d for d in self.win.descendants(control_type="Button")
+                   if d.element_info.automation_id == "tool"]
+        self.tool = buttons[0] if buttons else None
 
     def focus(self):
         self.win.set_focus()
