@@ -23,6 +23,25 @@ pub struct Segment {
     pub known: bool,
 }
 
+/// How many characters Ctrl+Backspace should delete after `before` (the
+/// text before the caret): the last Thai word, and the spaces after it.
+/// `None` when Windows' own Ctrl+Backspace already does the right thing:
+/// the text does not end in Thai, or the run of Thai is one word.
+pub fn last_word_to_delete(before: &str, dict: &Dictionary) -> Option<usize> {
+    let chars: Vec<char> = before.chars().collect();
+    let spaces = chars.iter().rev().take_while(|&&c| c == ' ').count();
+    let rest = &chars[..chars.len() - spaces];
+    let thai = |c: char| ('\u{0E01}'..='\u{0E4E}').contains(&c);
+    let run_len = rest.iter().rev().take_while(|&&c| thai(c)).count();
+    if run_len == 0 {
+        return None;
+    }
+    let run: String = rest[rest.len() - run_len..].iter().collect();
+    let last = segment(&run, dict).pop()?;
+    let len = last.text.chars().count();
+    (len < run_len).then_some(len + spaces)
+}
+
 /// Split `text` into segments by greedy longest dictionary match. Consecutive
 /// unmatched characters are merged into one `known: false` segment.
 pub fn segment(text: &str, dict: &Dictionary) -> Vec<Segment> {
@@ -236,5 +255,24 @@ mod tests {
         assert!(is_fully_known("สวัสดีครับ", d));
         // "วันนี้วันจันทร์" — the user's real test phrase — is all real words.
         assert!(is_fully_known("วันนี้วันจันทร์", d));
+    }
+
+    #[test]
+    fn ctrl_backspace_takes_one_thai_word() {
+        let th = crate::dict::thai();
+        assert_eq!(
+            last_word_to_delete("สวัสดีครับ", th),
+            Some("ครับ".chars().count())
+        );
+        assert_eq!(
+            last_word_to_delete("สวัสดีครับ  ", th),
+            Some("ครับ".chars().count() + 2)
+        );
+        assert_eq!(last_word_to_delete("hello สวัสดีครับ", th), Some(4));
+        // One word, or no Thai at the end: Windows does it already.
+        assert_eq!(last_word_to_delete("สวัสดี", th), None);
+        assert_eq!(last_word_to_delete("hello ครับ", th), None);
+        assert_eq!(last_word_to_delete("สวัสดี hello", th), None);
+        assert_eq!(last_word_to_delete("", th), None);
     }
 }

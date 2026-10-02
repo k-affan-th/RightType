@@ -447,6 +447,9 @@ pub fn run() {
     // Session resilience: reinstall the hook across sleep/resume + lock/unlock by
     // watching raw power/session messages on this window (Bug 1).
     let hwnd = ui.window.handle.hwnd().map(|h| HWND(h as _));
+    if let Some(h) = hwnd {
+        TRAY_HWND.store(h.0 as isize, std::sync::atomic::Ordering::Release);
+    }
     sync_state(&ui);
     if !config::onboarded() {
         crate::onboard::show(true);
@@ -492,6 +495,13 @@ pub fn run() {
     let ui_t = ui.clone();
     let raw = nwg::bind_raw_event_handler(&ui.window.handle, 0x5254_0001, move |_h, msg, w, _l| {
         unsafe { session::on_message(msg, w) };
+        if msg == WM_ON_UI {
+            match w {
+                UI_REVIEW => crate::palette::open_review(),
+                UI_FIX_WINDOW => crate::fixer::open(),
+                _ => {}
+            }
+        }
         if msg == crate::instance::WM_INSTANCE {
             match w {
                 crate::instance::HELLO_MSG => overlay::show(tr(T::ToastAlreadyRunning)),
@@ -543,6 +553,30 @@ pub fn run() {
 }
 
 const WM_TIMER: u32 = 0x0113;
+
+/// Posted to the tray window to have its thread (the one with the windows)
+/// do something a worker cannot: `wparam` is one of the `UI_` values.
+const WM_ON_UI: u32 = 0x8000 + 0x580;
+/// Open the palette on the review waiting in `palette::request_review`.
+pub const UI_REVIEW: usize = 1;
+/// Open the Fix text window.
+pub const UI_FIX_WINDOW: usize = 2;
+static TRAY_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/// Ask the tray window's thread to do `what` (a `UI_` value), from any thread.
+pub fn on_ui(what: usize) {
+    let hwnd = TRAY_HWND.load(std::sync::atomic::Ordering::Acquire);
+    if hwnd != 0 {
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                HWND(hwnd as *mut _),
+                WM_ON_UI,
+                windows::Win32::Foundation::WPARAM(what),
+                windows::Win32::Foundation::LPARAM(0),
+            );
+        }
+    }
+}
 
 /// Refresh every state-bearing surface: the tray tooltip and the mode/enable/
 /// learn checkmarks. Called before the menu opens, after any menu action, and

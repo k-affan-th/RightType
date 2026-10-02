@@ -86,17 +86,23 @@ SNIPPET_CONFIG = '''[[snippets]]
 trigger = ";sig"
 text = "Best regards"
 scope = "either"
+
+[[snippets]]
+trigger = ";today"
+text = "{iso}"
+scope = "either"
 '''
 
 
-def write_sweep_config(tables=""):
-    """The sweep's config. `tables` (TOML tables such as [app_modes]) go
-    after every top-level key: a key written after a table header belongs
-    to that table (and then the whole file is refused)."""
+def write_sweep_config(tables="", keys=""):
+    """The sweep's config. `keys` are more top-level keys; `tables` (TOML
+    tables such as [app_modes]) go after every top-level key: a key written
+    after a table header belongs to that table (and then the whole file is
+    refused)."""
     fs.write_config(mode="auto", learn=False)
     path = fs.DATA / "config.toml"
-    path.write_text(path.read_text(encoding="utf-8") + "fix_spelling = true\n\n" + tables
-                    + SNIPPET_CONFIG, encoding="utf-8")
+    path.write_text(path.read_text(encoding="utf-8") + "fix_spelling = true\n" + keys + "\n"
+                    + tables + SNIPPET_CONFIG, encoding="utf-8")
 
 
 def snippets_and_spelling(t):
@@ -107,10 +113,110 @@ def snippets_and_spelling(t):
     fs.run(t, "snippet expands on the Thai keyboard (same keys)", ";sig ", "Best regards",
            layout=HKL_TH)
     fs.run(t, "snippet taken back with Shift+Backspace", ";sig ", ";sig", then=[flip])
+    import datetime
+    fs.run(t, "snippet with today's date", ";today ", datetime.date.today().isoformat())
     # อนุญาติ (keys vo6Pk9b on the Thai keyboard) → อนุญาต.
     fs.run(t, "common misspelling put right", "vo6Pk9b ", "อนุญาต", layout=HKL_TH)
     fs.run(t, "Backspace right after puts the misspelling back", "vo6Pk9b ", "อนุญาติ",
            layout=HKL_TH, then=[lambda: tap(BACK)])
+
+
+def palette_search(text, settle=1.2):
+    """Open the palette, search for `text`, Enter."""
+    def steps():
+        tap(fs.SPACE, fs.CTRL, fs.ALT)  # the palette's hotkey
+        time.sleep(1.0)
+        fs.type_keys(text)
+        time.sleep(0.4)
+        tap(ENTER)
+        time.sleep(settle)
+    return steps
+
+
+def select_line():
+    fs.select_word()
+    time.sleep(0.3)
+
+
+def palette_text_tools(t):
+    """2.1: the palette's text tools, in Manual mode so nothing is fixed as
+    typed: amounts and years rewritten, a special character typed, only the
+    wrong-keyboard words of a selection fixed, the copied text typed key by
+    key, and "Fix this field" checked word by word before fixing."""
+    fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
+    try:
+        fs.run(t, "palette: amount in words", "1250", "หนึ่งพันสองร้อยห้าสิบบาทถ้วน",
+               then=[select_line, palette_search("amount")])
+        fs.run(t, "palette: year BE to CE", "2569", "2026",
+               then=[select_line, palette_search("year")])
+        fs.run(t, "palette: special character by name", "25", "25°",
+               then=[palette_search("degree")])
+        fs.run(t, "palette: only the wrong-keyboard words of a selection",
+               "hello l;ylfu", "hello สวัสดี",
+               then=[select_line, palette_search("wrong-keyboard")])
+        put_on_clipboard("hi สวัสดี")
+        fs.run(t, "palette: copied text typed key by key", "", "hi สวัสดี",
+               then=[palette_search("key by key", settle=2.0)])
+        # Fix this field: the words are listed ticked; Enter fixes them, or
+        # Space first leaves the selected one as typed.
+        fs.run(t, "fix this field after checking", "l;ylfu 8iy[", "สวัสดี ครับ",
+               then=[palette_search("fix this", settle=1.5), lambda: tap(ENTER),
+                     lambda: time.sleep(1.5)])
+        fs.run(t, "fix this field with a word unticked", "l;ylfu 8iy[", "l;ylfu ครับ",
+               then=[palette_search("fix this", settle=1.5), lambda: tap(fs.SPACE),
+                     lambda: time.sleep(0.3), lambda: tap(ENTER), lambda: time.sleep(1.5)])
+    finally:
+        fs.set_mode("auto")
+
+
+def thai_word_delete(t):
+    """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
+    fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
+           layout=HKL_TH, then=[lambda: tap(BACK, CTRL)])
+    fs.run(t, "Ctrl+Backspace twice, Ctrl held", "l;ylfu8iy[l;ylfu", "สวัสดี",
+           layout=HKL_TH, then=[lambda: hold_ctrl_tap_twice(BACK)])
+
+
+def hold_ctrl_tap_twice(vk):
+    user32.keybd_event(CTRL, 0, 0, 0)
+    time.sleep(0.05)
+    for _ in range(2):
+        user32.keybd_event(vk, 0, 0, 0)
+        user32.keybd_event(vk, 0, 2, 0)
+        time.sleep(0.4)
+    user32.keybd_event(CTRL, 0, 2, 0)
+
+
+def enter_guard(t):
+    """2.1: in a chat app (Notepad stands in for one here), Enter on a
+    message typed on the wrong keyboard is held once."""
+    write_sweep_config(keys='chat_apps = ["notepad.exe"]\n')
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+        fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
+
+        def lines(keys, enters):
+            t.clear()
+            fs.type_keys(keys)
+            for _ in range(enters):
+                time.sleep(0.4)
+                tap(ENTER)
+            time.sleep(0.4)
+            fs.type_keys("x")
+            time.sleep(0.8)
+            return t.read().replace("\r\n", "\n").replace("\r", "\n")
+        fs.check(t.name, "Enter held on a wrong-keyboard message",
+                 lines("l;ylfu 8iy[", 1), "l;ylfu 8iy[x")
+        fs.check(t.name, "Enter again sends it anyway",
+                 lines("l;ylfu 8iy[", 2), "l;ylfu 8iy[\nx")
+        fs.check(t.name, "Enter not held on a right message",
+                 lines("hello world", 1), "hello world\nx")
+    finally:
+        fs.set_mode("auto")
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+        t.focus()
 
 
 def code_mode(t):
@@ -816,6 +922,11 @@ def sweep(t):
     # Thai typed in a wrong order that looks right: two เ for แ (keys g g).
     fs.run(t, "two เ typed for แ is put right", "gg,; ", "แมว", layout=HKL_TH)
     snippets_and_spelling(t)
+    if t.name in ("page", "notepad"):
+        thai_word_delete(t)
+        palette_text_tools(t)
+    if t.name == "notepad":
+        enter_guard(t)
     if t.name == "page":
         full_screen_browser_still_works(t)
         palette_by_keyboard(t)

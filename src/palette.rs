@@ -44,6 +44,14 @@ const IDCANCEL: usize = 2;
 /// What a "selection" command does to the text.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TransformKind {
+    /// Only the words typed on the wrong keyboard (as "Fix this field").
+    Repair,
+    /// Thai in its standard form (`righttype::thai_text::normalize`).
+    Normalize,
+    /// Years พ.ศ. ↔ ค.ศ.
+    Era,
+    NumberWords,
+    BahtWords,
     Digits,
     Upper,
     Lower,
@@ -83,8 +91,23 @@ enum Command {
     /// Keep a word the typist reversed lately as typed (by its place in
     /// `learn::reversed_words`).
     KeepAsTyped(usize),
-    /// Show the options section (folded away at first).
-    MoreOptions,
+    /// Show a section's folded rows (options, more selection changes,
+    /// special characters).
+    More(Section),
+    /// Type a special character (by its place in `thai_text::SYMBOLS`).
+    Symbol(usize),
+    /// Type the copied text key by key (remote desktops, VMs).
+    TypeClipboard,
+    /// A word "Fix this field" would change (by its place in the review):
+    /// ticked words are fixed.
+    Review(usize),
+    /// Fix the ticked words of the review.
+    ApplyReview,
+    /// Hold Enter in chat apps when the message looks typed on the wrong
+    /// keyboard, on or off.
+    EnterGuard,
+    /// Ctrl+Backspace deletes one Thai word, on or off.
+    ThaiWordDelete,
     /// English prefix words written with their hyphen, on or off.
     Hyphens,
 }
@@ -93,12 +116,16 @@ enum Command {
 /// (numbered 1–9); settings come last, folded away.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Section {
+    /// The words "Fix this field" would change, to tick before fixing.
+    Review,
     /// The words just typed.
     Words,
     /// Fixing text.
     Fix,
     /// The selected text.
     Selection,
+    /// Special characters to type (folded until asked for or searched).
+    Symbols,
     /// The app (and field) that had focus.
     Here,
     Mode,
@@ -107,10 +134,12 @@ enum Section {
 }
 
 impl Section {
-    const ALL: [Section; 6] = [
+    const ALL: [Section; 8] = [
+        Section::Review,
         Section::Words,
         Section::Fix,
         Section::Selection,
+        Section::Symbols,
         Section::Here,
         Section::Mode,
         Section::Options,
@@ -118,13 +147,23 @@ impl Section {
 
     /// Rows here get the numbers 1–9.
     fn numbered(self) -> bool {
-        !matches!(self, Section::Mode | Section::Options)
+        !matches!(
+            self,
+            Section::Mode | Section::Options | Section::Symbols | Section::Review
+        )
+    }
+
+    /// Its bit in `Palette::expanded`.
+    fn bit(self) -> u8 {
+        1 << (self as u8)
     }
 
     /// The heading's icon (a glyph of Windows' icon font).
     fn icon(self) -> char {
         match self {
+            Section::Review => '\u{E73E}',    // CheckMark
             Section::Words => '\u{E81C}',     // History
+            Section::Symbols => '\u{E76E}',   // Emoji2
             Section::Fix => '\u{E90F}',       // Repair
             Section::Selection => '\u{E8B3}', // SelectAll
             Section::Here => '\u{E7F4}',      // TVMonitor
@@ -144,11 +183,15 @@ impl Command {
             Command::FixText => '\u{E8A5}',        // Document
             Command::FixField => '\u{E8AC}',       // Rename
             Command::Transform(kind) => match kind {
-                TransformKind::Digits => '\u{E8EF}',   // Calculator
-                TransformKind::Upper => '\u{E8E8}',    // FontIncrease
-                TransformKind::Lower => '\u{E8E7}',    // FontDecrease
-                TransformKind::Title => '\u{E8D2}',    // Font
-                TransformKind::SwapCase => '\u{E895}', // Sync
+                TransformKind::Repair => '\u{E8AB}',    // Switch
+                TransformKind::Normalize => '\u{E8D2}', // Font
+                TransformKind::Era => '\u{E787}',       // Calendar
+                TransformKind::NumberWords | TransformKind::BahtWords => '\u{E8EF}', // Calculator
+                TransformKind::Digits => '\u{E8EF}',    // Calculator
+                TransformKind::Upper => '\u{E8E8}',     // FontIncrease
+                TransformKind::Lower => '\u{E8E7}',     // FontDecrease
+                TransformKind::Title => '\u{E8E9}',     // FontSize
+                TransformKind::SwapCase => '\u{E895}',  // Sync
             },
             Command::OfferForNow(_) => '\u{E916}', // Stopwatch
             Command::OfferKeep(_) => '\u{E74E}',   // Save
@@ -162,12 +205,18 @@ impl Command {
                 hook::Mode::Suggest => '\u{EA80}', // Lightbulb
                 _ => '\u{E765}',                   // KeyboardClassic
             },
-            Command::MoreOptions => '\u{E712}',  // More
-            Command::Spelling => '\u{E82D}',     // Dictionary
-            Command::Hyphens => '\u{E738}',      // Remove (a dash)
-            Command::CapsSwitch => '\u{E72E}',   // Lock
-            Command::TrayLanguage => '\u{E774}', // Globe
-            Command::Settings => '\u{E713}',     // Settings
+            Command::More(_) => '\u{E712}',        // More
+            Command::Symbol(_) => '\u{E76E}',      // Emoji2
+            Command::TypeClipboard => '\u{E765}',  // KeyboardClassic
+            Command::Review(_) => '\u{E8AB}',      // Switch
+            Command::ApplyReview => '\u{E73E}',    // CheckMark
+            Command::EnterGuard => '\u{E8BD}',     // Message
+            Command::ThaiWordDelete => '\u{E75C}', // EraseTool
+            Command::Spelling => '\u{E82D}',       // Dictionary
+            Command::Hyphens => '\u{E738}',        // Remove (a dash)
+            Command::CapsSwitch => '\u{E72E}',     // Lock
+            Command::TrayLanguage => '\u{E774}',   // Globe
+            Command::Settings => '\u{E713}',       // Settings
         }
     }
 }
@@ -175,6 +224,8 @@ impl Command {
 /// One row: its section, text, hint at the right, and command.
 struct Entry {
     section: Section,
+    /// Hidden until its section's "more" row is opened (or a search finds it).
+    folded: bool,
     label: String,
     hint: String,
     command: Command,
@@ -194,8 +245,12 @@ struct Palette {
     item_sections: Vec<Section>,
     /// Each section's heading (a label).
     headings: Vec<(Section, u16)>,
-    /// The options section is open.
-    expanded: std::cell::Cell<bool>,
+    /// Sections whose folded rows are shown (`Section::bit`).
+    expanded: std::cell::Cell<u8>,
+    /// Each item is folded (see `Entry::folded`).
+    item_folded: Vec<bool>,
+    /// Opened to check the words "Fix this field" would change.
+    review: bool,
     /// Which shown item each number key (1–9) runs.
     numbers: RefCell<Vec<usize>>,
     /// Each item's text, for filtering and numbering.
@@ -304,10 +359,11 @@ fn refilter(p: &Palette) {
     let shows = |i: usize| {
         let command = p.items[i].1;
         let section = p.item_sections[i];
-        if command == Command::MoreOptions {
-            return !searching && !p.expanded.get();
+        let open = p.expanded.get() & section.bit() != 0;
+        if let Command::More(_) = command {
+            return !searching && !open;
         }
-        if section == Section::Options && !searching && !p.expanded.get() {
+        if p.item_folded[i] && !searching && !open {
             return false;
         }
         let label = p.labels.borrow()[i].to_lowercase();
@@ -425,7 +481,9 @@ fn select(p: &Palette, k: usize) {
     }
     drop(visible);
     if p.filter.borrow().is_empty() {
-        let head = if matches!(selected_command(p), Some(Command::History(_))) {
+        let head = if p.review {
+            T::PaletteReviewHint
+        } else if matches!(selected_command(p), Some(Command::History(_))) {
             T::PaletteHistoryHint
         } else {
             T::PaletteHead
@@ -445,6 +503,9 @@ fn selected_command(p: &Palette) -> Option<Command> {
 /// the selected one.
 fn picked(p: &Palette) -> Vec<usize> {
     let checked = p.checked.borrow();
+    if p.review {
+        return checked.clone();
+    }
     if !checked.is_empty() {
         let mut v = checked.clone();
         v.sort_unstable();
@@ -467,8 +528,9 @@ fn show_marks(p: &Palette) {
 
 /// Tick or untick the selected recent word (Space).
 fn toggle_checked(p: &Palette) -> bool {
-    let Some(Command::History(word)) = selected_command(p) else {
-        return false;
+    let word = match selected_command(p) {
+        Some(Command::History(word) | Command::Review(word)) => word,
+        _ => return false,
     };
     {
         let mut checked = p.checked.borrow_mut();
@@ -546,18 +608,27 @@ fn run_shown(p: &Rc<Palette>, k: usize) {
         return;
     };
     let command = p.items[i].1;
-    if command == Command::MoreOptions {
-        // Open the options in place; the first of them is selected.
-        p.expanded.set(true);
+    if let Command::More(section) = command {
+        // Open the section's folded rows in place; the first of them is
+        // selected.
+        p.expanded.set(p.expanded.get() | section.bit());
         refilter(p);
         let first = p
             .visible
             .borrow()
             .iter()
-            .position(|&v| p.item_sections[v] == Section::Options);
+            .position(|&v| p.item_sections[v] == section && p.item_folded[v]);
         if let Some(k) = first {
             select(p, k);
         }
+        return;
+    }
+    if let Command::Review(_) | Command::ApplyReview = command {
+        let keep: Vec<bool> = (0..p.words.borrow().len())
+            .map(|i| p.checked.borrow().contains(&i))
+            .collect();
+        close(p, true);
+        crate::manual::request_apply_review(keep);
         return;
     }
     let words = if let Command::History(_) = command {
@@ -619,6 +690,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
     let mut add = |section, label: String, hint: &str, command| {
         list.push(Entry {
             section,
+            folded: false,
             label,
             hint: hint.to_string(),
             command,
@@ -644,12 +716,6 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             Command::KeepAsTyped(i),
         );
     }
-    add(
-        Section::Fix,
-        tr(T::TrayFix).to_string(),
-        "",
-        Command::FixText,
-    );
     if app.is_some() {
         add(
             Section::Fix,
@@ -657,7 +723,19 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             "",
             Command::FixField,
         );
+        add(
+            Section::Fix,
+            tr(T::PaletteTypeClipboard).to_string(),
+            "",
+            Command::TypeClipboard,
+        );
+        // The first two are shown; the rest wait behind a "more" row.
         for (key, kind) in [
+            (T::PaletteRepairSelection, TransformKind::Repair),
+            (T::PaletteNormalize, TransformKind::Normalize),
+            (T::PaletteEra, TransformKind::Era),
+            (T::PaletteNumberWords, TransformKind::NumberWords),
+            (T::PaletteBahtWords, TransformKind::BahtWords),
             (T::PaletteSwapDigits, TransformKind::Digits),
             (T::PaletteUpper, TransformKind::Upper),
             (T::PaletteLower, TransformKind::Lower),
@@ -669,6 +747,26 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
                 tr(key).to_string(),
                 "",
                 Command::Transform(kind),
+            );
+        }
+        add(
+            Section::Selection,
+            tr(T::PaletteMoreSelection).to_string(),
+            "▸",
+            Command::More(Section::Selection),
+        );
+        add(
+            Section::Symbols,
+            tr(T::PaletteMoreSymbols).to_string(),
+            "▸",
+            Command::More(Section::Symbols),
+        );
+        for (i, (symbol, th, en)) in righttype::thai_text::SYMBOLS.iter().enumerate() {
+            add(
+                Section::Symbols,
+                format!("{symbol}   {th} · {en}"),
+                "",
+                Command::Symbol(i),
             );
         }
     }
@@ -750,7 +848,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
         Section::Mode,
         tr(T::PaletteMoreOptions).to_string(),
         "▸",
-        Command::MoreOptions,
+        Command::More(Section::Options),
     );
     let state = |on: bool| tr(if on { T::HintOn } else { T::HintOff });
     for (key, on, command) in [
@@ -770,21 +868,80 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             crate::tray::shows_language(),
             Command::TrayLanguage,
         ),
+        (
+            T::PaletteThaiWordDelete,
+            hook::deletes_thai_words(),
+            Command::ThaiWordDelete,
+        ),
+        (
+            T::PaletteEnterGuard,
+            hook::guards_enter(),
+            Command::EnterGuard,
+        ),
     ] {
         add(Section::Options, tr(key).to_string(), state(on), command);
     }
+    // For apps that do not share their text (see `manual::fix_field`).
+    add(
+        Section::Options,
+        tr(T::PaletteFixWindow).to_string(),
+        "",
+        Command::FixText,
+    );
     add(
         Section::Options,
         tr(T::TraySettings).to_string(),
         "",
         Command::Settings,
     );
+    // Folded: the options, the special characters, and all but the first
+    // two changes to the selection.
+    let mut in_selection = 0;
+    for entry in &mut list {
+        if let Command::More(_) = entry.command {
+            continue;
+        }
+        entry.folded = match entry.section {
+            Section::Options | Section::Symbols => true,
+            Section::Selection => {
+                in_selection += 1;
+                in_selection > 2
+            }
+            _ => false,
+        };
+    }
     list
 }
 
-/// A section's heading.
-fn heading(section: Section, app: Option<&str>) -> String {
+/// The rows for checking what "Fix this field" would change: each word,
+/// ticked, and the row that fixes the ticked ones.
+fn review_commands(changes: &[(String, String)]) -> Vec<Entry> {
+    let mut list: Vec<Entry> = changes
+        .iter()
+        .enumerate()
+        .map(|(i, (original, fixed))| Entry {
+            section: Section::Review,
+            folded: false,
+            label: format!("☑  {original}  →  {fixed}"),
+            hint: String::new(),
+            command: Command::Review(i),
+        })
+        .collect();
+    list.push(Entry {
+        section: Section::Review,
+        folded: false,
+        label: tr(T::PaletteApplyReview).to_string(),
+        hint: "Enter".to_string(),
+        command: Command::ApplyReview,
+    });
+    list
+}
+
+/// A section's heading; `reviewed` is how many words the review lists.
+fn heading(section: Section, app: Option<&str>, reviewed: usize) -> String {
     match section {
+        Section::Review => trf(T::PaletteSecReview, &[("n", &reviewed.to_string())]),
+        Section::Symbols => tr(T::PaletteSecSymbols).to_string(),
         Section::Words => tr(T::PaletteSecWords).to_string(),
         Section::Fix => tr(T::PaletteSecFix).to_string(),
         Section::Selection => tr(T::PaletteSecSelection).to_string(),
@@ -798,6 +955,48 @@ fn heading(section: Section, app: Option<&str>) -> String {
 }
 
 fn open() {
+    open_with(None);
+}
+
+/// What "Fix this field" would change, waiting for the palette to show it:
+/// each word (as typed, fixed) and where it is on screen.
+pub struct Review {
+    pub changes: Vec<(String, String)>,
+    pub boxes: Vec<Option<RECT>>,
+}
+
+impl Drop for Review {
+    fn drop(&mut self) {
+        for (a, b) in &mut self.changes {
+            a.zeroize();
+            b.zeroize();
+        }
+    }
+}
+
+static REVIEW: std::sync::Mutex<Option<Review>> = std::sync::Mutex::new(None);
+
+/// Show `review` in the palette, from any thread (the fix-field worker):
+/// the tray window's thread opens it.
+pub fn request_review(review: Review) {
+    if let Ok(mut r) = REVIEW.lock() {
+        *r = Some(review);
+    }
+    crate::tray::on_ui(crate::tray::UI_REVIEW);
+}
+
+/// Open the palette on the waiting review (the tray window's thread).
+pub fn open_review() {
+    let review = REVIEW.lock().ok().and_then(|mut r| r.take());
+    if review.is_some() {
+        if let Some(existing) = CURRENT.with(|c| c.borrow().clone()) {
+            close(&existing, false);
+        }
+        open_with(review);
+    }
+}
+
+fn open_with(review: Option<Review>) {
     // However this ends (opened, closed instead, or failed), it is no longer
     // opening: never leave the hook holding keys for a palette that is not
     // coming.
@@ -823,16 +1022,36 @@ fn open() {
     let caret = crate::caret::caret_rect();
     ui::refresh();
 
-    // The recent words, and where they are, asked while the app still has
-    // the focus (before the palette exists).
-    let (words, spans) = hook::recent_words();
-    let boxes = if words.is_empty() {
-        Vec::new()
-    } else {
-        crate::focus::boxes_before_caret_within(spans, std::time::Duration::from_millis(150))
+    let reviewing = review.as_ref().map_or(0, |r| r.changes.len());
+    let (words, boxes, list) = match &review {
+        // The words as typed stand in for the recent words: ticked, marked
+        // and wiped the same way.
+        Some(r) => (
+            r.changes.iter().map(|(a, _)| a.clone()).collect(),
+            r.boxes.clone(),
+            review_commands(&r.changes),
+        ),
+        None => {
+            // The recent words, and where they are, asked while the app
+            // still has the focus (before the palette exists).
+            let (words, spans) = hook::recent_words();
+            let boxes = if words.is_empty() {
+                Vec::new()
+            } else {
+                crate::focus::boxes_before_caret_within(
+                    spans,
+                    std::time::Duration::from_millis(150),
+                )
+            };
+            let list = commands(app.as_deref(), &words);
+            (words, boxes, list)
+        }
     };
-    let list = commands(app.as_deref(), &words);
-    let h = PAD * 2 + 28 + list.len() as i32 * ROW + Section::ALL.len() as i32 * HEAD;
+    drop(review);
+    // Folded rows are not shown at first: the window is sized (and placed
+    // next to the caret) for the rest.
+    let shown = list.iter().filter(|e| !e.folded).count() as i32;
+    let h = PAD * 2 + 28 + shown * ROW + Section::ALL.len() as i32 * HEAD;
     let mut window = nwg::Window::default();
     if nwg::Window::builder()
         .flags(nwg::WindowFlags::POPUP)
@@ -857,7 +1076,7 @@ fn open() {
         .iter()
         .map(|&section| {
             let id = surface.label(
-                &heading(section, app.as_deref()),
+                &heading(section, app.as_deref(), reviewing),
                 TextStyle::Heading(section.icon()),
                 (PAD + 8, PAD + 28, W - 2 * PAD - 16, HEAD - 4),
                 p.surface,
@@ -913,12 +1132,15 @@ fn open() {
         items,
         item_sections: list.iter().map(|e| e.section).collect(),
         headings,
-        expanded: std::cell::Cell::new(false),
+        expanded: std::cell::Cell::new(0),
+        item_folded: list.iter().map(|e| e.folded).collect(),
+        review: reviewing > 0,
         numbers: RefCell::new(Vec::new()),
         labels: RefCell::new(list.iter().map(|e| e.label.clone()).collect()),
         words: RefCell::new(words),
         boxes,
-        checked: RefCell::new(Vec::new()),
+        // Every word of a review starts ticked.
+        checked: RefCell::new((0..reviewing).collect()),
         header,
         visible: RefCell::new(Vec::new()),
         selected: std::cell::Cell::new(0),
@@ -1023,6 +1245,11 @@ fn run(command: Command, app: Option<&str>) {
         Command::Transform(kind) => {
             use righttype::layout as l;
             let f: fn(&str) -> String = match kind {
+                TransformKind::Repair => repair_words,
+                TransformKind::Normalize => righttype::thai_text::normalize,
+                TransformKind::Era => righttype::thai_text::swap_era,
+                TransformKind::NumberWords => righttype::thai_text::number_words,
+                TransformKind::BahtWords => righttype::thai_text::baht_words,
                 TransformKind::Digits => l::swap_digits,
                 TransformKind::Upper => l::upper_case,
                 TransformKind::Lower => l::lower_case,
@@ -1100,7 +1327,23 @@ fn run(command: Command, app: Option<&str>) {
             config::persist();
         }
         // Handled in `run_shown`.
-        Command::MoreOptions => {}
+        Command::More(_) | Command::Review(_) | Command::ApplyReview => {}
+        Command::Symbol(i) => {
+            if let Some((symbol, _, _)) = righttype::thai_text::SYMBOLS.get(i) {
+                crate::manual::request_type(PREVIOUS.load(Ordering::Acquire), symbol);
+            }
+        }
+        Command::TypeClipboard => {
+            crate::manual::request_type_clipboard(PREVIOUS.load(Ordering::Acquire))
+        }
+        Command::EnterGuard => {
+            hook::set_guards_enter(!hook::guards_enter());
+            config::persist();
+        }
+        Command::ThaiWordDelete => {
+            hook::set_deletes_thai_words(!hook::deletes_thai_words());
+            config::persist();
+        }
         Command::Spelling => {
             hook::set_fixes_spelling(!hook::fixes_spelling());
             config::persist();
@@ -1111,6 +1354,11 @@ fn run(command: Command, app: Option<&str>) {
             overlay::show(mode.label());
         }
     }
+}
+
+/// Only the words of `text` typed on the wrong keyboard, fixed.
+fn repair_words(text: &str) -> String {
+    righttype::repair::repair(text, righttype::dict::english(), righttype::dict::thai()).text
 }
 
 fn paint(g: &Gfx, _hdc: HDC, rc: RECT, _page: u8) {

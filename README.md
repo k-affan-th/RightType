@@ -65,7 +65,8 @@ with a hotkey:
 | `Tab` or `Alt`+`CapsLock` | Accept the current Suggest hint (Tab only right after it appears; otherwise Tab is Tab) |
 | `Ctrl`+`Shift`+`CapsLock` | Undo the last correction (selection undo requires the same focused context) |
 | `Ctrl`+`Alt`+`CapsLock` | Enable/disable RightType immediately |
-| `Ctrl`+`Alt`+`Space` | Command palette: your recent words (tick several with Space — they are tinted in the app — and Enter flips exactly those), fix text, pause, off in this app or **this field**, switch mode, settings |
+| `Ctrl`+`Alt`+`Space` | Command palette: your recent words (tick several with Space — they are tinted in the app — and Enter flips exactly those), **fix this field** (the words are listed and tinted first; untick any), fix only the wrong-keyboard words of a selection, Thai text in standard form, year พ.ศ. ↔ ค.ศ., numbers and baht amounts in words, special characters by name, **type the copied text key by key** (remote desktops, VMs), pause, off in this app or **this field**, switch mode, settings |
+| `Ctrl`+`Backspace` | After Thai: deletes one Thai word, not the whole run back to the last space |
 
 Every hotkey can be changed in Settings → Hotkeys (click **Change**, press the new keys).
 

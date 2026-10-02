@@ -51,4 +51,5 @@ pub mod segment;
 pub mod sim;
 pub mod snippets;
 pub mod spelling;
+pub mod thai_text;
 pub mod usage;

@@ -127,6 +127,30 @@ pub fn format_list(modes: &BTreeMap<String, AppMode>) -> String {
         .join("\r\n")
 }
 
+/// Chat apps, where Enter sends: a message that looks typed on the wrong
+/// keyboard is held once there (the typist can add more in the config).
+/// Browsers are not here: Enter in a browser may send a chat message or
+/// start a new line, and RightType cannot tell which.
+pub const CHAT_APPS: &[&str] = &[
+    "line.exe",
+    "ms-teams.exe",
+    "teams.exe",
+    "discord.exe",
+    "slack.exe",
+    "telegram.exe",
+    "whatsapp.exe",
+    "messenger.exe",
+    "signal.exe",
+    "zoom.exe",
+    "skype.exe",
+];
+
+/// Is `exe` a chat app (built in, or one of `extra`)?
+pub fn is_chat_app(exe: &str, extra: &[String]) -> bool {
+    let exe = exe.to_ascii_lowercase();
+    CHAT_APPS.contains(&exe.as_str()) || extra.iter().any(|e| e.eq_ignore_ascii_case(&exe))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

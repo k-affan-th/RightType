@@ -510,6 +510,96 @@ fn uia_selected_text() -> Option<zeroize::Zeroizing<String>> {
     }
 }
 
+/// The whole text of the focused field, without selecting it: through UI
+/// Automation, or from a standard text box. Read up to just past `max`
+/// characters, so the caller can tell the field is longer; `None` for a
+/// password field, or when the app does not say.
+/// Any thread but the keyboard hook's.
+pub fn field_text(max: usize) -> Option<zeroize::Zeroizing<String>> {
+    use windows::Win32::UI::Accessibility::{IUIAutomationTextPattern, UIA_TextPatternId};
+    use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
+    use zeroize::Zeroize;
+    let from_uia = || unsafe {
+        let element = uia_here()?.GetFocusedElement().ok()?;
+        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            return None;
+        }
+        let pattern = element
+            .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+            .ok()?;
+        let text = pattern.DocumentRange().ok()?.GetText(max as i32 + 1).ok()?;
+        Some(zeroize::Zeroizing::new(text.to_string()))
+    };
+    let from_box = || {
+        let tb = TextBox::focused().ok()?;
+        let len = tb.ask(WM_GETTEXTLENGTH, 0, 0)?;
+        let len = len.min(max * 2 + 2);
+        let mut units = vec![0u16; len + 1];
+        let got = tb
+            .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?
+            .min(len);
+        let text = zeroize::Zeroizing::new(String::from_utf16_lossy(&units[..got]));
+        units.zeroize();
+        Some(text)
+    };
+    from_uia().or_else(from_box)
+}
+
+/// Where pieces of the focused field are on screen: for each `(start,
+/// len)` in characters from the field's start, its box in screen pixels,
+/// or `None`. Through UI Automation; empty when the app does not say. Any
+/// thread but the keyboard hook's.
+pub fn field_boxes(spans: &[(usize, usize)]) -> Vec<Option<windows::Win32::Foundation::RECT>> {
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationTextPattern, TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
+        TextUnit_Character, UIA_TextPatternId,
+    };
+    let none = || vec![None; spans.len()];
+    let start = || unsafe {
+        let element = uia_here()?.GetFocusedElement().ok()?;
+        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            return None;
+        }
+        let pattern = element
+            .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+            .ok()?;
+        let range = pattern.DocumentRange().ok()?;
+        // An empty range at the start.
+        range
+            .MoveEndpointByRange(
+                TextPatternRangeEndpoint_End,
+                &range,
+                TextPatternRangeEndpoint_Start,
+            )
+            .ok()?;
+        Some(range)
+    };
+    let Some(origin) = start() else {
+        return none();
+    };
+    spans
+        .iter()
+        .map(|&(at, len)| unsafe {
+            let r = origin.Clone().ok()?;
+            let moved = r
+                .MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, at as i32)
+                .ok()?;
+            if moved != at as i32 {
+                return None;
+            }
+            r.MoveEndpointByRange(
+                TextPatternRangeEndpoint_Start,
+                &r,
+                TextPatternRangeEndpoint_End,
+            )
+            .ok()?;
+            r.MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, len as i32)
+                .ok()?;
+            union_of_boxes(&r)
+        })
+        .collect()
+}
+
 /// The focused standard Windows text box (Edit, RichEdit: classic and
 /// Windows 11 Notepad, WordPad, many dialogs), which can be asked and told
 /// things directly with its own messages — Windows copies their text

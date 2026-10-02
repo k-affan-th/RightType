@@ -514,7 +514,24 @@ pub fn set_snippets(list: Vec<righttype::snippets::Snippet>) {
 
 /// Put a snippet's `text` in place of its trigger `word`, then the boundary
 /// `vk`. Line breaks are typed as Enter.
+/// The local date and time, for a snippet's date and time fields.
+pub(crate) fn snippet_now() -> righttype::snippets::Now {
+    let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+    righttype::snippets::Now {
+        year: t.wYear as u32,
+        month: t.wMonth as u32,
+        day: t.wDay as u32,
+        weekday: t.wDayOfWeek as u32,
+        hour: t.wHour as u32,
+        minute: t.wMinute as u32,
+    }
+}
+
 unsafe fn expand_snippet(word: &str, vk: u16, text: &str) -> bool {
+    // Its date and time fields, for now.
+    let now = snippet_now();
+    let filled = zeroize::Zeroizing::new(righttype::snippets::fill(text, &now));
+    let text = filled.as_str();
     let shown = policy::shown_with_caps(word, caps_on());
     inject::expect_before_caret(&shown);
     let lines: Vec<&str> = text.split('\n').collect();
@@ -553,6 +570,100 @@ pub fn fixes_hyphens() -> bool {
 
 pub fn set_fixes_hyphens(on: bool) {
     FIX_HYPHENS.store(on, Ordering::Relaxed);
+}
+
+/// Ctrl+Backspace after Thai deletes one Thai word (Windows takes the whole
+/// run of Thai, which has no spaces between words). On by default.
+static DELETE_THAI_WORDS: AtomicBool = AtomicBool::new(true);
+
+pub fn deletes_thai_words() -> bool {
+    DELETE_THAI_WORDS.load(Ordering::Relaxed)
+}
+
+pub fn set_deletes_thai_words(on: bool) {
+    DELETE_THAI_WORDS.store(on, Ordering::Relaxed);
+}
+
+/// In a chat app, Enter on a message that looks typed on the wrong keyboard
+/// is held once (see `guard_enter`). On by default.
+static GUARD_ENTER: AtomicBool = AtomicBool::new(true);
+
+pub fn guards_enter() -> bool {
+    GUARD_ENTER.load(Ordering::Relaxed)
+}
+
+pub fn set_guards_enter(on: bool) {
+    GUARD_ENTER.store(on, Ordering::Relaxed);
+}
+
+/// Chat apps added in the config (see `righttype::per_app::is_chat_app`).
+static CHAT_APPS: std::sync::RwLock<Vec<String>> = std::sync::RwLock::new(Vec::new());
+
+pub fn chat_apps() -> Vec<String> {
+    CHAT_APPS.read().map(|a| a.clone()).unwrap_or_default()
+}
+
+pub fn set_chat_apps(apps: Vec<String>) {
+    if let Ok(mut a) = CHAT_APPS.write() {
+        *a = apps;
+    }
+}
+
+/// How long a held Enter waits for the second press that sends anyway.
+const ENTER_HELD_FOR: Duration = Duration::from_secs(5);
+
+thread_local! {
+    /// Enter was held here (this window) at this moment: the next Enter
+    /// soon after sends.
+    static ENTER_HELD: std::cell::Cell<Option<(isize, Instant)>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Hold this Enter? In a chat app (with the guard on, not in Code mode),
+/// when the words of the message so far look typed on the wrong keyboard
+/// and this is not the second Enter that sends anyway.
+unsafe fn hold_enter(mode_now: Mode) -> bool {
+    let hwnd = GetForegroundWindow().0 as isize;
+    let held = ENTER_HELD.with(|h| h.take());
+    if held.is_some_and(|(w, at)| w == hwnd && at.elapsed() < ENTER_HELD_FOR) {
+        return false;
+    }
+    if !guards_enter() || mode_now == Mode::Code {
+        return false;
+    }
+    let chat = STATE
+        .with(|s| s.borrow().app_exe.clone())
+        .is_some_and(|exe| {
+            CHAT_APPS
+                .read()
+                .is_ok_and(|extra| righttype::per_app::is_chat_app(&exe, &extra))
+        });
+    if !chat {
+        return false;
+    }
+    let mut words = STATE.with(|s| {
+        let st = s.borrow();
+        let mut w = st.recent.words();
+        let current = st.buf.current();
+        if !current.is_empty() {
+            w.push(current.to_string());
+        }
+        w
+    });
+    let refs: Vec<&str> = words.iter().map(|w| w.as_str()).collect();
+    let hold = righttype::repair::looks_mistyped(
+        &refs,
+        righttype::dict::english(),
+        righttype::dict::thai(),
+    );
+    drop(refs);
+    words.iter_mut().for_each(|w| w.zeroize());
+    if hold {
+        ENTER_HELD.with(|h| h.set(Some((hwnd, Instant::now()))));
+        trace_note("enter held: the message looks typed on the wrong keyboard");
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastEnterHeld));
+    }
+    hold
 }
 
 /// A Backspace this soon after a spelling fix takes the fix back instead of
@@ -1275,6 +1386,57 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         });
         return false;
     };
+
+    // Ctrl+Backspace after Thai: one Thai word, not the whole run (Thai has
+    // no spaces between words, so Windows takes everything back to the last
+    // space). Only when the text before the caret says so; otherwise the key
+    // is Windows' own.
+    if vk == VK_BACK.0
+        && action.is_none()
+        && is_down(VK_CONTROL)
+        && !is_down(VK_SHIFT)
+        && !is_down(VK_MENU)
+        && deletes_thai_words()
+        && STATE.with(|s| s.borrow().owned.is_none())
+    {
+        let before = crate::focus::text_before_caret_within(80, Duration::from_millis(60));
+        let n = before
+            .as_ref()
+            .and_then(|t| righttype::segment::last_word_to_delete(t, righttype::dict::thai()));
+        drop(before);
+        e2e_trace(format!("ctrl+backspace: thai word of {n:?} characters"));
+        if let Some(n) = n {
+            STATE.with(|s| {
+                let mut st = s.borrow_mut();
+                st.buf.clear();
+                st.mark = TokenMark::Plain;
+                st.recent.clear();
+                st.undo = None;
+            });
+            // The Backspaces go without Ctrl (`apply` lets go of it, or the
+            // app would take a word for each); the typist still holds it.
+            if inject::apply(n, "", None) {
+                inject::hold_again(VK_CONTROL.0);
+                return true;
+            }
+        }
+    }
+
+    // Enter in a chat app, on a message typed on the wrong keyboard: held
+    // once, so it is not sent unreadable (Enter again sends it).
+    if vk == VK_RETURN.0 && action.is_none() && !repeat {
+        if !is_down(VK_SHIFT)
+            && !is_down(VK_CONTROL)
+            && !is_down(VK_MENU)
+            && STATE.with(|s| s.borrow().owned.is_none())
+            && hold_enter(mode_now)
+        {
+            return true;
+        }
+    } else if !is_modifier(vk) {
+        // Any other key: the next Enter is looked at afresh.
+        ENTER_HELD.with(|h| h.set(None));
+    }
 
     // The text hotkeys (CapsLock chords by default).
     {

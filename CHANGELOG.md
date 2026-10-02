@@ -31,8 +31,24 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 - **Off in this field** (palette): RightType stays out of one field — a
   search box, a code cell — and keeps working everywhere else in the app,
   until it restarts.
+- **Ctrl+Backspace deletes one Thai word** (on by default): Windows takes
+  everything back to the last space, which in Thai is often a whole
+  sentence. Only when the text before the cursor ends in a run of Thai of
+  more than one word; otherwise the key is Windows' own. Ctrl can stay held
+  for the next word.
+- **A chat message typed on the wrong keyboard is not sent unread** (on by
+  default): in LINE, Teams, Discord, Slack, Telegram, WhatsApp, Messenger,
+  Signal, Zoom and Skype, Enter on a message where at least two words (and
+  at least half) look typed on the wrong keyboard is held once with a note;
+  Enter again sends it, Shift+Backspace fixes words. More apps can be added
+  as `chat_apps` in the config. Not in browsers (Enter there may not send).
 - **Snippets** (Settings → Snippets): a short trigger and Space becomes a
-  longer text, line breaks included. Each works on the Thai keyboard, the
+  longer text, line breaks included. **Date and time fields** fill in when
+  the snippet is typed — `{วันที่}` 2 ตุลาคม 2569, `{วันที่เต็ม}`
+  วันพฤหัสบดีที่ 2 ตุลาคม พ.ศ. 2569, `{วันที่ย่อ}` 2 ต.ค. 69,
+  `{วันที่เลขไทย}` ๒ ตุลาคม ๒๕๖๙, `{วันที่ตัวเลข}` 02/10/2569, `{เวลา}`
+  14.30 น., `{date}` 2 October 2026, `{date-us}` October 2, 2026, `{iso}`
+  2026-10-02, `{time}` 14:30 — picked from a **Date / time** button. Each works on the Thai keyboard, the
   English one, or **either** — matched by the keys pressed, so `;addr`
   works with the Thai keyboard on too. Shift+Backspace right after puts the
   trigger back. Not in password fields.
@@ -65,8 +81,30 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   word, the cursor tag shows where the keys are heading — `l;yl` shows
   `→ สวัส` — so you can see a fix is coming without anything changing yet.
 - **Command palette** (`Ctrl`+`Alt`+`Space`) gains:
-  - **Fix this field**: every wrong-layout word in the field, fixed in one
-    go (read from the app, never through the clipboard; Ctrl+Z undoes it).
+  - **Fix this field, checked first**: the words it would change are listed
+    ticked and tinted where they are in the field; Space unticks one, Enter
+    fixes the ticked ones (Ctrl+Z undoes it). The field is read from the
+    app without selecting it and never through the clipboard; if the text
+    changed meanwhile nothing is fixed. More than 12 words are fixed at
+    once. An app that does not share its text gets the **Fix text** window
+    instead (now under Options in the palette, and in the tray).
+  - **Fix only the wrong-keyboard words** of the selection (the flip hotkey
+    still flips all of it).
+  - **Thai in standard form**: text from PDFs that looks right but is not
+    found by search (`นํ้า` → `น้ำ`, a tone mark before its vowel, old
+    fonts' private-use letters) put into the form Windows searches for.
+  - **Year พ.ศ. ↔ ค.ศ.** (`พ.ศ. 2569` ↔ `ค.ศ. 2026`), **number in Thai
+    words** (`1,250` → `หนึ่งพันสองร้อยห้าสิบ`) and **amount in words**
+    as on a cheque (`1,250.50` → `หนึ่งพันสองร้อยห้าสิบบาทห้าสิบสตางค์`).
+    These and the case/digit changes sit behind "More changes to the
+    selection".
+  - **Special characters** by name in either language: `฿` (baht), `ๆ`,
+    `ฯ`, `ฯลฯ`, `°`, `×`, `±`, `…`, `—`, `©`, `€` and more — type to search.
+  - **Type the copied text key by key**, for remote desktops, virtual
+    machines and forms that refuse paste: each character is the key that
+    types it on the keyboard in use; Esc stops it. At most 2,000
+    characters; the clipboard is read only when this is picked.
+  - **Icons** on every row and heading, from Windows' own icon font.
   - **Never convert “word”**: for words you took back lately while learning
     is off — one click and RightType leaves that word alone from then on.
   - **Thai digits ↔ 0–9**, **UPPER CASE**, **lower case**, **Title Case**

@@ -77,6 +77,15 @@ pub struct Config {
     pub snippets: Vec<SnippetConfig>,
     /// Write English prefixes with their hyphen (`re-login`).
     pub fix_hyphens: bool,
+    /// Ctrl+Backspace deletes one Thai word rather than the whole run.
+    pub delete_thai_words: bool,
+    /// Hold Enter in chat apps when the message looks typed on the wrong
+    /// keyboard.
+    pub guard_enter: bool,
+    /// More chat apps for that (program file names), besides the built-in
+    /// ones (`righttype::per_app::CHAT_APPS`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chat_apps: Vec<String>,
     /// Put right common Thai misspellings (opt-in).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fix_spelling: bool,
@@ -145,6 +154,9 @@ impl Default for Config {
             restart_after_crash: true,
             fix_spelling: false,
             fix_hyphens: true,
+            delete_thai_words: true,
+            guard_enter: true,
+            chat_apps: Vec::new(),
             snippets: Vec::new(),
             sync_settings: false,
         }
@@ -190,6 +202,9 @@ pub fn apply(cfg: &Config) {
     SYNC_SETTINGS.store(cfg.sync_settings, std::sync::atomic::Ordering::Relaxed);
     hook::set_fixes_spelling(cfg.fix_spelling);
     hook::set_fixes_hyphens(cfg.fix_hyphens);
+    hook::set_deletes_thai_words(cfg.delete_thai_words);
+    hook::set_guards_enter(cfg.guard_enter);
+    hook::set_chat_apps(cfg.chat_apps.clone());
     hook::set_snippets(
         cfg.snippets
             .iter()
@@ -426,6 +441,9 @@ fn snapshot() -> Config {
         tray_shows_language: crate::tray::shows_language(),
         fix_spelling: hook::fixes_spelling(),
         fix_hyphens: hook::fixes_hyphens(),
+        delete_thai_words: hook::deletes_thai_words(),
+        guard_enter: hook::guards_enter(),
+        chat_apps: hook::chat_apps(),
         sync_settings: SYNC_SETTINGS.load(std::sync::atomic::Ordering::Relaxed),
         snippets: hook::snippets()
             .into_iter()

@@ -89,6 +89,8 @@ struct Ids {
     snip_table: u16,
     snip_trigger: u16,
     snip_text: u16,
+    /// Puts a date or time field into the text.
+    snip_date: u16,
     /// Thai, English, either.
     snip_scope: [u16; 3],
     snip_save: u16,
@@ -473,7 +475,14 @@ fn open_on(page: u8) {
         p.bg,
         n,
     );
-    let snip_text = s.edit("", (X0 + 164, 348, CW - 168, 60), n);
+    let snip_text = s.edit("", (X0 + 164, 348, CW - 168 - 126, 60), n);
+    let snip_date = s.button(
+        tr(T::BtnInsertDate),
+        false,
+        (X0 + CW - 120, 348, 120, 32),
+        p.bg,
+        n,
+    );
     let mut snip_scope = [0u16; 3];
     for (i, key) in [T::ScopeThai, T::ScopeEnglish, T::ScopeEither]
         .iter()
@@ -638,6 +647,7 @@ fn open_on(page: u8) {
         snip_table,
         snip_trigger,
         snip_text,
+        snip_date,
         snip_scope,
         snip_save,
         snip_remove,
@@ -879,6 +889,8 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         overlay::show(tr(T::ToastSaved));
     } else if let Some(i) = ids.app_seg.iter().position(|&b| b == id) {
         set_app_mode(win, APP_MODE_CHOICES[i]);
+    } else if id == ids.snip_date {
+        insert_date_field(win);
     } else if id == ids.snip_save {
         save_snippet(win);
     } else if id == ids.snip_remove {
@@ -1338,6 +1350,37 @@ fn app_menu(win: &Rc<SettingsWindow>, x: i32, y: i32) {
         if let Some(path) = path {
             show_in_folder(&path);
         }
+    }
+}
+
+/// The date and time fields, each with what it gives today, under the
+/// button; the one picked goes into the snippet's text at the caret.
+fn insert_date_field(win: &SettingsWindow) {
+    use righttype::snippets::{fill, FIELDS};
+    use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, SendMessageW};
+    let now = crate::hook::snippet_now();
+    let labels: Vec<String> = FIELDS
+        .iter()
+        .map(|(name, _, _)| format!("{name}\t{}", fill(name, &now)))
+        .collect();
+    let mut rc = windows::Win32::Foundation::RECT::default();
+    unsafe {
+        let _ = GetWindowRect(win.surface.hwnd_of(win.ids.snip_date), &mut rc);
+    }
+    let Some(i) = popup(win, &labels, rc.left, rc.bottom) else {
+        return;
+    };
+    let field: Vec<u16> = format!("{}\0", FIELDS[i].0).encode_utf16().collect();
+    let edit = win.surface.hwnd_of(win.ids.snip_text);
+    unsafe {
+        const EM_REPLACESEL: u32 = 0x00C2;
+        let _ = SendMessageW(
+            edit,
+            EM_REPLACESEL,
+            windows::Win32::Foundation::WPARAM(1),
+            windows::Win32::Foundation::LPARAM(field.as_ptr() as isize),
+        );
+        let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(edit);
     }
 }
 
