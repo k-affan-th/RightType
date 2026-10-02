@@ -463,6 +463,7 @@ pub fn run() {
             "settings-blocked" => settings::open_page(4),
             "settings-about" => settings::open_page(5),
             "settings-snippets" => settings::open_page(6),
+            "settings-keyboard" => settings::open_page(7),
             "stats" => stats::open(),
             "palette" => crate::palette::request_open(),
             "fixer" => crate::fixer::open_demo(

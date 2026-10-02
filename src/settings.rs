@@ -42,9 +42,11 @@ const PAGE_LEARNED: u8 = 3;
 const PAGE_BLOCKED: u8 = 4;
 const PAGE_ABOUT: u8 = 5;
 const PAGE_SNIPPETS: u8 = 6;
+const PAGE_KEYBOARD: u8 = 7;
 /// Sidebar entries, top to bottom, and their pages.
-const NAV: [(T, u8); 6] = [
+const NAV: [(T, u8); 7] = [
     (T::NavGeneral, PAGE_GENERAL),
+    (T::NavKeyboard, PAGE_KEYBOARD),
     (T::NavHotkeys, PAGE_HOTKEYS),
     (T::NavLearned, PAGE_LEARNED),
     (T::NavSnippets, PAGE_SNIPPETS),
@@ -59,8 +61,14 @@ const CARD_B_Y: i32 = 282;
 const PREDICT_Y: i32 = 548;
 /// The restart-after-a-crash card on the Privacy & about page.
 const RESTART_Y: i32 = 486;
-/// The Thai keyboard picker on the Hotkeys page.
-const KEYBOARD_Y: i32 = 568;
+/// The Keyboard page: its three cards (y of each card's top) and how tall
+/// the page is (it scrolls).
+const KB_PICK_Y: i32 = 98;
+const KB_TYPING_Y: i32 = 246;
+const KB_KEYS_Y: i32 = 558;
+const KB_HEIGHT: i32 = KB_KEYS_Y + 3 * ROW_H + 8 + 24;
+/// The segment buttons at the right of a Keyboard-page row.
+const KB_SEG_W: i32 = 68;
 
 /// The label of each hotkey action.
 pub fn action_label(action: Action) -> T {
@@ -86,7 +94,7 @@ pub fn hotkey_rows() -> Vec<(T, String)> {
 }
 
 struct Ids {
-    nav: [u16; 6],
+    nav: [u16; 7],
     snip_table: u16,
     snip_trigger: u16,
     snip_text: u16,
@@ -120,6 +128,14 @@ struct Ids {
     kedmanee: u16,
     pattachote: u16,
     manoonchai: u16,
+    kb_addresses: u16,
+    kb_complete: u16,
+    kb_grave: u16,
+    kb_guard: u16,
+    kb_password_tag: u16,
+    /// NumLock and Insert: off, warn, fix.
+    kb_numlock: [u16; 3],
+    kb_insert: [u16; 3],
     save_learned: u16,
     clear_learned: u16,
     apps_table: u16,
@@ -140,6 +156,13 @@ struct Ids {
     this_pc: u16,
     sync_settings: u16,
 }
+
+/// The choices for NumLock and Insert, in button order.
+const KEY_GUARDS: [hook::KeyGuard; 3] = [
+    hook::KeyGuard::Off,
+    hook::KeyGuard::Warn,
+    hook::KeyGuard::Fix,
+];
 
 /// The modes offered for an app on the Apps page, in button order.
 const APP_MODE_CHOICES: [AppMode; 5] = [
@@ -191,7 +214,7 @@ pub fn open() {
 /// Open on a given page (1 = General … 5 = Privacy & about); debug harness use.
 #[cfg(debug_assertions)]
 pub fn open_page(page: u8) {
-    open_on(page.clamp(PAGE_GENERAL, PAGE_SNIPPETS));
+    open_on(page.clamp(PAGE_GENERAL, PAGE_KEYBOARD));
 }
 
 fn open_on(page: u8) {
@@ -227,7 +250,7 @@ fn open_on(page: u8) {
         p.bg,
         0,
     );
-    let mut nav = [0u16; 6];
+    let mut nav = [0u16; 7];
     for (i, (label, _)) in NAV.iter().enumerate() {
         nav[i] = s.nav(tr(*label), i == 0, (12, 84 + i as i32 * 40, 196, 36));
     }
@@ -353,41 +376,123 @@ fn open_on(page: u8) {
         p.bg,
         h,
     );
+    // --- Keyboard ---------------------------------------------------------
+    let k = PAGE_KEYBOARD;
+    surface.set_page_height(k, KB_HEIGHT);
+    s.label(
+        tr(T::NavKeyboard),
+        TextStyle::Title,
+        (X0, 18, CW, 36),
+        p.bg,
+        k,
+    );
     s.label(
         tr(T::HeadThaiKeyboard),
         TextStyle::BodyStrong,
-        (X0, KEYBOARD_Y + 6, 200, 22),
+        (X0, KB_PICK_Y - 28, CW, 20),
         p.bg,
-        h,
+        k,
     );
-    let kedmanee = s.segment(
-        "Kedmanee",
-        true,
-        (X0 + CW - 20 - 3 * 104, KEYBOARD_Y + 4, 104, 32),
-        p.inset,
-        h,
-    );
-    let pattachote = s.segment(
-        "Pattachote",
-        false,
-        (X0 + CW - 20 - 2 * 104, KEYBOARD_Y + 4, 104, 32),
-        p.inset,
-        h,
-    );
-    let manoonchai = s.segment(
-        "Manoonchai",
-        false,
-        (X0 + CW - 20 - 104, KEYBOARD_Y + 4, 104, 32),
-        p.inset,
-        h,
-    );
+    let kb_seg_w = (CW - 32 - 8) / 3;
+    let kb_seg = |i: i32| (X0 + 20 + i * kb_seg_w, KB_PICK_Y + 16, kb_seg_w, 40);
+    let kedmanee = s.segment("Kedmanee", true, kb_seg(0), p.inset, k);
+    let pattachote = s.segment("Pattachote", false, kb_seg(1), p.inset, k);
+    let manoonchai = s.segment("Manoonchai", false, kb_seg(2), p.inset, k);
     s.label(
         tr(T::NoteKeyboards),
-        TextStyle::Small,
-        (X0, KEYBOARD_Y + 46, CW, 22),
-        p.bg,
-        h,
+        TextStyle::Dim,
+        (X0 + 20, KB_PICK_Y + 66, CW - 40, 22),
+        p.surface,
+        k,
     );
+    s.label(
+        tr(T::HeadWhileTyping),
+        TextStyle::BodyStrong,
+        (X0, KB_TYPING_Y - 28, CW, 20),
+        p.bg,
+        k,
+    );
+    let kb_row = |top: i32, i: i32| (X0 + 4, top + 4 + i * ROW_H, CW - 8, ROW_H - 4);
+    let kb_addresses = s.toggle(
+        tr(T::RowAddresses),
+        tr(T::SubAddresses),
+        kb_row(KB_TYPING_Y, 0),
+        p.surface,
+        k,
+    );
+    let kb_complete = s.toggle(
+        tr(T::RowComplete),
+        tr(T::SubComplete),
+        kb_row(KB_TYPING_Y, 1),
+        p.surface,
+        k,
+    );
+    let kb_grave = s.toggle(
+        tr(T::RowGrave),
+        tr(T::SubGrave),
+        kb_row(KB_TYPING_Y, 2),
+        p.surface,
+        k,
+    );
+    let kb_guard = s.toggle(
+        tr(T::RowGuardSwitch),
+        tr(T::SubGuardSwitch),
+        kb_row(KB_TYPING_Y, 3),
+        p.surface,
+        k,
+    );
+    s.label(
+        tr(T::HeadStateKeys),
+        TextStyle::BodyStrong,
+        (X0, KB_KEYS_Y - 28, CW, 20),
+        p.bg,
+        k,
+    );
+    let kb_password_tag = s.toggle(
+        tr(T::RowPasswordTag),
+        tr(T::SubPasswordTag),
+        kb_row(KB_KEYS_Y, 0),
+        p.surface,
+        k,
+    );
+    // A row with three choices: title and description left, the choices
+    // right where a toggle's switch would be.
+    let guard_row = |i: i32, title: T, sub: T, last: T| -> [u16; 3] {
+        let top = KB_KEYS_Y + 4 + i * ROW_H;
+        let text_w = CW - 40 - 3 * KB_SEG_W - 16;
+        s.label(
+            tr(title),
+            TextStyle::Body,
+            (X0 + 20, top + 8, text_w, 22),
+            p.surface,
+            k,
+        );
+        s.label(
+            tr(sub),
+            TextStyle::Small,
+            (X0 + 20, top + 30, text_w, 30),
+            p.surface,
+            k,
+        );
+        let x = X0 + CW - 20 - 3 * KB_SEG_W;
+        [T::GuardOff, T::GuardWarn, last]
+            .iter()
+            .enumerate()
+            .map(|(j, label)| {
+                s.segment(
+                    tr(*label),
+                    j == 0,
+                    (x + j as i32 * KB_SEG_W, top + 14, KB_SEG_W, 32),
+                    p.inset,
+                    k,
+                )
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap_or([0; 3])
+    };
+    let kb_numlock = guard_row(1, T::RowNumLock, T::SubNumLock, T::GuardFix);
+    let kb_insert = guard_row(2, T::RowInsertKey, T::SubInsertKey, T::GuardBlock);
 
     // --- Learned words ----------------------------------------------------
     let l = PAGE_LEARNED;
@@ -697,6 +802,13 @@ fn open_on(page: u8) {
         kedmanee,
         pattachote,
         manoonchai,
+        kb_addresses,
+        kb_complete,
+        kb_grave,
+        kb_guard,
+        kb_password_tag,
+        kb_numlock,
+        kb_insert,
         save_learned,
         clear_learned,
         apps_table,
@@ -825,6 +937,17 @@ fn sync(win: &SettingsWindow) {
         ids.manoonchai,
         variant == righttype::layout::ThaiVariant::Manoonchai,
     );
+    s.set_checked(ids.kb_addresses, righttype::policy::fixes_addresses());
+    s.set_checked(ids.kb_complete, hook::completes_thai());
+    s.set_checked(ids.kb_grave, hook::grave_types());
+    s.set_checked(ids.kb_guard, hook::guards_switch());
+    s.set_checked(ids.kb_password_tag, crate::pwhint::is_enabled());
+    for (j, id) in ids.kb_numlock.iter().enumerate() {
+        s.set_checked(*id, KEY_GUARDS[j] == hook::numlock_mode());
+    }
+    for (j, id) in ids.kb_insert.iter().enumerate() {
+        s.set_checked(*id, KEY_GUARDS[j] == hook::insert_mode());
+    }
     s.set_text(
         ids.folder_label,
         &match learn::folder() {
@@ -973,6 +1096,27 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         } else {
             righttype::layout::ThaiVariant::Kedmanee
         });
+        config::persist();
+    } else if id == ids.kb_addresses {
+        righttype::policy::set_fixes_addresses(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_complete {
+        hook::set_completes_thai(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_grave {
+        hook::set_grave_types(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_guard {
+        hook::set_guards_switch(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_password_tag {
+        crate::pwhint::set_enabled(s.checked(id));
+        config::persist();
+    } else if let Some(j) = ids.kb_numlock.iter().position(|&b| b == id) {
+        hook::set_numlock_mode(KEY_GUARDS[j]);
+        config::persist();
+    } else if let Some(j) = ids.kb_insert.iter().position(|&b| b == id) {
+        hook::set_insert_mode(KEY_GUARDS[j]);
         config::persist();
     } else if id == ids.keys_reset {
         hook::cancel_capture();
@@ -1686,8 +1830,26 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
                 divider(hdc, X0 + 16, CARD_B_Y + i * ROW_H + 2, CW - 32);
             }
         }
+        PAGE_KEYBOARD => {
+            // The page scrolls: everything moves up by the scroll.
+            let dy = ui::page_scroll();
+            card(g, rect(X0, KB_PICK_Y - dy, CW, 100));
+            track(g, rect(X0 + 16, KB_PICK_Y + 12 - dy, CW - 32, 48));
+            card(g, rect(X0, KB_TYPING_Y - dy, CW, 4 * ROW_H + 8));
+            for i in 1..4 {
+                divider(hdc, X0 + 16, KB_TYPING_Y + i * ROW_H + 2 - dy, CW - 32);
+            }
+            card(g, rect(X0, KB_KEYS_Y - dy, CW, 3 * ROW_H + 8));
+            for i in 1..3 {
+                divider(hdc, X0 + 16, KB_KEYS_Y + i * ROW_H + 2 - dy, CW - 32);
+                let x = X0 + CW - 24 - 3 * KB_SEG_W;
+                track(
+                    g,
+                    rect(x, KB_KEYS_Y + 4 + i * ROW_H + 10 - dy, 3 * KB_SEG_W + 8, 40),
+                );
+            }
+        }
         PAGE_HOTKEYS => {
-            track(g, rect(X0 + CW - 24 - 3 * 104, KEYBOARD_Y, 3 * 104 + 8, 40));
             card(g, rect(X0, 68, CW, Action::ALL.len() as i32 * 52 + 8));
             for i in 1..Action::ALL.len() as i32 {
                 divider(hdc, X0 + 16, 74 + i * 52 - 1, CW - 32);

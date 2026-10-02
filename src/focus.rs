@@ -347,6 +347,13 @@ unsafe extern "system" fn on_focus(
         hwnd.0 as usize
     ));
     wake_worker();
+    // One of RightType's own windows: a settings page follows Tab.
+    if !hwnd.0.is_null()
+        && windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(hwnd, None)
+            == windows::Win32::System::Threading::GetCurrentThreadId()
+    {
+        crate::ui::focus_moved_to(hwnd);
+    }
     DEPTH.with(|d| d.set(depth));
 }
 

@@ -18,16 +18,18 @@ echo   3  Settings - ข้อความสำเร็จรูป / Snippets
 echo   4  Settings - ทั่วไป / General
 echo   5  ซ่อมข้อความ / Fix text
 echo   6  แผนผังแป้นพิมพ์ / Keyboard map
+echo   7  Settings - แป้นพิมพ์ / Keyboard
 echo.
 echo  RightType ที่เปิดอยู่จะถูกปิดระหว่างดู ปิดหน้าต่างนี้แล้วเปิดใหม่ได้เลย
 echo.
-set /p pick="เลือก / pick 1-6: "
+set /p pick="เลือก / pick 1-7: "
 set "show=palette"
 if "%pick%"=="2" set "show=settings-blocked"
 if "%pick%"=="3" set "show=settings-snippets"
 if "%pick%"=="4" set "show=settings"
 if "%pick%"=="5" set "show=fixer"
 if "%pick%"=="6" set "show=keymap"
+if "%pick%"=="7" set "show=settings-keyboard"
 set "APPDATA=%TEMP%\RightType-preview"
 if not exist "%APPDATA%\RightType" mkdir "%APPDATA%\RightType"
 if not exist "%APPDATA%\RightType\config.toml" (
