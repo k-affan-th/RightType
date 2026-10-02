@@ -755,6 +755,24 @@ REAL_SENTENCES = [
 ADDRESS_BARS = ("omnibox", "edge")
 
 
+def flip_back_several(t):
+    """Shift+Backspace pressed again reaches one word further back (up to
+    eight). In Manual mode, so the words stay as typed until flipped."""
+    fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
+    try:
+        fs.run(t, "Shift+Backspace once flips the last word", "l;ylfu 8iy[ ",
+               "l;ylfu ครับ", then=[flip], settle=1.0)
+        fs.run(t, "Shift+Backspace twice flips two words", "l;ylfu 8iy[ ",
+               "สวัสดี ครับ", then=[flip, flip], settle=1.0)
+        fs.run(t, "Shift+Backspace three times flips three words",
+               "l;ylfu 8iy[ l;ylfu ", "สวัสดี ครับ สวัสดี",
+               then=[flip, flip, flip], settle=1.0)
+        fs.run(t, "a caret move forgets the recent words", "l;ylfu ", "l;ylfu",
+               then=[lambda: tap(fs.END), flip], settle=1.0)
+    finally:
+        fs.set_mode("auto")
+
+
 def prose(t, expect):
     """`expect` as it ends up in `t`: an address bar keeps `relogin`."""
     return expect.replace("re-login", "relogin") if t.name in ADDRESS_BARS else expect
@@ -788,6 +806,7 @@ def sweep(t):
     # Pressed once too often: with no older word to reach, the next press
     # puts the word back (it used to say "nothing to flip").
     run(t, "Shift+Backspace twice puts the word back", "reload ", "reload", then=[flip, flip])
+    flip_back_several(t)
     # Found on a real PC: keys typed quickly while a word was being rewritten
     # were lost. A person typing ~30 ms per key, word ended by a space.
     fs.run(t, "fast typing through a correction", "", "สวัสดีครับ",
