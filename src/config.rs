@@ -110,6 +110,11 @@ pub struct Config {
     /// dropped: scan codes, plus 0x100 for extended keys.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub debounce_keys: Vec<u16>,
+    /// A barcode scanner's burst typed with the Thai keyboard on is put back.
+    pub fix_scanners: bool,
+    /// Keys a device types into the Run box faster than any hand are held
+    /// back.
+    pub guard_fake_keyboards: bool,
     /// Put right common Thai misspellings (opt-in).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fix_spelling: bool,
@@ -190,6 +195,8 @@ impl Default for Config {
             guard_switch: false,
             complete_thai: false,
             debounce_keys: Vec::new(),
+            fix_scanners: true,
+            guard_fake_keyboards: true,
             snippets: Vec::new(),
             sync_settings: false,
         }
@@ -253,6 +260,8 @@ pub fn apply(cfg: &Config) {
     righttype::policy::set_fixes_addresses(cfg.fix_addresses);
     hook::set_guards_switch(cfg.guard_switch);
     hook::set_completes_thai(cfg.complete_thai);
+    hook::set_fixes_scanners(cfg.fix_scanners);
+    hook::set_guards_fake_keyboards(cfg.guard_fake_keyboards);
     hook::set_debounce_keys(
         cfg.debounce_keys
             .iter()
@@ -514,6 +523,8 @@ fn snapshot() -> Config {
         fix_addresses: righttype::policy::fixes_addresses(),
         guard_switch: hook::guards_switch(),
         complete_thai: hook::completes_thai(),
+        fix_scanners: hook::fixes_scanners(),
+        guard_fake_keyboards: hook::guards_fake_keyboards(),
         debounce_keys: hook::debounce_keys()
             .iter()
             .map(|(scan, ext)| scan | if *ext { 0x100 } else { 0 })

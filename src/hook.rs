@@ -1167,6 +1167,16 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
             && ((kb.flags.0 & LLKHF_INJECTED.0) == 0 || debug_e2e_accepts_injected())
         {
             let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+            if down && !is_modifier(kb.vkCode as u16) {
+                FAST_RUN.with(|f| {
+                    let (last, run) = f.get();
+                    let quick = kb.time.wrapping_sub(last) <= SCANNER_GAP_MS;
+                    f.set((kb.time, if quick { run + 1 } else { 0 }));
+                });
+            }
+            if fake_keyboard_blocks(kb.vkCode as u16, down, kb.time) {
+                return LRESULT(1);
+            }
             let key = (kb.scanCode as u16, kb.flags.0 & 0x01 != 0);
             match CHATTER.with(|c| c.borrow_mut().observe(key, down, kb.time)) {
                 righttype::chatter::Verdict::Pass => {}
@@ -1296,6 +1306,90 @@ pub fn debounce_keys() -> Vec<righttype::chatter::KeyId> {
 /// Keys seen bouncing (scan code and extended flag) and how often.
 pub fn chatter_suspects() -> Vec<(righttype::chatter::KeyId, u32)> {
     CHATTER.with(|c| c.borrow().suspects())
+}
+
+/// Keys this close together (ms) come from a machine, not fingers: a
+/// barcode scanner (or a device pretending to be a keyboard). Windows
+/// stamps keys with a clock that ticks every 15.6 ms, so keys sent back to
+/// back can read 16 ms apart.
+const SCANNER_GAP_MS: u32 = 20;
+/// A scanner's burst is at least this many characters.
+const SCANNER_MIN: usize = 6;
+
+thread_local! {
+    /// The last key's time, and how many keys in a row came within
+    /// [`SCANNER_GAP_MS`] of the one before.
+    static FAST_RUN: std::cell::Cell<(u32, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+static FIXES_SCANNERS: AtomicBool = AtomicBool::new(true);
+static GUARDS_FAKE_KEYBOARDS: AtomicBool = AtomicBool::new(true);
+
+pub fn fixes_scanners() -> bool {
+    FIXES_SCANNERS.load(Ordering::Relaxed)
+}
+pub fn set_fixes_scanners(on: bool) {
+    FIXES_SCANNERS.store(on, Ordering::Relaxed);
+}
+pub fn guards_fake_keyboards() -> bool {
+    GUARDS_FAKE_KEYBOARDS.load(Ordering::Relaxed)
+}
+pub fn set_guards_fake_keyboards(on: bool) {
+    GUARDS_FAKE_KEYBOARDS.store(on, Ordering::Relaxed);
+}
+
+/// After Win+R, this long (ms) for a fast run to count as a device typing a
+/// command into the Run box.
+const RUN_BOX_WINDOW_MS: u32 = 3000;
+/// A run this long, as fast as a machine, is a device typing.
+const FAKE_RUN: usize = 8;
+/// Keys stay held back until the device has been quiet this long (ms).
+const FAKE_QUIET_MS: u32 = 1000;
+
+thread_local! {
+    /// When Win+R was pressed; whether keys are being held back now.
+    static RUN_BOX_AT: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+    static HOLDING_FAKE: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+}
+
+/// A device posing as a keyboard (a "BadUSB" stick) opens the Run box with
+/// Win+R and types a command into it faster than any hand, then Enter. Once
+/// such a run starts, every key is held back (Enter included) until the
+/// device goes quiet; the typist is told. A hand never types 8 keys within
+/// 20 ms of each other.
+unsafe fn fake_keyboard_blocks(vk: u16, down: bool, time: u32) -> bool {
+    if !guards_fake_keyboards() {
+        return false;
+    }
+    if let Some(last) = HOLDING_FAKE.with(|h| h.get()) {
+        if time.wrapping_sub(last) < FAKE_QUIET_MS {
+            HOLDING_FAKE.with(|h| h.set(Some(time)));
+            return true;
+        }
+        HOLDING_FAKE.with(|h| h.set(None));
+    }
+    if down && vk == b'R' as u16 && (is_down(VIRTUAL_KEY(0x5B)) || is_down(VIRTUAL_KEY(0x5C))) {
+        RUN_BOX_AT.with(|r| r.set(Some(time)));
+        return false;
+    }
+    let armed = RUN_BOX_AT
+        .with(|r| r.get())
+        .is_some_and(|at| time.wrapping_sub(at) < RUN_BOX_WINDOW_MS);
+    if armed && down && FAST_RUN.with(|f| f.get().1) >= FAKE_RUN {
+        RUN_BOX_AT.with(|r| r.set(None));
+        HOLDING_FAKE.with(|h| h.set(Some(time)));
+        trace_note("fake keyboard: keys held back");
+        diag::note("fake keyboard: keys held back", &[]);
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastFakeKeyboard));
+        return true;
+    }
+    false
+}
+
+/// The word just ended (`len` characters, then its boundary key) came in
+/// one machine-fast burst.
+fn came_in_a_burst(len: usize) -> bool {
+    len >= SCANNER_MIN && FAST_RUN.with(|f| f.get().1) >= len
 }
 
 /// The most one key may spend in the hook, waits included. Windows lets a
@@ -2126,6 +2220,32 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
 
     let active_layout = policy::supported_layout_id(layout_id(effective_layout()));
+
+    // A barcode scanner types like a US keyboard, as fast as a machine:
+    // with the Thai keyboard on, `8851234567890` came out as Thai. A burst
+    // no finger could type, ended by Enter or Tab, goes back to the
+    // scanner's characters, in every mode.
+    if fixes_scanners()
+        && active_layout == Some(policy::InputLayout::ThaiKedmanee)
+        && (vk == VK_RETURN.0 || vk == VK_TAB.0)
+        && came_in_a_burst(word.chars().count())
+    {
+        let mut scanned = righttype::layout::th_to_en(&word);
+        if scanned != *word && scanned.chars().all(|c| c.is_ascii_graphic()) {
+            e2e_trace(format!("scanner burst put back ({} keys)", scanned.len()));
+            diag::note(
+                "scanner burst put back",
+                &[("length", scanned.len().into())],
+            );
+            inject::expect_before_caret(&word);
+            let done = inject::apply(word.chars().count(), &scanned, Some(vk));
+            scanned.zeroize();
+            STATE.with(|s| s.borrow_mut().recent.clear());
+            word.zeroize();
+            return done;
+        }
+        scanned.zeroize();
+    }
 
     // A snippet's trigger: its text instead, in every mode.
     let snippet = active_layout.and_then(|layout| {

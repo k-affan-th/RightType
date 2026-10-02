@@ -337,6 +337,12 @@ texts! {
     HealthChatterFiltered => "Filtered: {keys}. A second press right after letting go is dropped.", "กรองอยู่: {keys} การกดซ้ำทันทีหลังปล่อยจะไม่ถูกนับ";
     HealthFilterThem => "Filter", "กรองให้";
     HealthStopFilter => "Stop filtering", "เลิกกรอง";
+    HeadDevices => "Devices", "อุปกรณ์";
+    RowScanner => "Barcode scanners", "เครื่องสแกนบาร์โค้ด";
+    SubScanner => "With the Thai keyboard on, a scan comes back as its digits and letters.", "เมื่อแป้นไทยเปิดอยู่ ค่าที่สแกนจะกลับเป็นตัวเลขและตัวอักษรเดิม";
+    RowFakeKeyboard => "Block fake keyboards", "กันคีย์บอร์ดปลอม";
+    SubFakeKeyboard => "A device typing into the Run box faster than any hand is held back.", "อุปกรณ์ที่พิมพ์ลงช่อง Run เร็วเกินมือคนจะถูกกันไว้ รวมถึง Enter";
+    ToastFakeKeyboard => "A device typed into the Run box faster than any hand: its keys, Enter included, were held back. Close that box if you did not mean it.", "มีอุปกรณ์พิมพ์ลงช่อง Run เร็วเกินมือคน RightType กันปุ่มไว้แล้วรวมถึง Enter ถ้าไม่ได้ตั้งใจให้ปิดหน้าต่างนั้น";
     NavLearned => "Learned words", "คำที่เรียนรู้";
     NavBlocked => "Apps", "แอป";
     NavAbout => "Privacy & about", "ความเป็นส่วนตัว";

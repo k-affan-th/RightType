@@ -68,7 +68,8 @@ const RESTART_Y: i32 = 486;
 const KB_PICK_Y: i32 = 98;
 const KB_TYPING_Y: i32 = 246;
 const KB_KEYS_Y: i32 = 558;
-const KB_HEIGHT: i32 = KB_KEYS_Y + 3 * ROW_H + 8 + 24;
+const KB_DEV_Y: i32 = KB_KEYS_Y + 3 * ROW_H + 8 + 56;
+const KB_HEIGHT: i32 = KB_DEV_Y + 2 * ROW_H + 8 + 24;
 /// The Tools page: the tools' card, the health check's card, the page.
 const TOOLS_Y: i32 = 98;
 const HEALTH_Y: i32 = 246;
@@ -142,6 +143,8 @@ struct Ids {
     /// NumLock and Insert: off, warn, fix.
     kb_numlock: [u16; 3],
     kb_insert: [u16; 3],
+    kb_scanner: u16,
+    kb_fake: u16,
     tools_clean: u16,
     tools_test: u16,
     tools_map: u16,
@@ -542,6 +545,27 @@ fn open_on(page: u8) {
     };
     let kb_numlock = guard_row(1, T::RowNumLock, T::SubNumLock, T::GuardFix);
     let kb_insert = guard_row(2, T::RowInsertKey, T::SubInsertKey, T::GuardBlock);
+    s.label(
+        tr(T::HeadDevices),
+        TextStyle::BodyStrong,
+        (X0, KB_DEV_Y - 28, CW, 20),
+        p.bg,
+        k,
+    );
+    let kb_scanner = s.toggle(
+        tr(T::RowScanner),
+        tr(T::SubScanner),
+        kb_row(KB_DEV_Y, 0),
+        p.surface,
+        k,
+    );
+    let kb_fake = s.toggle(
+        tr(T::RowFakeKeyboard),
+        tr(T::SubFakeKeyboard),
+        kb_row(KB_DEV_Y, 1),
+        p.surface,
+        k,
+    );
 
     // --- Tools ------------------------------------------------------------
     let t = PAGE_TOOLS;
@@ -918,6 +942,8 @@ fn open_on(page: u8) {
         kb_password_tag,
         kb_numlock,
         kb_insert,
+        kb_scanner,
+        kb_fake,
         tools_clean,
         tools_test,
         tools_map,
@@ -1060,6 +1086,8 @@ fn sync(win: &SettingsWindow) {
     s.set_checked(ids.kb_grave, hook::grave_types());
     s.set_checked(ids.kb_guard, hook::guards_switch());
     s.set_checked(ids.kb_password_tag, crate::pwhint::is_enabled());
+    s.set_checked(ids.kb_scanner, hook::fixes_scanners());
+    s.set_checked(ids.kb_fake, hook::guards_fake_keyboards());
     for (j, id) in ids.kb_numlock.iter().enumerate() {
         s.set_checked(*id, KEY_GUARDS[j] == hook::numlock_mode());
     }
@@ -1243,6 +1271,12 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         config::persist();
     } else if id == ids.kb_guard {
         hook::set_guards_switch(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_scanner {
+        hook::set_fixes_scanners(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_fake {
+        hook::set_guards_fake_keyboards(s.checked(id));
         config::persist();
     } else if id == ids.kb_password_tag {
         crate::pwhint::set_enabled(s.checked(id));
@@ -2005,6 +2039,8 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
                 divider(hdc, X0 + 16, KB_TYPING_Y + i * ROW_H + 2 - dy, CW - 32);
             }
             card(g, rect(X0, KB_KEYS_Y - dy, CW, 3 * ROW_H + 8));
+            card(g, rect(X0, KB_DEV_Y - dy, CW, 2 * ROW_H + 8));
+            divider(hdc, X0 + 16, KB_DEV_Y + ROW_H + 2 - dy, CW - 32);
             for i in 1..3 {
                 divider(hdc, X0 + 16, KB_KEYS_Y + i * ROW_H + 2 - dy, CW - 32);
                 let x = X0 + CW - 24 - 3 * KB_SEG_W;

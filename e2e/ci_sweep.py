@@ -403,6 +403,39 @@ def key_bounce(t):
         CURRENT[0] = fs.start_rt()
 
 
+def burst(keys):
+    """Keys as fast as a machine sends them: no pause between them."""
+    for vk in keys:
+        fs.key(vk)
+        fs.key(vk, True)
+
+
+def devices(t):
+    """2.3: a barcode scanner's burst with the Thai keyboard on comes back as
+    digits; a device typing into the Run box faster than a hand is held
+    back."""
+    t.clear()
+    t.focus()
+    t.layout(HKL_TH)
+    time.sleep(0.4)
+    code = "8851234567890"
+    burst([ord(c) for c in code] + [ENTER])
+    time.sleep(1.0)
+    fs.check(t.name, "scanner burst comes back as digits", t.read().strip(), code)
+    t.clear()
+    t.layout(HKL_EN)
+    def run_box():
+        tap(ord("R"), 0x5B)  # Win+R
+        time.sleep(0.8)
+        burst([ord(c) for c in "NOTEPAD"] + [0xBE, ord("E"), ord("X"), ord("E"), ENTER])
+        time.sleep(1.5)
+        tap(0x1B)  # close the Run box (the device has gone quiet)
+        time.sleep(0.5)
+    fs.check(t.name, "fake keyboard typing into Run is held back",
+             traced(run_box, "fake keyboard: keys held back"), "yes")
+    t.focus()
+
+
 def thai_word_delete(t):
     """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
     fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
@@ -1311,6 +1344,7 @@ def sweep(t):
         keyboard_lock(t)
         keyboard_health(t)
         key_bounce(t)
+        devices(t)
         enter_guard(t)
         app_keyboards(t)
     if t.name == "page":
