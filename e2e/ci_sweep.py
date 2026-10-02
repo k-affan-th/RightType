@@ -1287,9 +1287,12 @@ def report_has_no_typed_text(target, results):
     # Nor the answers of checks that typed nothing ("yes", "True"): those
     # are the sweep's words, and the report says "yes" of its own.
     answers = {"yes", "no", "True", "False"}
+    # Words of RightType's own report messages ("put back to the keys"):
+    # the typo check types `teh` for "the".
+    own = {"the"}
     words = {w for _, name, _, got, expect in results if "clipboard" not in name
              and got not in answers and expect not in answers
-             for w in (got + " " + expect).split() if len(w) >= 3}
+             for w in (got + " " + expect).split() if len(w) >= 3 and w not in own}
     # Whole words: "correct" is part of the report's own word "correction".
     import re
     leaked = sorted(w for w in words
