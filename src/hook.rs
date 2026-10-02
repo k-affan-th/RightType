@@ -1209,8 +1209,16 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
                 });
             }
             let done = Done(nested);
+            let started = Instant::now();
             let swallow = process(wparam.0 as u32, kb);
             drop(done);
+            if !nested {
+                righttype::timing::HOOK.record(started.elapsed().as_micros() as u64);
+                let waited = crate::focus::take_wait_us();
+                if waited > 0 {
+                    righttype::timing::WAITING.record(waited);
+                }
+            }
             if NESTED_KEY.with(|n| n.replace(false)) {
                 STATE.with(|s| {
                     let mut st = s.borrow_mut();

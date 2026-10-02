@@ -1303,6 +1303,10 @@ def report_has_no_typed_text(target, results):
     leaked = sorted(w for w in words
                     if re.search(rf"(?<![\w\u0E00-\u0E7F]){re.escape(w)}(?![\w\u0E00-\u0E7F])", report))
     fs.check(target, "problem report has no typed text", " ".join(leaked), "")
+    # How long the hook took per key in this target (2.3 P2: numbers only).
+    for line in report.splitlines():
+        if line.startswith(("keyboard hook time", "of it waiting")):
+            print(f"[{target}] {line}", flush=True)
     fs.check(target, "problem report records word ends",
              "yes" if "word end" in report else "no", "yes")
 

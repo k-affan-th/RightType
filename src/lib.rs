@@ -53,5 +53,6 @@ pub mod sim;
 pub mod snippets;
 pub mod spelling;
 pub mod thai_text;
+pub mod timing;
 pub mod usage;
 pub mod why;

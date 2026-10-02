@@ -730,14 +730,16 @@ impl TextBox {
     fn ask_within(&self, msg: u32, w: usize, l: isize, ms: u32) -> Option<usize> {
         // While this waits, Windows may hand the keyboard hook the next key
         // on this thread (see `waiting_on_app`).
-        struct Waiting;
+        struct Waiting(std::time::Instant);
         impl Drop for Waiting {
             fn drop(&mut self) {
                 WAITING_ON_APP.with(|w| w.set(w.get() - 1));
+                let us = self.0.elapsed().as_micros() as u64;
+                WAIT_US.with(|w| w.set(w.get() + us));
             }
         }
         WAITING_ON_APP.with(|w| w.set(w.get() + 1));
-        let _waiting = Waiting;
+        let _waiting = Waiting(std::time::Instant::now());
         use windows::Win32::Foundation::{LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, SMTO_ABORTIFHUNG};
         let mut result = 0usize;
@@ -907,6 +909,17 @@ impl TextBox {
 /// The longest one message to a text box may wait while the keyboard hook
 /// is replacing a word (see [`TextBox::replace_before_caret`]).
 const STEP_MS: u32 = 80;
+
+thread_local! {
+    /// Time this thread spent waiting for text boxes since last taken.
+    static WAIT_US: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// The time this thread waited for text boxes to answer since the last
+/// call (the hook counts it per key: [`righttype::timing::WAITING`]).
+pub fn take_wait_us() -> u64 {
+    WAIT_US.with(|w| w.replace(0))
+}
 
 thread_local! {
     static WAITING_ON_APP: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
