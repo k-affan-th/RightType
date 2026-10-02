@@ -30,6 +30,13 @@ fn thai_on() -> bool {
     }
 }
 
+/// Another window came to the front (UI thread): its app's own keyboard
+/// applies again, even when its field had focus before.
+pub fn on_front() {
+    LAST_APP.with(|l| *l.borrow_mut() = None);
+    let _ = on_focus();
+}
+
 /// Focus moved (UI thread). Returns whether the app has a keyboard of its
 /// own (then the per-field guess stays out of it).
 pub fn on_focus() -> bool {

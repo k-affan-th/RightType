@@ -333,6 +333,8 @@ struct HookState {
     /// Focus generation supplied by the UIA WinEvent hook. This catches focus
     /// changes between controls in the same top-level window.
     last_focus_generation: u64,
+    /// When the context last changed (the run was dropped).
+    context_since: Instant,
     /// Whether the current foreground app is blacklisted (wallet / password
     /// manager / terminal). Recomputed only when the window changes — opening the
     /// process every keystroke would be wasteful.
@@ -378,6 +380,7 @@ impl HookState {
             last_hwnd: 0,
             last_hkl: 0,
             last_focus_generation: 0,
+            context_since: Instant::now(),
             sensitive_app: false,
             app_exe: None,
             undo: None,
@@ -2895,6 +2898,10 @@ unsafe fn flip_back_recent() {
         STATE.with(|s| s.borrow_mut().recent.commit(convert_shown));
         return;
     }
+    // The deleted characters, so a text box that has not caught up with
+    // the last keys is not edited (CI, Windows 11 Notepad: the flip read
+    // `l;ylfu ` before `8iy[ ` reached the box).
+    inject::expect_before_caret(&step.restore);
     if !inject::apply(
         step.backspaces,
         &step.insert,
@@ -2971,6 +2978,10 @@ unsafe fn flip_rest_of_run() {
         return;
     };
     e2e_trace(format!("flip: held, {} words", step.words));
+    // The deleted characters, so a text box that has not caught up with
+    // the last keys is not edited (CI, Windows 11 Notepad: the flip read
+    // `l;ylfu ` before `8iy[ ` reached the box).
+    inject::expect_before_caret(&step.restore);
     if !inject::apply(
         step.backspaces,
         &step.insert,
@@ -3022,6 +3033,10 @@ pub unsafe fn flip_picked(picked: &[usize]) {
         crate::overlay::show(tr(T::ToastNothingToFlip));
         return;
     };
+    // The deleted characters, so a text box that has not caught up with
+    // the last keys is not edited (CI, Windows 11 Notepad: the flip read
+    // `l;ylfu ` before `8iy[ ` reached the box).
+    inject::expect_before_caret(&step.restore);
     if !inject::apply(
         step.backspaces,
         &step.insert,
@@ -3497,7 +3512,21 @@ unsafe fn sync_context() {
                 undo_switch = policy::supported_layout_id(layout_id(HKL(before as *mut _)));
             }
         }
-        let focus_changed = st.last_focus_generation != focus_generation;
+        let mut focus_changed = st.last_focus_generation != focus_generation;
+        // A slow app can answer the focus question long after the move (CI:
+        // 15 s). When the context was already reset after the move happened
+        // (the window or keyboard changed since), the keys typed since are
+        // in the new field: dropping them then stranded the first letter
+        // (`lวัสดี`).
+        if focus_changed
+            && !changed
+            && !lang_changed
+            && crate::focus::moved_at().is_some_and(|at| at < st.context_since)
+        {
+            e2e_trace("focus answer came late: the run already started after the move".into());
+            st.last_focus_generation = focus_generation;
+            focus_changed = false;
+        }
         if changed || lang_changed || focus_changed {
             e2e_trace(format!(
                 "context changed: window={changed} layout={lang_changed} ({:X} -> {hkl_i:X}) focus={focus_changed}",
@@ -3530,6 +3559,7 @@ unsafe fn sync_context() {
             st.last_hwnd = hwnd_i;
             st.last_hkl = hkl_i;
             st.last_focus_generation = focus_generation;
+            st.context_since = Instant::now();
         }
         changed
     });

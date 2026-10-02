@@ -227,6 +227,7 @@ pub unsafe fn on_message(msg: u32, wparam: usize) {
             }
             crate::pwhint::on_focus();
         }
+        crate::focus::WM_APP_TO_FRONT => crate::keyboards::on_front(),
         WM_POWERBROADCAST if wparam == PBT_APMRESUMEAUTOMATIC || wparam == PBT_APMRESUMESUSPEND => {
             crate::hook::e2e_trace(format!("session: power resume ({wparam:#x}) reinstall"));
             righttype::diag::note("session: power resume, reinstall", &[]);

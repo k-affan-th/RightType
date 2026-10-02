@@ -212,17 +212,22 @@ def keyboard_states(t):
     finally:
         fs.set_mode("auto")
     t.clear()
-    # Keypad 1 with NumLock off sends End (not extended). This process's
-    # view of NumLock (GetKeyState) can be stale (CI: read as on, was off,
-    # and the check pressed it on), so: try, and if nothing was said, switch
-    # NumLock over and try once more; put it back afterwards.
-    said = traced(lambda: tap(0x23), "NumLock off: said so")
+    # Keypad 1 with NumLock off sends End without the extended flag (`tap`
+    # sends the separate End key, extended).
+    def keypad_1():
+        fs.key(0x23)
+        fs.key(0x23, True)
+        time.sleep(0.07)
+    # This process's view of NumLock (GetKeyState) can be stale, so: try,
+    # and if nothing was said, switch NumLock over and try once more; put it
+    # back afterwards.
+    said = traced(keypad_1, "NumLock off: said so")
     toggled = said != "yes"
     if toggled:
         tap(0x90)
     try:
         if toggled:
-            said = traced(lambda: tap(0x23), "NumLock off: said so")
+            said = traced(keypad_1, "NumLock off: said so")
         fs.check(t.name, "keypad with NumLock off is pointed out", said, "yes")
     finally:
         if toggled:

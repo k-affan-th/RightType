@@ -205,6 +205,25 @@ pub unsafe fn arm() {
 static NOTIFY_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 /// Posted to [`NOTIFY_HWND`] when the caret moved to another field.
 pub const WM_FOCUS_MOVED: u32 = 0x8000 + 0x551;
+/// Posted to [`NOTIFY_HWND`] when another window came to the front, even
+/// to the field it had before (an app's own keyboard applies then).
+pub const WM_APP_TO_FRONT: u32 = 0x8000 + 0x552;
+/// The foreground window when the focus worker last looked.
+static LAST_FOREGROUND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+fn notify(msg: u32) {
+    let hwnd = NOTIFY_HWND.load(Ordering::Acquire);
+    if hwnd != 0 {
+        let _ = unsafe {
+            windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                HWND(hwnd as *mut _),
+                msg,
+                windows::Win32::Foundation::WPARAM(0),
+                windows::Win32::Foundation::LPARAM(0),
+            )
+        };
+    }
+}
 
 pub fn set_notify_window(hwnd: isize) {
     NOTIFY_HWND.store(hwnd, Ordering::Release);
@@ -272,8 +291,22 @@ fn start_worker() {
         });
 }
 
+/// When the newest focus event came, and when the event behind the last
+/// move to another field came (the move happened then, however late the
+/// answer).
+static LAST_EVENT_AT: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+static MOVE_EVENT_AT: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+/// When the focus event behind the latest [`generation`] came.
+pub fn moved_at() -> Option<std::time::Instant> {
+    MOVE_EVENT_AT.lock().ok().and_then(|at| *at)
+}
+
 /// Ask the focus worker to look again (never waits; a pending ask covers it).
 fn wake_worker() {
+    if let Ok(mut at) = LAST_EVENT_AT.lock() {
+        *at = Some(std::time::Instant::now());
+    }
     // The oldest question still open is the one `settle` measures from.
     if ANSWERED.load(Ordering::Acquire) >= ASKED.load(Ordering::Acquire) {
         if let Ok(mut at) = ASKED_AT.lock() {
@@ -320,8 +353,12 @@ unsafe extern "system" fn on_focus(
 /// On the focus worker thread.
 unsafe fn on_focus_inner() {
     let started = std::time::Instant::now();
+    let event_at = LAST_EVENT_AT.lock().ok().and_then(|at| *at);
     let moved = moves_to_another_field();
     if moved {
+        if let Ok(mut at) = MOVE_EVENT_AT.lock() {
+            *at = event_at;
+        }
         FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
         refresh_status();
     }
@@ -329,6 +366,13 @@ unsafe fn on_focus_inner() {
         "focus event handled in {} ms (moved={moved})",
         started.elapsed().as_millis()
     ));
+    // Back to an app whose field still has focus is no move to another
+    // field, but the app came to the front (CI: Notepad, back from the
+    // taskbar, kept the Thai keyboard set for it as English).
+    let foreground = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize;
+    if LAST_FOREGROUND.swap(foreground, Ordering::AcqRel) != foreground {
+        notify(WM_APP_TO_FRONT);
+    }
     if !moved {
         return;
     }
@@ -338,15 +382,7 @@ unsafe fn on_focus_inner() {
     );
     // After the password check above: the habit switch never runs in one.
     // It changes the hook's state, so it runs on the UI thread.
-    let hwnd = NOTIFY_HWND.load(Ordering::Acquire);
-    if hwnd != 0 {
-        let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
-            HWND(hwnd as *mut _),
-            WM_FOCUS_MOVED,
-            windows::Win32::Foundation::WPARAM(0),
-            windows::Win32::Foundation::LPARAM(0),
-        );
-    }
+    notify(WM_FOCUS_MOVED);
 }
 
 /// Whether a focus event means the caret went to another field.
