@@ -239,11 +239,23 @@ class Claude(Target):
 RESULTS = []
 
 
+# Where the trace was at the last check: a failing case prints its own part
+# (the trace of a whole target is cut to its end, where the case may not be).
+_MARK = [0]
+
+
 def check(target, name, got, expect):
     ok = got.strip() == expect.strip()
     RESULTS.append((target, name, ok, got, expect))
     print(f"[{'PASS' if ok else 'FAIL'}] {target:7} {name}: got {got.strip()!r}"
           + ("" if ok else f" expected {expect.strip()!r}"), flush=True)
+    if LOG.exists():
+        if not ok:
+            part = log_since(_MARK[0])
+            print(f"--- trace of this case ({len(part)} chars, last 15000) ---", flush=True)
+            print(part[-15000:], flush=True)
+            print("--- end of this case's trace ---", flush=True)
+        _MARK[0] = log_size()
     return ok
 
 
