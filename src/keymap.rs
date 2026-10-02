@@ -63,7 +63,7 @@ thread_local! {
 
 /// What a key types on the Thai keyboard in use, and how it is shown (a
 /// mark above or below a letter on a dotted circle).
-fn thai_of(key: char) -> (String, String) {
+pub(crate) fn thai_of(key: char) -> (String, String) {
     let typed = righttype::layout::en_to_th(&key.to_string());
     let shown = match typed.chars().next() {
         Some(c) if is_mark(c) => format!("◌{c}"),

@@ -17,6 +17,8 @@ mod apps;
 #[cfg(feature = "winos")]
 mod caret;
 #[cfg(feature = "winos")]
+mod clean;
+#[cfg(feature = "winos")]
 mod clipboard;
 #[cfg(feature = "winos")]
 mod config;
@@ -40,6 +42,8 @@ mod keyboards;
 mod keymap;
 #[cfg(feature = "winos")]
 mod learn;
+#[cfg(feature = "winos")]
+mod lock;
 #[cfg(feature = "winos")]
 mod manual;
 #[cfg(feature = "winos")]

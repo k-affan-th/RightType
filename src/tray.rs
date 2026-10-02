@@ -69,6 +69,8 @@ struct Tray {
     m_learn: nwg::MenuItem,
     m_startup: nwg::MenuItem,
     m_fix: nwg::MenuItem,
+    m_clean: nwg::MenuItem,
+    m_keytest: nwg::MenuItem,
     m_settings: nwg::MenuItem,
     m_stats: nwg::MenuItem,
     m_help: nwg::MenuItem,
@@ -261,6 +263,8 @@ pub fn run() {
         .expect("startup item");
 
     let m_fix = item(&menu, tr(T::TrayFix));
+    let m_clean = item(&menu, tr(T::PaletteClean));
+    let m_keytest = item(&menu, tr(T::PaletteKeyTest));
 
     let mut m_settings = nwg::MenuItem::default();
     nwg::MenuItem::builder()
@@ -333,6 +337,8 @@ pub fn run() {
         m_learn,
         m_startup,
         m_fix,
+        m_clean,
+        m_keytest,
         m_settings,
         m_stats,
         m_help,
@@ -429,6 +435,10 @@ pub fn run() {
                     ui_h.m_startup.set_checked(on);
                 } else if handle == ui_h.m_fix.handle {
                     crate::fixer::open();
+                } else if handle == ui_h.m_clean.handle {
+                    crate::clean::request_open(crate::clean::Mode::Clean);
+                } else if handle == ui_h.m_keytest.handle {
+                    crate::clean::request_open(crate::clean::Mode::Test);
                 } else if handle == ui_h.m_settings.handle {
                     settings::open();
                 } else if handle == ui_h.m_stats.handle {
@@ -464,6 +474,8 @@ pub fn run() {
             "settings-about" => settings::open_page(5),
             "settings-snippets" => settings::open_page(6),
             "settings-keyboard" => settings::open_page(7),
+            "clean" => crate::clean::request_open(crate::clean::Mode::Clean),
+            "keytest" => crate::clean::request_open(crate::clean::Mode::Test),
             "stats" => stats::open(),
             "palette" => crate::palette::request_open(),
             "fixer" => crate::fixer::open_demo(
@@ -636,6 +648,8 @@ fn sync_state(ui: &Rc<Tray>) {
             (&ui.m_learn, T::TrayLearn),
             (&ui.m_startup, T::TrayStartup),
             (&ui.m_fix, T::TrayFix),
+            (&ui.m_clean, T::PaletteClean),
+            (&ui.m_keytest, T::PaletteKeyTest),
             (&ui.m_settings, T::TraySettings),
             (&ui.m_stats, T::TrayStats),
             (&ui.m_help, T::TrayHelp),

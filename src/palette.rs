@@ -127,6 +127,9 @@ enum Command {
     CompleteThai,
     /// Open the keyboard map.
     KeyMap,
+    /// Lock the keyboard to clean it; test the keys.
+    Clean,
+    KeyTest,
     /// English prefix words written with their hyphen, on or off.
     Hyphens,
 }
@@ -245,6 +248,8 @@ impl Command {
             Command::CapsSwitch => '\u{E72E}',   // Lock
             Command::TrayLanguage => '\u{E774}', // Globe
             Command::Settings => '\u{E713}',     // Settings
+            Command::Clean => '\u{EA99}',        // Broom
+            Command::KeyTest => '\u{E9D9}',      // Diagnostic
         }
     }
 }
@@ -981,6 +986,18 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
     );
     add(
         Section::Options,
+        tr(T::PaletteClean).to_string(),
+        "",
+        Command::Clean,
+    );
+    add(
+        Section::Options,
+        tr(T::PaletteKeyTest).to_string(),
+        "",
+        Command::KeyTest,
+    );
+    add(
+        Section::Options,
         tr(T::TraySettings).to_string(),
         "",
         Command::Settings,
@@ -1332,6 +1349,8 @@ fn run(command: Command, app: Option<&str>) {
         Command::History(_) => {}
         Command::FixText => crate::fixer::open(),
         Command::Settings => crate::settings::open(),
+        Command::Clean => crate::clean::request_open(crate::clean::Mode::Clean),
+        Command::KeyTest => crate::clean::request_open(crate::clean::Mode::Test),
         Command::FixField => crate::manual::request_fix_field(PREVIOUS.load(Ordering::Acquire)),
         Command::Transform(kind) => {
             use righttype::layout as l;

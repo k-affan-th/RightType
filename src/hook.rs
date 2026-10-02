@@ -1109,6 +1109,10 @@ pub unsafe fn reinstall() -> windows::core::Result<()> {
 /// recorded about the text before it can be trusted any more — the same as an
 /// arrow key. Only the event type is looked at, never where the click was.
 unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // The keyboard lock with the mouse locked too (cleaning).
+    if code == HC_ACTION as i32 && crate::lock::mouse_event() {
+        return LRESULT(1);
+    }
     if code == HC_ACTION as i32
         && matches!(
             wparam.0 as u32,
@@ -1144,6 +1148,18 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
     if code == HC_ACTION as i32 {
         let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
         LAST_HOOK_TICK.store(kb.time, Ordering::Relaxed);
+        // The keyboard lock (cleaning, the key tester) comes before
+        // everything: no key gets through, ours aside.
+        let msg = wparam.0 as u32;
+        if kb.dwExtraInfo != INJECT_TAG
+            && crate::lock::key_event(
+                kb.scanCode as u16,
+                kb.flags.0 & 0x01 != 0,
+                msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN,
+            )
+        {
+            return LRESULT(1);
+        }
         // Skip anything we generated: our tag is authoritative and timing-free.
         let externally_injected = (kb.flags.0 & LLKHF_INJECTED.0) != 0;
         let ours = kb.dwExtraInfo == INJECT_TAG

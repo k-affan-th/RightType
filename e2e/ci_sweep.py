@@ -296,6 +296,55 @@ def keyboard_map(t):
     fs.check(t.name, "keyboard map types the key clicked", typed, "ส")
 
 
+def keyboard_lock(t):
+    """2.3: cleaning locks the keyboard (nothing reaches the app) until
+    unlocked; the key tester takes keys and closes on Esc held."""
+    from pywinauto import Desktop
+    t.clear()
+    t.focus()
+    palette_search("clean the keyboard", settle=1.5)()
+    typed = "no window"
+    try:
+        win = Desktop(backend="uia").window(title_re="Clean the keyboard|ทำความสะอาดคีย์บอร์ด")
+        win.child_window(title_re="Lock and start|ล็อกและเริ่มเช็ด",
+                         control_type="Button").invoke()
+        time.sleep(3.8)  # the lead-in before the lock
+        t.focus()
+        time.sleep(0.4)
+        type_keys("locked ")
+        time.sleep(0.6)
+        typed = t.read().strip()
+        win.child_window(title_re="Unlock|ปลดล็อก", control_type="Button").invoke()
+        time.sleep(0.6)
+        win.child_window(title_re="Close|ปิด", control_type="Button").invoke()
+        time.sleep(0.6)
+    except Exception as e:
+        typed = f"failed: {e}"
+    fs.check(t.name, "cleaning lock keeps keys from the app", typed, "")
+    t.focus()
+    time.sleep(0.3)
+    type_keys("ok ")
+    time.sleep(0.6)
+    fs.check(t.name, "keys work again after cleaning", t.read().strip(), "ok")
+    t.clear()
+    palette_search("test the keyboard", settle=1.5)()
+    def hold_esc():
+        fs.key(0x1B)
+        for _ in range(12):  # auto-repeat, as a held key sends
+            time.sleep(0.2)
+            fs.key(0x1B)
+        fs.key(0x1B, True)
+        time.sleep(0.8)
+    type_keys("abc")
+    fs.check(t.name, "key tester closes on Esc held",
+             traced(hold_esc, "keyboard lock: off"), "yes")
+    t.focus()
+    time.sleep(0.3)
+    type_keys("ok ")
+    time.sleep(0.6)
+    fs.check(t.name, "keys work again after the key tester", t.read().strip(), "ok")
+
+
 def thai_word_delete(t):
     """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
     fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
@@ -1201,6 +1250,7 @@ def sweep(t):
         palette_text_tools(t)
     if t.name == "notepad":
         keyboard_map(t)
+        keyboard_lock(t)
         enter_guard(t)
         app_keyboards(t)
     if t.name == "page":
