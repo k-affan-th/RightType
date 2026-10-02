@@ -11,7 +11,7 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   domains such as `.com` and `.co.th`; `ๅจจ` → `100`, also `1,250`
   `3.50` `100%` `10:30` `2/10` `081-234-5678`. Judged by the keys pressed;
   Thai text on screen (a dictionary word, or known words in a row) is never
-  read as one.
+  read as one. On by default; the command palette turns it off.
 - **Hold Shift+Backspace** (half a second) to flip the rest of the words in
   one go; one more press, or Undo, puts them all back.
 - **TH / CAPS tag at password fields** when the Thai keyboard or CapsLock

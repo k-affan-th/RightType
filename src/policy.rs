@@ -10,6 +10,7 @@ use crate::english;
 use crate::layout::{en_to_th, th_to_en, ThaiVariant};
 use crate::secret::{self, SecretKind};
 use crate::segment;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::RwLock;
 
 /// Shortest in-flight token the live path will consider at all. Two-character
@@ -65,6 +66,18 @@ pub fn supported_layout_id(hkl: u32) -> Option<InputLayout> {
             .then_some(InputLayout::ThaiKedmanee);
     }
     None
+}
+
+/// Web addresses, email addresses and numbers typed with the Thai keyboard
+/// on are put back (on by default; the typist can turn it off).
+static FIXES_ADDRESSES: AtomicBool = AtomicBool::new(true);
+
+pub fn fixes_addresses() -> bool {
+    FIXES_ADDRESSES.load(Ordering::Relaxed)
+}
+
+pub fn set_fixes_addresses(on: bool) {
+    FIXES_ADDRESSES.store(on, Ordering::Relaxed);
 }
 
 /// The Thai keyboards other than the default one, by the high word of their
@@ -170,7 +183,7 @@ pub fn detect_token(
             }
             // Thai text on screen is Thai, whatever its keys spell.
             let is_thai = th.contains(token) || segment::is_fully_known(token, th);
-            (!is_thai)
+            (!is_thai && fixes_addresses())
                 .then(|| thai_layout_address(token).or_else(|| thai_layout_number(token, th)))
                 .flatten()
                 .or_else(|| detect::detect(token, en, th))

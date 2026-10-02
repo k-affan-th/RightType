@@ -308,6 +308,7 @@ texts! {
     PaletteSpacing => "Thai spacing (ๆ ฯลฯ brackets)", "จัดเว้นวรรคแบบไทย (ๆ ฯลฯ วงเล็บ)";
     ToastSwitchUndone => "The language switched with a shortcut: put back", "ภาษาเปลี่ยนไปพร้อมปุ่มลัด: เปลี่ยนกลับให้แล้ว";
     PaletteGraveTypes => "Grave key (`) types ` instead of switching language", "ปุ่มตัวหนอน (`) พิมพ์ ` แทนการสลับภาษา";
+    PaletteFixAddresses => "Put back web addresses, email and numbers typed on the Thai keyboard", "แก้ที่อยู่เว็บ อีเมล และตัวเลขที่พิมพ์ตอนแป้นไทย";
     PaletteGuardSwitch => "Undo a language switch that comes with a shortcut", "เปลี่ยนภาษากลับเมื่อสลับไปพร้อมปุ่มลัด";
     PaletteAppKeyboard => "Keyboard in this app", "แป้นในแอปนี้";
     KeyboardNone => "Not set", "ไม่กำหนด";

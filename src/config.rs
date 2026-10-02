@@ -98,6 +98,9 @@ pub struct Config {
     /// The grave key (`) types its character instead of switching the
     /// language (Windows' Thai keyboard setting).
     pub grave_types: bool,
+    /// Web addresses, email addresses and numbers typed with the Thai
+    /// keyboard on are put back.
+    pub fix_addresses: bool,
     /// A language switch that comes with a shortcut (Ctrl/Alt + Shift + a
     /// key) is undone.
     pub guard_switch: bool,
@@ -179,6 +182,7 @@ impl Default for Config {
             insert_key: "warn".into(),
             app_keyboards: BTreeMap::new(),
             grave_types: false,
+            fix_addresses: true,
             guard_switch: false,
             complete_thai: false,
             snippets: Vec::new(),
@@ -241,6 +245,7 @@ pub fn apply(cfg: &Config) {
             .collect(),
     );
     hook::set_grave_types(cfg.grave_types);
+    righttype::policy::set_fixes_addresses(cfg.fix_addresses);
     hook::set_guards_switch(cfg.guard_switch);
     hook::set_completes_thai(cfg.complete_thai);
     hook::set_snippets(
@@ -495,6 +500,7 @@ fn snapshot() -> Config {
             .map(|(exe, k)| (exe, k.name().to_string()))
             .collect(),
         grave_types: hook::grave_types(),
+        fix_addresses: righttype::policy::fixes_addresses(),
         guard_switch: hook::guards_switch(),
         complete_thai: hook::completes_thai(),
         sync_settings: SYNC_SETTINGS.load(std::sync::atomic::Ordering::Relaxed),

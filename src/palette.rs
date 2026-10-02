@@ -119,6 +119,7 @@ enum Command {
     /// English outside text.
     AppKeyboard,
     GraveTypes,
+    FixAddresses,
     GuardSwitch,
     /// Why the last word was fixed or left as typed.
     Why,
@@ -234,6 +235,7 @@ impl Command {
             Command::PasswordHint => '\u{E72E}',   // Lock
             Command::NumLock | Command::InsertKey | Command::AppKeyboard => '\u{E765}', // KeyboardClassic
             Command::GraveTypes => '\u{E8C8}',                                          // Copy
+            Command::FixAddresses => '\u{E774}',                                        // Globe
             Command::GuardSwitch => '\u{E72E}',                                         // Lock
             Command::Why => '\u{E946}',                                                 // Info
             Command::CompleteThai => '\u{E8C8}',                                        // Copy
@@ -934,6 +936,11 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             Command::GraveTypes,
         ),
         (
+            T::PaletteFixAddresses,
+            righttype::policy::fixes_addresses(),
+            Command::FixAddresses,
+        ),
+        (
             T::PaletteCompleteThai,
             hook::completes_thai(),
             Command::CompleteThai,
@@ -1466,6 +1473,10 @@ fn run(command: Command, app: Option<&str>) {
             if on {
                 overlay::show(tr(T::ToastGraveTypes));
             }
+        }
+        Command::FixAddresses => {
+            righttype::policy::set_fixes_addresses(!righttype::policy::fixes_addresses());
+            config::persist();
         }
         Command::KeyMap => crate::keymap::request_toggle(),
         Command::CompleteThai => {
