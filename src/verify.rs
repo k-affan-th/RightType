@@ -32,7 +32,11 @@ static SLOW_APPS: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 const SETTLE: Duration = Duration::from_millis(120);
 /// The read-back must have come in by this long after the correction to
 /// count: later, it may describe a screen changed since.
-const READ_LIMIT: Duration = Duration::from_millis(600);
+const READ_LIMIT: Duration = Duration::from_millis(900);
+/// A mismatch is looked at once more after this long before it counts: a
+/// slow box may still be drawing the last mark (Windows 11 Notepad on a
+/// real PC: 5 of 6 characters, then all 6).
+const SECOND_LOOK: Duration = Duration::from_millis(150);
 
 /// The pause between deletions and text in an app that garbled one.
 pub const SLOW_GAP: Duration = Duration::from_millis(150);
@@ -106,10 +110,16 @@ pub fn after_keys(expected: &str, exe: Option<String>) {
             let n = expected.chars().count();
             // Room to spare: some apps count Thai clusters (ว + ั) as one
             // character, and the text then comes back longer than asked.
-            let Some(shown) = crate::focus::text_before_caret_up_to(n + 8) else {
+            let Some(mut shown) = crate::focus::text_before_caret_up_to(n + 8) else {
                 crate::hook::trace_note("verify: app does not share its text");
                 return;
             };
+            if !shown.ends_with(expected.as_str()) {
+                std::thread::sleep(SECOND_LOOK);
+                if let Some(again) = crate::focus::text_before_caret_up_to(n + 8) {
+                    shown = again;
+                }
+            }
             // An answer that came late, or after anything else happened,
             // describes a later screen (CI: read back a second later, after
             // the test had moved on, and taken for garbling).
