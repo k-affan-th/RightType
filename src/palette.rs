@@ -32,8 +32,10 @@ static OPEN: AtomicIsize = AtomicIsize::new(0);
 /// The window that had focus when the palette last opened.
 static PREVIOUS: AtomicIsize = AtomicIsize::new(0);
 
-const W: i32 = 320;
-const ROW: i32 = 36;
+const W: i32 = 380;
+const ROW: i32 = 34;
+/// A section heading's height.
+const HEAD: i32 = 24;
 const PAD: i32 = 10;
 const WM_COMMAND: u32 = 0x0111;
 const WM_ACTIVATE: u32 = 0x0006;
@@ -81,12 +83,71 @@ enum Command {
     /// Keep a word the typist reversed lately as typed (by its place in
     /// `learn::reversed_words`).
     KeepAsTyped(usize),
+    /// Show the options section (folded away at first).
+    MoreOptions,
+    /// English prefix words written with their hyphen, on or off.
+    Hyphens,
+}
+
+/// The palette's sections, top to bottom. Things done to text come first
+/// (numbered 1–9); settings come last, folded away.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Section {
+    /// The words just typed.
+    Words,
+    /// Fixing text.
+    Fix,
+    /// The selected text.
+    Selection,
+    /// The app (and field) that had focus.
+    Here,
+    Mode,
+    /// Switches and Settings (folded until asked for or searched).
+    Options,
+}
+
+impl Section {
+    const ALL: [Section; 6] = [
+        Section::Words,
+        Section::Fix,
+        Section::Selection,
+        Section::Here,
+        Section::Mode,
+        Section::Options,
+    ];
+
+    /// Rows here get the numbers 1–9.
+    fn numbered(self) -> bool {
+        !matches!(self, Section::Mode | Section::Options)
+    }
+}
+
+/// One row: its section, text, hint at the right, and command.
+struct Entry {
+    section: Section,
+    label: String,
+    hint: String,
+    command: Command,
+}
+
+impl Drop for Entry {
+    fn drop(&mut self) {
+        self.label.zeroize();
+    }
 }
 
 struct Palette {
     window: nwg::Window,
     surface: Rc<Surface>,
     items: Vec<(u16, Command)>,
+    /// Each item's section.
+    item_sections: Vec<Section>,
+    /// Each section's heading (a label).
+    headings: Vec<(Section, u16)>,
+    /// The options section is open.
+    expanded: std::cell::Cell<bool>,
+    /// Which shown item each number key (1–9) runs.
+    numbers: RefCell<Vec<usize>>,
     /// Each item's text, for filtering and numbering.
     labels: RefCell<Vec<String>>,
     /// The recent words listed (oldest first), wiped on close.
@@ -180,48 +241,91 @@ pub fn key(vk: u16, ch: Option<char>) -> bool {
     true
 }
 
-/// Show the items that match the filter, numbered, packed from the top, and
-/// select the first.
+/// Show the items that match the filter under their headings, numbered,
+/// packed from the top, and select the first.
 fn refilter(p: &Palette) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        ShowWindow, SWP_NOMOVE, SWP_NOZORDER, SW_HIDE, SW_SHOW,
+    };
     let filter = p.filter.borrow().to_lowercase();
     // Typed on the wrong keyboard still finds it (`fxw` and `ซ่อม` alike).
     let other = righttype::layout::auto_convert(&filter).to_lowercase();
-    let visible: Vec<usize> = (0..p.items.len())
-        .filter(|&i| {
-            let label = p.labels.borrow()[i].to_lowercase();
-            filter.is_empty() || label.contains(&filter) || label.contains(&other)
-        })
-        .collect();
-    for (i, (id, _)) in p.items.iter().enumerate() {
-        let hwnd = p.surface.hwnd_of(*id);
-        match visible.iter().position(|&v| v == i) {
-            Some(k) => {
-                p.surface.set_text(*id, &numbered(&p.labels.borrow()[i], k));
-                unsafe {
+    let searching = !filter.is_empty();
+    let shows = |i: usize| {
+        let command = p.items[i].1;
+        let section = p.item_sections[i];
+        if command == Command::MoreOptions {
+            return !searching && !p.expanded.get();
+        }
+        if section == Section::Options && !searching && !p.expanded.get() {
+            return false;
+        }
+        let label = p.labels.borrow()[i].to_lowercase();
+        !searching || label.contains(&filter) || label.contains(&other)
+    };
+    let mut visible = Vec::new();
+    let mut numbers = Vec::new();
+    let mut y = PAD + 28;
+    for section in Section::ALL {
+        let rows: Vec<usize> = (0..p.items.len())
+            .filter(|&i| p.item_sections[i] == section && shows(i))
+            .collect();
+        let heading = p.headings.iter().find(|(s, _)| *s == section).map(|h| h.1);
+        if let Some(id) = heading {
+            let hwnd = p.surface.hwnd_of(id);
+            unsafe {
+                if rows.is_empty() {
+                    let _ = ShowWindow(hwnd, SW_HIDE);
+                } else {
                     let _ = SetWindowPos(
                         hwnd,
                         None,
-                        ui::px(PAD),
-                        ui::px(PAD + 28 + k as i32 * ROW),
+                        ui::px(PAD + 8),
+                        ui::px(y + 4),
                         0,
                         0,
-                        SWP_NOSIZE | windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER,
+                        SWP_NOSIZE | SWP_NOZORDER,
                     );
-                    let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
-                        hwnd,
-                        windows::Win32::UI::WindowsAndMessaging::SW_SHOW,
-                    );
+                    let _ = ShowWindow(hwnd, SW_SHOW);
+                    y += HEAD;
                 }
             }
-            None => unsafe {
-                let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
-                    hwnd,
-                    windows::Win32::UI::WindowsAndMessaging::SW_HIDE,
+        }
+        for i in rows {
+            let k = visible.len();
+            let number = (section.numbered() && numbers.len() < 9).then(|| {
+                numbers.push(k);
+                numbers.len()
+            });
+            let label = &p.labels.borrow()[i];
+            let text = match number {
+                Some(n) => format!("{n}\t{label}"),
+                None => format!("\t{label}"),
+            };
+            p.surface.set_text(p.items[i].0, &text);
+            unsafe {
+                let _ = SetWindowPos(
+                    p.surface.hwnd_of(p.items[i].0),
+                    None,
+                    ui::px(PAD),
+                    ui::px(y),
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOZORDER,
                 );
-            },
+                let _ = ShowWindow(p.surface.hwnd_of(p.items[i].0), SW_SHOW);
+            }
+            y += ROW;
+            visible.push(i);
         }
     }
-    let rows = visible.len().max(1) as i32;
+    for (i, (id, _)) in p.items.iter().enumerate() {
+        if !visible.contains(&i) {
+            unsafe {
+                let _ = ShowWindow(p.surface.hwnd_of(*id), SW_HIDE);
+            }
+        }
+    }
     unsafe {
         let _ = SetWindowPos(
             p.surface.hwnd,
@@ -229,9 +333,8 @@ fn refilter(p: &Palette) {
             0,
             0,
             ui::px(W),
-            ui::px(PAD * 2 + 28 + rows * ROW),
-            windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE
-                | windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER,
+            ui::px(y.max(PAD + 28 + ROW) + PAD),
+            SWP_NOMOVE | SWP_NOZORDER,
         );
     }
     let typed = p.filter.borrow();
@@ -245,16 +348,17 @@ fn refilter(p: &Palette) {
     );
     drop(typed);
     *p.visible.borrow_mut() = visible;
+    *p.numbers.borrow_mut() = numbers;
     select(p, 0);
 }
 
-/// An item's text with its number (1–9) in front.
-fn numbered(label: &str, k: usize) -> String {
-    if k < 9 {
-        format!("{}   {label}", k + 1)
-    } else {
-        format!("    {label}")
-    }
+/// The number shown on the `k`-th shown item, if it has one.
+fn number_of(p: &Palette, k: usize) -> Option<usize> {
+    p.numbers
+        .borrow()
+        .iter()
+        .position(|&v| v == k)
+        .map(|n| n + 1)
 }
 
 /// Select the `k`-th shown item (keyboard focus on it).
@@ -334,7 +438,11 @@ fn toggle_checked(p: &Palette) -> bool {
         labels[i] = format!("{}{rest}", if on { '☑' } else { '☐' });
         labels[i].clone()
     };
-    p.surface.set_text(p.items[i].0, &numbered(&label, k));
+    let text = match number_of(p, k) {
+        Some(n) => format!("{n}\t{label}"),
+        None => format!("\t{label}"),
+    };
+    p.surface.set_text(p.items[i].0, &text);
     show_marks(p);
     true
 }
@@ -365,7 +473,10 @@ fn on_key(p: &Rc<Palette>, vk: u16, ch: Option<char>) {
         _ => match ch {
             // 1–9 run that line, unless a filter is being typed.
             Some(d @ '1'..='9') if p.filter.borrow().is_empty() => {
-                run_shown(p, d as usize - '1' as usize)
+                let shown = p.numbers.borrow().get(d as usize - '1' as usize).copied();
+                if let Some(k) = shown {
+                    run_shown(p, k);
+                }
             }
             Some(c) => {
                 p.filter.borrow_mut().push(c);
@@ -385,6 +496,20 @@ fn run_shown(p: &Rc<Palette>, k: usize) {
         return;
     };
     let command = p.items[i].1;
+    if command == Command::MoreOptions {
+        // Open the options in place; the first of them is selected.
+        p.expanded.set(true);
+        refilter(p);
+        let first = p
+            .visible
+            .borrow()
+            .iter()
+            .position(|&v| p.item_sections[v] == Section::Options);
+        if let Some(k) = first {
+            select(p, k);
+        }
+        return;
+    }
     let words = if let Command::History(_) = command {
         // Enter on a word flips the ticked ones (or this one if none is).
         p.selected.set(k);
@@ -437,66 +562,124 @@ pub fn request_open() {
     }
 }
 
-/// The commands, in order, for the current state. `words` are the recent
-/// words (oldest first).
-fn commands(app: Option<&str>, words: &[String]) -> Vec<(String, Command)> {
+/// The rows, in order, for the current state. `words` are the recent words
+/// (oldest first).
+fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
     let mut list = Vec::new();
-    // A calmer mode on offer for this app comes first (1 and 2).
-    if let (Some(app), Some((exe, mode))) = (app, apps::offer()) {
-        if app == exe {
-            let name = tr(crate::tray::app_mode_name(mode));
-            list.push((
-                trf(T::PaletteOfferForNow, &[("mode", name), ("app", app)]),
-                Command::OfferForNow(mode),
-            ));
-            list.push((
-                trf(T::PaletteOfferKeep, &[("mode", name), ("app", app)]),
-                Command::OfferKeep(mode),
-            ));
-        }
-    }
-    // The recent words, newest first (at most five, to keep the list short):
-    // flip one, or tick several with Space.
+    let mut add = |section, label: String, hint: &str, command| {
+        list.push(Entry {
+            section,
+            label,
+            hint: hint.to_string(),
+            command,
+        })
+    };
+    // The words just typed, newest first (at most five): flip one, or tick
+    // several with Space.
     for (i, word) in words.iter().enumerate().rev().take(5) {
         let mut flipped = hook::flipped(word);
-        list.push((format!("☐  {word}  →  {flipped}"), Command::History(i)));
+        add(
+            Section::Words,
+            format!("☐  {word}  →  {flipped}"),
+            "",
+            Command::History(i),
+        );
         flipped.zeroize();
     }
-    list.push((tr(T::TrayFix).to_string(), Command::FixText));
+    for (i, word) in crate::learn::reversed_words().iter().enumerate().take(3) {
+        add(
+            Section::Words,
+            trf(T::PaletteKeepAsTyped, &[("word", word)]),
+            "",
+            Command::KeepAsTyped(i),
+        );
+    }
+    add(
+        Section::Fix,
+        tr(T::TrayFix).to_string(),
+        "",
+        Command::FixText,
+    );
     if app.is_some() {
-        list.push((tr(T::PaletteFixField).to_string(), Command::FixField));
-        list.push((
-            tr(T::PaletteSwapDigits).to_string(),
-            Command::Transform(TransformKind::Digits),
-        ));
+        add(
+            Section::Fix,
+            tr(T::PaletteFixField).to_string(),
+            "",
+            Command::FixField,
+        );
         for (key, kind) in [
+            (T::PaletteSwapDigits, TransformKind::Digits),
             (T::PaletteUpper, TransformKind::Upper),
             (T::PaletteLower, TransformKind::Lower),
             (T::PaletteTitle, TransformKind::Title),
             (T::PaletteSwapCase, TransformKind::SwapCase),
         ] {
-            list.push((tr(key).to_string(), Command::Transform(kind)));
+            add(
+                Section::Selection,
+                tr(key).to_string(),
+                "",
+                Command::Transform(kind),
+            );
+        }
+    }
+    // A calmer mode on offer for this app.
+    if let (Some(app), Some((exe, mode))) = (app, apps::offer()) {
+        if app == exe {
+            let name = tr(crate::tray::app_mode_name(mode));
+            add(
+                Section::Here,
+                trf(T::PaletteOfferForNow, &[("mode", name), ("app", app)]),
+                "",
+                Command::OfferForNow(mode),
+            );
+            add(
+                Section::Here,
+                trf(T::PaletteOfferKeep, &[("mode", name), ("app", app)]),
+                "",
+                Command::OfferKeep(mode),
+            );
         }
     }
     if session::is_paused() {
-        list.push((tr(T::TrayResume).to_string(), Command::Resume));
+        add(
+            Section::Here,
+            tr(T::TrayResume).to_string(),
+            "",
+            Command::Resume,
+        );
     } else if hook::is_enabled() {
-        list.push((tr(T::PalettePause).to_string(), Command::Pause));
+        add(
+            Section::Here,
+            tr(T::PalettePause).to_string(),
+            "",
+            Command::Pause,
+        );
     }
     let field = FIELD.load(Ordering::Acquire);
     if app.is_some() && field != 0 {
         if crate::focus::is_off(field) {
-            list.push((tr(T::PaletteFieldOn).to_string(), Command::FieldOn));
+            add(
+                Section::Here,
+                tr(T::PaletteFieldOn).to_string(),
+                "",
+                Command::FieldOn,
+            );
         } else {
-            list.push((tr(T::PaletteFieldOff).to_string(), Command::FieldOff));
+            add(
+                Section::Here,
+                tr(T::PaletteFieldOff).to_string(),
+                "",
+                Command::FieldOff,
+            );
         }
     }
     if let Some(app) = app {
-        if apps::lookup(app) == Some(AppMode::Off) {
-            list.push((trf(T::PaletteAppOn, &[("app", app)]), Command::AppDefault));
+        let (key, command) = if apps::lookup(app) == Some(AppMode::Off) {
+            (T::PaletteAppOnShort, Command::AppDefault)
         } else {
-            list.push((trf(T::PaletteAppOff, &[("app", app)]), Command::AppOff));
-        }
+            (T::PaletteAppOffShort, Command::AppOff)
+        };
+        add(Section::Here, tr(key).to_string(), "", command);
     }
     let now = hook::mode();
     for (mode, key) in [
@@ -504,40 +687,64 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<(String, Command)> {
         (hook::Mode::Suggest, T::TraySuggest),
         (hook::Mode::Manual, T::TrayManual),
     ] {
-        let mark = if mode == now { "✓  " } else { "" };
-        list.push((format!("{mark}{}", tr(key)), Command::Mode(mode)));
+        let hint = if mode == now { tr(T::HintInUse) } else { "" };
+        add(
+            Section::Mode,
+            tr(key).to_string(),
+            hint,
+            Command::Mode(mode),
+        );
     }
-    for (i, word) in crate::learn::reversed_words().iter().enumerate().take(3) {
-        list.push((
-            trf(T::PaletteKeepAsTyped, &[("word", word)]),
-            Command::KeepAsTyped(i),
-        ));
+    // Stands in for the options until they are opened.
+    add(
+        Section::Mode,
+        tr(T::PaletteMoreOptions).to_string(),
+        "▸",
+        Command::MoreOptions,
+    );
+    let state = |on: bool| tr(if on { T::HintOn } else { T::HintOff });
+    for (key, on, command) in [
+        (
+            T::PaletteSpelling,
+            hook::fixes_spelling(),
+            Command::Spelling,
+        ),
+        (T::PaletteHyphens, hook::fixes_hyphens(), Command::Hyphens),
+        (
+            T::PaletteCapsSwitch,
+            hook::caps_switches_language(),
+            Command::CapsSwitch,
+        ),
+        (
+            T::PaletteTrayLanguage,
+            crate::tray::shows_language(),
+            Command::TrayLanguage,
+        ),
+    ] {
+        add(Section::Options, tr(key).to_string(), state(on), command);
     }
-    let mark = if crate::tray::shows_language() {
-        "✓  "
-    } else {
-        ""
-    };
-    list.push((
-        format!("{mark}{}", tr(T::PaletteTrayLanguage)),
-        Command::TrayLanguage,
-    ));
-    let mark = if hook::caps_switches_language() {
-        "✓  "
-    } else {
-        ""
-    };
-    list.push((
-        format!("{mark}{}", tr(T::PaletteCapsSwitch)),
-        Command::CapsSwitch,
-    ));
-    let mark = if hook::fixes_spelling() { "✓  " } else { "" };
-    list.push((
-        format!("{mark}{}", tr(T::PaletteSpelling)),
-        Command::Spelling,
-    ));
-    list.push((tr(T::TraySettings).to_string(), Command::Settings));
+    add(
+        Section::Options,
+        tr(T::TraySettings).to_string(),
+        "",
+        Command::Settings,
+    );
     list
+}
+
+/// A section's heading.
+fn heading(section: Section, app: Option<&str>) -> String {
+    match section {
+        Section::Words => tr(T::PaletteSecWords).to_string(),
+        Section::Fix => tr(T::PaletteSecFix).to_string(),
+        Section::Selection => tr(T::PaletteSecSelection).to_string(),
+        Section::Here => match app {
+            Some(app) => trf(T::PaletteSecHereApp, &[("app", app)]),
+            None => tr(T::PaletteSecHere).to_string(),
+        },
+        Section::Mode => tr(T::PaletteSecMode).to_string(),
+        Section::Options => tr(T::PaletteSecOptions).to_string(),
+    }
 }
 
 fn open() {
@@ -575,7 +782,7 @@ fn open() {
         crate::focus::boxes_before_caret_within(spans, std::time::Duration::from_millis(150))
     };
     let list = commands(app.as_deref(), &words);
-    let h = PAD * 2 + 28 + list.len() as i32 * ROW;
+    let h = PAD * 2 + 28 + list.len() as i32 * ROW + Section::ALL.len() as i32 * HEAD;
     let mut window = nwg::Window::default();
     if nwg::Window::builder()
         .flags(nwg::WindowFlags::POPUP)
@@ -596,17 +803,31 @@ fn open() {
         p.surface,
         0,
     );
+    let headings: Vec<(Section, u16)> = Section::ALL
+        .iter()
+        .map(|&section| {
+            let id = surface.label(
+                &heading(section, app.as_deref()),
+                TextStyle::Small,
+                (PAD + 8, PAD + 28, W - 2 * PAD - 16, HEAD - 4),
+                p.surface,
+                0,
+            );
+            (section, id)
+        })
+        .collect();
     let items: Vec<(u16, Command)> = list
         .iter()
         .enumerate()
-        .map(|(i, (label, command))| {
-            let id = surface.list_item(
-                label,
+        .map(|(i, entry)| {
+            let id = surface.row(
+                &entry.label,
+                &entry.hint,
                 i == 0,
-                (PAD, PAD + 28 + i as i32 * ROW, W - 2 * PAD, ROW - 4),
+                (PAD, PAD + 28 + i as i32 * ROW, W - 2 * PAD, ROW - 2),
                 p.surface,
             );
-            (id, *command)
+            (id, entry.command)
         })
         .collect();
     ui::size_and_center(surface.hwnd, W, h);
@@ -639,7 +860,11 @@ fn open() {
         window,
         surface,
         items,
-        labels: RefCell::new(list.iter().map(|(label, _)| label.clone()).collect()),
+        item_sections: list.iter().map(|e| e.section).collect(),
+        headings,
+        expanded: std::cell::Cell::new(false),
+        numbers: RefCell::new(Vec::new()),
+        labels: RefCell::new(list.iter().map(|e| e.label.clone()).collect()),
         words: RefCell::new(words),
         boxes,
         checked: RefCell::new(Vec::new()),
@@ -819,6 +1044,12 @@ fn run(command: Command, app: Option<&str>) {
                 T::ToastCapsSwitchOff
             }));
         }
+        Command::Hyphens => {
+            hook::set_fixes_hyphens(!hook::fixes_hyphens());
+            config::persist();
+        }
+        // Handled in `run_shown`.
+        Command::MoreOptions => {}
         Command::Spelling => {
             hook::set_fixes_spelling(!hook::fixes_spelling());
             config::persist();

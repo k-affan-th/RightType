@@ -747,13 +747,22 @@ REAL_SENTENCES = [
     ("Thai sentence", "lj'wa]N,k.shsojvp ", "ส่งไฟล์มาให้หน่อย"),
     ("English then Thai", "hello l;ylfu8iy[ ", "hello สวัสดีครับ"),
     ("Thai then an English tech word", "l;ylfu8iy[ middleware ", "สวัสดีครับ middleware"),
-    ("English computer words", "relogin logout ", "relogin logout"),
+    # In prose the prefix takes its hyphen (2.1); not in an address bar.
+    ("English computer words", "relogin logout ", "re-login logout"),
 ]
+
+# Targets that are address bars: nothing there is rewritten as prose.
+ADDRESS_BARS = ("omnibox", "edge")
+
+
+def prose(t, expect):
+    """`expect` as it ends up in `t`: an address bar keeps `relogin`."""
+    return expect.replace("re-login", "relogin") if t.name in ADDRESS_BARS else expect
 
 
 def realistic(t):
     for name, keys, expect in REAL_SENTENCES:
-        fs.run(t, f"typed like a person: {name}", "", expect,
+        fs.run(t, f"typed like a person: {name}", "", prose(t, expect),
                then=[lambda keys=keys: human_keys(keys)], settle=1.2)
 
 
@@ -764,7 +773,9 @@ def sweep(t):
     run(t, "EN->TH then Thai typed natively", "l;ylfu giupo ", "สวัสดี เรียน")
     run(t, "TH->EN word", "correct ", "correct", layout=HKL_TH)
     # Not Thai: it only starts like three short Thai words (พำ สน เร).
-    run(t, "English computer word stays English", "relogin ", "relogin")
+    run(t, "English computer word stays English (hyphen in prose)", "relogin ",
+        prose(t, "re-login"))
+    run(t, "English word with its own spelling stays", "reinstall ", "reinstall")
     # A wrong correction is undone with one Shift+Backspace, wherever it
     # happened: in the middle of a word, after a long word was handed to the
     # Thai layout, or at the space.

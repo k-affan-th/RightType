@@ -34,8 +34,9 @@ use windows::Win32::Graphics::Dwm::{
 use windows::Win32::Graphics::Gdi::{
     CreateFontW, CreateSolidBrush, DeleteObject, DrawTextW, FillRect, InvalidateRect, SelectObject,
     SetBkMode, SetTextColor, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET,
-    DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE,
-    DT_VCENTER, DT_WORDBREAK, HBRUSH, HDC, HFONT, HGDIOBJ, OUT_DEFAULT_PRECIS, TRANSPARENT,
+    DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_RIGHT,
+    DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK, HBRUSH, HDC, HFONT, HGDIOBJ, OUT_DEFAULT_PRECIS,
+    TRANSPARENT,
 };
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, HMONITOR, MONITORINFO, MONITOR_DEFAULTTONEAREST,
@@ -748,6 +749,23 @@ pub fn text_width_at(s: &str, size: i32, weight: i32, dpi: u32) -> i32 {
 }
 
 /// Height `s` needs when wrapped to `width` device pixels.
+/// The width of `s` on one line in `font`.
+pub fn measure_width(hdc: HDC, s: &str, font: HFONT) -> i32 {
+    let mut wide: Vec<u16> = s.encode_utf16().collect();
+    let mut m = RECT::default();
+    unsafe {
+        let old = SelectObject(hdc, HGDIOBJ(font.0));
+        DrawTextW(
+            hdc,
+            &mut wide,
+            &mut m,
+            DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX,
+        );
+        SelectObject(hdc, old);
+    }
+    m.right - m.left
+}
+
 pub fn measure(hdc: HDC, s: &str, width: i32, font: HFONT) -> i32 {
     let mut wide: Vec<u16> = s.encode_utf16().collect();
     let mut rc = RECT {
@@ -814,6 +832,12 @@ pub enum Kind {
     /// A list with columns (a report-view list view); drawn by Windows in
     /// the window's colours.
     Table,
+    /// A palette row: left-aligned text with an optional number key cap in
+    /// front (`"3\tFix text"`; `"\tFix text"` without), and `hint` in dim
+    /// text at the right (a state, or what a key does).
+    Row {
+        hint: String,
+    },
 }
 
 /// Something done to a table row with the mouse or keyboard.
@@ -1127,7 +1151,9 @@ impl Surface {
     fn font_for(&self, kind: &Kind) -> HFONT {
         let f = self.fonts.borrow();
         match kind {
-            Kind::Edit | Kind::Secondary | Kind::Toggle { .. } | Kind::Table => f.body,
+            Kind::Edit | Kind::Secondary | Kind::Toggle { .. } | Kind::Table | Kind::Row { .. } => {
+                f.body
+            }
             _ => f.body_strong,
         }
     }
@@ -1390,6 +1416,79 @@ impl Surface {
                     DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
                 );
             }
+            Kind::Row { hint } => {
+                if focus || hot || pressed {
+                    g.fill_round(rc, radius, p.surface_hover);
+                }
+                if focus {
+                    let bar_h = (rc.bottom - rc.top) - px(14);
+                    let bar = RECT {
+                        left: rc.left + px(2),
+                        top: rc.top + px(7),
+                        right: rc.left + px(5),
+                        bottom: rc.top + px(7) + bar_h,
+                    };
+                    g.fill_round(bar, pxf(1.5), p.accent);
+                }
+                let (number, text_s) = label.split_once('\t').unwrap_or(("", &label));
+                let mut x = rc.left + px(12);
+                let cap_w = px(22);
+                if !number.is_empty() {
+                    let cap_h = px(20);
+                    let top = rc.top + ((rc.bottom - rc.top) - cap_h) / 2;
+                    let cap = RECT {
+                        left: x,
+                        top,
+                        right: x + cap_w,
+                        bottom: top + cap_h,
+                    };
+                    g.fill_round(cap, pxf(4.0), p.keycap_border);
+                    g.fill_round(inset(cap, px(1)), pxf(3.0), p.keycap);
+                    text(
+                        hdc,
+                        number,
+                        cap,
+                        f.small,
+                        p.text,
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+                    );
+                }
+                x += cap_w + px(10);
+                let hint_w = if hint.is_empty() {
+                    0
+                } else {
+                    measure_width(hdc, hint, f.small) + px(12)
+                };
+                if !hint.is_empty() {
+                    let hr = RECT {
+                        left: rc.right - hint_w - px(4),
+                        right: rc.right - px(12),
+                        ..rc
+                    };
+                    text(
+                        hdc,
+                        hint,
+                        hr,
+                        f.small,
+                        p.text_dim,
+                        DT_RIGHT | DT_VCENTER | DT_SINGLELINE,
+                    );
+                }
+                let tr_rc = RECT {
+                    left: x,
+                    right: rc.right - hint_w - px(8),
+                    ..rc
+                };
+                text(
+                    hdc,
+                    text_s,
+                    tr_rc,
+                    f.body,
+                    p.text,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                );
+                return;
+            }
             Kind::Text(_) | Kind::Edit | Kind::Table => {}
         }
         if focus {
@@ -1494,16 +1593,18 @@ impl Surface {
         )
     }
 
-    /// One entry of a list of commands (the palette): a push button that
-    /// joins the previous entry's group, so the arrow keys move between them.
-    pub fn list_item(&self, s: &str, first: bool, rc: (i32, i32, i32, i32), bg: Rgb) -> u16 {
+    /// One row of the palette (see [`Kind::Row`]): joins the previous row's
+    /// group, so the arrow keys move between them.
+    pub fn row(&self, s: &str, hint: &str, first: bool, rc: (i32, i32, i32, i32), bg: Rgb) -> u16 {
         let group = if first { WS_GROUP } else { 0 };
         self.create(
             "BUTTON",
             s,
             BS_PUSHBUTTON | WS_TABSTOP | group,
             rc,
-            Kind::Secondary,
+            Kind::Row {
+                hint: hint.to_string(),
+            },
             bg,
             0,
         )

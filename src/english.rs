@@ -206,6 +206,42 @@ const PREFIXES: &[&str] = &[
     "inter", "auto", "multi",
 ];
 
+/// Prefixes that take a hyphen before a stem starting with the vowel they
+/// end with (`re-enable`, `co-owner`, `anti-inflammatory`).
+const VOWEL_PREFIXES: &[&str] = &["re", "pre", "de", "co", "anti", "semi", "multi"];
+
+/// Closed compounds of a verb and a particle (`log in` → `login`): with a
+/// prefix they are written with a hyphen (`re-login`, `pre-signup`).
+const PARTICLE_STEMS: &[&str] = &["login", "logon", "signin", "signup"];
+
+/// `word` as it is written with its prefix hyphenated, when style calls for
+/// it: a prefix before the same vowel (`reenable` → `re-enable`), unless the
+/// joined spelling is a dictionary word (`reenter`, `cooperate`), and `re` or
+/// `pre` before a verb–particle compound (`relogin` → `re-login`). Lower
+/// case words only; anything else is left alone.
+pub fn hyphenated(word: &str, en: &Dictionary) -> Option<String> {
+    if word.len() < 5 || !word.bytes().all(|b| b.is_ascii_lowercase()) {
+        return None;
+    }
+    for prefix in ["re", "pre"] {
+        if let Some(stem) = word.strip_prefix(prefix) {
+            if PARTICLE_STEMS.contains(&stem) {
+                return Some(format!("{prefix}-{stem}"));
+            }
+        }
+    }
+    if en.contains(word) {
+        return None;
+    }
+    VOWEL_PREFIXES.iter().find_map(|prefix| {
+        let stem = word.strip_prefix(prefix)?;
+        let last = prefix.chars().last()?;
+        let first = stem.chars().next()?;
+        (first == last && "aeiou".contains(first) && stem.len() >= 3 && en.contains(stem))
+            .then(|| format!("{prefix}-{stem}"))
+    })
+}
+
 /// Endings for [`is_affixed`], longest first.
 const AFFIX_SUFFIXES: &[&str] = &[
     "ization", "ations", "ation", "ments", "ment", "ness", "less", "able", "ings", "ing", "ized",
@@ -298,6 +334,35 @@ pub fn has_continuation(token: &str, en: &Dictionary) -> bool {
             part_has_extension(tail) || is_part(tail)
         }
     })
+}
+
+#[cfg(test)]
+mod hyphen_tests {
+    use super::*;
+    use crate::dict;
+
+    #[test]
+    fn prefixes_take_their_hyphen_where_style_says() {
+        let en = dict::english();
+        assert_eq!(hyphenated("relogin", en).as_deref(), Some("re-login"));
+        assert_eq!(hyphenated("presignup", en).as_deref(), Some("pre-signup"));
+        assert_eq!(hyphenated("reenable", en).as_deref(), Some("re-enable"));
+        // Written closed in the dictionary, or not a prefix case at all.
+        for word in [
+            "reenter",
+            "cooperate",
+            "reinstall",
+            "reload",
+            "react",
+            "relaunch",
+            "login",
+            "Relogin",
+            "re-login",
+            "rest",
+        ] {
+            assert_eq!(hyphenated(word, en), None, "{word}");
+        }
+    }
 }
 
 #[cfg(test)]

@@ -490,7 +490,9 @@ enum UndoKind {
     /// RightType put right a common Thai misspelling (this one). Undoing it
     /// (Shift+Backspace, Ctrl+Shift+CapsLock, or Backspace right after)
     /// puts back what was typed, and that word is not fixed again this run.
-    Spelling(&'static str),
+    /// The misspelling is kept in `SPELLING_FIXED` until the fix is undone
+    /// or another word is fixed.
+    Spelling,
     /// A snippet was expanded. Undoing it puts the trigger back; nothing is
     /// learned.
     Snippet,
@@ -541,6 +543,18 @@ pub fn set_fixes_spelling(on: bool) {
     FIX_SPELLING.store(on, Ordering::Relaxed);
 }
 
+/// Write English prefixes with their hyphen (`relogin` → `re-login`; on by
+/// default; `righttype::english::hyphenated`).
+static FIX_HYPHENS: AtomicBool = AtomicBool::new(true);
+
+pub fn fixes_hyphens() -> bool {
+    FIX_HYPHENS.load(Ordering::Relaxed)
+}
+
+pub fn set_fixes_hyphens(on: bool) {
+    FIX_HYPHENS.store(on, Ordering::Relaxed);
+}
+
 /// A Backspace this soon after a spelling fix takes the fix back instead of
 /// deleting: someone surprised by a changed word reaches for Backspace, and
 /// deleting into a fix they did not expect leaves a mess.
@@ -550,7 +564,9 @@ thread_local! {
     /// When the last spelling fix was made (for [`SPELLING_GRACE`]).
     static SPELLING_AT: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
     /// Misspellings the typist took a fix back for: left alone from now on.
-    static SPELLING_KEPT: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
+    static SPELLING_KEPT: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// The misspelling the last spelling fix put right.
+    static SPELLING_FIXED: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
 impl Drop for UndoRecord {
@@ -629,8 +645,9 @@ unsafe fn undo_last_correction() {
         let mut kept_spelling = None;
         match rec.kind {
             UndoKind::Manual | UndoKind::Snippet => {}
-            UndoKind::Spelling(wrong) => {
-                SPELLING_KEPT.with(|k| k.borrow_mut().push(wrong));
+            UndoKind::Spelling => {
+                let wrong = SPELLING_FIXED.with(|f| std::mem::take(&mut *f.borrow_mut()));
+                SPELLING_KEPT.with(|k| k.borrow_mut().push(wrong.clone()));
                 SPELLING_AT.with(|t| t.set(None));
                 kept_spelling = Some(wrong);
             }
@@ -651,7 +668,7 @@ unsafe fn undo_last_correction() {
         activate_layout(layout_of(restored));
         match kept_spelling {
             Some(wrong) => crate::overlay::show_at(
-                &righttype::i18n::trf(righttype::i18n::T::ToastSpellingKept, &[("word", wrong)]),
+                &righttype::i18n::trf(righttype::i18n::T::ToastSpellingKept, &[("word", &wrong)]),
                 crate::caret::hint_anchor(),
             ),
             None => crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastUndo)),
@@ -1398,7 +1415,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             s.borrow()
                 .undo
                 .as_ref()
-                .is_some_and(|u| matches!(u.kind, UndoKind::Spelling(_)))
+                .is_some_and(|u| matches!(u.kind, UndoKind::Spelling))
         })
     {
         diag::note("Backspace right after a spelling fix: fix taken back", &[]);
@@ -1689,7 +1706,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
     // A common Thai misspelling (opt-in): put right in Auto, with its own
     // message and the way back.
-    let mut spelling: Option<(&'static str, &'static str)> = None;
+    let mut spelling: Option<(String, String)> = None;
     if detection.is_none()
         && !seed_run
         && mode_now == Mode::Auto
@@ -1698,14 +1715,34 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             == Some(policy::InputLayout::ThaiKedmanee)
     {
         if let Some((fixed, wrong, right)) = righttype::spelling::fix(&word, dict::thai()) {
-            if !SPELLING_KEPT.with(|k| k.borrow().contains(&wrong)) {
+            if !SPELLING_KEPT.with(|k| k.borrow().iter().any(|w| w == wrong)) {
                 detection = Some(righttype::detect::Detection {
                     corrected: fixed,
                     confidence: righttype::detect::Confidence::High,
                     evidence: righttype::detect::Evidence::ExactDictionary,
                 });
-                spelling = Some((wrong, right));
+                spelling = Some((wrong.to_string(), right.to_string()));
             }
+        }
+    }
+    // An English prefix written as style has it (`relogin` → `re-login`), in
+    // Auto, in prose: not in code, nor in an address bar.
+    if detection.is_none()
+        && !seed_run
+        && mode_now == Mode::Auto
+        && fixes_hyphens()
+        && !crate::focus::completes_inline()
+        && policy::supported_layout_id(layout_id(effective_layout()))
+            == Some(policy::InputLayout::UsQwerty)
+        && !SPELLING_KEPT.with(|k| k.borrow().contains(&word))
+    {
+        if let Some(fixed) = righttype::english::hyphenated(&word, dict::english()) {
+            spelling = Some((word.clone(), fixed.clone()));
+            detection = Some(righttype::detect::Detection {
+                corrected: fixed,
+                confidence: righttype::detect::Confidence::High,
+                evidence: righttype::detect::Evidence::ExactDictionary,
+            });
         }
     }
 
@@ -1751,18 +1788,19 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                 crate::overlay::announce(&said);
                 said.zeroize();
             }
-            if let (true, Some((wrong, right))) = (done, spelling) {
+            if let (true, Some((wrong, right))) = (done, spelling.as_ref()) {
                 STATE.with(|s| {
                     if let Some(u) = s.borrow_mut().undo.as_mut() {
-                        u.kind = UndoKind::Spelling(wrong);
+                        u.kind = UndoKind::Spelling;
                     }
                 });
+                SPELLING_FIXED.with(|f| *f.borrow_mut() = wrong.clone());
                 SPELLING_AT.with(|t| t.set(Some(Instant::now())));
                 diag::note("common misspelling put right", &[]);
                 crate::overlay::show_at(
                     &righttype::i18n::trf(
                         righttype::i18n::T::ToastSpellingFixed,
-                        &[("wrong", wrong), ("right", right)],
+                        &[("wrong", wrong.as_str()), ("right", right.as_str())],
                     ),
                     crate::caret::hint_anchor(),
                 );
@@ -2233,7 +2271,7 @@ unsafe fn flip_back_recent() {
         s.borrow().undo.as_ref().is_some_and(|u| {
             matches!(
                 u.kind,
-                UndoKind::CapsAccident | UndoKind::Spelling(_) | UndoKind::Snippet
+                UndoKind::CapsAccident | UndoKind::Spelling | UndoKind::Snippet
             )
         })
     }) {

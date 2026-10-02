@@ -75,6 +75,8 @@ pub struct Config {
     /// The typist's snippets (trigger → text, and which keyboard).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub snippets: Vec<SnippetConfig>,
+    /// Write English prefixes with their hyphen (`re-login`).
+    pub fix_hyphens: bool,
     /// Put right common Thai misspellings (opt-in).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fix_spelling: bool,
@@ -142,6 +144,7 @@ impl Default for Config {
             tray_shows_language: false,
             restart_after_crash: true,
             fix_spelling: false,
+            fix_hyphens: true,
             snippets: Vec::new(),
             sync_settings: false,
         }
@@ -186,6 +189,7 @@ pub fn apply(cfg: &Config) {
     crate::tray::set_shows_language(cfg.tray_shows_language);
     SYNC_SETTINGS.store(cfg.sync_settings, std::sync::atomic::Ordering::Relaxed);
     hook::set_fixes_spelling(cfg.fix_spelling);
+    hook::set_fixes_hyphens(cfg.fix_hyphens);
     hook::set_snippets(
         cfg.snippets
             .iter()
@@ -421,6 +425,7 @@ fn snapshot() -> Config {
         capslock_switches_language: hook::caps_switches_language(),
         tray_shows_language: crate::tray::shows_language(),
         fix_spelling: hook::fixes_spelling(),
+        fix_hyphens: hook::fixes_hyphens(),
         sync_settings: SYNC_SETTINGS.load(std::sync::atomic::Ordering::Relaxed),
         snippets: hook::snippets()
             .into_iter()

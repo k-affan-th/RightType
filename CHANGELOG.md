@@ -56,6 +56,11 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   learned words, modes, apps, hotkeys and snippets are shared by every PC
   using that folder.
 - **Windows on ARM**: an arm64 installer and zip.
+- **English prefixes get their hyphen in prose** (on by default, in Auto):
+  `relogin` → `re-login`, `reenable` → `re-enable`, shown in the spelling
+  colour, Backspace right after puts it back. Never in Code mode or an
+  address bar; words the dictionary writes closed (`reinstall`, `reenter`)
+  are left alone.
 - **A preview while you type (Auto)**: before Auto is sure enough to fix a
   word, the cursor tag shows where the keys are heading — `l;yl` shows
   `→ สวัส` — so you can see a fix is coming without anything changing yet.
@@ -125,6 +130,12 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   typed as keys instead, which arrive after them.
 
 ### Changed
+
+- **The command palette is grouped**: the words just typed, fixing text,
+  the selected text, this app and field, and the mode, each under its own
+  heading; numbers 1–9 go to the things done to text, and the switches and
+  Settings are folded under one row until opened (or searched for). Rows
+  are left-aligned with their state (On/Off, in use) at the right.
 
 - **Smoother tags and messages**: the pill now rises a few pixels into
   place while fading in (140 ms, ease-out) and fades out with an ease-in
