@@ -336,6 +336,64 @@ pub fn has_continuation(token: &str, en: &Dictionary) -> bool {
     })
 }
 
+/// Top-level domains read as the end of a web address even without
+/// `http://` or `www.` (`.co.th` and the other Thai second levels end in
+/// `th`).
+const ADDRESS_ENDINGS: &[&str] = &[
+    "com", "net", "org", "io", "dev", "app", "ai", "co", "me", "info", "edu", "gov", "th",
+];
+
+/// Is `s` an email address (`name@gmail.com`)?
+pub fn is_email(s: &str) -> bool {
+    let Some((local, domain)) = s.split_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && local
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._%+-".contains(c))
+        && is_domain(domain)
+}
+
+/// `gmail.com`, `mail.example.co.th`: labels of letters, digits and `-`,
+/// ending in letters.
+fn is_domain(s: &str) -> bool {
+    let labels: Vec<&str> = s.split('.').collect();
+    labels.len() >= 2
+        && labels.iter().all(|l| {
+            !l.is_empty()
+                && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+                && !l.starts_with('-')
+        })
+        && labels
+            .last()
+            .is_some_and(|t| t.len() >= 2 && t.chars().all(|c| c.is_ascii_alphabetic()))
+}
+
+/// Is `s` a web address: `http://` or `https://` and more, `www.` and a
+/// domain, or a domain ending in a common top-level domain (`example.com`,
+/// `chula.ac.th`)? A path may follow.
+pub fn is_web_address(s: &str) -> bool {
+    let lower = s.to_ascii_lowercase();
+    if let Some(rest) = lower
+        .strip_prefix("https://")
+        .or_else(|| lower.strip_prefix("http://"))
+    {
+        return rest.chars().any(|c| c.is_ascii_alphanumeric());
+    }
+    let host = lower.split('/').next().unwrap_or("");
+    if let Some(rest) = host.strip_prefix("www.") {
+        return is_domain(rest);
+    }
+    is_domain(host)
+        && host
+            .rsplit('.')
+            .next()
+            .is_some_and(|tld| ADDRESS_ENDINGS.contains(&tld))
+        // A letter somewhere before the ending: not `3.14.th`.
+        && host.split('.').next().is_some_and(|l| l.chars().any(|c| c.is_ascii_alphabetic()))
+}
+
 #[cfg(test)]
 mod hyphen_tests {
     use super::*;
@@ -468,6 +526,39 @@ mod tests {
             "เดี๋ยวโทรกลับนะ",
         ] {
             assert!(!is_word(&th_to_en(phrase), dict::english()), "{phrase}");
+        }
+    }
+
+    #[test]
+    fn addresses_are_recognised() {
+        for s in [
+            "name@gmail.com",
+            "a.b+c@mail.example.co.th",
+            "x_y@chula.ac.th",
+        ] {
+            assert!(is_email(s), "{s}");
+        }
+        for s in [
+            "@gmail.com",
+            "name@",
+            "name@gmail",
+            "name@gmail.c",
+            "na me@x.com",
+        ] {
+            assert!(!is_email(s), "{s}");
+        }
+        for s in [
+            "https://example.com",
+            "http://x",
+            "www.google.co.th",
+            "example.com",
+            "chula.ac.th/news",
+            "github.io",
+        ] {
+            assert!(is_web_address(s), "{s}");
+        }
+        for s in ["3.14", "e.g.", "a.b", "file.txt", "www.", "hello", "1.2.th"] {
+            assert!(!is_web_address(s), "{s}");
         }
     }
 }

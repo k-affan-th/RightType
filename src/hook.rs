@@ -1536,11 +1536,23 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                 ],
             );
         }
-        // Holding the keys acts once: each flip reaches one word further back,
-        // so auto-repeat would run through all of them in a blink.
+        // Holding the keys flips the rest of the run in one go, once (after
+        // FLIP_HOLD, timed from the press: the repeat delay is the typist's
+        // own setting); the other repeats do nothing, or auto-repeat would
+        // run back and forth through the words.
         if repeat {
+            let held = FLIP_DOWN.with(|f| {
+                f.get()
+                    .filter(|(at, done)| !done && at.elapsed() >= FLIP_HOLD)
+                    .is_some()
+            });
+            if held {
+                FLIP_DOWN.with(|f| f.set(f.get().map(|(at, _)| (at, true))));
+                flip_rest_of_run();
+            }
             return true;
         }
+        FLIP_DOWN.with(|f| f.set(Some((Instant::now(), false))));
         // While we own the run the screen does not match the buffer, so the
         // manual path's backspace count would be wrong. Withdraw our rendering
         // first; the typist asked for the raw keystrokes back.
@@ -2496,6 +2508,49 @@ unsafe fn flip_back_recent() {
             righttype::i18n::T::ToastFlippedOneBack
         }));
     }
+}
+
+/// How long Shift+Backspace is held before the rest of the run is flipped.
+const FLIP_HOLD: Duration = Duration::from_millis(400);
+
+thread_local! {
+    /// When Shift+Backspace went down, and whether holding it has acted.
+    static FLIP_DOWN: std::cell::Cell<Option<(Instant, bool)>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Shift+Backspace held: flip every word of the run the presses have not
+/// reached yet, in one step. Undo (or one more press) puts them back.
+unsafe fn flip_rest_of_run() {
+    if !STATE.with(|s| s.borrow().buf.current().is_empty()) {
+        return;
+    }
+    let Some(step) = STATE.with(|s| s.borrow().recent.rest_step(convert_shown)) else {
+        return;
+    };
+    e2e_trace(format!("flip: held, {} words", step.words));
+    if !inject::apply(
+        step.backspaces,
+        &step.insert,
+        Some(boundary_vk(step.boundary)),
+    ) {
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+        STATE.with(|s| s.borrow_mut().recent.clear());
+        return;
+    }
+    STATE.with(|s| s.borrow_mut().recent.commit_rest(convert_shown));
+    set_undo(
+        step.insert.chars().count() + 1,
+        &step.restore,
+        UndoKind::Manual,
+    );
+    crate::stats::record_manual();
+    habit_correction(step.was_thai, step.now_thai);
+    activate_layout(layout_of(&step.newest));
+    crate::overlay::show(&righttype::i18n::trf(
+        righttype::i18n::T::ToastFlippedWords,
+        &[("n", &step.words.to_string())],
+    ));
 }
 
 /// The recent words (oldest first, as on screen) and where each is before
