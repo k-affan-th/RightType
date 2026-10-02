@@ -113,6 +113,11 @@ enum Command {
     /// The keypad with NumLock off, Insert: off → warn → fix.
     NumLock,
     InsertKey,
+    /// The keyboard this app starts with: not set → Thai → English →
+    /// English outside text.
+    AppKeyboard,
+    GraveTypes,
+    GuardSwitch,
     /// English prefix words written with their hyphen, on or off.
     Hyphens,
 }
@@ -218,12 +223,14 @@ impl Command {
             Command::EnterGuard => '\u{E8BD}',     // Message
             Command::ThaiWordDelete => '\u{E75C}', // EraseTool
             Command::PasswordHint => '\u{E72E}',   // Lock
-            Command::NumLock | Command::InsertKey => '\u{E765}', // KeyboardClassic
-            Command::Spelling => '\u{E82D}',       // Dictionary
-            Command::Hyphens => '\u{E738}',        // Remove (a dash)
-            Command::CapsSwitch => '\u{E72E}',     // Lock
-            Command::TrayLanguage => '\u{E774}',   // Globe
-            Command::Settings => '\u{E713}',       // Settings
+            Command::NumLock | Command::InsertKey | Command::AppKeyboard => '\u{E765}', // KeyboardClassic
+            Command::GraveTypes => '\u{E8C8}',                                          // Copy
+            Command::GuardSwitch => '\u{E72E}',                                         // Lock
+            Command::Spelling => '\u{E82D}',     // Dictionary
+            Command::Hyphens => '\u{E738}',      // Remove (a dash)
+            Command::CapsSwitch => '\u{E72E}',   // Lock
+            Command::TrayLanguage => '\u{E774}', // Globe
+            Command::Settings => '\u{E713}',     // Settings
         }
     }
 }
@@ -829,6 +836,12 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
         }
     }
     if let Some(app) = app {
+        add(
+            Section::Here,
+            tr(T::PaletteAppKeyboard).to_string(),
+            tr(keyboard_name(apps::keyboard(app))),
+            Command::AppKeyboard,
+        );
         let (key, command) = if apps::lookup(app) == Some(AppMode::Off) {
             (T::PaletteAppOnShort, Command::AppDefault)
         } else {
@@ -889,6 +902,16 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             T::PalettePasswordHint,
             crate::pwhint::is_enabled(),
             Command::PasswordHint,
+        ),
+        (
+            T::PaletteGraveTypes,
+            hook::grave_types(),
+            Command::GraveTypes,
+        ),
+        (
+            T::PaletteGuardSwitch,
+            hook::guards_switch(),
+            Command::GuardSwitch,
         ),
     ] {
         add(Section::Options, tr(key).to_string(), state(on), command);
@@ -1375,6 +1398,32 @@ fn run(command: Command, app: Option<&str>) {
             hook::set_deletes_thai_words(!hook::deletes_thai_words());
             config::persist();
         }
+        Command::AppKeyboard => {
+            if let Some(app) = app {
+                use righttype::per_app::AppKeyboard as K;
+                let next = match apps::keyboard(app) {
+                    None => Some(K::Thai),
+                    Some(K::Thai) => Some(K::English),
+                    Some(K::English) => Some(K::EnglishOutsideText),
+                    Some(K::EnglishOutsideText) => None,
+                };
+                apps::set_keyboard(app, next);
+                config::persist();
+                overlay::show(&format!("{} · {}", tr(keyboard_name(next)), app));
+            }
+        }
+        Command::GraveTypes => {
+            let on = !hook::grave_types();
+            hook::set_grave_types(on);
+            config::persist();
+            if on {
+                overlay::show(tr(T::ToastGraveTypes));
+            }
+        }
+        Command::GuardSwitch => {
+            hook::set_guards_switch(!hook::guards_switch());
+            config::persist();
+        }
         Command::PasswordHint => {
             crate::pwhint::set_enabled(!crate::pwhint::is_enabled());
             config::persist();
@@ -1401,6 +1450,17 @@ fn run(command: Command, app: Option<&str>) {
             config::persist();
             overlay::show(mode.label());
         }
+    }
+}
+
+/// The name of an app's keyboard setting.
+pub fn keyboard_name(k: Option<righttype::per_app::AppKeyboard>) -> T {
+    use righttype::per_app::AppKeyboard as K;
+    match k {
+        None => T::KeyboardNone,
+        Some(K::Thai) => T::KeyboardThai,
+        Some(K::English) => T::KeyboardEnglish,
+        Some(K::EnglishOutsideText) => T::KeyboardOutsideText,
     }
 }
 

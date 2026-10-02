@@ -193,6 +193,9 @@ class Chrome(Target):
                 break
             time.sleep(0.5)
         self.box, self.pw = edits["out"], edits["pw"]
+        buttons = [d for d in self.win.descendants(control_type="Button")
+                   if d.element_info.automation_id == "tool"]
+        self.tool = buttons[0] if buttons else None
 
     def focus(self):
         self.win.set_focus()

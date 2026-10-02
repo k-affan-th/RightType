@@ -221,7 +221,10 @@ pub unsafe fn on_message(msg: u32, wparam: usize) {
             }
         }
         crate::focus::WM_FOCUS_MOVED => {
-            crate::habits::on_focus();
+            // An app's own keyboard comes before the per-field guess.
+            if !crate::keyboards::on_focus() {
+                crate::habits::on_focus();
+            }
             crate::pwhint::on_focus();
         }
         WM_POWERBROADCAST if wparam == PBT_APMRESUMEAUTOMATIC || wparam == PBT_APMRESUMESUSPEND => {

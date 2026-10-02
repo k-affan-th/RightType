@@ -387,6 +387,26 @@ unsafe fn moves_to_another_field() -> bool {
     })
 }
 
+/// Does `el` show a text caret now (UI Automation's caret range is
+/// active)? A page or canvas that is only looked at has none.
+unsafe fn has_active_caret(el: &IUIAutomationElement) -> bool {
+    use windows::Win32::UI::Accessibility::{IUIAutomationTextPattern2, UIA_TextPattern2Id};
+    let Ok(pattern) = el.GetCurrentPatternAs::<IUIAutomationTextPattern2>(UIA_TextPattern2Id)
+    else {
+        return false;
+    };
+    let mut active = windows::Win32::Foundation::BOOL(0);
+    pattern.GetCaretRange(&mut active).is_ok() && active.as_bool()
+}
+
+/// Is focus on text being edited (an edit box, or a document with a
+/// caret), as opposed to a canvas, a button or a page only read?
+pub fn is_editing() -> bool {
+    EDITING.load(Ordering::Relaxed)
+}
+
+static EDITING: AtomicBool = AtomicBool::new(false);
+
 /// Rows of a list, menu, grid or tree: what a suggestion dropdown is made of.
 fn is_list_row(control_type: UIA_CONTROLTYPE_ID) -> bool {
     [
@@ -401,6 +421,7 @@ fn is_list_row(control_type: UIA_CONTROLTYPE_ID) -> bool {
 unsafe fn refresh_status() {
     let mut inline = false;
     let mut text_field = false;
+    let mut editing = false;
     let uia = uia_here();
     let status = UIA.with(|_| {
         uia.as_ref()
@@ -415,10 +436,13 @@ unsafe fn refresh_status() {
                     .map(|b| b.to_string())
                     .unwrap_or_default();
                 inline = is_inline_completing(&class, &id);
-                text_field = el.CurrentControlType().is_ok_and(|t| {
+                let kind = el.CurrentControlType().ok();
+                text_field = kind.is_some_and(|t| {
                     t == windows::Win32::UI::Accessibility::UIA_EditControlTypeId
                         || t == windows::Win32::UI::Accessibility::UIA_DocumentControlTypeId
                 });
+                editing = kind == Some(windows::Win32::UI::Accessibility::UIA_EditControlTypeId)
+                    || has_active_caret(&el);
                 let is_password = el.CurrentIsPassword().ok().map(|b| b.as_bool());
                 if is_password == Some(true) {
                     if let Ok(r) = el.CurrentBoundingRectangle() {
@@ -441,6 +465,7 @@ unsafe fn refresh_status() {
     ));
     FIELD_STATUS.store(status, Ordering::Relaxed);
     TEXT_FIELD.store(text_field, Ordering::Relaxed);
+    EDITING.store(editing, Ordering::Relaxed);
     INLINE_COMPLETION.store(inline, Ordering::Relaxed);
 }
 

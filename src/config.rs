@@ -92,6 +92,15 @@ pub struct Config {
     pub numlock: String,
     /// Insert in a text field: "off", "warn" or "fix" (held back).
     pub insert_key: String,
+    /// The keyboard each app starts with: "th", "en" or "en-outside-text".
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub app_keyboards: BTreeMap<String, String>,
+    /// The grave key (`) types its character instead of switching the
+    /// language (Windows' Thai keyboard setting).
+    pub grave_types: bool,
+    /// A language switch that comes with a shortcut (Ctrl/Alt + Shift + a
+    /// key) is undone.
+    pub guard_switch: bool,
     /// Put right common Thai misspellings (opt-in).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fix_spelling: bool,
@@ -166,6 +175,9 @@ impl Default for Config {
             password_hint: true,
             numlock: "warn".into(),
             insert_key: "warn".into(),
+            app_keyboards: BTreeMap::new(),
+            grave_types: false,
+            guard_switch: false,
             snippets: Vec::new(),
             sync_settings: false,
         }
@@ -217,6 +229,16 @@ pub fn apply(cfg: &Config) {
     crate::pwhint::set_enabled(cfg.password_hint);
     hook::set_numlock_mode(hook::KeyGuard::parse(&cfg.numlock));
     hook::set_insert_mode(hook::KeyGuard::parse(&cfg.insert_key));
+    crate::apps::set_all_keyboards(
+        cfg.app_keyboards
+            .iter()
+            .filter_map(|(exe, k)| {
+                righttype::per_app::AppKeyboard::parse(k).map(|k| (exe.to_lowercase(), k))
+            })
+            .collect(),
+    );
+    hook::set_grave_types(cfg.grave_types);
+    hook::set_guards_switch(cfg.guard_switch);
     hook::set_snippets(
         cfg.snippets
             .iter()
@@ -277,6 +299,8 @@ struct Shared {
     capslock_switches_language: bool,
     language: Option<String>,
     thai_layout: Option<String>,
+    #[serde(default)]
+    app_keyboards: BTreeMap<String, String>,
 }
 
 impl Shared {
@@ -292,6 +316,7 @@ impl Shared {
             capslock_switches_language: cfg.capslock_switches_language,
             language: cfg.language.clone(),
             thai_layout: cfg.thai_layout.clone(),
+            app_keyboards: cfg.app_keyboards.clone(),
         }
     }
 
@@ -306,6 +331,7 @@ impl Shared {
         cfg.capslock_switches_language = self.capslock_switches_language;
         cfg.language = self.language;
         cfg.thai_layout = self.thai_layout;
+        cfg.app_keyboards = self.app_keyboards;
     }
 }
 
@@ -459,6 +485,12 @@ fn snapshot() -> Config {
         password_hint: crate::pwhint::is_enabled(),
         numlock: hook::numlock_mode().name().into(),
         insert_key: hook::insert_mode().name().into(),
+        app_keyboards: crate::apps::all_keyboards()
+            .into_iter()
+            .map(|(exe, k)| (exe, k.name().to_string()))
+            .collect(),
+        grave_types: hook::grave_types(),
+        guard_switch: hook::guards_switch(),
         sync_settings: SYNC_SETTINGS.load(std::sync::atomic::Ordering::Relaxed),
         snippets: hook::snippets()
             .into_iter()

@@ -282,6 +282,15 @@ texts! {
     HkReset => "All hotkeys are back to the defaults.", "คืนปุ่มลัดทั้งหมดเป็นค่าเดิมแล้ว";
     PaletteHead => "↑↓ Enter · 1–9 · type to search · Esc", "↑↓ Enter · 1–9 · พิมพ์เพื่อค้นหา · Esc";
     PaletteFiltering => "Search: {text}", "ค้นหา: {text}";
+    ToastSwitchUndone => "The language switched with a shortcut: put back", "ภาษาเปลี่ยนไปพร้อมปุ่มลัด: เปลี่ยนกลับให้แล้ว";
+    PaletteGraveTypes => "Grave key (`) types ` instead of switching language", "ปุ่มตัวหนอน (`) พิมพ์ ` แทนการสลับภาษา";
+    PaletteGuardSwitch => "Undo a language switch that comes with a shortcut", "เปลี่ยนภาษากลับเมื่อสลับไปพร้อมปุ่มลัด";
+    PaletteAppKeyboard => "Keyboard in this app", "แป้นในแอปนี้";
+    KeyboardNone => "Not set", "ไม่กำหนด";
+    KeyboardThai => "Thai", "ไทย";
+    KeyboardEnglish => "English", "อังกฤษ";
+    KeyboardOutsideText => "English outside text", "อังกฤษนอกช่องพิมพ์";
+    ToastGraveTypes => "The grave key now types `: switch language with Alt+Shift, or turn on CapsLock switches language", "ปุ่มตัวหนอนพิมพ์ ` แล้ว: สลับภาษาด้วย Alt+Shift หรือเปิด CapsLock สลับภาษา";
     AboutWindowsAutocorrect => "Windows' own autocorrect for the keyboard is on (Settings → Time & language → Typing): it may change an English word again after RightType.", "การแก้คำอัตโนมัติของ Windows เปิดอยู่ (Settings → Time & language → Typing) อาจแก้คำอังกฤษซ้ำหลัง RightType";
     ToastGoogleDocsTip => "Google Docs shares its text only with screen-reader support on: Tools → Accessibility", "Google Docs ให้อ่านข้อความเมื่อเปิดการรองรับโปรแกรมอ่านหน้าจอ: เครื่องมือ → การช่วยเหลือพิเศษ";
     PalettePasswordHint => "TH / CAPS tag at password fields", "แท็ก TH / CAPS ที่ช่องรหัสผ่าน";

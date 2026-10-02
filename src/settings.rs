@@ -153,6 +153,8 @@ const APP_MODE_CHOICES: [AppMode; 5] = [
 enum RowSource {
     ForNow,
     Chosen,
+    /// No mode of its own, only a keyboard.
+    KeyboardOnly,
     Blocked,
     Default,
     Safety,
@@ -533,8 +535,9 @@ fn open_on(page: u8) {
         &[
             (tr(T::ColApp), 150),
             (tr(T::ColMode), 104),
+            (tr(T::ColKeyboard), 110),
             (tr(T::ColSetBy), 120),
-            (tr(T::ColWhere), 300),
+            (tr(T::ColWhere), 190),
         ],
         (X0, 102, CW, 232),
         b,
@@ -1105,6 +1108,16 @@ fn app_rows() -> Vec<AppRow> {
             },
         })
         .collect();
+    // Apps with only a keyboard of their own.
+    for exe in crate::apps::all_keyboards().into_keys() {
+        if !rows.iter().any(|r| r.exe == exe) {
+            rows.push(AppRow {
+                exe,
+                mode: Some(hook::mode().into()),
+                source: RowSource::KeyboardOnly,
+            });
+        }
+    }
     for exe in safety::custom_list() {
         rows.retain(|r| r.exe != exe);
         rows.push(AppRow {
@@ -1137,18 +1150,23 @@ fn fill_apps(win: &SettingsWindow, exe: Option<&str>) {
         .map(|r| {
             let mode = match (r.mode, r.source) {
                 (_, RowSource::Safety) => tr(T::ModeAlwaysOff).to_string(),
+                (_, RowSource::KeyboardOnly) => "—".to_string(),
                 (None, _) => tr(T::ModeBlocked).to_string(),
                 (Some(m), _) => tr(crate::tray::app_mode_name(m)).to_string(),
             };
             let by = tr(match r.source {
                 RowSource::ForNow => T::SetByForNow,
-                RowSource::Chosen => T::SetByYou,
+                RowSource::Chosen | RowSource::KeyboardOnly => T::SetByYou,
                 RowSource::Blocked => T::SetByYouBlocked,
                 RowSource::Default => T::SetByDefault,
                 RowSource::Safety => T::SetBySafety,
             });
             let place = paths.get(&r.exe).cloned().unwrap_or_else(|| "—".into());
-            vec![r.exe.clone(), mode, by.to_string(), place]
+            let keyboard = match crate::apps::keyboard(&r.exe) {
+                None => "—".to_string(),
+                k => tr(crate::palette::keyboard_name(k)).to_string(),
+            };
+            vec![r.exe.clone(), mode, keyboard, by.to_string(), place]
         })
         .collect();
     drop(paths);
@@ -1237,6 +1255,7 @@ fn remove_app(win: &SettingsWindow) {
         }
         RowSource::ForNow => crate::apps::clear_for_now(&row.exe),
         RowSource::Chosen => crate::apps::set(&row.exe, None),
+        RowSource::KeyboardOnly => {}
         RowSource::Blocked => {
             let rest: Vec<String> = safety::custom_list()
                 .into_iter()
@@ -1245,6 +1264,8 @@ fn remove_app(win: &SettingsWindow) {
             safety::set_custom_list(rest);
         }
     }
+    // Removing an app forgets its keyboard too.
+    crate::apps::set_keyboard(&row.exe, None);
     config::persist();
     fill_apps(win, None);
     win.surface.set_text(
@@ -1322,6 +1343,19 @@ fn app_menu(win: &Rc<SettingsWindow>, x: i32, y: i32) {
             format!("{mark}{}", tr(crate::tray::app_mode_name(*m)))
         })
         .collect();
+    // The keyboard the app starts with.
+    let keyboards: Vec<Option<righttype::per_app::AppKeyboard>> = std::iter::once(None)
+        .chain(righttype::per_app::AppKeyboard::ALL.map(Some))
+        .collect();
+    let current = crate::apps::keyboard(&row.exe);
+    for k in &keyboards {
+        let mark = if *k == current { "✓  " } else { "" };
+        labels.push(format!(
+            "{mark}{}: {}",
+            tr(T::ColKeyboard),
+            tr(crate::palette::keyboard_name(*k))
+        ));
+    }
     let keep = row.source == RowSource::ForNow;
     if keep {
         labels.push(tr(T::BtnKeepMode).to_string());
@@ -1342,7 +1376,13 @@ fn app_menu(win: &Rc<SettingsWindow>, x: i32, y: i32) {
         set_app_mode(win, APP_MODE_CHOICES[i]);
         return;
     }
-    let mut rest = i - n;
+    if i < n + keyboards.len() {
+        crate::apps::set_keyboard(&row.exe, keyboards[i - n]);
+        config::persist();
+        fill_apps(win, Some(&row.exe));
+        return;
+    }
+    let mut rest = i - n - keyboards.len();
     if keep {
         if rest == 0 {
             keep_app(win);

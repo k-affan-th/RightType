@@ -23,9 +23,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use righttype::per_app::{self, AppMode};
+use righttype::per_app::{self, AppKeyboard, AppMode};
 
 static MODES: Mutex<BTreeMap<String, AppMode>> = Mutex::new(BTreeMap::new());
+/// The keyboard each app starts with (Settings → Apps; saved).
+static KEYBOARDS: Mutex<BTreeMap<String, AppKeyboard>> = Mutex::new(BTreeMap::new());
 static TEMP: Mutex<BTreeMap<String, AppMode>> = Mutex::new(BTreeMap::new());
 static LAST_APP: Mutex<Option<String>> = Mutex::new(None);
 static REJECTIONS: Mutex<Option<HashMap<String, Vec<Instant>>>> = Mutex::new(None);
@@ -68,6 +70,33 @@ pub fn rows() -> Vec<(String, AppMode, Source)> {
         rows.insert(exe.clone(), (*mode, Source::ForNow));
     }
     rows.into_iter().map(|(e, (m, s))| (e, m, s)).collect()
+}
+
+/// Replace every app's keyboard (from the config).
+pub fn set_all_keyboards(keyboards: BTreeMap<String, AppKeyboard>) {
+    *KEYBOARDS.lock().unwrap() = keyboards;
+}
+
+pub fn all_keyboards() -> BTreeMap<String, AppKeyboard> {
+    KEYBOARDS.lock().unwrap().clone()
+}
+
+/// The keyboard `exe` starts with, if it has one.
+pub fn keyboard(exe: &str) -> Option<AppKeyboard> {
+    KEYBOARDS.lock().unwrap().get(exe).copied()
+}
+
+/// Set (or with `None`, remove) the keyboard `exe` starts with.
+pub fn set_keyboard(exe: &str, keyboard: Option<AppKeyboard>) {
+    let mut all = KEYBOARDS.lock().unwrap();
+    match keyboard {
+        Some(k) => {
+            all.insert(exe.to_string(), k);
+        }
+        None => {
+            all.remove(exe);
+        }
+    }
 }
 
 /// The mode for `exe` (lower case), if it has one of its own.

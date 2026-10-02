@@ -663,6 +663,38 @@ fn warn_once(last: &std::sync::Mutex<Option<Instant>>, tag: &str, message: right
     crate::overlay::show(righttype::i18n::tr(message));
 }
 
+/// The grave key types its character instead of switching the language.
+static GRAVE_TYPES: AtomicBool = AtomicBool::new(false);
+
+pub fn grave_types() -> bool {
+    GRAVE_TYPES.load(Ordering::Relaxed)
+}
+
+pub fn set_grave_types(on: bool) {
+    GRAVE_TYPES.store(on, Ordering::Relaxed);
+}
+
+/// A language switch that comes with a shortcut is undone.
+static GUARD_SWITCH: AtomicBool = AtomicBool::new(false);
+
+pub fn guards_switch() -> bool {
+    GUARD_SWITCH.load(Ordering::Relaxed)
+}
+
+pub fn set_guards_switch(on: bool) {
+    GUARD_SWITCH.store(on, Ordering::Relaxed);
+}
+
+/// A switch this soon after a Ctrl/Alt + Shift shortcut came with it.
+const SHORTCUT_SWITCH_WINDOW: Duration = Duration::from_millis(700);
+
+thread_local! {
+    /// The last Ctrl/Alt + Shift + key shortcut: when, and the keyboard
+    /// layout it was pressed on.
+    static SHORTCUT: std::cell::Cell<Option<(Instant, isize)>> =
+        const { std::cell::Cell::new(None) };
+}
+
 /// Ctrl+Backspace after Thai deletes one Thai word (Windows takes the whole
 /// run of Thai, which has no spaces between words). On by default.
 static DELETE_THAI_WORDS: AtomicBool = AtomicBool::new(true);
@@ -1295,6 +1327,10 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return true;
     }
     let action = hotkeys().action_for(vk, is_down(VK_CONTROL), is_down(VK_SHIFT), is_down(VK_MENU));
+    if !is_modifier(vk) && is_down(VK_SHIFT) && (is_down(VK_CONTROL) || is_down(VK_MENU)) {
+        let hkl = STATE.with(|s| s.borrow().last_hkl);
+        SHORTCUT.with(|c| c.set(Some((Instant::now(), hkl))));
+    }
 
     // The command palette is open and in front: its keys are its own
     // (arrows, Enter, 1–9, typing to search, Esc), so it works without a
@@ -1477,6 +1513,26 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         });
         return false;
     };
+
+    // The grave key types its character (`, ~, or _ % on the Thai keyboard)
+    // instead of switching the language, when the typist asked for that:
+    // Windows' Thai setup makes it the language key, and code and Markdown
+    // need it.
+    if vk == 0xC0 && grave_types() && action.is_none() && !is_down(VK_CONTROL) && !is_down(VK_MENU)
+    {
+        let us = if is_down(VK_SHIFT) { "~" } else { "`" };
+        let thai = policy::supported_layout_id(layout_id(effective_layout()))
+            == Some(policy::InputLayout::ThaiKedmanee);
+        let ch = if thai {
+            righttype::layout::en_to_th(us)
+        } else {
+            us.to_string()
+        };
+        STATE.with(|s| s.borrow_mut().buf.clear());
+        if inject::apply(0, &ch, None) {
+            return true;
+        }
+    }
 
     // Keys that change how the next keys type, without a sign of it: the
     // numeric keypad with NumLock off (it moves the caret instead of typing
@@ -3183,10 +3239,21 @@ unsafe fn sync_context() {
     });
 
     let focus_generation = crate::focus::generation();
+    let mut undo_switch = None;
     let window_changed = STATE.with(|s| {
         let mut st = s.borrow_mut();
         let changed = st.last_hwnd != hwnd_i;
         let lang_changed = st.last_hkl != hkl_i;
+        // A switch the typist did not mean: it came with a shortcut
+        // (Ctrl/Alt + Shift + a key), not on its own, and was not ours.
+        if lang_changed && st.pending_hkl.is_none() && st.last_hwnd == hwnd_i && guards_switch() {
+            let came_with = SHORTCUT.with(|c| c.get()).filter(|(at, before)| {
+                at.elapsed() < SHORTCUT_SWITCH_WINDOW && *before == st.last_hkl
+            });
+            if let Some((_, before)) = came_with {
+                undo_switch = policy::supported_layout_id(layout_id(HKL(before as *mut _)));
+            }
+        }
         let focus_changed = st.last_focus_generation != focus_generation;
         if changed || lang_changed || focus_changed {
             e2e_trace(format!(
@@ -3223,6 +3290,11 @@ unsafe fn sync_context() {
         }
         changed
     });
+    if let Some(layout) = undo_switch {
+        trace_note("language switch with a shortcut: undone");
+        activate_layout(layout);
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastSwitchUndone));
+    }
     // Re-evaluate the (heavier) app blacklist only when the window changed.
     if window_changed {
         let exe = safety::foreground_exe(hwnd);

@@ -290,6 +290,79 @@ def enter_guard(t):
     fs.run(t, "Auto again after the chat check", "l;ylfu ", "สวัสดี")
 
 
+def keyboard_of(hwnd):
+    """The keyboard layout (low word) of the window's thread."""
+    tid = user32.GetWindowThreadProcessId(hwnd, None)
+    return user32.GetKeyboardLayout(tid) & 0xFFFF
+
+
+def app_keyboards(t):
+    """2.2: the keyboard an app starts with; English outside text; the grave
+    key typing its character; a switch that came with a shortcut undone.
+    Notepad stands in for the app."""
+    write_sweep_config(keys='grave_types = true\nguard_switch = true\n',
+                       tables='[app_keyboards]\n"notepad.exe" = "en"\n\n')
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+        t.layout(HKL_TH)
+        # Away and back: Notepad comes to the front again.
+        user32.SetForegroundWindow(user32.FindWindowW("Shell_TrayWnd", None))
+        time.sleep(0.8)
+        t.focus()
+        time.sleep(1.0)
+        fs.check(t.name, "app keyboard: English on coming to the front",
+                 f"{keyboard_of(t.hwnd):04X}", "0409")
+        fs.run(t, "grave key types ` on the English keyboard", "", "`",
+               then=[lambda: tap(0xC0)])
+        fs.run(t, "grave key types _ on the Thai keyboard", "", "_",
+               layout=HKL_TH, then=[lambda: tap(0xC0)])
+        # A switch right after Ctrl+Shift+a key (not ours) is put back once a
+        # key shows RightType the new layout.
+        t.clear()
+        t.layout(HKL_EN)
+        def shortcut_then_switch():
+            tap(ord("X"), CTRL, SHIFT)
+            user32.PostMessageW(t.hwnd, 0x0050, 0, HKL_TH)
+            time.sleep(0.2)
+            tap(fs.SPACE)
+            time.sleep(0.6)
+        fs.check(t.name, "language switch with a shortcut is undone",
+                 traced(shortcut_then_switch, "language switch with a shortcut: undone"), "yes")
+    finally:
+        t.layout(HKL_EN)
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+    fs.run(t, "Auto again after the keyboard checks", "l;ylfu ", "สวัสดี")
+
+
+def outside_text(t):
+    """2.2: in an app set to "English outside text", the button (no caret)
+    gets English, and the text box the Thai keyboard back."""
+    if not getattr(t, "tool", None):
+        return
+    write_sweep_config(tables='[app_keyboards]\n"chrome.exe" = "en-outside-text"\n\n')
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+        t.layout(HKL_TH)
+        t.tool.set_focus()
+        time.sleep(1.0)
+        fs.check(t.name, "English outside text: a button gets English",
+                 f"{keyboard_of(t.hwnd):04X}", "0409")
+        t.box.set_focus()
+        time.sleep(1.0)
+        fs.check(t.name, "English outside text: the text box gets Thai back",
+                 f"{keyboard_of(t.hwnd):04X}", "041E")
+    finally:
+        t.layout(HKL_EN)
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+        t.focus()
+    fs.run(t, "Auto again after English outside text", "l;ylfu ", "สวัสดี")
+
+
 def code_mode(t):
     """2.1 Code mode, with the browser set to it: names stay, Thai keys
     typed for code come back as the English typed, Thai only in comments."""
@@ -1068,8 +1141,10 @@ def sweep(t):
         palette_text_tools(t)
     if t.name == "notepad":
         enter_guard(t)
+        app_keyboards(t)
     if t.name == "page":
         password_tag(t)
+        outside_text(t)
         full_screen_browser_still_works(t)
         palette_by_keyboard(t)
         code_mode(t)

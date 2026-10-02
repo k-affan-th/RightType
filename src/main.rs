@@ -35,6 +35,8 @@ mod inject;
 #[cfg(feature = "winos")]
 mod instance;
 #[cfg(feature = "winos")]
+mod keyboards;
+#[cfg(feature = "winos")]
 mod learn;
 #[cfg(feature = "winos")]
 mod manual;
