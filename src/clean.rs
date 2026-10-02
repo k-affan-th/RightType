@@ -189,43 +189,35 @@ fn open(mode: Mode) {
         p.bg,
         SETUP,
     );
-    // Running.
-    let unlock = s.button(
-        tr(T::BtnUnlock),
-        true,
-        (W - PAD - 160, FOOT_Y, 160, 40),
-        p.bg,
-        if mode == Mode::Clean { RUNNING } else { 99 },
-    );
-    let start_over = s.button(
-        tr(T::BtnStartOver),
+    // Running and done. Each mode makes only its own buttons (0: none):
+    // buttons of the other mode, even hidden, are still there for screen
+    // readers and UI Automation.
+    let clean = mode == Mode::Clean;
+    let make = |on: bool, label: T, primary: bool, rc: (i32, i32, i32, i32), page: u8| {
+        if on {
+            s.button(tr(label), primary, rc, p.bg, page)
+        } else {
+            0
+        }
+    };
+    let right = (W - PAD - 160, FOOT_Y, 160, 40);
+    let unlock = make(clean, T::BtnUnlock, true, right, RUNNING);
+    let start_over = make(
+        !clean,
+        T::BtnStartOver,
         false,
         (W - PAD - 160 - 12 - 140, FOOT_Y, 140, 40),
-        p.bg,
-        if mode == Mode::Test { RUNNING } else { 99 },
+        RUNNING,
     );
-    let close_id = s.button(
-        tr(T::BtnClose),
-        true,
-        (W - PAD - 160, FOOT_Y, 160, 40),
-        p.bg,
-        if mode == Mode::Test { RUNNING } else { 99 },
-    );
-    // Done (cleaning).
-    let test_keys = s.button(
-        tr(T::BtnTestKeys),
+    let close_id = make(!clean, T::BtnClose, true, right, RUNNING);
+    let test_keys = make(
+        clean,
+        T::BtnTestKeys,
         false,
         (W - PAD - 160 - 12 - 160, FOOT_Y, 160, 40),
-        p.bg,
         DONE,
     );
-    let close_done = s.button(
-        tr(T::BtnClose),
-        true,
-        (W - PAD - 160, FOOT_Y, 160, 40),
-        p.bg,
-        DONE,
-    );
+    let close_done = make(clean, T::BtnClose, true, right, DONE);
     s.label(
         tr(if mode == Mode::Clean {
             T::CleanLimits

@@ -25,7 +25,9 @@ use windows::Win32::UI::Accessibility::{
     UIA_ListItemControlTypeId, UIA_MenuItemControlTypeId, UIA_TreeItemControlTypeId,
     UnhookWinEvent, HWINEVENTHOOK, UIA_CONTROLTYPE_ID,
 };
-use windows::Win32::UI::WindowsAndMessaging::{EVENT_OBJECT_FOCUS, WINEVENT_OUTOFCONTEXT};
+use windows::Win32::UI::WindowsAndMessaging::{
+    EVENT_OBJECT_FOCUS, EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT,
+};
 
 const FIELD_UNKNOWN: u8 = 0;
 const FIELD_SAFE: u8 = 1;
@@ -197,6 +199,36 @@ pub unsafe fn arm() {
         WINEVENT_OUTOFCONTEXT,
     );
     HOOK.with(|h| *h.borrow_mut() = Some(hook));
+    // Another window to the front: its app's own keyboard applies again,
+    // whether or not its field changes (CI: Notepad back from the taskbar
+    // kept the field it had, so no focus move was seen).
+    let fg = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND,
+        EVENT_SYSTEM_FOREGROUND,
+        None,
+        Some(on_foreground),
+        0,
+        0,
+        WINEVENT_OUTOFCONTEXT,
+    );
+    FG_HOOK.with(|h| *h.borrow_mut() = Some(fg));
+}
+
+thread_local! {
+    static FG_HOOK: std::cell::RefCell<Option<HWINEVENTHOOK>> = const { std::cell::RefCell::new(None) };
+}
+
+unsafe extern "system" fn on_foreground(
+    _hook: HWINEVENTHOOK,
+    _event: u32,
+    hwnd: HWND,
+    _idobj: i32,
+    _idchild: i32,
+    _thread: u32,
+    _time: u32,
+) {
+    crate::hook::e2e_trace(format!("window to the front: {:#x}", hwnd.0 as usize));
+    notify(WM_APP_TO_FRONT);
 }
 
 /// Where the focus worker reports "the caret moved to another field", so the
@@ -208,8 +240,6 @@ pub const WM_FOCUS_MOVED: u32 = 0x8000 + 0x551;
 /// Posted to [`NOTIFY_HWND`] when another window came to the front, even
 /// to the field it had before (an app's own keyboard applies then).
 pub const WM_APP_TO_FRONT: u32 = 0x8000 + 0x552;
-/// The foreground window when the focus worker last looked.
-static LAST_FOREGROUND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 
 fn notify(msg: u32) {
     let hwnd = NOTIFY_HWND.load(Ordering::Acquire);
@@ -330,6 +360,11 @@ pub unsafe fn disarm() {
             let _ = UnhookWinEvent(hook);
         }
     });
+    FG_HOOK.with(|h| {
+        if let Some(hook) = h.borrow_mut().take() {
+            let _ = UnhookWinEvent(hook);
+        }
+    });
 }
 
 unsafe extern "system" fn on_focus(
@@ -374,13 +409,6 @@ unsafe fn on_focus_inner() {
         "focus event handled in {} ms (moved={moved})",
         started.elapsed().as_millis()
     ));
-    // Back to an app whose field still has focus is no move to another
-    // field, but the app came to the front (CI: Notepad, back from the
-    // taskbar, kept the Thai keyboard set for it as English).
-    let foreground = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize;
-    if LAST_FOREGROUND.swap(foreground, Ordering::AcqRel) != foreground {
-        notify(WM_APP_TO_FRONT);
-    }
     if !moved {
         return;
     }
