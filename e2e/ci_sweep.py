@@ -1304,9 +1304,19 @@ def report_has_no_typed_text(target, results):
                     if re.search(rf"(?<![\w\u0E00-\u0E7F]){re.escape(w)}(?![\w\u0E00-\u0E7F])", report))
     fs.check(target, "problem report has no typed text", " ".join(leaked), "")
     # How long the hook took per key in this target (2.3 P2: numbers only).
+    # Every wait in the hook draws on a 200 ms budget per key: 250 ms is the
+    # line no key may cross (Windows passes keys on by itself after 300).
+    import re
+    slowest = None
     for line in report.splitlines():
         if line.startswith(("keyboard hook time", "of it waiting")):
             print(f"[{target}] {line}", flush=True)
+        m = re.match(r"keyboard hook time: .*slowest ([0-9.]+) ms", line)
+        if m:
+            slowest = float(m.group(1))
+    if slowest is not None:
+        fs.check(target, "keyboard hook stays under 250 ms per key",
+                 "yes" if slowest < 250 else f"slowest {slowest} ms", "yes")
     fs.check(target, "problem report records word ends",
              "yes" if "word end" in report else "no", "yes")
 

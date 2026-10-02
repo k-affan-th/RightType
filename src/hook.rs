@@ -1210,7 +1210,13 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
             }
             let done = Done(nested);
             let started = Instant::now();
+            if !nested {
+                HOOK_DEADLINE.with(|d| d.set(Some(started + HOOK_BUDGET)));
+            }
             let swallow = process(wparam.0 as u32, kb);
+            if !nested {
+                HOOK_DEADLINE.with(|d| d.set(None));
+            }
             drop(done);
             if !nested {
                 righttype::timing::HOOK.record(started.elapsed().as_micros() as u64);
@@ -1235,6 +1241,26 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         }
     }
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
+/// The most one key may spend in the hook, waits included. Windows lets a
+/// key through by itself when the hook takes longer than it allows
+/// (`LowLevelHooksTimeout`, 300 ms or more) and removes a hook that does so
+/// often; every wait on the way (focus answers, text boxes, the pause
+/// between deletions and text) takes from this budget, so their sum stays
+/// inside it.
+const HOOK_BUDGET: Duration = Duration::from_millis(200);
+
+thread_local! {
+    /// When the key being handled must be done by.
+    static HOOK_DEADLINE: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+}
+
+/// How much of the key's [`HOOK_BUDGET`] is left; `max` outside the hook.
+pub fn budget_left(max: Duration) -> Duration {
+    HOOK_DEADLINE.with(|d| d.get()).map_or(max, |at| {
+        at.saturating_duration_since(Instant::now()).min(max)
+    })
 }
 
 thread_local! {

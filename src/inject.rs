@@ -76,6 +76,9 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
         let mut replaced =
             tb.replace_before_caret(backspaces, &whole, context.as_deref().map(|s| s.as_str()));
         for _ in 0..CATCH_UP_TRIES {
+            if crate::hook::budget_left(CATCH_UP_WAIT * 4) < CATCH_UP_WAIT * 4 {
+                break;
+            }
             if !matches!(replaced, Err(crate::focus::ReplaceError::Untouched(why)) if why == crate::focus::NOT_CAUGHT_UP)
             {
                 break;
@@ -180,7 +183,8 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     let (first, rest) = inputs.split_at(split.unwrap_or(inputs.len()));
     let mut sent = SendInput(first, size_of::<INPUT>() as i32) as usize;
     if sent == first.len() && !rest.is_empty() {
-        std::thread::sleep(gap);
+        // The pause, within what is left of the key's time in the hook.
+        std::thread::sleep(crate::hook::budget_left(gap));
         sent += SendInput(rest, size_of::<INPUT>() as i32) as usize;
     }
     INJECTING.store(false, Ordering::SeqCst);

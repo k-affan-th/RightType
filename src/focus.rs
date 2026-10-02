@@ -245,6 +245,7 @@ const SETTLE_LIMIT: std::time::Duration = std::time::Duration::from_millis(150);
 /// word of a field came out wrong (CI). Normally a few milliseconds; a hung
 /// app costs `max` per key, and its keys go nowhere meanwhile anyway.
 pub fn settle(max: std::time::Duration) {
+    let max = crate::hook::budget_left(max);
     let asked = ASKED.load(Ordering::Acquire);
     if ANSWERED.load(Ordering::Acquire) >= asked {
         return;
@@ -735,6 +736,12 @@ impl TextBox {
     }
 
     fn ask_within(&self, msg: u32, w: usize, l: isize, ms: u32) -> Option<usize> {
+        // Inside the keyboard hook, never past the key's budget.
+        let ms = crate::hook::budget_left(std::time::Duration::from_millis(ms as u64)).as_millis()
+            as u32;
+        if ms == 0 {
+            return None;
+        }
         // While this waits, Windows may hand the keyboard hook the next key
         // on this thread (see `waiting_on_app`).
         struct Waiting(std::time::Instant);
