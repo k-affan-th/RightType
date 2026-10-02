@@ -2723,6 +2723,18 @@ where
     if matches!(reading, policy::Reading::Thai(_)) && STATE.with(|s| s.borrow().seed.guarding()) {
         reading = policy::Reading::AsTyped;
     }
+    // A snippet's trigger being typed stays as typed, to be found at its
+    // boundary (`;today` spells Thai keys).
+    if matches!(reading, policy::Reading::Thai(_)) && !holding {
+        let starts = policy::supported_layout_id(layout_id(effective_layout())).is_some_and(|l| {
+            SNIPPETS
+                .read()
+                .is_ok_and(|list| righttype::snippets::starts_a_trigger(&list, &run, l))
+        });
+        if starts {
+            reading = policy::Reading::AsTyped;
+        }
+    }
     e2e_trace(format!(
         "reconcile run={run:?} holding={holding} -> {reading:?}"
     ));

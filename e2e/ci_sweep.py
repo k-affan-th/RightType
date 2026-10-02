@@ -217,6 +217,9 @@ def enter_guard(t):
         write_sweep_config()
         CURRENT[0] = fs.start_rt()
         t.focus()
+    # A fresh RightType: give the problem report (checked after the sweep)
+    # a word to record again.
+    fs.run(t, "Auto again after the chat check", "l;ylfu ", "สวัสดี")
 
 
 def code_mode(t):

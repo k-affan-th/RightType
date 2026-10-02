@@ -183,7 +183,15 @@ class Chrome(Target):
         self.app, self.httpd = lib.start_edge(lib.HERE / "target.html", lib.CHROME_EXE)
         self.win = self.app.top_window()
         self.hwnd = self.win.handle
-        edits = {d.element_info.automation_id: d for d in self.win.descendants(control_type="Edit")}
+        # The page's fields can take a while to reach UI Automation on a busy
+        # runner (CI: KeyError 'out' right after the page loaded).
+        edits = {}
+        for _ in range(30):
+            edits = {d.element_info.automation_id: d
+                     for d in self.win.descendants(control_type="Edit")}
+            if "out" in edits and "pw" in edits:
+                break
+            time.sleep(0.5)
         self.box, self.pw = edits["out"], edits["pw"]
 
     def focus(self):

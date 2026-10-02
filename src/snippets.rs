@@ -119,6 +119,28 @@ pub fn find<'a>(list: &'a [Snippet], typed: &str, layout: InputLayout) -> Option
     })
 }
 
+/// Is `typed` (the word so far, as on screen with `layout` on) the start of
+/// some snippet's trigger? Then it must stay as typed while it is being
+/// typed: `;today` would otherwise be shown as Thai (`วะนก…`) before its
+/// space.
+pub fn starts_a_trigger(list: &[Snippet], typed: &str, layout: InputLayout) -> bool {
+    if typed.is_empty() {
+        return false;
+    }
+    let keys = match layout {
+        InputLayout::ThaiKedmanee => th_to_en(typed),
+        InputLayout::UsQwerty => typed.to_string(),
+    };
+    list.iter().any(|s| match s.scope {
+        Scope::Thai => {
+            layout == InputLayout::ThaiKedmanee
+                && (s.trigger.starts_with(typed) || en_to_th(&s.trigger).starts_with(typed))
+        }
+        Scope::English => layout == InputLayout::UsQwerty && as_keys(&s.trigger).starts_with(typed),
+        Scope::Either => as_keys(&s.trigger).starts_with(&keys),
+    })
+}
+
 /// The moment a snippet is typed, for its date and time fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Now {
@@ -330,5 +352,20 @@ mod tests {
             assert_eq!(fill(th, &ex), *example, "{th}");
             assert_eq!(fill(en, &ex), *example, "{en}");
         }
+    }
+
+    #[test]
+    fn a_trigger_being_typed_is_noticed() {
+        let list = vec![check(";today", "{iso}", Scope::Either).unwrap()];
+        assert!(starts_a_trigger(&list, ";tod", InputLayout::UsQwerty));
+        assert!(starts_a_trigger(&list, ";today", InputLayout::UsQwerty));
+        assert!(starts_a_trigger(
+            &list,
+            &en_to_th(";tod"),
+            InputLayout::ThaiKedmanee
+        ));
+        assert!(!starts_a_trigger(&list, ";x", InputLayout::UsQwerty));
+        assert!(!starts_a_trigger(&list, "l;ylfu", InputLayout::UsQwerty));
+        assert!(!starts_a_trigger(&list, "", InputLayout::UsQwerty));
     }
 }
