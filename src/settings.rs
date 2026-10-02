@@ -92,7 +92,7 @@ struct Ids {
     /// Puts a date or time field into the text.
     snip_date: u16,
     /// Thai, English, either.
-    snip_scope: [u16; 3],
+    snip_scope: [u16; 4],
     snip_save: u16,
     snip_remove: u16,
     snip_status: u16,
@@ -485,15 +485,15 @@ fn open_on(page: u8) {
         p.bg,
         n,
     );
-    let mut snip_scope = [0u16; 3];
-    for (i, key) in [T::ScopeThai, T::ScopeEnglish, T::ScopeEither]
+    let mut snip_scope = [0u16; 4];
+    for (i, key) in [T::ScopeThai, T::ScopeEnglish, T::ScopeEither, T::ScopeTypo]
         .iter()
         .enumerate()
     {
         snip_scope[i] = s.segment(
             tr(*key),
             i == 0,
-            (X0 + 4 + i as i32 * 104, 426, 102, 32),
+            (X0 + 4 + i as i32 * 72, 426, 70, 32),
             p.inset,
             n,
         );
@@ -501,14 +501,14 @@ fn open_on(page: u8) {
     let snip_save = s.button(
         tr(T::BtnSaveSnippet),
         true,
-        (X0 + CW - 232, 424, 118, 34),
+        (X0 + CW - 206, 424, 106, 34),
         p.bg,
         n,
     );
     let snip_remove = s.button(
         tr(T::BtnRemoveApp),
         false,
-        (X0 + CW - 108, 424, 108, 34),
+        (X0 + CW - 94, 424, 94, 34),
         p.bg,
         n,
     );
@@ -516,7 +516,7 @@ fn open_on(page: u8) {
     s.label(
         tr(T::SnippetsNote),
         TextStyle::Small,
-        (X0, 492, CW, 60),
+        (X0, 492, CW, 110),
         p.bg,
         n,
     );
@@ -986,10 +986,11 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
 
 // --------------------------------------------------------- Snippets page
 
-const SCOPES: [righttype::snippets::Scope; 3] = [
+const SCOPES: [righttype::snippets::Scope; 4] = [
     righttype::snippets::Scope::Thai,
     righttype::snippets::Scope::English,
     righttype::snippets::Scope::Either,
+    righttype::snippets::Scope::Typo,
 ];
 
 /// Fill the Snippets table, selecting the snippet `trigger` when given.
@@ -1003,6 +1004,7 @@ fn fill_snippets(win: &SettingsWindow, trigger: Option<&str>) {
                 righttype::snippets::Scope::Thai => T::ScopeThai,
                 righttype::snippets::Scope::English => T::ScopeEnglish,
                 righttype::snippets::Scope::Either => T::ScopeEither,
+                righttype::snippets::Scope::Typo => T::ScopeTypo,
             });
             vec![sn.trigger.clone(), text, scope.to_string()]
         })
@@ -1035,7 +1037,7 @@ fn snippet_table_event(win: &Rc<SettingsWindow>, event: ui::TableEvent) {
 fn save_snippet(win: &SettingsWindow) {
     use righttype::snippets::{check, Problem, MAX_SNIPPETS};
     let s = &win.surface;
-    let scope = (0..3)
+    let scope = (0..SCOPES.len())
         .find(|&k| s.checked(win.ids.snip_scope[k]))
         .map_or(righttype::snippets::Scope::Either, |k| SCOPES[k]);
     let mut text = s.text_of(win.ids.snip_text);

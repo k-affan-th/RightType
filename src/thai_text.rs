@@ -343,6 +343,96 @@ pub fn baht_words(input: &str) -> String {
     out
 }
 
+/// Spacing around Thai marks and brackets, as the Royal Institute's rules
+/// for spacing put it:
+///
+/// - mai yamok `ๆ` stands apart from its word, with a space after it
+///   (`เด็กๆเล่น` → `เด็ก ๆ เล่น`);
+/// - `ฯลฯ` stands apart on both sides;
+/// - paiyan noi `ฯ` (an abbreviation) joins its word (`กรุงเทพ ฯ` →
+///   `กรุงเทพฯ`);
+/// - brackets stand apart outside and hug their text inside
+///   (`คำ(อธิบาย)ต่อ` → `คำ (อธิบาย) ต่อ`);
+/// - spaces run together become one (not at the start of a line).
+///
+/// Only spaces are added or taken away; no character is changed.
+pub fn tidy_spacing(input: &str) -> String {
+    let thai = |c: char| ('\u{0E01}'..='\u{0E5B}').contains(&c);
+    let chars: Vec<char> = input.chars().collect();
+    let mut out: Vec<char> = Vec::with_capacity(chars.len() + 8);
+    let space_before = |out: &mut Vec<char>| {
+        if out
+            .last()
+            .is_some_and(|&c| c != ' ' && c != '\n' && c != '\t')
+        {
+            out.push(' ');
+        }
+    };
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let next = chars.get(i + 1).copied();
+        // ฯลฯ: apart on both sides.
+        if c == 'ฯ' && next == Some('ล') && chars.get(i + 2) == Some(&'ฯ') {
+            space_before(&mut out);
+            out.extend(['ฯ', 'ล', 'ฯ']);
+            i += 3;
+            if chars.get(i).is_some_and(|&n| thai(n) || n == '(') {
+                out.push(' ');
+            }
+            continue;
+        }
+        match c {
+            'ๆ' => {
+                space_before(&mut out);
+                out.push('ๆ');
+                if next.is_some_and(|n| thai(n) || n == '(') {
+                    out.push(' ');
+                }
+            }
+            'ฯ' => {
+                // Joins the word before it.
+                while out.last() == Some(&' ') {
+                    out.pop();
+                }
+                out.push('ฯ');
+            }
+            '(' => {
+                if out.last().is_some_and(|&p| thai(p)) {
+                    out.push(' ');
+                }
+                out.push('(');
+                while chars.get(i + 1) == Some(&' ') {
+                    i += 1;
+                }
+            }
+            ')' => {
+                while out.last() == Some(&' ') {
+                    out.pop();
+                }
+                out.push(')');
+                if next.is_some_and(thai) {
+                    out.push(' ');
+                }
+            }
+            ' ' => {
+                // Indentation: only spaces so far on this line.
+                let line_start = out
+                    .iter()
+                    .rev()
+                    .take_while(|&&p| p != '\n')
+                    .all(|&p| p == ' ');
+                if line_start || out.last() != Some(&' ') {
+                    out.push(' ');
+                }
+            }
+            _ => out.push(c),
+        }
+        i += 1;
+    }
+    out.into_iter().collect()
+}
+
 /// Characters the palette can type, found by name in either language:
 /// (character, Thai name, English name).
 pub const SYMBOLS: &[(&str, &str, &str)] = &[
@@ -451,5 +541,27 @@ mod tests {
         assert_eq!(baht_words("9.999"), "สิบบาทถ้วน");
         assert_eq!(baht_words("0"), "ศูนย์บาทถ้วน");
         assert_eq!(baht_words("abc"), "abc");
+    }
+
+    #[test]
+    fn thai_spacing_follows_the_royal_institute() {
+        assert_eq!(tidy_spacing("เด็กๆเล่น"), "เด็ก ๆ เล่น");
+        assert_eq!(tidy_spacing("เด็ก ๆ เล่น"), "เด็ก ๆ เล่น");
+        assert_eq!(tidy_spacing("ผลไม้ฯลฯ"), "ผลไม้ ฯลฯ");
+        assert_eq!(tidy_spacing("ผลไม้ฯลฯและ"), "ผลไม้ ฯลฯ และ");
+        assert_eq!(tidy_spacing("กรุงเทพ ฯ"), "กรุงเทพฯ");
+        assert_eq!(tidy_spacing("คำ(อธิบาย)ต่อ"), "คำ (อธิบาย) ต่อ");
+        assert_eq!(tidy_spacing("คำ ( อธิบาย ) ต่อ"), "คำ (อธิบาย) ต่อ");
+        assert_eq!(tidy_spacing("หนึ่ง   สอง"), "หนึ่ง สอง");
+        // English, indentation and line ends are left alone.
+        assert_eq!(tidy_spacing("f(x) = y"), "f(x) = y");
+        assert_eq!(tidy_spacing("  ย่อหน้า\n  ต่อ"), "  ย่อหน้า\n  ต่อ");
+        assert_eq!(tidy_spacing("จบ ๆ"), "จบ ๆ");
+        // Only spaces move.
+        for s in ["เด็กๆ(ฯลฯ)กรุงเทพ ฯ  x", "a ( b ) c", "ๆๆ ฯฯ"]
+        {
+            let keep = |t: &str| t.chars().filter(|c| *c != ' ').collect::<String>();
+            assert_eq!(keep(&tidy_spacing(s)), keep(s), "{s}");
+        }
     }
 }

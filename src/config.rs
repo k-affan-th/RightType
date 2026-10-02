@@ -101,6 +101,8 @@ pub struct Config {
     /// A language switch that comes with a shortcut (Ctrl/Alt + Shift + a
     /// key) is undone.
     pub guard_switch: bool,
+    /// Offer the rest of a long Thai word, for Tab (opt-in).
+    pub complete_thai: bool,
     /// Put right common Thai misspellings (opt-in).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fix_spelling: bool,
@@ -178,6 +180,7 @@ impl Default for Config {
             app_keyboards: BTreeMap::new(),
             grave_types: false,
             guard_switch: false,
+            complete_thai: false,
             snippets: Vec::new(),
             sync_settings: false,
         }
@@ -239,6 +242,7 @@ pub fn apply(cfg: &Config) {
     );
     hook::set_grave_types(cfg.grave_types);
     hook::set_guards_switch(cfg.guard_switch);
+    hook::set_completes_thai(cfg.complete_thai);
     hook::set_snippets(
         cfg.snippets
             .iter()
@@ -491,6 +495,7 @@ fn snapshot() -> Config {
             .collect(),
         grave_types: hook::grave_types(),
         guard_switch: hook::guards_switch(),
+        complete_thai: hook::completes_thai(),
         sync_settings: SYNC_SETTINGS.load(std::sync::atomic::Ordering::Relaxed),
         snippets: hook::snippets()
             .into_iter()

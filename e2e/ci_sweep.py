@@ -91,6 +91,11 @@ scope = "either"
 trigger = ";today"
 text = "{iso}"
 scope = "either"
+
+[[snippets]]
+trigger = "teh"
+text = "the"
+scope = "typo"
 '''
 
 
@@ -101,7 +106,8 @@ def write_sweep_config(tables="", keys=""):
     refused)."""
     fs.write_config(mode="auto", learn=False)
     path = fs.DATA / "config.toml"
-    path.write_text(path.read_text(encoding="utf-8") + "fix_spelling = true\n" + keys + "\n"
+    path.write_text(path.read_text(encoding="utf-8") + "fix_spelling = true\ncomplete_thai = true\n"
+                    + keys + "\n"
                     + tables + SNIPPET_CONFIG, encoding="utf-8")
 
 
@@ -235,6 +241,27 @@ def password_tag(t):
     fs.check(t.name, "TH tag at a password field", traced(steps, "password tag: TH"), "yes")
     t.layout(HKL_EN)
     t.focus()
+
+
+def thai_text_tools(t):
+    """2.2: Thai spacing from the palette; "why?" for the last word; a
+    misspelling of one's own put right; the rest of a long Thai word taken
+    with Tab."""
+    fs.run(t, "own misspelling put right", "teh ", "the")
+    fs.run(t, "own misspelling put back by Backspace right after", "teh ", "teh",
+           then=[lambda: tap(BACK)])
+    fs.check(t.name, "why? says an English word was left as typed",
+             traced(lambda: (fs.type_keys("hello "), time.sleep(0.5),
+                             palette_search("why")()), "why: KeptEnglish"), "yes")
+    fs.run(t, "rest of a long Thai word with Tab", "xit=kly,ry", "ประชาสัมพันธ์",
+           layout=HKL_TH, then=[lambda: tap(0x09)])
+    fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
+    try:
+        fs.run(t, "Thai spacing from the palette", "gfHdqg]jo", "เด็ก ๆ เล่น",
+               layout=HKL_TH, then=[select_line, lambda: t.layout(HKL_EN),
+                                    palette_search("spacing")])
+    finally:
+        fs.set_mode("auto")
 
 
 def thai_word_delete(t):
@@ -1137,6 +1164,7 @@ def sweep(t):
     snippets_and_spelling(t)
     if t.name in ("page", "notepad"):
         keyboard_states(t)
+        thai_text_tools(t)
         thai_word_delete(t)
         palette_text_tools(t)
     if t.name == "notepad":

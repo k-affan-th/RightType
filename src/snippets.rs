@@ -22,6 +22,11 @@ pub enum Scope {
     Thai,
     English,
     Either,
+    /// A misspelling of the typist's own: the trigger is the word as they
+    /// mistype it, the text the right spelling. Fixed like the built-in
+    /// misspellings (Auto only, its own colour, Backspace right after puts
+    /// it back), on either keyboard.
+    Typo,
 }
 
 impl Scope {
@@ -30,6 +35,7 @@ impl Scope {
             Scope::Thai => "thai",
             Scope::English => "english",
             Scope::Either => "either",
+            Scope::Typo => "typo",
         }
     }
 
@@ -38,6 +44,7 @@ impl Scope {
             "thai" => Some(Scope::Thai),
             "english" => Some(Scope::English),
             "either" | "both" => Some(Scope::Either),
+            "typo" | "misspelling" | "คำผิด" => Some(Scope::Typo),
             _ => None,
         }
     }
@@ -116,6 +123,7 @@ pub fn find<'a>(list: &'a [Snippet], typed: &str, layout: InputLayout) -> Option
         }
         Scope::English => layout == InputLayout::UsQwerty && as_keys(&s.trigger) == typed,
         Scope::Either => as_keys(&s.trigger) == keys,
+        Scope::Typo => false,
     })
 }
 
@@ -138,7 +146,21 @@ pub fn starts_a_trigger(list: &[Snippet], typed: &str, layout: InputLayout) -> b
         }
         Scope::English => layout == InputLayout::UsQwerty && as_keys(&s.trigger).starts_with(typed),
         Scope::Either => as_keys(&s.trigger).starts_with(&keys),
+        Scope::Typo => false,
     })
+}
+
+/// The right spelling for `typed`, if it is one of the typist's own
+/// misspellings ([`Scope::Typo`]): the word exactly as it shows (English
+/// in any case).
+pub fn find_typo<'a>(list: &'a [Snippet], typed: &str) -> Option<&'a str> {
+    list.iter()
+        .find(|s| {
+            s.scope == Scope::Typo
+                && (s.trigger == typed
+                    || (s.trigger.is_ascii() && s.trigger.eq_ignore_ascii_case(typed)))
+        })
+        .map(|s| s.text.as_str())
 }
 
 /// The moment a snippet is typed, for its date and time fields.
@@ -367,5 +389,18 @@ mod tests {
         assert!(!starts_a_trigger(&list, ";x", InputLayout::UsQwerty));
         assert!(!starts_a_trigger(&list, "l;ylfu", InputLayout::UsQwerty));
         assert!(!starts_a_trigger(&list, "", InputLayout::UsQwerty));
+    }
+
+    #[test]
+    fn own_misspellings_are_found_as_typed() {
+        let list = vec![
+            check("อนุญาติ", "อนุญาต", Scope::Typo).unwrap(),
+            check("teh", "the", Scope::Typo).unwrap(),
+        ];
+        assert_eq!(find_typo(&list, "อนุญาติ"), Some("อนุญาต"));
+        assert_eq!(find_typo(&list, "Teh"), Some("the"));
+        assert_eq!(find_typo(&list, "อนุญาต"), None);
+        // Not snippets: never expanded as one.
+        assert!(find(&list, "teh", InputLayout::UsQwerty).is_none());
     }
 }

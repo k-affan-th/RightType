@@ -48,6 +48,8 @@ enum TransformKind {
     Repair,
     /// Thai in its standard form (`righttype::thai_text::normalize`).
     Normalize,
+    /// Thai spacing (`righttype::thai_text::tidy_spacing`).
+    Spacing,
     /// Years พ.ศ. ↔ ค.ศ.
     Era,
     NumberWords,
@@ -118,6 +120,10 @@ enum Command {
     AppKeyboard,
     GraveTypes,
     GuardSwitch,
+    /// Why the last word was fixed or left as typed.
+    Why,
+    /// Offer the rest of a long Thai word for Tab, on or off.
+    CompleteThai,
     /// English prefix words written with their hyphen, on or off.
     Hyphens,
 }
@@ -195,6 +201,7 @@ impl Command {
             Command::Transform(kind) => match kind {
                 TransformKind::Repair => '\u{E8AB}',    // Switch
                 TransformKind::Normalize => '\u{E8D2}', // Font
+                TransformKind::Spacing => '\u{E8E4}',   // AlignLeft
                 TransformKind::Era => '\u{E787}',       // Calendar
                 TransformKind::NumberWords | TransformKind::BahtWords => '\u{E8EF}', // Calculator
                 TransformKind::Digits => '\u{E8EF}',    // Calculator
@@ -226,6 +233,8 @@ impl Command {
             Command::NumLock | Command::InsertKey | Command::AppKeyboard => '\u{E765}', // KeyboardClassic
             Command::GraveTypes => '\u{E8C8}',                                          // Copy
             Command::GuardSwitch => '\u{E72E}',                                         // Lock
+            Command::Why => '\u{E946}',                                                 // Info
+            Command::CompleteThai => '\u{E8C8}',                                        // Copy
             Command::Spelling => '\u{E82D}',     // Dictionary
             Command::Hyphens => '\u{E738}',      // Remove (a dash)
             Command::CapsSwitch => '\u{E72E}',   // Lock
@@ -747,6 +756,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
         for (key, kind) in [
             (T::PaletteRepairSelection, TransformKind::Repair),
             (T::PaletteNormalize, TransformKind::Normalize),
+            (T::PaletteSpacing, TransformKind::Spacing),
             (T::PaletteEra, TransformKind::Era),
             (T::PaletteNumberWords, TransformKind::NumberWords),
             (T::PaletteBahtWords, TransformKind::BahtWords),
@@ -835,6 +845,12 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             );
         }
     }
+    add(
+        Section::Here,
+        tr(T::PaletteWhy).to_string(),
+        "",
+        Command::Why,
+    );
     if let Some(app) = app {
         add(
             Section::Here,
@@ -907,6 +923,11 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             T::PaletteGraveTypes,
             hook::grave_types(),
             Command::GraveTypes,
+        ),
+        (
+            T::PaletteCompleteThai,
+            hook::completes_thai(),
+            Command::CompleteThai,
         ),
         (
             T::PaletteGuardSwitch,
@@ -1301,6 +1322,7 @@ fn run(command: Command, app: Option<&str>) {
             let f: fn(&str) -> String = match kind {
                 TransformKind::Repair => repair_words,
                 TransformKind::Normalize => righttype::thai_text::normalize,
+                TransformKind::Spacing => righttype::thai_text::tidy_spacing,
                 TransformKind::Era => righttype::thai_text::swap_era,
                 TransformKind::NumberWords => righttype::thai_text::number_words,
                 TransformKind::BahtWords => righttype::thai_text::baht_words,
@@ -1412,6 +1434,18 @@ fn run(command: Command, app: Option<&str>) {
                 overlay::show(&format!("{} · {}", tr(keyboard_name(next)), app));
             }
         }
+        Command::Why => {
+            let key = if crate::focus::is_password_field() {
+                T::WhyHerePassword
+            } else if app.is_some_and(|a| apps::lookup(a) == Some(AppMode::Off)) {
+                T::WhyHereOff
+            } else {
+                let why = hook::last_why();
+                hook::e2e_trace(format!("why: {why:?}"));
+                why.message()
+            };
+            overlay::show(tr(key));
+        }
         Command::GraveTypes => {
             let on = !hook::grave_types();
             hook::set_grave_types(on);
@@ -1419,6 +1453,10 @@ fn run(command: Command, app: Option<&str>) {
             if on {
                 overlay::show(tr(T::ToastGraveTypes));
             }
+        }
+        Command::CompleteThai => {
+            hook::set_completes_thai(!hook::completes_thai());
+            config::persist();
         }
         Command::GuardSwitch => {
             hook::set_guards_switch(!hook::guards_switch());

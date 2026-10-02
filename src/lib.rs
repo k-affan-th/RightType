@@ -54,3 +54,4 @@ pub mod snippets;
 pub mod spelling;
 pub mod thai_text;
 pub mod usage;
+pub mod why;

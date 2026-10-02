@@ -663,6 +663,75 @@ fn warn_once(last: &std::sync::Mutex<Option<Instant>>, tag: &str, message: right
     crate::overlay::show(righttype::i18n::tr(message));
 }
 
+/// Offer the rest of a long Thai word (Tab takes it): opt-in.
+static COMPLETE_THAI: AtomicBool = AtomicBool::new(false);
+
+pub fn completes_thai() -> bool {
+    COMPLETE_THAI.load(Ordering::Relaxed)
+}
+
+pub fn set_completes_thai(on: bool) {
+    COMPLETE_THAI.store(on, Ordering::Relaxed);
+}
+
+/// How long a completion on offer can be taken.
+const COMPLETION_OPEN: Duration = Duration::from_secs(5);
+
+struct Completion {
+    /// What Tab types: the letters after those typed.
+    rest: String,
+    hwnd: isize,
+    focus_generation: u64,
+    created: Instant,
+}
+
+impl Drop for Completion {
+    fn drop(&mut self) {
+        self.rest.zeroize();
+    }
+}
+
+thread_local! {
+    static COMPLETION: RefCell<Option<Completion>> = const { RefCell::new(None) };
+}
+
+/// The Thai word being typed (at least three letters) has one sure way on
+/// (`righttype::dict::Dictionary::sure_completion`): show it, for Tab.
+fn offer_completion() {
+    let run = STATE.with(|s| s.borrow().buf.current().to_string());
+    let typed = run.chars().count();
+    let thai = run.chars().all(|c| ('\u{0E01}'..='\u{0E4E}').contains(&c));
+    if typed < 3 || !thai || STATE.with(|s| s.borrow().seed.guarding()) {
+        let mut run = run;
+        run.zeroize();
+        return;
+    }
+    if let Some(mut whole) = dict::thai().sure_completion(&run, 2) {
+        let rest: String = whole.chars().skip(typed).collect();
+        let mut hint = format!("→ {whole}  ·  Tab");
+        crate::overlay::show_at(&hint, crate::caret::hint_anchor());
+        hint.zeroize();
+        whole.zeroize();
+        COMPLETION.with(|c| {
+            *c.borrow_mut() = Some(Completion {
+                rest,
+                hwnd: unsafe { GetForegroundWindow() }.0 as isize,
+                focus_generation: crate::focus::generation(),
+                created: Instant::now(),
+            })
+        });
+    }
+    let mut run = run;
+    run.zeroize();
+}
+
+/// Why the last word was fixed or left (a `righttype::why::Why`).
+static LAST_WHY: AtomicU8 = AtomicU8::new(0);
+
+pub fn last_why() -> righttype::why::Why {
+    righttype::why::Why::from_u8(LAST_WHY.load(Ordering::Relaxed))
+}
+
 /// The grave key types its character instead of switching the language.
 static GRAVE_TYPES: AtomicBool = AtomicBool::new(false);
 
@@ -1346,6 +1415,35 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         }
     }
 
+    // Tab (alone) takes a Thai completion on offer; any other key drops it.
+    let completion = COMPLETION.with(|c| c.borrow_mut().take());
+    if let Some(offer) = completion {
+        let fresh = offer.hwnd == GetForegroundWindow().0 as isize
+            && offer.focus_generation == crate::focus::generation()
+            && offer.created.elapsed() < COMPLETION_OPEN;
+        if vk == VK_TAB.0
+            && fresh
+            && !is_down(VK_SHIFT)
+            && !is_down(VK_CONTROL)
+            && !is_down(VK_MENU)
+            && !crate::focus::is_password_field()
+        {
+            crate::overlay::dismiss();
+            if inject::apply(0, &offer.rest, None) {
+                trace_note("Thai completion taken with Tab");
+                // The word is whole and right: nothing left to decide.
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    st.buf.clear();
+                    st.mark = TokenMark::Plain;
+                });
+                return true;
+            }
+        } else if !is_modifier(vk) {
+            crate::overlay::dismiss();
+        }
+    }
+
     // Tab (alone) right after a Suggest hint takes it, like Alt+CapsLock. The
     // hint exists only until the next key, so Tab is otherwise untouched.
     // This runs ahead of the context checks below, so it checks for itself
@@ -1835,6 +1933,16 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         {
             show_live_hint();
         }
+        // A long Thai word on its way: offer the rest, when every word that
+        // starts like this goes on the same way (opt-in).
+        if matches!(key, Key::Char(_))
+            && completes_thai()
+            && mode_now != Mode::Code
+            && policy::supported_layout_id(layout_id(effective_layout()))
+                == Some(policy::InputLayout::ThaiKedmanee)
+        {
+            offer_completion();
+        }
         if may_reconcile
             && mode_now == Mode::Auto
             && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
@@ -2098,6 +2206,26 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             }
         }
     }
+    // One of the typist's own misspellings (Settings → Snippets, "My
+    // typo"): put right in Auto like the built-in ones.
+    if detection.is_none()
+        && !seed_run
+        && mode_now == Mode::Auto
+        && !SPELLING_KEPT.with(|k| k.borrow().contains(&word))
+    {
+        let right = SNIPPETS
+            .read()
+            .ok()
+            .and_then(|l| righttype::snippets::find_typo(&l, &word).map(str::to_string));
+        if let Some(right) = right {
+            spelling = Some((word.clone(), right.clone()));
+            detection = Some(righttype::detect::Detection {
+                corrected: right,
+                confidence: righttype::detect::Confidence::High,
+                evidence: righttype::detect::Evidence::ExactDictionary,
+            });
+        }
+    }
     // An English prefix written as style has it (`relogin` → `re-login`), in
     // Auto, in prose: not in code, nor in an address bar.
     if detection.is_none()
@@ -2151,6 +2279,29 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     } else {
         mode_now
     };
+    // Why, for the palette's "Why?" (the reason only, never the word).
+    let why = {
+        use righttype::why::{self, Why};
+        if seed_run {
+            Why::KeptSeed
+        } else {
+            match (&detection, mode_for_word) {
+                (Some(_), Mode::Auto) if spelling.is_some() => Why::FixedSpelling,
+                (Some(_), Mode::Auto) if caps_accident => Why::FixedCaps,
+                (Some(_), Mode::Auto) if mode_now == Mode::Code => Why::FixedCode,
+                (Some(d), Mode::Auto) => why::fixed(
+                    &d.corrected,
+                    d.evidence == righttype::detect::Evidence::ExactDictionary,
+                ),
+                (Some(_), Mode::Suggest) => Why::Suggested,
+                (Some(_), _) => Why::KeptManual,
+                (None, _) => active_layout
+                    .map(|l| why::kept(&word, l, dict::english(), dict::thai()))
+                    .unwrap_or(Why::KeptUnknown),
+            }
+        }
+    };
+    LAST_WHY.store(why as u8, Ordering::Relaxed);
     let swallow = match (mode_for_word, detection) {
         (Mode::Auto, Some(d)) => {
             let mut corrected = d.corrected.clone();

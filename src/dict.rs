@@ -108,6 +108,42 @@ impl Dictionary {
             })
     }
 
+    /// The letters every known word starting with `prefix` goes on with —
+    /// the longest beginning they share — when that is at least `at_least`
+    /// more characters. Never a guess: whichever word is meant, it starts
+    /// with what this gives (`ประชาสัมพั` → `ประชาสัมพันธ์`; `สวัส` gives
+    /// nothing, since สวัสดี and สวัสดิการ part at once).
+    pub fn sure_completion(&self, prefix: &str, at_least: usize) -> Option<String> {
+        let prefix = normalize(prefix);
+        if prefix.is_empty() {
+            return None;
+        }
+        let sorted = self.sorted.get_or_init(|| {
+            let mut v: Vec<Box<str>> = self.words.iter().map(|w| w.as_str().into()).collect();
+            v.sort_unstable();
+            v
+        });
+        let from = sorted.partition_point(|w| w.as_ref() < prefix.as_str());
+        let mut common: Option<Vec<char>> = None;
+        for w in sorted[from..]
+            .iter()
+            .take_while(|w| w.starts_with(prefix.as_str()))
+        {
+            let chars: Vec<char> = w.chars().collect();
+            common = Some(match common {
+                None => chars,
+                Some(c) => c
+                    .iter()
+                    .zip(&chars)
+                    .take_while(|(a, b)| a == b)
+                    .map(|(a, _)| *a)
+                    .collect(),
+            });
+        }
+        let common: String = common?.into_iter().collect();
+        (common.chars().count() >= prefix.chars().count() + at_least).then_some(common)
+    }
+
     pub fn len(&self) -> usize {
         self.words.len()
     }
@@ -212,5 +248,22 @@ mod tests {
         assert!(english().len() > 1000);
         assert!(thai().len() > 1000);
         assert!(thai().contains("สวัสดี"));
+    }
+
+    #[test]
+    fn completion_is_only_what_every_word_shares() {
+        let d = Dictionary::from_words(["ประชาสัมพันธ์", "สวัสดี", "สวัสดิการ", "hello"]);
+        assert_eq!(
+            d.sure_completion("ประชาสัมพั", 2).as_deref(),
+            Some("ประชาสัมพันธ์")
+        );
+        assert_eq!(d.sure_completion("สวัส", 2), None);
+        assert_eq!(d.sure_completion("hel", 5), None);
+        assert_eq!(d.sure_completion("hel", 2).as_deref(), Some("hello"));
+        assert_eq!(d.sure_completion("xyz", 1), None);
+        // With the bundled list: a long word, a common start.
+        let th = thai();
+        assert!(th.sure_completion("ประชาสัมพั", 2).is_some());
+        assert_eq!(th.sure_completion("สวัส", 2), None);
     }
 }
