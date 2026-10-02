@@ -33,6 +33,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use crate::hook::{held_modifiers, INJECTING, INJECT_TAG};
 use zeroize::Zeroize;
 
+/// How often, and how long apart, a text box behind the keys is asked again.
+const CATCH_UP_TRIES: usize = 2;
+const CATCH_UP_WAIT: std::time::Duration = std::time::Duration::from_millis(25);
+
 /// Replace the just-typed word with `text`.
 ///
 /// `backspaces` characters are deleted first (the mistyped word plus the boundary
@@ -66,8 +70,20 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
             }
             other => other,
         };
-        let replaced =
+        // A box a few keys behind (Windows 11 Notepad while keys are still
+        // arriving) catches up within milliseconds: ask again before falling
+        // back to keys, which that box garbles (CI: `l;ครับ บบบบ`).
+        let mut replaced =
             tb.replace_before_caret(backspaces, &whole, context.as_deref().map(|s| s.as_str()));
+        for _ in 0..CATCH_UP_TRIES {
+            if !matches!(replaced, Err(crate::focus::ReplaceError::Untouched(why)) if why == crate::focus::NOT_CAUGHT_UP)
+            {
+                break;
+            }
+            std::thread::sleep(CATCH_UP_WAIT);
+            replaced =
+                tb.replace_before_caret(backspaces, &whole, context.as_deref().map(|s| s.as_str()));
+        }
         whole.zeroize();
         match replaced {
             Ok(()) => {

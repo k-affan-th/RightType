@@ -817,9 +817,7 @@ impl TextBox {
         before.zeroize();
         match (whole, part) {
             (Some(_), Some(n)) => Ok(n),
-            _ => Err(ReplaceError::Untouched(
-                "the box has not caught up with the keys",
-            )),
+            _ => Err(ReplaceError::Untouched(NOT_CAUGHT_UP)),
         }
     }
 
@@ -931,6 +929,9 @@ thread_local! {
 pub fn waiting_on_app() -> bool {
     WAITING_ON_APP.with(|w| w.get() > 0)
 }
+
+/// The box does not show yet what was typed last.
+pub const NOT_CAUGHT_UP: &str = "the box has not caught up with the keys";
 
 /// Why [`TextBox::replace_before_caret`] did not do the job.
 #[derive(Debug)]
