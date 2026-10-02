@@ -239,6 +239,15 @@ pub unsafe fn toggle_numlock() {
     let _ = send(&[key(0x90, false), key(0x90, true)]);
 }
 
+/// Send the key-up of each of `keys` (keys Windows counts as held down).
+///
+/// # Safety
+/// Calls `SendInput`.
+pub unsafe fn release_keys(keys: &[u16]) {
+    let ups: Vec<INPUT> = keys.iter().map(|&vk| key(vk, true)).collect();
+    let _ = send(&ups);
+}
+
 /// Press CapsLock once (ours: the hook lets it through untouched).
 ///
 /// # Safety

@@ -345,6 +345,35 @@ def keyboard_lock(t):
     fs.check(t.name, "keys work again after the key tester", t.read().strip(), "ok")
 
 
+def keyboard_health(t):
+    """2.3: the Tools page's health check finds CapsLock on, and its fix
+    turns it off."""
+    from pywinauto import Desktop
+    t.focus()
+    result = "no window"
+    try:
+        set_capslock(True)
+        palette_search("settings", settle=2.0)()
+        win = Desktop(backend="uia").window(title_re="RightType — .*")
+        win.child_window(title_re="Tools|เครื่องมือ", control_type="RadioButton").invoke()
+        time.sleep(0.8)
+        win.child_window(title_re="Check again|ตรวจอีกครั้ง", control_type="Button").invoke()
+        time.sleep(0.8)
+        def fix_caps():
+            buttons = [b for b in win.descendants(control_type="Button")
+                       if b.window_text() in ("Turn off", "ปิด") and b.is_visible()]
+            # CapsLock is the last check on the page.
+            buttons[-1].invoke()
+        result = traced(fix_caps, "health: fix CapsOff")
+        win.close()
+        time.sleep(0.5)
+    except Exception as e:
+        result = f"failed: {e}"
+    finally:
+        set_capslock(False)
+    fs.check(t.name, "health check turns CapsLock off", result, "yes")
+
+
 def thai_word_delete(t):
     """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
     fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
@@ -1251,6 +1280,7 @@ def sweep(t):
     if t.name == "notepad":
         keyboard_map(t)
         keyboard_lock(t)
+        keyboard_health(t)
         enter_guard(t)
         app_keyboards(t)
     if t.name == "page":

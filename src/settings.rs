@@ -43,10 +43,12 @@ const PAGE_BLOCKED: u8 = 4;
 const PAGE_ABOUT: u8 = 5;
 const PAGE_SNIPPETS: u8 = 6;
 const PAGE_KEYBOARD: u8 = 7;
+const PAGE_TOOLS: u8 = 8;
 /// Sidebar entries, top to bottom, and their pages.
-const NAV: [(T, u8); 7] = [
+const NAV: [(T, u8); 8] = [
     (T::NavGeneral, PAGE_GENERAL),
     (T::NavKeyboard, PAGE_KEYBOARD),
+    (T::NavTools, PAGE_TOOLS),
     (T::NavHotkeys, PAGE_HOTKEYS),
     (T::NavLearned, PAGE_LEARNED),
     (T::NavSnippets, PAGE_SNIPPETS),
@@ -67,6 +69,10 @@ const KB_PICK_Y: i32 = 98;
 const KB_TYPING_Y: i32 = 246;
 const KB_KEYS_Y: i32 = 558;
 const KB_HEIGHT: i32 = KB_KEYS_Y + 3 * ROW_H + 8 + 24;
+/// The Tools page: the tools' card, the health check's card, the page.
+const TOOLS_Y: i32 = 98;
+const HEALTH_Y: i32 = 246;
+const TOOLS_HEIGHT: i32 = HEALTH_Y + crate::health::COUNT as i32 * ROW_H + 8 + 24;
 /// The segment buttons at the right of a Keyboard-page row.
 const KB_SEG_W: i32 = 68;
 
@@ -94,7 +100,7 @@ pub fn hotkey_rows() -> Vec<(T, String)> {
 }
 
 struct Ids {
-    nav: [u16; 7],
+    nav: [u16; 8],
     snip_table: u16,
     snip_trigger: u16,
     snip_text: u16,
@@ -136,6 +142,13 @@ struct Ids {
     /// NumLock and Insert: off, warn, fix.
     kb_numlock: [u16; 3],
     kb_insert: [u16; 3],
+    tools_clean: u16,
+    tools_test: u16,
+    tools_map: u16,
+    health_again: u16,
+    /// Per check: its status line and its fix button.
+    health_status: [u16; crate::health::COUNT],
+    health_fix: [u16; crate::health::COUNT],
     save_learned: u16,
     clear_learned: u16,
     apps_table: u16,
@@ -155,6 +168,42 @@ struct Ids {
     sync_folder: u16,
     this_pc: u16,
     sync_settings: u16,
+}
+
+thread_local! {
+    /// The health check's last results, for the fix buttons and the painter.
+    static HEALTH: RefCell<Vec<crate::health::Check>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Run the health check and show it.
+fn fill_health(win: &SettingsWindow) {
+    let s = &win.surface;
+    let checks = crate::health::run();
+    for (i, check) in checks.iter().enumerate().take(crate::health::COUNT) {
+        s.set_text(win.ids.health_status[i], &check.status);
+        let button = s.hwnd_of(win.ids.health_fix[i]);
+        match &check.fix {
+            Some((label, _)) => {
+                s.set_text(win.ids.health_fix[i], tr(*label));
+                unsafe {
+                    let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                        button,
+                        windows::Win32::UI::WindowsAndMessaging::SW_SHOW,
+                    );
+                }
+            }
+            None => unsafe {
+                let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                    button,
+                    windows::Win32::UI::WindowsAndMessaging::SW_HIDE,
+                );
+            },
+        }
+    }
+    HEALTH.with(|h| *h.borrow_mut() = checks);
+    unsafe {
+        let _ = windows::Win32::Graphics::Gdi::InvalidateRect(s.hwnd, None, true);
+    }
 }
 
 /// The choices for NumLock and Insert, in button order.
@@ -214,7 +263,7 @@ pub fn open() {
 /// Open on a given page (1 = General … 5 = Privacy & about); debug harness use.
 #[cfg(debug_assertions)]
 pub fn open_page(page: u8) {
-    open_on(page.clamp(PAGE_GENERAL, PAGE_KEYBOARD));
+    open_on(page.clamp(PAGE_GENERAL, PAGE_TOOLS));
 }
 
 fn open_on(page: u8) {
@@ -250,7 +299,7 @@ fn open_on(page: u8) {
         p.bg,
         0,
     );
-    let mut nav = [0u16; 7];
+    let mut nav = [0u16; 8];
     for (i, (label, _)) in NAV.iter().enumerate() {
         nav[i] = s.nav(tr(*label), i == 0, (12, 84 + i as i32 * 40, 196, 36));
     }
@@ -493,6 +542,66 @@ fn open_on(page: u8) {
     };
     let kb_numlock = guard_row(1, T::RowNumLock, T::SubNumLock, T::GuardFix);
     let kb_insert = guard_row(2, T::RowInsertKey, T::SubInsertKey, T::GuardBlock);
+
+    // --- Tools ------------------------------------------------------------
+    let t = PAGE_TOOLS;
+    surface.set_page_height(t, TOOLS_HEIGHT);
+    s.label(tr(T::NavTools), TextStyle::Title, (X0, 18, CW, 36), p.bg, t);
+    let tool_w = (CW - 32 - 16) / 3;
+    let tool = |i: i32, label: T| {
+        s.button(
+            tr(label),
+            false,
+            (X0 + 16 + i * (tool_w + 8), TOOLS_Y + 16, tool_w, 40),
+            p.surface,
+            t,
+        )
+    };
+    let tools_clean = tool(0, T::CleanTitle);
+    let tools_test = tool(1, T::KeyTestTitle);
+    let tools_map = tool(2, T::KeyMapTitle);
+    s.label(
+        tr(T::HeadHealth),
+        TextStyle::BodyStrong,
+        (X0, HEALTH_Y - 28, CW - 160, 20),
+        p.bg,
+        t,
+    );
+    let health_again = s.button(
+        tr(T::BtnCheckAgain),
+        false,
+        (X0 + CW - 140, HEALTH_Y - 36, 140, 30),
+        p.bg,
+        t,
+    );
+    let checks = crate::health::run();
+    let mut health_status = [0u16; crate::health::COUNT];
+    let mut health_fix = [0u16; crate::health::COUNT];
+    for (i, check) in checks.iter().enumerate().take(crate::health::COUNT) {
+        let top = HEALTH_Y + 4 + i as i32 * ROW_H;
+        let text_w = CW - 56 - 160;
+        s.label(
+            tr(check.title),
+            TextStyle::Body,
+            (X0 + 56, top + 8, text_w, 22),
+            p.surface,
+            t,
+        );
+        health_status[i] = s.label(
+            "",
+            TextStyle::Small,
+            (X0 + 56, top + 30, text_w, 30),
+            p.surface,
+            t,
+        );
+        health_fix[i] = s.button(
+            "",
+            false,
+            (X0 + CW - 16 - 140, top + 14, 140, 34),
+            p.surface,
+            t,
+        );
+    }
 
     // --- Learned words ----------------------------------------------------
     let l = PAGE_LEARNED;
@@ -809,6 +918,12 @@ fn open_on(page: u8) {
         kb_password_tag,
         kb_numlock,
         kb_insert,
+        tools_clean,
+        tools_test,
+        tools_map,
+        health_again,
+        health_status,
+        health_fix,
         save_learned,
         clear_learned,
         apps_table,
@@ -848,6 +963,9 @@ fn open_on(page: u8) {
         win.surface.set_checked(win.ids.nav[i], true);
     }
     win.surface.show_page(page);
+    if page == PAGE_TOOLS {
+        fill_health(&win);
+    }
     if let Some(h) = win.window.handle.hwnd() {
         crate::ui::present(HWND(h as _), "settings", started);
     } else {
@@ -969,6 +1087,9 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     let s = &win.surface;
     if let Some(i) = ids.nav.iter().position(|&n| n == id) {
         s.show_page(NAV[i].1);
+        if NAV[i].1 == PAGE_TOOLS {
+            fill_health(win);
+        }
         return;
     }
     if id == ids.edit_learned {
@@ -1097,6 +1218,20 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
             righttype::layout::ThaiVariant::Kedmanee
         });
         config::persist();
+    } else if id == ids.tools_clean {
+        crate::clean::request_open(crate::clean::Mode::Clean);
+    } else if id == ids.tools_test {
+        crate::clean::request_open(crate::clean::Mode::Test);
+    } else if id == ids.tools_map {
+        crate::keymap::request_toggle();
+    } else if id == ids.health_again {
+        fill_health(win);
+    } else if let Some(i) = ids.health_fix.iter().position(|&b| b == id) {
+        let fix = HEALTH.with(|h| h.borrow().get(i).and_then(|c| c.fix.clone()));
+        if let Some((_, fix)) = fix {
+            crate::health::apply(&fix);
+            fill_health(win);
+        }
     } else if id == ids.kb_addresses {
         righttype::policy::set_fixes_addresses(s.checked(id));
         config::persist();
@@ -1828,6 +1963,36 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             card(g, rect(X0, CARD_B_Y, CW, 5 * ROW_H + 64));
             for i in 1..=5 {
                 divider(hdc, X0 + 16, CARD_B_Y + i * ROW_H + 2, CW - 32);
+            }
+        }
+        PAGE_TOOLS => {
+            let dy = ui::page_scroll();
+            card(g, rect(X0, TOOLS_Y - dy, CW, 72));
+            card(
+                g,
+                rect(
+                    X0,
+                    HEALTH_Y - dy,
+                    CW,
+                    crate::health::COUNT as i32 * ROW_H + 8,
+                ),
+            );
+            let ok = HEALTH.with(|h| h.borrow().iter().map(|c| c.ok).collect::<Vec<_>>());
+            for (i, ok) in ok.iter().enumerate() {
+                let top = HEALTH_Y + 4 + i as i32 * ROW_H - dy;
+                if i > 0 {
+                    divider(hdc, X0 + 16, top - 2, CW - 32);
+                }
+                // A check mark when fine; an accent "!" where something is
+                // off, so problems stand out in the list.
+                let c = rect(X0 + 18, top + 18, 24, 24);
+                let (fill, ink, mark) = if *ok {
+                    (pal().inset, pal().text_dim, "✓")
+                } else {
+                    (pal().accent, pal().on_accent, "!")
+                };
+                g.fill_round(c, ui::px(12) as f32, fill);
+                ui::glyph(hdc, mark, c, ink);
             }
         }
         PAGE_KEYBOARD => {
