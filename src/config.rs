@@ -260,6 +260,7 @@ pub fn apply(cfg: &Config) {
     crate::habits::set_enabled(cfg.predict_layout);
     righttype::layout::set_thai_variant(match cfg.thai_layout.as_deref() {
         Some("pattachote") => righttype::layout::ThaiVariant::Pattachote,
+        Some("manoonchai") => righttype::layout::ThaiVariant::Manoonchai,
         _ => righttype::layout::ThaiVariant::Kedmanee,
     });
     hook::set_hotkeys(righttype::hotkeys::Hotkeys::from_config(
@@ -514,9 +515,11 @@ fn snapshot() -> Config {
             .into_iter()
             .map(|(k, v)| (k.to_string(), v))
             .collect(),
-        thai_layout: (righttype::layout::thai_variant()
-            == righttype::layout::ThaiVariant::Pattachote)
-            .then(|| "pattachote".to_string()),
+        thai_layout: match righttype::layout::thai_variant() {
+            righttype::layout::ThaiVariant::Kedmanee => None,
+            righttype::layout::ThaiVariant::Pattachote => Some("pattachote".to_string()),
+            righttype::layout::ThaiVariant::Manoonchai => Some("manoonchai".to_string()),
+        },
     }
 }
 

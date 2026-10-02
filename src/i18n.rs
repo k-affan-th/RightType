@@ -282,6 +282,10 @@ texts! {
     HkReset => "All hotkeys are back to the defaults.", "คืนปุ่มลัดทั้งหมดเป็นค่าเดิมแล้ว";
     PaletteHead => "↑↓ Enter · 1–9 · type to search · Esc", "↑↓ Enter · 1–9 · พิมพ์เพื่อค้นหา · Esc";
     PaletteFiltering => "Search: {text}", "ค้นหา: {text}";
+    HkKeyMap => "Keyboard map", "แผนผังแป้นพิมพ์";
+    KeyMapTitle => "Keyboard map", "แผนผังแป้นพิมพ์";
+    KeyMapHead => "Click a key to type it · Shift for the upper characters", "คลิกปุ่มเพื่อพิมพ์ตัวนั้น · Shift สำหรับตัวบน";
+    PaletteKeyMap => "Keyboard map (Ctrl+Alt+K)", "แผนผังแป้นพิมพ์ (Ctrl+Alt+K)";
     PaletteCompleteThai => "Complete long Thai words with Tab", "เติมคำไทยยาวด้วย Tab";
     ScopeTypo => "My typo", "คำผิดของฉัน";
     PaletteWhy => "Why? (the last word)", "ทำไม? (คำล่าสุด)";
@@ -387,7 +391,7 @@ texts! {
     Privacy4 => "The word being typed is kept in memory only, and wiped at every space.", "คำที่กำลังพิมพ์อยู่ในหน่วยความจำเท่านั้น และถูกล้างทุกครั้งที่เว้นวรรค";
     HeadAbout => "About", "เกี่ยวกับ";
     AboutVersion => "RightType {v}", "RightType {v}";
-    AboutLicense => "Free and open source — MIT or Apache-2.0.", "ฟรีและโอเพนซอร์ส — MIT หรือ Apache-2.0";
+    AboutLicense => "Free and open source — MIT or Apache-2.0. Manoonchai layout © Manassarn Manoonchai (MIT).", "ฟรีและโอเพนซอร์ส — MIT หรือ Apache-2.0 · แป้นมนูญชัย © Manassarn Manoonchai (MIT)";
     BtnCheckUpdates => "Check for updates", "ตรวจสอบอัปเดต";
     AboutUpdates => "Opens the download page in your browser. RightType itself never goes online.", "เปิดหน้าดาวน์โหลดในเบราว์เซอร์ ตัว RightType เองไม่ต่ออินเทอร์เน็ต";
     BtnClose => "Close", "ปิด";

@@ -264,6 +264,28 @@ def thai_text_tools(t):
         fs.set_mode("auto")
 
 
+def keyboard_map(t):
+    """2.2: the keyboard map types the key clicked on it, where the typist
+    is, without taking the focus."""
+    from pywinauto import Desktop
+    t.clear()
+    t.focus()
+    tap(ord("K"), CTRL, fs.ALT)
+    time.sleep(1.2)
+    typed = "no window"
+    try:
+        win = Desktop(backend="uia").window(title="Keyboard map")
+        win.child_window(title="ส", control_type="Button").invoke()
+        time.sleep(1.0)
+        typed = t.read().strip()
+    except Exception as e:
+        typed = f"failed: {e}"
+    finally:
+        tap(ord("K"), CTRL, fs.ALT)  # closed again
+        time.sleep(0.5)
+    fs.check(t.name, "keyboard map types the key clicked", typed, "ส")
+
+
 def thai_word_delete(t):
     """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
     fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
@@ -1168,6 +1190,7 @@ def sweep(t):
         thai_word_delete(t)
         palette_text_tools(t)
     if t.name == "notepad":
+        keyboard_map(t)
         enter_guard(t)
         app_keyboards(t)
     if t.name == "page":

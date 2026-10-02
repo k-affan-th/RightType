@@ -37,6 +37,8 @@ mod instance;
 #[cfg(feature = "winos")]
 mod keyboards;
 #[cfg(feature = "winos")]
+mod keymap;
+#[cfg(feature = "winos")]
 mod learn;
 #[cfg(feature = "winos")]
 mod manual;

@@ -1547,6 +1547,14 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return true;
     }
 
+    // The keyboard map types only what is clicked on it: it opens everywhere.
+    if action == Some(Action::KeyMap) {
+        if !repeat {
+            crate::keymap::request_toggle();
+        }
+        return true;
+    }
+
     // The command palette never touches text either: it opens everywhere.
     // Opened after this callback returns, never inside the hook.
     if action == Some(Action::Palette) {
@@ -2620,17 +2628,36 @@ fn thai_keyboards() -> Vec<(u16, righttype::layout::ThaiVariant)> {
         Some(String::from_utf16_lossy(&buf[..len]))
     }
 
+    // Windows' own Thai keyboards, and any other installed for Thai (a
+    // keyboard installed from a file, such as Manoonchai, gets an
+    // identifier like `A000041E`).
+    let mut klids: Vec<String> = ["0001041E", "0002041E", "0003041E"]
+        .iter()
+        .map(|k| k.to_string())
+        .collect();
+    for k in installed_keyboard_ids() {
+        if k.to_ascii_uppercase().ends_with("041E")
+            && !klids.iter().any(|o| o.eq_ignore_ascii_case(&k))
+        {
+            klids.push(k);
+        }
+    }
     let mut out = Vec::new();
-    for klid in ["0001041E", "0002041E", "0003041E"] {
+    for klid in klids {
         let key = format!("SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts\\{klid}");
         let Some(file) = read(&key, "Layout File") else {
             continue;
         };
         let file = file.to_ascii_uppercase();
+        let text = read(&key, "Layout Text")
+            .unwrap_or_default()
+            .to_ascii_uppercase();
         let variant = if file.starts_with("KBDTH0") || file.starts_with("KBDTH2") {
             ThaiVariant::Kedmanee
         } else if file.starts_with("KBDTH1") || file.starts_with("KBDTH3") {
             ThaiVariant::Pattachote
+        } else if file.contains("MANOON") || text.contains("MANOONCHAI") {
+            ThaiVariant::Manoonchai
         } else {
             continue;
         };
@@ -2643,6 +2670,54 @@ fn thai_keyboards() -> Vec<(u16, righttype::layout::ThaiVariant)> {
         if let Ok(high) = u16::from_str_radix(&klid[..4], 16) {
             out.push((high, variant));
         }
+    }
+    out
+}
+
+/// The keyboard identifiers (`0000041E`, `A000041E`, …) Windows lists under
+/// `Keyboard Layouts`.
+fn installed_keyboard_ids() -> Vec<String> {
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, HKEY, HKEY_LOCAL_MACHINE, KEY_READ,
+    };
+    let path: Vec<u16> = "SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts\0"
+        .encode_utf16()
+        .collect();
+    let mut key = HKEY::default();
+    let mut out = Vec::new();
+    unsafe {
+        if RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(path.as_ptr()),
+            0,
+            KEY_READ,
+            &mut key,
+        )
+        .is_err()
+        {
+            return out;
+        }
+        for i in 0..2048u32 {
+            let mut name = [0u16; 64];
+            let mut len = name.len() as u32;
+            if RegEnumKeyExW(
+                key,
+                i,
+                windows::core::PWSTR(name.as_mut_ptr()),
+                &mut len,
+                None,
+                windows::core::PWSTR::null(),
+                None,
+                None,
+            )
+            .is_err()
+            {
+                break;
+            }
+            out.push(String::from_utf16_lossy(&name[..len as usize]));
+        }
+        let _ = RegCloseKey(key);
     }
     out
 }

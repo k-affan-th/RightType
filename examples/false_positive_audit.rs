@@ -34,6 +34,9 @@ const MIN_THAI_RECALL: usize = 60_550;
 const MIN_PATTACHOTE_THAI_RECALL: usize = 60_150;
 /// English recall with the Pattachote table (2.0 M6), measured 86,833.
 const MIN_PATTACHOTE_ENGLISH_RECALL: usize = 86_750;
+/// Thai recall with the Manoonchai table (2.2), measured 60,146 when it was
+/// added.
+const MIN_MANOONCHAI_THAI_RECALL: usize = 60_050;
 /// English dictionary words typed on the Thai layout that must come back.
 const MIN_ENGLISH_RECALL: usize = 86_600;
 
@@ -341,6 +344,39 @@ fn main() {
     if recall_english < MIN_PATTACHOTE_ENGLISH_RECALL {
         failures.push(format!(
             "Pattachote English recall {recall_english} below floor {MIN_PATTACHOTE_ENGLISH_RECALL}"
+        ));
+    }
+    // And with Thai Manoonchai (2.2): no dictionary word may change. Its
+    // recall is printed; the floor is set from the first measurement.
+    righttype::layout::set_thai_variant(righttype::layout::ThaiVariant::Manoonchai);
+    let changed_thai = thai_words.iter().filter(|w| th_layout(w).is_some()).count();
+    let changed_english = english_words
+        .iter()
+        .filter(|w| us_layout(w).is_some())
+        .count();
+    let recall_thai = thai_words
+        .iter()
+        .filter(|w| us_layout(&righttype::layout::th_to_en(w)).as_deref() == Some(**w))
+        .count();
+    let recall_english = english_words
+        .iter()
+        .filter(|w| th_layout(&righttype::layout::en_to_th(w)).as_deref() == Some(**w))
+        .count();
+    righttype::layout::set_thai_variant(righttype::layout::ThaiVariant::Kedmanee);
+    println!(
+        "Manoonchai: Thai dictionary words changed {changed_thai}, English dictionary words changed {changed_english}; recall Thai {recall_thai} of {}, English {recall_english} of {}",
+        thai_words.len(),
+        english_words.len()
+    );
+    if changed_thai + changed_english > 0 {
+        failures.push(format!(
+            "Manoonchai: {} dictionary words changed (must be 0)",
+            changed_thai + changed_english
+        ));
+    }
+    if recall_thai < MIN_MANOONCHAI_THAI_RECALL {
+        failures.push(format!(
+            "Manoonchai Thai recall {recall_thai} below floor {MIN_MANOONCHAI_THAI_RECALL}"
         ));
     }
 

@@ -47,10 +47,12 @@ pub enum Action {
     Panic,
     /// Open the command palette.
     Palette,
+    /// Open (or close) the keyboard map.
+    KeyMap,
 }
 
 impl Action {
-    pub const ALL: [Action; 7] = [
+    pub const ALL: [Action; 8] = [
         Action::Flip,
         Action::Selection,
         Action::Cycle,
@@ -58,6 +60,7 @@ impl Action {
         Action::Accept,
         Action::Panic,
         Action::Palette,
+        Action::KeyMap,
     ];
 
     /// The config name.
@@ -70,6 +73,7 @@ impl Action {
             Action::Accept => "accept",
             Action::Panic => "panic",
             Action::Palette => "palette",
+            Action::KeyMap => "keymap",
         }
     }
 
@@ -218,7 +222,7 @@ fn key_from_name(name: &str) -> Option<u16> {
 /// Every action's chord.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hotkeys {
-    chords: [Chord; 7],
+    chords: [Chord; Action::ALL.len()],
 }
 
 impl Default for Hotkeys {
@@ -239,6 +243,7 @@ pub fn default_chord(action: Action) -> Chord {
         Action::Accept => Chord::new(false, false, true, vk::CAPITAL),
         Action::Panic => Chord::new(true, false, true, vk::CAPITAL),
         Action::Palette => Chord::new(true, false, true, vk::SPACE),
+        Action::KeyMap => Chord::new(true, false, true, 0x4B), // K
     }
 }
 
@@ -294,7 +299,7 @@ impl Hotkeys {
     /// their defaults until none do.
     pub fn from_config<'a>(entries: impl IntoIterator<Item = (&'a str, &'a str)>) -> Self {
         let mut hotkeys = Hotkeys::default();
-        let mut saved = [false; 7];
+        let mut saved = [false; Action::ALL.len()];
         for (name, text) in entries {
             if let (Some(action), Some(chord)) = (Action::from_name(name), Chord::parse(text)) {
                 if chord.is_usable() {
@@ -304,8 +309,9 @@ impl Hotkeys {
             }
         }
         loop {
-            let clash = (0..7).find(|&i| {
-                (0..7).any(|j| j != i && hotkeys.chords[i] == hotkeys.chords[j]) && saved[i]
+            let n = Action::ALL.len();
+            let clash = (0..n).find(|&i| {
+                (0..n).any(|j| j != i && hotkeys.chords[i] == hotkeys.chords[j]) && saved[i]
             });
             let Some(i) = clash else {
                 break;

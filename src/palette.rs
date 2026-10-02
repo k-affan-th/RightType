@@ -124,6 +124,8 @@ enum Command {
     Why,
     /// Offer the rest of a long Thai word for Tab, on or off.
     CompleteThai,
+    /// Open the keyboard map.
+    KeyMap,
     /// English prefix words written with their hyphen, on or off.
     Hyphens,
 }
@@ -235,6 +237,7 @@ impl Command {
             Command::GuardSwitch => '\u{E72E}',                                         // Lock
             Command::Why => '\u{E946}',                                                 // Info
             Command::CompleteThai => '\u{E8C8}',                                        // Copy
+            Command::KeyMap => '\u{E765}',       // KeyboardClassic
             Command::Spelling => '\u{E82D}',     // Dictionary
             Command::Hyphens => '\u{E738}',      // Remove (a dash)
             Command::CapsSwitch => '\u{E72E}',   // Lock
@@ -785,6 +788,12 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             "▸",
             Command::More(Section::Symbols),
         );
+        add(
+            Section::Symbols,
+            tr(T::PaletteKeyMap).to_string(),
+            "",
+            Command::KeyMap,
+        );
         for (i, (symbol, th, en)) in righttype::thai_text::SYMBOLS.iter().enumerate() {
             add(
                 Section::Symbols,
@@ -973,7 +982,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
     // two changes to the selection.
     let mut in_selection = 0;
     for entry in &mut list {
-        if let Command::More(_) = entry.command {
+        if let Command::More(_) | Command::KeyMap = entry.command {
             continue;
         }
         entry.folded = match entry.section {
@@ -1406,7 +1415,11 @@ fn run(command: Command, app: Option<&str>) {
         Command::More(_) | Command::Review(_) | Command::ApplyReview => {}
         Command::Symbol(i) => {
             if let Some((symbol, _, _)) = righttype::thai_text::SYMBOLS.get(i) {
-                crate::manual::request_type(PREVIOUS.load(Ordering::Acquire), symbol);
+                crate::manual::request_type(
+                    PREVIOUS.load(Ordering::Acquire),
+                    symbol.to_string(),
+                    true,
+                );
             }
         }
         Command::TypeClipboard => {
@@ -1454,6 +1467,7 @@ fn run(command: Command, app: Option<&str>) {
                 overlay::show(tr(T::ToastGraveTypes));
             }
         }
+        Command::KeyMap => crate::keymap::request_toggle(),
         Command::CompleteThai => {
             hook::set_completes_thai(!hook::completes_thai());
             config::persist();

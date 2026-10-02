@@ -339,8 +339,10 @@ pub fn has_continuation(token: &str, en: &Dictionary) -> bool {
 /// Top-level domains read as the end of a web address even without
 /// `http://` or `www.` (`.co.th` and the other Thai second levels end in
 /// `th`).
+/// Two-letter endings that are common in typing (`.co`, `.me`) are left
+/// out: on some Thai keyboards a Thai word reads as `x.co`.
 const ADDRESS_ENDINGS: &[&str] = &[
-    "com", "net", "org", "io", "dev", "app", "ai", "co", "me", "info", "edu", "gov", "th",
+    "com", "net", "org", "io", "dev", "app", "info", "edu", "gov", "th",
 ];
 
 /// Is `s` an email address (`name@gmail.com`)?

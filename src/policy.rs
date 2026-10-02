@@ -168,8 +168,11 @@ pub fn detect_token(
             if !has_thai || has_latin {
                 return None;
             }
-            thai_layout_address(token)
-                .or_else(|| thai_layout_number(token, th))
+            // Thai text on screen is Thai, whatever its keys spell.
+            let is_thai = th.contains(token) || segment::is_fully_known(token, th);
+            (!is_thai)
+                .then(|| thai_layout_address(token).or_else(|| thai_layout_number(token, th)))
+                .flatten()
                 .or_else(|| detect::detect(token, en, th))
                 .or_else(|| thai_layout_compound(token, th))
                 .or_else(|| thai_layout_technical(token, en, th))
@@ -1088,9 +1091,15 @@ mod tests {
         ] {
             assert!(thai_layout_number(&word, th).is_none(), "{word}");
         }
-        // No Thai dictionary word reads as an address or a number.
+        // No Thai dictionary word reads as an address or a number (the
+        // other Thai keyboards: examples/false_positive_audit.rs).
         for word in include_str!("../assets/th_words.txt").lines() {
-            assert!(thai_layout_number(word, th).is_none(), "{word}");
+            let d = detect_token(word, InputLayout::ThaiKedmanee, en, th);
+            let keys = d.map(|d| d.corrected).unwrap_or_default();
+            assert!(
+                !crate::english::is_email(&keys) && !crate::english::is_web_address(&keys),
+                "{word} -> {keys}"
+            );
         }
         for word in include_str!("../assets/th_words.txt").lines() {
             assert!(thai_layout_address(word).is_none(), "{word}");

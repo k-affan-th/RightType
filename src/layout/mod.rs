@@ -12,12 +12,14 @@
 //! punctuation) pass through unchanged.
 
 mod kedmanee;
+mod manoonchai;
 mod pattachote;
 mod qwerty;
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
 pub use kedmanee::Kedmanee;
+pub use manoonchai::Manoonchai;
 pub use pattachote::Pattachote;
 pub use qwerty::{QwertyEn, QwertyUk};
 
@@ -32,6 +34,8 @@ pub enum LayoutId {
     Kedmanee,
     /// Thai Pattachote mapped onto a US physical keyboard.
     Pattachote,
+    /// Thai Manoonchai mapped onto a US physical keyboard.
+    Manoonchai,
 }
 
 /// Which Thai layout the typist uses (a setting: Windows does not say which
@@ -40,6 +44,7 @@ pub enum LayoutId {
 pub enum ThaiVariant {
     Kedmanee,
     Pattachote,
+    Manoonchai,
 }
 
 /// Which English layout is active (read from the window's keyboard layout).
@@ -57,10 +62,10 @@ pub fn set_thai_variant(v: ThaiVariant) {
 }
 
 pub fn thai_variant() -> ThaiVariant {
-    if THAI.load(Ordering::Relaxed) == ThaiVariant::Pattachote as u8 {
-        ThaiVariant::Pattachote
-    } else {
-        ThaiVariant::Kedmanee
+    match THAI.load(Ordering::Relaxed) {
+        v if v == ThaiVariant::Pattachote as u8 => ThaiVariant::Pattachote,
+        v if v == ThaiVariant::Manoonchai as u8 => ThaiVariant::Manoonchai,
+        _ => ThaiVariant::Kedmanee,
     }
 }
 
@@ -80,6 +85,7 @@ fn thai_layout() -> &'static dyn Layout {
     match thai_variant() {
         ThaiVariant::Kedmanee => &Kedmanee,
         ThaiVariant::Pattachote => &Pattachote,
+        ThaiVariant::Manoonchai => &Manoonchai,
     }
 }
 

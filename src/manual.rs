@@ -70,7 +70,9 @@ pub enum Command {
     /// Type `text` (a special character from the palette).
     TypeText {
         hwnd: isize,
-        text: &'static str,
+        text: String,
+        /// Wait for the palette to close and focus to come back first.
+        wait: bool,
         requested_at: Instant,
     },
     /// Type the copied text key by key (remote desktops, VMs).
@@ -161,12 +163,14 @@ pub fn request_apply_review(keep: Vec<bool>) {
     }
 }
 
-/// Ask the worker to type `text` into `hwnd` once the palette has closed.
-pub fn request_type(hwnd: isize, text: &'static str) {
+/// Ask the worker to type `text` into `hwnd` (once the palette has closed
+/// and focus is back, when `wait`).
+pub fn request_type(hwnd: isize, text: String, wait: bool) {
     if let Some(tx) = SENDER.get() {
         let _ = tx.try_send(Command::TypeText {
             hwnd,
             text,
+            wait,
             requested_at: Instant::now(),
         });
     }
@@ -338,9 +342,12 @@ unsafe fn apply_review(keep: Vec<bool>) {
     }
 }
 
-/// Type `text` into `hwnd` once the palette has closed and focus is back.
-unsafe fn type_text(hwnd: isize, text: &str) {
-    thread::sleep(Duration::from_millis(200));
+/// Type `text` into `hwnd` (once the palette has closed and focus is back,
+/// when `wait`).
+unsafe fn type_text(hwnd: isize, text: &str, wait: bool) {
+    if wait {
+        thread::sleep(Duration::from_millis(200));
+    }
     if GetForegroundWindow().0 as isize != hwnd || !release_modifiers() {
         return;
     }
@@ -497,9 +504,10 @@ fn run(rx: Receiver<Command>) {
             Command::TypeText {
                 hwnd,
                 text,
+                wait,
                 requested_at,
             } if requested_at.elapsed() <= Duration::from_secs(3) => unsafe {
-                type_text(hwnd, text)
+                type_text(hwnd, &text, wait)
             },
             Command::TypeClipboard { hwnd, requested_at }
                 if requested_at.elapsed() <= Duration::from_secs(3) =>

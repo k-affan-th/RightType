@@ -60,7 +60,7 @@ const PREDICT_Y: i32 = 548;
 /// The restart-after-a-crash card on the Privacy & about page.
 const RESTART_Y: i32 = 486;
 /// The Thai keyboard picker on the Hotkeys page.
-const KEYBOARD_Y: i32 = 516;
+const KEYBOARD_Y: i32 = 568;
 
 /// The label of each hotkey action.
 pub fn action_label(action: Action) -> T {
@@ -72,6 +72,7 @@ pub fn action_label(action: Action) -> T {
         Action::Accept => T::HkAccept,
         Action::Panic => T::HkPanic,
         Action::Palette => T::HkPalette,
+        Action::KeyMap => T::HkKeyMap,
     }
 }
 
@@ -118,6 +119,7 @@ struct Ids {
     keys_reset: u16,
     kedmanee: u16,
     pattachote: u16,
+    manoonchai: u16,
     save_learned: u16,
     clear_learned: u16,
     apps_table: u16,
@@ -361,14 +363,21 @@ fn open_on(page: u8) {
     let kedmanee = s.segment(
         "Kedmanee",
         true,
-        (X0 + CW - 20 - 2 * 130, KEYBOARD_Y + 4, 130, 32),
+        (X0 + CW - 20 - 3 * 104, KEYBOARD_Y + 4, 104, 32),
         p.inset,
         h,
     );
     let pattachote = s.segment(
         "Pattachote",
         false,
-        (X0 + CW - 20 - 130, KEYBOARD_Y + 4, 130, 32),
+        (X0 + CW - 20 - 2 * 104, KEYBOARD_Y + 4, 104, 32),
+        p.inset,
+        h,
+    );
+    let manoonchai = s.segment(
+        "Manoonchai",
+        false,
+        (X0 + CW - 20 - 104, KEYBOARD_Y + 4, 104, 32),
         p.inset,
         h,
     );
@@ -687,6 +696,7 @@ fn open_on(page: u8) {
         keys_reset,
         kedmanee,
         pattachote,
+        manoonchai,
         save_learned,
         clear_learned,
         apps_table,
@@ -802,10 +812,19 @@ fn sync(win: &SettingsWindow) {
         config::RESTART_AFTER_CRASH.load(Ordering::Relaxed),
     );
     sync_app_choice(win);
-    let pattachote =
-        righttype::layout::thai_variant() == righttype::layout::ThaiVariant::Pattachote;
-    s.set_checked(ids.kedmanee, !pattachote);
-    s.set_checked(ids.pattachote, pattachote);
+    let variant = righttype::layout::thai_variant();
+    s.set_checked(
+        ids.kedmanee,
+        variant == righttype::layout::ThaiVariant::Kedmanee,
+    );
+    s.set_checked(
+        ids.pattachote,
+        variant == righttype::layout::ThaiVariant::Pattachote,
+    );
+    s.set_checked(
+        ids.manoonchai,
+        variant == righttype::layout::ThaiVariant::Manoonchai,
+    );
     s.set_text(
         ids.folder_label,
         &match learn::folder() {
@@ -946,9 +965,11 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
             ids.keys_status,
             &trf(T::HkPress, &[("v", tr(action_label(action)))]),
         );
-    } else if id == ids.kedmanee || id == ids.pattachote {
+    } else if id == ids.kedmanee || id == ids.pattachote || id == ids.manoonchai {
         righttype::layout::set_thai_variant(if id == ids.pattachote {
             righttype::layout::ThaiVariant::Pattachote
+        } else if id == ids.manoonchai {
+            righttype::layout::ThaiVariant::Manoonchai
         } else {
             righttype::layout::ThaiVariant::Kedmanee
         });
@@ -1666,7 +1687,7 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             }
         }
         PAGE_HOTKEYS => {
-            track(g, rect(X0 + CW - 24 - 2 * 130, KEYBOARD_Y, 2 * 130 + 8, 40));
+            track(g, rect(X0 + CW - 24 - 3 * 104, KEYBOARD_Y, 3 * 104 + 8, 40));
             card(g, rect(X0, 68, CW, Action::ALL.len() as i32 * 52 + 8));
             for i in 1..Action::ALL.len() as i32 {
                 divider(hdc, X0 + 16, 74 + i * 52 - 1, CW - 32);
