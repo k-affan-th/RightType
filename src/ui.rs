@@ -352,6 +352,10 @@ pub struct Fonts {
     pub subtitle: HFONT,
     pub title: HFONT,
     pub display: HFONT,
+    /// Windows' icon font for palette rows and headings; `None` where the
+    /// system has none (before Windows 10).
+    pub icons: Option<HFONT>,
+    pub icons_small: Option<HFONT>,
 }
 
 impl Fonts {
@@ -363,6 +367,8 @@ impl Fonts {
             subtitle: make_font(17, 600),
             title: make_font(24, 600),
             display: make_font(34, 600),
+            icons: make_icon_font(16),
+            icons_small: make_icon_font(13),
         }
     }
 }
@@ -376,7 +382,11 @@ impl Drop for Fonts {
             self.subtitle,
             self.title,
             self.display,
-        ] {
+        ]
+        .into_iter()
+        .chain(self.icons)
+        .chain(self.icons_small)
+        {
             unsafe {
                 let _ = DeleteObject(HGDIOBJ(font.0));
             }
@@ -452,6 +462,73 @@ pub fn make_font_at(size: i32, weight: i32, dpi: u32) -> HFONT {
             PCWSTR(face.as_ptr()),
         )
     }
+}
+
+/// The icon font this Windows has: Segoe Fluent Icons (Windows 11), else
+/// Segoe MDL2 Assets (Windows 10). The glyphs used are in both, at the same
+/// code points.
+fn icon_face() -> Option<&'static str> {
+    static FACE: OnceLock<Option<&'static str>> = OnceLock::new();
+    *FACE.get_or_init(|| {
+        ["Segoe Fluent Icons", "Segoe MDL2 Assets"]
+            .into_iter()
+            .find(|&face| installed(face))
+    })
+}
+
+/// Whether GDI gives `face` itself when asked for it, rather than a stand-in.
+fn installed(face: &str) -> bool {
+    let wide: Vec<u16> = format!("{face}\0").encode_utf16().collect();
+    unsafe {
+        let font = CreateFontW(
+            -16,
+            0,
+            0,
+            0,
+            400,
+            0,
+            0,
+            0,
+            DEFAULT_CHARSET.0 as u32,
+            OUT_DEFAULT_PRECIS.0 as u32,
+            CLIP_DEFAULT_PRECIS.0 as u32,
+            CLEARTYPE_QUALITY.0 as u32,
+            0,
+            PCWSTR(wide.as_ptr()),
+        );
+        let hdc = windows::Win32::Graphics::Gdi::GetDC(None);
+        let old = SelectObject(hdc, HGDIOBJ(font.0));
+        let mut got = [0u16; 64];
+        let n = windows::Win32::Graphics::Gdi::GetTextFaceW(hdc, Some(&mut got));
+        SelectObject(hdc, old);
+        windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc);
+        let _ = DeleteObject(HGDIOBJ(font.0));
+        let n = (n.max(1) as usize - 1).min(got.len());
+        String::from_utf16_lossy(&got[..n]).eq_ignore_ascii_case(face)
+    }
+}
+
+/// The icon font at `size` 96-DPI pixels, if Windows has one.
+fn make_icon_font(size: i32) -> Option<HFONT> {
+    let face: Vec<u16> = format!("{}\0", icon_face()?).encode_utf16().collect();
+    Some(unsafe {
+        CreateFontW(
+            -px(size),
+            0,
+            0,
+            0,
+            400,
+            0,
+            0,
+            0,
+            DEFAULT_CHARSET.0 as u32,
+            OUT_DEFAULT_PRECIS.0 as u32,
+            CLIP_DEFAULT_PRECIS.0 as u32,
+            CLEARTYPE_QUALITY.0 as u32,
+            0,
+            PCWSTR(face.as_ptr()),
+        )
+    })
 }
 
 // ------------------------------------------------------------------ show
@@ -810,6 +887,9 @@ pub enum TextStyle {
     Small,
     /// `Shift + Backspace` drawn as key caps.
     Keys,
+    /// A palette heading: small dim text after an icon (a glyph of the icon
+    /// font, kept out of the text so a screen reader does not read it).
+    Heading(char),
 }
 
 #[derive(Clone)]
@@ -834,9 +914,11 @@ pub enum Kind {
     Table,
     /// A palette row: left-aligned text with an optional number key cap in
     /// front (`"3\tFix text"`; `"\tFix text"` without), and `hint` in dim
-    /// text at the right (a state, or what a key does).
+    /// text at the right (a state, or what a key does). `icon` (a glyph of
+    /// the icon font) goes between the key cap and the text.
     Row {
         hint: String,
+        icon: char,
     },
 }
 
@@ -1176,6 +1258,32 @@ impl Surface {
                 self.paint_keys(hdc, &s, rc);
                 0
             }
+            TextStyle::Heading(icon) => {
+                let mut t = rc;
+                if let Some(font) = f.icons_small {
+                    let ic = RECT {
+                        right: rc.left + px(16),
+                        ..rc
+                    };
+                    text(
+                        hdc,
+                        &icon.to_string(),
+                        ic,
+                        font,
+                        p.text_dim,
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE,
+                    );
+                    t.left += px(22);
+                }
+                text(
+                    hdc,
+                    &s,
+                    t,
+                    f.small,
+                    p.text_dim,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                )
+            }
         };
     }
 
@@ -1416,7 +1524,7 @@ impl Surface {
                     DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
                 );
             }
-            Kind::Row { hint } => {
+            Kind::Row { hint, icon } => {
                 if focus || hot || pressed {
                     g.fill_round(rc, radius, p.surface_hover);
                 }
@@ -1454,6 +1562,24 @@ impl Surface {
                     );
                 }
                 x += cap_w + px(10);
+                if let (Some(font), false) = (f.icons, *icon == '\0') {
+                    let ic = RECT {
+                        left: x,
+                        right: x + px(18),
+                        ..rc
+                    };
+                    // The selected row's icon in the accent colour: the eye
+                    // finds the row by it.
+                    text(
+                        hdc,
+                        &icon.to_string(),
+                        ic,
+                        font,
+                        if focus { p.accent } else { p.text_dim },
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+                    );
+                    x += px(18) + px(10);
+                }
                 let hint_w = if hint.is_empty() {
                     0
                 } else {
@@ -1595,7 +1721,16 @@ impl Surface {
 
     /// One row of the palette (see [`Kind::Row`]): joins the previous row's
     /// group, so the arrow keys move between them.
-    pub fn row(&self, s: &str, hint: &str, first: bool, rc: (i32, i32, i32, i32), bg: Rgb) -> u16 {
+    /// `icon` is a glyph of the icon font, or `'\0'` for none.
+    pub fn row(
+        &self,
+        s: &str,
+        hint: &str,
+        icon: char,
+        first: bool,
+        rc: (i32, i32, i32, i32),
+        bg: Rgb,
+    ) -> u16 {
         let group = if first { WS_GROUP } else { 0 };
         self.create(
             "BUTTON",
@@ -1604,6 +1739,7 @@ impl Surface {
             rc,
             Kind::Row {
                 hint: hint.to_string(),
+                icon,
             },
             bg,
             0,

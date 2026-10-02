@@ -32,7 +32,7 @@ static OPEN: AtomicIsize = AtomicIsize::new(0);
 /// The window that had focus when the palette last opened.
 static PREVIOUS: AtomicIsize = AtomicIsize::new(0);
 
-const W: i32 = 380;
+const W: i32 = 400;
 const ROW: i32 = 34;
 /// A section heading's height.
 const HEAD: i32 = 24;
@@ -119,6 +119,56 @@ impl Section {
     /// Rows here get the numbers 1–9.
     fn numbered(self) -> bool {
         !matches!(self, Section::Mode | Section::Options)
+    }
+
+    /// The heading's icon (a glyph of Windows' icon font).
+    fn icon(self) -> char {
+        match self {
+            Section::Words => '\u{E81C}',     // History
+            Section::Fix => '\u{E90F}',       // Repair
+            Section::Selection => '\u{E8B3}', // SelectAll
+            Section::Here => '\u{E7F4}',      // TVMonitor
+            Section::Mode => '\u{E9E9}',      // Equalizer
+            Section::Options => '\u{E713}',   // Settings
+        }
+    }
+}
+
+impl Command {
+    /// The row's icon (a glyph of Windows' icon font), so the eye finds a
+    /// row by its shape before reading it.
+    fn icon(self) -> char {
+        match self {
+            Command::History(_) => '\u{E8AB}',     // Switch
+            Command::KeepAsTyped(_) => '\u{E7A7}', // Undo
+            Command::FixText => '\u{E8A5}',        // Document
+            Command::FixField => '\u{E8AC}',       // Rename
+            Command::Transform(kind) => match kind {
+                TransformKind::Digits => '\u{E8EF}',   // Calculator
+                TransformKind::Upper => '\u{E8E8}',    // FontIncrease
+                TransformKind::Lower => '\u{E8E7}',    // FontDecrease
+                TransformKind::Title => '\u{E8D2}',    // Font
+                TransformKind::SwapCase => '\u{E895}', // Sync
+            },
+            Command::OfferForNow(_) => '\u{E916}', // Stopwatch
+            Command::OfferKeep(_) => '\u{E74E}',   // Save
+            Command::Pause => '\u{E769}',          // Pause
+            Command::Resume => '\u{E768}',         // Play
+            Command::FieldOff => '\u{E733}',       // Blocked
+            Command::FieldOn => '\u{E73E}',        // CheckMark
+            Command::AppOff | Command::AppDefault => '\u{E7E8}', // PowerButton
+            Command::Mode(mode) => match mode {
+                hook::Mode::Auto => '\u{E945}',    // LightningBolt
+                hook::Mode::Suggest => '\u{EA80}', // Lightbulb
+                _ => '\u{E765}',                   // KeyboardClassic
+            },
+            Command::MoreOptions => '\u{E712}',  // More
+            Command::Spelling => '\u{E82D}',     // Dictionary
+            Command::Hyphens => '\u{E738}',      // Remove (a dash)
+            Command::CapsSwitch => '\u{E72E}',   // Lock
+            Command::TrayLanguage => '\u{E774}', // Globe
+            Command::Settings => '\u{E713}',     // Settings
+        }
     }
 }
 
@@ -808,7 +858,7 @@ fn open() {
         .map(|&section| {
             let id = surface.label(
                 &heading(section, app.as_deref()),
-                TextStyle::Small,
+                TextStyle::Heading(section.icon()),
                 (PAD + 8, PAD + 28, W - 2 * PAD - 16, HEAD - 4),
                 p.surface,
                 0,
@@ -823,6 +873,7 @@ fn open() {
             let id = surface.row(
                 &entry.label,
                 &entry.hint,
+                entry.command.icon(),
                 i == 0,
                 (PAD, PAD + 28 + i as i32 * ROW, W - 2 * PAD, ROW - 2),
                 p.surface,

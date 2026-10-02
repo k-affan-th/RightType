@@ -135,7 +135,9 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   the selected text, this app and field, and the mode, each under its own
   heading; numbers 1–9 go to the things done to text, and the switches and
   Settings are folded under one row until opened (or searched for). Rows
-  are left-aligned with their state (On/Off, in use) at the right.
+  are left-aligned with their state (On/Off, in use) at the right, and every
+  row and heading has an icon from Windows' own icon font; the selected
+  row's icon takes the accent colour.
 
 - **Smoother tags and messages**: the pill now rises a few pixels into
   place while fading in (140 ms, ease-out) and fades out with an ease-in

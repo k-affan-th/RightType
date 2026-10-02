@@ -106,14 +106,15 @@ jobs:
         path: target/debug/righttype.exe
         retention-days: 7
     # The one-click self-test for a real PC: this build, the e2e scripts and
-    # test-on-my-pc.bat in one zip (unzip, double-click the .bat).
+    # test-on-my-pc.bat in one zip (unzip, double-click the .bat); preview-ui.bat
+    # opens one window for a look without the test.
     - name: Package self-test
       shell: pwsh
       run: |
         $dir = "selftest"
         New-Item -ItemType Directory -Force -Path $dir | Out-Null
         Copy-Item target/debug/righttype.exe $dir
-        Copy-Item e2e/*.py, e2e/target.html, e2e/test-on-my-pc.bat $dir
+        Copy-Item e2e/*.py, e2e/target.html, e2e/test-on-my-pc.bat, e2e/preview-ui.bat $dir
     - name: Upload self-test
       uses: actions/upload-artifact@v4
       with:
