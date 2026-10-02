@@ -1383,6 +1383,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         false
     };
     if !down {
+        if vk == VK_BACK.0 {
+            FLIP_DOWN.with(|f| f.set(None));
+        }
         if vk == VK_CAPITAL.0 {
             if let Some(at) = CAPS_DOWN_AT.with(|c| c.take()) {
                 caps_released(at);
@@ -1392,6 +1395,14 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return false;
     }
     e2e_trace(format!("key vk={vk:#x} repeat={repeat}"));
+    // Shift+Backspace still held: its repeats are the flip's, with or
+    // without Shift. A flip sends Shift-up with its keys, so the next
+    // repeats arrive as plain Backspace and deleted the words just flipped
+    // (CI: `l;ylfu 8iy[`). Swallowed until Backspace is released.
+    if vk == VK_BACK.0 && repeat && FLIP_DOWN.with(|f| f.get()).is_some() {
+        flip_held_repeat();
+        return true;
+    }
     if capture_key(vk) {
         return true;
     }
@@ -1846,15 +1857,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // own setting); the other repeats do nothing, or auto-repeat would
         // run back and forth through the words.
         if repeat {
-            let held = FLIP_DOWN.with(|f| {
-                f.get()
-                    .filter(|(at, done)| !done && at.elapsed() >= FLIP_HOLD)
-                    .is_some()
-            });
-            if held {
-                FLIP_DOWN.with(|f| f.set(f.get().map(|(at, _)| (at, true))));
-                flip_rest_of_run();
-            }
+            flip_held_repeat();
             return true;
         }
         FLIP_DOWN.with(|f| f.set(Some((Instant::now(), false))));
@@ -2942,6 +2945,20 @@ thread_local! {
     /// When Shift+Backspace went down, and whether holding it has acted.
     static FLIP_DOWN: std::cell::Cell<Option<(Instant, bool)>> =
         const { std::cell::Cell::new(None) };
+}
+
+/// A repeat of a held Shift+Backspace: once it has been held for
+/// FLIP_HOLD, flip the rest of the run (once); otherwise nothing.
+unsafe fn flip_held_repeat() {
+    let held = FLIP_DOWN.with(|f| {
+        f.get()
+            .filter(|(at, done)| !done && at.elapsed() >= FLIP_HOLD)
+            .is_some()
+    });
+    if held {
+        FLIP_DOWN.with(|f| f.set(f.get().map(|(at, _)| (at, true))));
+        flip_rest_of_run();
+    }
 }
 
 /// Shift+Backspace held: flip every word of the run the presses have not

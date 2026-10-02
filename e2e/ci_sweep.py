@@ -212,15 +212,20 @@ def keyboard_states(t):
     finally:
         fs.set_mode("auto")
     t.clear()
-    numlock_on = bool(user32.GetKeyState(0x90) & 1)
-    if numlock_on:
+    # Keypad 1 with NumLock off sends End (not extended). This process's
+    # view of NumLock (GetKeyState) can be stale (CI: read as on, was off,
+    # and the check pressed it on), so: try, and if nothing was said, switch
+    # NumLock over and try once more; put it back afterwards.
+    said = traced(lambda: tap(0x23), "NumLock off: said so")
+    toggled = said != "yes"
+    if toggled:
         tap(0x90)
     try:
-        # Keypad 1 with NumLock off sends End (not extended).
-        fs.check(t.name, "keypad with NumLock off is pointed out",
-                 traced(lambda: tap(0x23), "NumLock off: said so"), "yes")
+        if toggled:
+            said = traced(lambda: tap(0x23), "NumLock off: said so")
+        fs.check(t.name, "keypad with NumLock off is pointed out", said, "yes")
     finally:
-        if numlock_on:
+        if toggled:
             tap(0x90)
     # Insert from the editing keys is an extended key.
     def insert():
@@ -1279,7 +1284,11 @@ def report_has_no_typed_text(target, results):
         return
     # Text the checks typed or read (not the clipboard checks' own sentinel,
     # whose words are not typed, and "clipboard" is in RightType's messages).
+    # Nor the answers of checks that typed nothing ("yes", "True"): those
+    # are the sweep's words, and the report says "yes" of its own.
+    answers = {"yes", "no", "True", "False"}
     words = {w for _, name, _, got, expect in results if "clipboard" not in name
+             and got not in answers and expect not in answers
              for w in (got + " " + expect).split() if len(w) >= 3}
     # Whole words: "correct" is part of the report's own word "correction".
     import re

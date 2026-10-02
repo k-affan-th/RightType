@@ -721,8 +721,12 @@ impl TextBox {
 
     /// The selection, in UTF-16 positions (16 bits each: EM_GETSEL's limit).
     fn selection(&self) -> Option<(usize, usize)> {
+        self.selection_within(300)
+    }
+
+    fn selection_within(&self, ms: u32) -> Option<(usize, usize)> {
         const EM_GETSEL: u32 = 0x00B0;
-        let sel = self.ask(EM_GETSEL, 0, 0)?;
+        let sel = self.ask_within(EM_GETSEL, 0, 0, ms)?;
         Some((sel & 0xFFFF, (sel >> 16) & 0xFFFF))
     }
 
@@ -806,8 +810,13 @@ impl TextBox {
     ) -> Result<(), ReplaceError> {
         const EM_SETSEL: u32 = 0x00B1;
         const EM_REPLACESEL: u32 = 0x00C2;
+        // This runs inside the keyboard hook: every wait here counts toward
+        // the time Windows gives the hook, after which it lets the key
+        // through itself (CI: `lสวัสดี`, the first word after start, when a
+        // 300 ms wait for the caret went unanswered). Short waits, so the
+        // whole replacement stays well inside it.
         let (start, end) = self
-            .selection()
+            .selection_within(STEP_MS)
             .ok_or(ReplaceError::Untouched("no answer"))?;
         if start != end {
             return Err(ReplaceError::Untouched("text is selected"));
@@ -822,11 +831,11 @@ impl TextBox {
         let from = start - delete;
         #[cfg(debug_assertions)]
         self.trace_around(start, delete);
-        self.ask(EM_SETSEL, from, start as isize)
+        self.ask_within(EM_SETSEL, from, start as isize, STEP_MS)
             .ok_or(ReplaceError::Untouched("could not select"))?;
-        if self.selection() != Some((from, start)) {
+        if self.selection_within(STEP_MS) != Some((from, start)) {
             // Put the caret back where it was before giving the job to keys.
-            let _ = self.ask(EM_SETSEL, start, start as isize);
+            let _ = self.ask_within(EM_SETSEL, start, start as isize, STEP_MS);
             return Err(ReplaceError::Untouched("selection did not take"));
         }
         let mut units: zeroize::Zeroizing<Vec<u16>> =
@@ -834,7 +843,7 @@ impl TextBox {
         // wParam 1: the replacement can be undone (Ctrl+Z in the app). A
         // short wait: an answer only confirms what the box will do anyway.
         if self
-            .ask_within(EM_REPLACESEL, 1, units.as_mut_ptr() as isize, 100)
+            .ask_within(EM_REPLACESEL, 1, units.as_mut_ptr() as isize, STEP_MS)
             .is_none()
         {
             // Sent, not yet answered: a slow box (a Notepad just opened,
@@ -850,7 +859,7 @@ impl TextBox {
             return Ok(());
         }
         let expected = from + units.len() - 1;
-        match self.selection() {
+        match self.selection_within(STEP_MS) {
             Some((a, b)) if a == expected && b == expected => Ok(()),
             _ => Err(ReplaceError::Unknown(
                 "caret not where the replacement should leave it",
@@ -858,6 +867,10 @@ impl TextBox {
         }
     }
 }
+
+/// The longest one message to a text box may wait while the keyboard hook
+/// is replacing a word (see [`TextBox::replace_before_caret`]).
+const STEP_MS: u32 = 80;
 
 thread_local! {
     static WAITING_ON_APP: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
