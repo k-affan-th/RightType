@@ -12,6 +12,8 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 
 use native_windows_gui as nwg;
 use righttype::i18n::{tr, T};
+use righttype::layout::ThaiVariant;
+use righttype::trainer::Board;
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Gdi::HDC;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -59,6 +61,43 @@ struct Map {
 
 thread_local! {
     static CURRENT: RefCell<Option<Rc<Map>>> = const { RefCell::new(None) };
+    /// The keyboard shown when not the one in use (a keyboard being
+    /// learnt, from typing practice).
+    static SHOWN: Cell<Option<ThaiVariant>> = const { Cell::new(None) };
+}
+
+fn variant() -> ThaiVariant {
+    SHOWN
+        .with(|v| v.get())
+        .unwrap_or_else(righttype::layout::thai_variant)
+}
+
+/// What key `key` types on the keyboard shown, and how it is drawn.
+fn shown_of(key: char) -> (String, String) {
+    let v = variant();
+    if v == righttype::layout::thai_variant() {
+        return thai_of(key);
+    }
+    match Board::Thai(v).char_of(key) {
+        Some(c) if is_mark(c) => (c.to_string(), format!("◌{c}")),
+        Some(c) => (c.to_string(), c.to_string()),
+        None => (key.to_string(), key.to_string()),
+    }
+}
+
+/// Show the map of keyboard `v` (open it, or switch it if open).
+pub fn request_show(v: ThaiVariant) {
+    SHOWN.with(|s| s.set(Some(v)));
+    unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
+        let _ = KillTimer(None, id);
+        if let Some(map) = CURRENT.with(|c| c.borrow_mut().take()) {
+            close(&map);
+        }
+        open();
+    }
+    unsafe {
+        SetTimer(None, 0, 1, Some(fire));
+    }
 }
 
 /// What a key types on the Thai keyboard in use, and how it is shown (a
@@ -95,6 +134,7 @@ fn toggle() {
         close(&map);
         return;
     }
+    SHOWN.with(|s| s.set(None));
     open();
 }
 
@@ -125,8 +165,19 @@ fn open() {
     }
     let surface = Surface::attach(&window, 0x5254_0016, Box::new(paint));
     let p = pal();
+    // A keyboard being learnt (not the one in use) is named.
+    let head = if variant() == righttype::layout::thai_variant() {
+        tr(T::KeyMapHead).to_string()
+    } else {
+        let name = match variant() {
+            ThaiVariant::Kedmanee => T::PracticeKedmanee,
+            ThaiVariant::Pattachote => T::PracticePattachote,
+            ThaiVariant::Manoonchai => T::PracticeManoonchai,
+        };
+        format!("{} · {}", tr(name), tr(T::KeyMapHead))
+    };
     surface.label(
-        tr(T::KeyMapHead),
+        &head,
         TextStyle::Small,
         (PAD + 4, PAD + 8, W - 2 * PAD - 150, 22),
         p.surface,
@@ -139,7 +190,7 @@ fn open() {
         let y = PAD + HEAD + r as i32 * (KEY + GAP);
         for (i, (k, s)) in row.chars().zip(up.chars()).enumerate() {
             let x = PAD + (INDENT[r] * (KEY + GAP)) / 2 + i as i32 * (KEY + GAP);
-            let (_, shown) = thai_of(k);
+            let (_, shown) = shown_of(k);
             let id = surface.button(&shown, false, (x, y, KEY, KEY), p.surface, 0);
             keys.push((id, k, s));
         }
@@ -181,6 +232,7 @@ fn open() {
             SWP_NOMOVE | SWP_NOSIZE,
         );
     }
+    fade_learnt(&map);
     OPEN.store(map.surface.hwnd.0 as isize, Ordering::Release);
     let weak = Rc::downgrade(&map);
     map.surface.on_click(move |id| {
@@ -197,13 +249,14 @@ fn open() {
             map.shifted.set(on);
             map.surface.set_checked(map.shift, on);
             for (button, k, s) in &map.keys {
-                let (_, shown) = thai_of(if on { *s } else { *k });
+                let (_, shown) = shown_of(if on { *s } else { *k });
                 map.surface.set_text(*button, &shown);
             }
+            fade_learnt(&map);
             return;
         }
         if let Some((_, k, s)) = map.keys.iter().find(|(b, _, _)| *b == id) {
-            let (typed, _) = thai_of(if map.shifted.get() { *s } else { *k });
+            let (typed, _) = shown_of(if map.shifted.get() { *s } else { *k });
             let target = unsafe { GetForegroundWindow() }.0 as isize;
             crate::manual::request_type(target, typed, false);
         }
@@ -217,6 +270,18 @@ fn open() {
     .ok();
     *map.handler.borrow_mut() = raw;
     CURRENT.with(|c| *c.borrow_mut() = Some(map));
+}
+
+/// Keys known from typing practice fade (up to three quarters, so a
+/// glance still finds them): the map stays on screen while moving to a new
+/// keyboard, and shows less as the keys are learnt.
+fn fade_learnt(map: &Map) {
+    let shifted = map.shifted.get();
+    for (button, k, s) in &map.keys {
+        let us = if shifted { *s } else { *k };
+        let known = crate::practice::mastery_of(variant(), us);
+        map.surface.set_fade(*button, (known * 75.0) as u8);
+    }
 }
 
 fn paint(g: &Gfx, _hdc: HDC, rc: RECT, _page: u8) {

@@ -32,6 +32,9 @@ use windows::Win32::Graphics::Dwm::{
     DWMWINDOWATTRIBUTE,
 };
 use windows::Win32::Graphics::Gdi::{
+    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, SRCCOPY,
+};
+use windows::Win32::Graphics::Gdi::{
     CreateFontW, CreateSolidBrush, DeleteObject, DrawTextW, FillRect, InvalidateRect, SelectObject,
     SetBkMode, SetTextColor, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET,
     DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_RIGHT,
@@ -66,6 +69,16 @@ use zeroize::Zeroize;
 
 /// A colour as `0xRRGGBB`.
 pub type Rgb = u32;
+
+/// `a` moved `percent` (0–100) of the way to `b`.
+pub fn blend(a: Rgb, b: Rgb, percent: u8) -> Rgb {
+    let t = percent.min(100) as u32;
+    let ch = |c: Rgb, s: u32| (c >> s) & 0xFF;
+    [0, 8, 16]
+        .iter()
+        .map(|&sh| ((ch(a, sh) * (100 - t) + ch(b, sh) * t) / 100) << sh)
+        .sum()
+}
 
 /// Every colour the windows use.
 #[derive(Clone, PartialEq, Eq)]
@@ -659,6 +672,25 @@ pub fn size_and_center(hwnd: HWND, w: i32, h: i32) {
         let x = wa.left + ((wa.right - wa.left) - ww).max(0) / 2;
         let y = wa.top + ((wa.bottom - wa.top) - wh).max(0) / 2;
         let _ = SetWindowPos(hwnd, None, x, y, ww, wh, SWP_NOZORDER | SWP_NOACTIVATE);
+        redraw_all(hwnd);
+    }
+}
+
+/// Repaint a window and its controls in full. A window drawn before it
+/// reached its final size and place can otherwise keep showing the plain
+/// background where the first drawing was lost (seen at 144 DPI: the
+/// typing practice text and keyboard missing until something changed).
+pub fn redraw_all(hwnd: HWND) {
+    use windows::Win32::Graphics::Gdi::{
+        RedrawWindow, RDW_ALLCHILDREN, RDW_ERASE, RDW_FRAME, RDW_INVALIDATE,
+    };
+    unsafe {
+        let _ = RedrawWindow(
+            hwnd,
+            None,
+            None,
+            RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME,
+        );
     }
 }
 
@@ -1006,6 +1038,8 @@ pub struct Surface {
     /// The height of pages taller than the window, in 96-DPI units: those
     /// scroll with the mouse wheel.
     page_heights: RefCell<HashMap<u8, i32>>,
+    /// Buttons whose label is faded toward their fill, 0–100 (percent).
+    faded: RefCell<HashMap<isize, u8>>,
 }
 
 thread_local! {
@@ -1136,6 +1170,7 @@ impl Surface {
             on_table: RefCell::new(None),
             scroll: std::cell::Cell::new(0),
             page_heights: RefCell::new(HashMap::new()),
+            faded: RefCell::new(HashMap::new()),
         });
         let weak = Rc::downgrade(&surface);
         let handler =
@@ -1211,15 +1246,36 @@ impl Surface {
                 Some(LRESULT(0))
             }
             WM_ERASEBKGND => {
-                let hdc = HDC(w as *mut c_void);
+                // Drawn off screen, then copied at once: a window repainted
+                // often (practice, 30 times a second) never shows half a
+                // frame.
+                let screen = HDC(w as *mut c_void);
                 let mut rc = RECT::default();
                 let _ = GetClientRect(self.hwnd, &mut rc);
+                let (cw, ch) = (rc.right - rc.left, rc.bottom - rc.top);
+                let mem = CreateCompatibleDC(screen);
+                let bmp = CreateCompatibleBitmap(screen, cw.max(1), ch.max(1));
+                let (hdc, old) = if mem.is_invalid() || bmp.is_invalid() {
+                    (screen, None)
+                } else {
+                    (mem, Some(SelectObject(mem, HGDIOBJ(bmp.0))))
+                };
                 fill(hdc, rc, pal().bg);
                 if let Some(g) = Gfx::new(hdc) {
                     PAINT_SCROLL.with(|s| s.set(self.scroll.get()));
                     (self.painter)(&g, hdc, rc, self.page.get());
                     PAINT_SCROLL.with(|s| s.set(0));
                     self.paint_scroll_thumb(&g, rc);
+                }
+                if let Some(old) = old {
+                    let _ = BitBlt(screen, 0, 0, cw, ch, mem, 0, 0, SRCCOPY);
+                    SelectObject(mem, old);
+                }
+                if !bmp.is_invalid() {
+                    let _ = DeleteObject(HGDIOBJ(bmp.0));
+                }
+                if !mem.is_invalid() {
+                    let _ = DeleteDC(mem);
                 }
                 Some(LRESULT(1))
             }
@@ -1601,9 +1657,21 @@ impl Surface {
                 } else {
                     p.button
                 };
-                g.fill_round(rc, radius, p.border);
+                let fade = self
+                    .faded
+                    .borrow()
+                    .get(&(nm.hdr.hwnd_from.0 as isize))
+                    .copied()
+                    .unwrap_or(0);
+                let edge = blend(p.border, fillc, fade);
+                g.fill_round(rc, radius, edge);
                 g.fill_round(inset(rc, px(1)), radius, fillc);
-                text(hdc, &label, rc, f.body, p.text, center);
+                let ink = if hot || pressed {
+                    p.text
+                } else {
+                    blend(p.text, fillc, fade)
+                };
+                text(hdc, &label, rc, f.body, ink, center);
             }
             Kind::Toggle { sub } => {
                 if hot {
@@ -2260,6 +2328,19 @@ impl Surface {
                 LPARAM(0),
             );
             let _ = InvalidateRect(self.hwnd_of(id), None, true);
+        }
+    }
+
+    /// Fade a button's label and edge toward its fill (`percent` 0–100);
+    /// it shows in full again under the mouse.
+    pub fn set_fade(&self, id: u16, percent: u8) {
+        let hwnd = self.hwnd_of(id);
+        let percent = percent.min(100);
+        let old = self.faded.borrow_mut().insert(hwnd.0 as isize, percent);
+        if old != Some(percent) {
+            unsafe {
+                let _ = InvalidateRect(hwnd, None, true);
+            }
         }
     }
 

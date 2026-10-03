@@ -20,7 +20,7 @@ use native_windows_gui as nwg;
 use righttype::i18n::{tr, trf, T};
 use righttype::keyboard::KEYS;
 use righttype::layout::ThaiVariant;
-use righttype::trainer::{self, Board, DayScore, Lesson, Rng, Session, Typed};
+use righttype::trainer::{self, Board, DayScore, KeyStats, Lesson, Rng, Session, Typed};
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Gdi::{
     DeleteObject, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER, HDC, HGDIOBJ,
@@ -168,6 +168,7 @@ struct Practice {
     modes: [u16; 3],
     lessons: [u16; 8],
     keep: u16,
+    on_screen: u16,
     timer: Cell<usize>,
     handler: RefCell<Option<nwg::RawEventHandler>>,
 }
@@ -175,6 +176,53 @@ struct Practice {
 thread_local! {
     static CURRENT: RefCell<Option<Rc<Practice>>> = const { RefCell::new(None) };
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
+    /// How each key went in practice (kept beside the scores when they
+    /// are kept; else only while RightType runs). `None`: not read yet.
+    static KEY_STATS: RefCell<Option<KeyStats>> = const { RefCell::new(None) };
+}
+
+fn with_key_stats<R>(f: impl FnOnce(&mut KeyStats) -> R) -> R {
+    KEY_STATS.with(|k| {
+        let mut k = k.borrow_mut();
+        let stats = k.get_or_insert_with(|| {
+            if crate::hook::practice_keeps_scores() {
+                read_file()
+                    .map(|t| trainer::key_stats_from_text(&t))
+                    .unwrap_or_default()
+            } else {
+                KeyStats::new()
+            }
+        });
+        f(stats)
+    })
+}
+
+/// Practice counts for the keyboard-map render (debug builds).
+#[cfg(debug_assertions)]
+pub fn seed_demo() {
+    let board = Board::Thai(righttype::layout::thai_variant());
+    with_key_stats(|k| {
+        for (i, us) in "asdfjkl;ghqwer".chars().enumerate() {
+            k.insert(
+                (board.name(), us),
+                trainer::KeyStat {
+                    hits: 140 - i as u32 * 9,
+                    misses: 0,
+                },
+            );
+        }
+    });
+}
+
+/// How well key `us` (by its US character) of the Thai keyboard in use is
+/// known, 0 to 1: the keyboard map fades the keys learnt (T5).
+pub fn mastery_of(variant: ThaiVariant, us: char) -> f32 {
+    let board = Board::Thai(variant);
+    with_key_stats(|k| {
+        k.get(&(board.name(), us))
+            .map(|s| trainer::mastery(*s))
+            .unwrap_or(0.0)
+    })
 }
 
 /// Open the practice window (from the message loop).
@@ -194,9 +242,12 @@ fn scores_path() -> Option<std::path::PathBuf> {
     Some(p)
 }
 
+fn read_file() -> Option<String> {
+    scores_path().and_then(|p| std::fs::read_to_string(p).ok())
+}
+
 fn load_scores() -> Vec<DayScore> {
-    scores_path()
-        .and_then(|p| std::fs::read_to_string(p).ok())
+    read_file()
         .map(|t| trainer::scores_from_text(&t))
         .unwrap_or_default()
 }
@@ -216,6 +267,9 @@ fn close(p: &Rc<Practice>) {
         let _ = nwg::unbind_raw_event_handler(&h);
     }
     p.window.close();
+    if crate::hook::practice_keeps_scores() {
+        save_scores();
+    }
     STATE.with(|s| s.borrow_mut().take());
 }
 
@@ -278,6 +332,13 @@ fn open() {
     let lessons: [u16; 8] = seg(&LESSON_LABELS, PAD + 4, ROW2_Y, (W - 2 * PAD - 8) / 8)
         .try_into()
         .unwrap_or([0; 8]);
+    let on_screen = s.button(
+        tr(T::PracticeOnScreen),
+        false,
+        (W - PAD - 260, 18, 260, 34),
+        pl.bg,
+        0,
+    );
     let keep = s.toggle(
         tr(T::RowKeepScores),
         tr(T::SubKeepScores),
@@ -328,6 +389,7 @@ fn open() {
         modes,
         lessons,
         keep,
+        on_screen,
         timer: Cell::new(0),
         handler: RefCell::new(None),
     });
@@ -338,6 +400,8 @@ fn open() {
         let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd);
         p.timer.set(SetTimer(hwnd, 1, 33, None));
     }
+    // Now that there is something to draw.
+    ui::redraw_all(hwnd);
     let weak = Rc::downgrade(&p);
     p.surface.on_click(move |id| {
         if let Some(p) = weak.upgrade() {
@@ -429,6 +493,15 @@ fn clicked(p: &Rc<Practice>, id: u16) {
             s.lesson = i;
             s.new_round();
         });
+    } else if id == p.on_screen {
+        // T5: the map of the Thai keyboard in use, on top while working;
+        // the keys learnt here fade.
+        let variant = match with_state(|s| s.board) {
+            Some(Board::Thai(v)) => v,
+            _ => righttype::layout::thai_variant(),
+        };
+        crate::keymap::request_show(variant);
+        crate::overlay::show(tr(T::PracticeOnScreenTip));
     } else if id == p.keep {
         let on = p.surface.checked(p.keep);
         crate::hook::set_practice_keeps_scores(on);
@@ -436,6 +509,25 @@ fn clicked(p: &Rc<Practice>, id: u16) {
         if on {
             let loaded = load_scores();
             with_state(|s| s.scores = loaded);
+            // Counts from before, added to this run's (unless not read yet:
+            // they are read with the file then).
+            let read = KEY_STATS.with(|k| k.borrow().is_some());
+            let kept = read
+                .then(read_file)
+                .flatten()
+                .map(|t| trainer::key_stats_from_text(&t))
+                .unwrap_or_default();
+            with_key_stats(|k| {
+                for (key, s) in kept {
+                    let e = k.entry(key).or_default();
+                    e.hits = e.hits.saturating_add(s.hits);
+                    e.misses = e.misses.saturating_add(s.misses);
+                }
+            });
+            save_scores();
+        } else if let Some(path) = scores_path() {
+            // Turned off: what was kept goes.
+            let _ = std::fs::remove_file(path);
         }
     }
     repaint(p);
@@ -480,6 +572,7 @@ fn key(p: &Rc<Practice>, us: Option<char>, vk: u16) {
             });
             match target {
                 Some(i) if game.falling[i].text.get(game.falling[i].typed) == Some(&c) => {
+                    count_key(s.board, c, true);
                     game.falling[i].typed += 1;
                     if game.falling[i].typed == game.falling[i].text.len() {
                         game.falling.remove(i);
@@ -492,6 +585,7 @@ fn key(p: &Rc<Practice>, us: Option<char>, vk: u16) {
                 Some(i) => {
                     let due = game.falling[i].text[game.falling[i].typed];
                     *s.misses.entry(due).or_insert(0) += 1;
+                    count_key(s.board, due, false);
                 }
                 None => {}
             }
@@ -519,6 +613,9 @@ fn key(p: &Rc<Practice>, us: Option<char>, vk: u16) {
 fn finish(s: &mut State) -> (u32, u8) {
     let now = s.now_ms();
     let score = (s.session.per_minute(now), s.session.accuracy());
+    let board = s.board;
+    with_key_stats(|k| trainer::add_key_stats(k, board, &s.session.hit, &s.session.missed));
+    s.session.hit.clear();
     for (c, n) in s.session.missed.drain() {
         *s.misses.entry(c).or_insert(0) += n;
     }
@@ -536,14 +633,29 @@ fn finish(s: &mut State) -> (u32, u8) {
     score
 }
 
+/// One key of the game, right or missed.
+fn count_key(board: Board, c: char, right: bool) {
+    let one = HashMap::from([(c, 1)]);
+    let none = HashMap::new();
+    let (hit, missed) = if right { (&one, &none) } else { (&none, &one) };
+    with_key_stats(|k| trainer::add_key_stats(k, board, hit, missed));
+}
+
+/// Write the day scores and the key counts (only when they are kept).
 fn save_scores() {
-    let text = STATE.with(|s| {
+    let scores = STATE.with(|s| {
         s.borrow()
             .as_ref()
             .map(|s| trainer::scores_to_text(&s.scores))
     });
-    if let (Some(path), Some(text)) = (scores_path(), text) {
-        let _ = std::fs::write(path, text);
+    let Some(scores) = scores
+        .or_else(|| read_file().map(|t| trainer::scores_to_text(&trainer::scores_from_text(&t))))
+    else {
+        return;
+    };
+    let keys = with_key_stats(|k| trainer::key_stats_to_text(k));
+    if let Some(path) = scores_path() {
+        let _ = std::fs::write(path, scores + &keys);
     }
 }
 

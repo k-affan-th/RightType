@@ -357,6 +357,8 @@ texts! {
     PracticeSpeed => "{n} per minute", "{n} ตัว/นาที";
     PracticeAccuracy => "{n}% right", "ถูก {n}%";
     PracticeLeft => "{t} left", "เหลือ {t}";
+    PracticeOnScreen => "Keep this keyboard on screen", "เปิดแป้นนี้ค้างไว้บนจอ";
+    PracticeOnScreenTip => "While you work, the keyboard map stays on top; keys you know from practice fade.", "ระหว่างทำงาน แผนผังแป้นอยู่บนสุด ปุ่มที่คล่องจากการฝึกจะจางลง";
     PracticeHelp => "Type the highlighted text. Tab: new text · Esc: start over. Works without the keyboard installed.", "พิมพ์ตามข้อความที่ไฮไลต์ Tab: ข้อความใหม่ · Esc: เริ่มใหม่ ฝึกได้แม้ยังไม่ได้ติดตั้งแป้นนั้น";
     PracticeDone => "Done: {speed}, {acc}", "เสร็จแล้ว: {speed} {acc}";
     PracticeBestToday => "Best today: {speed}", "ดีที่สุดวันนี้: {speed}";

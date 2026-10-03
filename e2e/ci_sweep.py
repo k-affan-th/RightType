@@ -536,8 +536,22 @@ def typing_practice(t):
         time.sleep(0.5)
         # The keys went to the practice, not to Notepad behind it.
         result = "kept" if t.read().strip() == "" else f"leaked: {t.read().strip()!r}"
+        # T5: the practised keyboard stays on screen while working.
+        on_screen = "no map"
+        try:
+            win.child_window(title_re="Keep this keyboard on screen|เปิดแป้นนี้ค้างไว้บนจอ",
+                             control_type="Button").invoke()
+            time.sleep(1.0)
+            if Desktop(backend="uia").window(title="Keyboard map").exists(timeout=2):
+                on_screen = "shown"
+        except Exception as e:
+            on_screen = f"failed: {e}"
         win.close()
         time.sleep(0.6)
+        if on_screen == "shown":
+            tap(ord("K"), CTRL, fs.ALT)  # closed again
+            time.sleep(0.5)
+        fs.check(t.name, "practice keeps its keyboard on screen", on_screen, "shown")
     except Exception as e:
         result = f"failed: {e}"
     fs.check(t.name, "typing practice keeps its keys", result, "kept")

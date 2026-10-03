@@ -252,6 +252,8 @@ pub struct Session {
     finished_ms: Option<u64>,
     /// Per character due: how often it was missed this session.
     pub missed: HashMap<char, u32>,
+    /// Per character: how often it was typed right this session.
+    pub hit: HashMap<char, u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -271,6 +273,7 @@ impl Session {
             started_ms: None,
             finished_ms: None,
             missed: HashMap::new(),
+            hit: HashMap::new(),
         }
     }
 
@@ -287,6 +290,7 @@ impl Session {
             return Typed::Wrong;
         }
         self.at += 1;
+        *self.hit.entry(due).or_insert(0) += 1;
         if self.is_done() {
             self.finished_ms = Some(now_ms);
             return Typed::Done;
@@ -388,6 +392,7 @@ pub fn scores_to_text(scores: &[DayScore]) -> String {
 
 pub fn scores_from_text(text: &str) -> Vec<DayScore> {
     text.lines()
+        .filter(|l| !l.starts_with("key "))
         .filter_map(|l| {
             let mut p = l.split_whitespace();
             Some(DayScore {
@@ -399,6 +404,93 @@ pub fn scores_from_text(text: &str) -> Vec<DayScore> {
             })
         })
         .take(MAX_SCORES)
+        .collect()
+}
+
+/// How one key has gone in practice: kept per keyboard and key position
+/// (the US character of the key and layer), never what was typed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct KeyStat {
+    pub hits: u32,
+    pub misses: u32,
+}
+
+/// The kept counts stop growing here (old practice then weighs as much
+/// as new).
+const STAT_CAP: u32 = 10_000;
+
+/// Per keyboard, per key: how practice went.
+pub type KeyStats = HashMap<(&'static str, char), KeyStat>;
+
+/// Add a session's hits and misses (by the character due) to `stats`.
+pub fn add_key_stats(
+    stats: &mut KeyStats,
+    board: Board,
+    hit: &HashMap<char, u32>,
+    missed: &HashMap<char, u32>,
+) {
+    let mut add = |c: char, hits: u32, misses: u32| {
+        if c == ' ' {
+            return;
+        }
+        let Some(key) = board.key_of(c) else {
+            return;
+        };
+        let s = stats.entry((board.name(), key)).or_default();
+        s.hits = (s.hits + hits).min(STAT_CAP);
+        s.misses = (s.misses + misses).min(STAT_CAP);
+    };
+    for (&c, &n) in hit {
+        add(c, n, 0);
+    }
+    for (&c, &n) in missed {
+        add(c, 0, n);
+    }
+}
+
+/// How well a key is known, from 0 (not yet) to 1 (without looking): it
+/// needs some practice first, then grows with the keys typed right and
+/// shrinks with the share missed (a key missed one time in ten or more is
+/// not known).
+pub fn mastery(s: KeyStat) -> f32 {
+    const START: u32 = 20;
+    const FULL: u32 = 120;
+    if s.hits < START {
+        return 0.0;
+    }
+    let practised = ((s.hits - START) as f32 / (FULL - START) as f32).min(1.0);
+    let missed = s.misses as f32 / (s.hits + s.misses) as f32;
+    practised * (1.0 - missed * 10.0).clamp(0.0, 1.0)
+}
+
+/// Key stats as lines: `key kedmanee d 120 3` (the key as a code point,
+/// so `#` and space-like keys stay one word).
+pub fn key_stats_to_text(stats: &KeyStats) -> String {
+    let mut lines: Vec<String> = stats
+        .iter()
+        .map(|((board, key), s)| format!("key {board} {:x} {} {}\n", *key as u32, s.hits, s.misses))
+        .collect();
+    lines.sort();
+    lines.concat()
+}
+
+pub fn key_stats_from_text(text: &str) -> KeyStats {
+    text.lines()
+        .filter_map(|l| {
+            let mut p = l.split_whitespace();
+            if p.next()? != "key" {
+                return None;
+            }
+            let board = Board::parse(p.next()?)?;
+            let key = char::from_u32(u32::from_str_radix(p.next()?, 16).ok()?)?;
+            if !key.is_ascii_graphic() {
+                return None;
+            }
+            let hits = p.next()?.parse::<u32>().ok()?.min(STAT_CAP);
+            let misses = p.next()?.parse::<u32>().ok()?.min(STAT_CAP);
+            Some(((board.name(), key), KeyStat { hits, misses }))
+        })
+        .take(4 * 100)
         .collect()
 }
 
@@ -566,5 +658,45 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn key_stats_count_by_key_and_read_back_beside_scores() {
+        let mut stats = KeyStats::new();
+        // ก is on D in Kedmanee; ฃ (Shift) on its own layer.
+        let hit = HashMap::from([('ก', 30), (' ', 9)]);
+        let missed = HashMap::from([('ก', 2), ('ฅ', 1)]);
+        add_key_stats(&mut stats, KED, &hit, &missed);
+        assert_eq!(
+            stats[&("kedmanee", 'd')],
+            KeyStat {
+                hits: 30,
+                misses: 2
+            }
+        );
+        assert!(!stats.keys().any(|(_, k)| *k == ' '));
+        let scores = vec![DayScore {
+            date: "2026-10-03".into(),
+            board: KED,
+            lesson: 1,
+            per_minute: 120,
+            accuracy: 97,
+        }];
+        let text = scores_to_text(&scores) + &key_stats_to_text(&stats);
+        assert_eq!(scores_from_text(&text), scores);
+        assert_eq!(key_stats_from_text(&text), stats);
+        // Nothing but counts: no line carries a typed character.
+        assert!(!text.contains('ก'));
+    }
+
+    #[test]
+    fn mastery_needs_practice_and_few_misses() {
+        let m = |hits, misses| mastery(KeyStat { hits, misses });
+        assert_eq!(m(10, 0), 0.0);
+        assert!(m(70, 0) > 0.4 && m(70, 0) < 0.6);
+        assert_eq!(m(500, 0), 1.0);
+        // One miss in ten: not known, however long practised.
+        assert_eq!(m(450, 50), 0.0);
+        assert!(m(500, 10) < m(500, 0));
     }
 }
