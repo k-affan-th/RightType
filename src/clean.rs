@@ -373,13 +373,11 @@ fn clock(d: Duration) -> String {
 }
 
 fn paint(g: &Gfx, hdc: HDC, rc: RECT, page: u8) {
-    use windows::Win32::Graphics::Gdi::{DT_CENTER, DT_LEFT, DT_SINGLELINE, DT_VCENTER};
+    use windows::Win32::Graphics::Gdi::{DT_LEFT, DT_SINGLELINE, DT_VCENTER};
     let p = pal();
     let (mode, starting) = SHOWN.with(|v| v.get());
     let big = ui::make_font(26, 700);
     let body = ui::make_font(14, 400);
-    let cap = ui::make_font(12, 600);
-    let small = ui::make_font(10, 400);
     let line = |s: &str, y: i32, font, color| {
         ui::text(
             hdc,
@@ -477,63 +475,21 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, page: u8) {
         );
     }
     // The keyboard.
-    let x0 = (W - (keyboard::WIDTH * UNIT as f32) as i32) / 2;
-    for (i, k) in KEYS.iter().enumerate() {
-        let r = ui::rect(
-            x0 + (k.x * UNIT as f32) as i32 + 2,
-            KB_Y + (k.y * UNIT as f32) as i32 + 2,
-            (k.w * UNIT as f32) as i32 - 4,
-            (k.h * UNIT as f32) as i32 - 4,
-        );
-        let (fill, ink) = if down.is_pressed(i) {
-            (p.accent_pressed, p.on_accent)
+    let x0 = (W - crate::kbdraw::size(UNIT).0) / 2;
+    crate::kbdraw::draw(g, hdc, x0, KB_Y, UNIT, |i| {
+        let mut look = if down.is_pressed(i) {
+            crate::kbdraw::Look::lit(p.accent_pressed)
         } else if pressed.is_pressed(i) {
-            (p.accent, p.on_accent)
+            crate::kbdraw::Look::lit(p.accent)
         } else {
-            (p.keycap, p.text)
+            crate::kbdraw::Look::plain()
         };
-        g.fill_round(
-            r,
-            ui::px(5) as f32,
-            if fill == p.keycap {
-                p.keycap_border
-            } else {
-                fill
-            },
-        );
-        g.fill_round(ui::inset(r, ui::px(1)), ui::px(4) as f32, fill);
-        let label = if k.label.is_empty() { "Space" } else { k.label };
-        let font = if label.chars().count() > 3 {
-            small
-        } else {
-            cap
-        };
-        ui::text(
-            hdc,
-            label,
-            r,
-            font,
-            ink,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE,
-        );
-        // The Thai character it types, small in the corner.
-        if let Some(c) = k.us {
-            let (typed, th) = crate::keymap::thai_of(c);
-            if typed != c.to_string() {
-                let corner = RECT {
-                    left: r.right - ui::px(16),
-                    top: r.bottom - ui::px(16),
-                    right: r.right - ui::px(2),
-                    bottom: r.bottom - ui::px(1),
-                };
-                let dim = if ink == p.text { p.text_dim } else { ink };
-                ui::text(hdc, &th, corner, small, dim, DT_CENTER | DT_SINGLELINE);
-            }
-        }
-    }
+        look.corner = crate::kbdraw::thai_corner(KEYS[i].us);
+        look
+    });
     let _ = rc;
     unsafe {
-        for f in [big, body, cap, small] {
+        for f in [big, body] {
             let _ = DeleteObject(HGDIOBJ(f.0));
         }
     }

@@ -316,7 +316,10 @@ def keyboard_lock(t):
         typed = t.read().strip()
         win.child_window(title_re="Unlock|ปลดล็อก", control_type="Button").invoke()
         time.sleep(0.6)
-        win.child_window(title_re="Close|ปิด", control_type="Button").invoke()
+        # The window's own Close, not the title bar's.
+        next(b for b in win.descendants(control_type="Button")
+             if b.window_text() in ("Close", "ปิด")
+             and b.parent().element_info.control_type != "TitleBar").invoke()
         time.sleep(0.6)
     except Exception as e:
         typed = f"failed: {e}"
@@ -501,7 +504,7 @@ def shortcut_list(t):
     t.focus()
     result = "no list"
     try:
-        palette_search("this app", settle=1.5)()
+        palette_search("app's shortcuts", settle=1.5)()
         time.sleep(0.5)
         type_keys("replace")
         time.sleep(0.6)
@@ -515,6 +518,33 @@ def shortcut_list(t):
         result = f"failed: {e}"
     fs.check(t.name, "shortcut list presses the shortcut found", result, "opened")
     t.focus()
+
+
+def typing_practice(t):
+    """2.3: typing practice takes the keys while it is in front (nothing
+    reaches the app behind), and the app gets them again once it closes."""
+    from pywinauto import Desktop
+    t.clear()
+    t.focus()
+    result = "no window"
+    try:
+        palette_search("typing practice", settle=2.0)()
+        win = Desktop(backend="uia").window(title_re="Typing practice|ฝึกพิมพ์")
+        win.set_focus()
+        time.sleep(0.4)
+        type_keys("asdf")
+        time.sleep(0.5)
+        # The keys went to the practice, not to Notepad behind it.
+        result = "kept" if t.read().strip() == "" else f"leaked: {t.read().strip()!r}"
+        win.close()
+        time.sleep(0.6)
+    except Exception as e:
+        result = f"failed: {e}"
+    fs.check(t.name, "typing practice keeps its keys", result, "kept")
+    t.focus()
+    type_keys("ok ")
+    time.sleep(0.6)
+    fs.check(t.name, "keys reach the app after practice", t.read().strip(), "ok")
 
 
 def thai_word_delete(t):
@@ -1428,6 +1458,7 @@ def sweep(t):
         devices(t)
         hold_for_accents(t)
         shortcut_list(t)
+        typing_practice(t)
         enter_guard(t)
         app_keyboards(t)
     if t.name == "page":

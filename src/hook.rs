@@ -1166,6 +1166,12 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         {
             return LRESULT(1);
         }
+        // Typing practice in front: its keys go to it, by their place on
+        // the keyboard (so a keyboard not installed can be practised), and
+        // nowhere else. Alt and Windows-key shortcuts still work.
+        if kb.dwExtraInfo != INJECT_TAG && practice_takes(kb, msg) {
+            return LRESULT(1);
+        }
         // A key that types twice by itself: counted, and dropped for the
         // keys the typist chose to filter. Hardware only (and the e2e
         // test's keys): other programs' keys do not bounce.
@@ -1457,6 +1463,56 @@ unsafe fn shortcut_keys_released(vk: u16) {
         trace_note("shortcut keys: back to Thai");
         activate_layout(policy::InputLayout::ThaiKedmanee);
     }
+}
+
+/// The typing practice window, while it is open (0: none).
+pub static PRACTICE_WINDOW: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+/// Posted to the practice window per key pressed: wParam the character its
+/// place types on a US keyboard (with Shift as held; 0 for none), lParam
+/// the virtual key.
+pub const WM_PRACTICE_KEY: u32 = 0x8000 + 0x5A0;
+
+unsafe fn practice_takes(kb: &KBDLLHOOKSTRUCT, msg: u32) -> bool {
+    let window = PRACTICE_WINDOW.load(Ordering::Acquire);
+    if window == 0 || GetForegroundWindow().0 as isize != window {
+        return false;
+    }
+    let vk = kb.vkCode as u16;
+    if is_down(VK_MENU) || is_down(VIRTUAL_KEY(0x5B)) || is_down(VIRTUAL_KEY(0x5C)) {
+        return false;
+    }
+    if is_modifier(vk) || matches!(vk, 0x12 | 0x5B | 0x5C | 0xA4 | 0xA5) {
+        return false;
+    }
+    if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
+        let shift = is_down(VK_SHIFT);
+        let us = righttype::keyboard::index_of(kb.scanCode as u16, kb.flags.0 & 0x01 != 0)
+            .and_then(|i| righttype::keyboard::KEYS[i].us)
+            .or((vk == VK_SPACE.0).then_some(' '))
+            .map(|c| {
+                if shift {
+                    righttype::trainer::shifted(c).unwrap_or(c)
+                } else {
+                    c
+                }
+            });
+        let _ = PostMessageW(
+            HWND(window as *mut c_void),
+            WM_PRACTICE_KEY,
+            WPARAM(us.map_or(0, |c| c as usize)),
+            LPARAM(vk as isize),
+        );
+    }
+    true
+}
+
+static PRACTICE_KEEPS_SCORES: AtomicBool = AtomicBool::new(false);
+
+pub fn practice_keeps_scores() -> bool {
+    PRACTICE_KEEPS_SCORES.load(Ordering::Relaxed)
+}
+pub fn set_practice_keeps_scores(on: bool) {
+    PRACTICE_KEEPS_SCORES.store(on, Ordering::Relaxed);
 }
 
 static CTRL_HOLD_SHEET: AtomicBool = AtomicBool::new(false);

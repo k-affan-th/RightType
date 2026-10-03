@@ -110,7 +110,7 @@ pub fn lesson_keys(lesson: Lesson) -> Vec<char> {
 }
 
 /// The US character of `key` with Shift.
-fn shifted(key: char) -> Option<char> {
+pub fn shifted(key: char) -> Option<char> {
     if key.is_ascii_lowercase() {
         return Some(key.to_ascii_uppercase());
     }

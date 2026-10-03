@@ -132,6 +132,7 @@ enum Command {
     KeyTest,
     /// The shortcuts of the app that had focus.
     Sheet,
+    Practice,
     /// English prefix words written with their hyphen, on or off.
     Hyphens,
 }
@@ -253,6 +254,7 @@ impl Command {
             Command::Clean => '\u{EA99}',        // Broom
             Command::KeyTest => '\u{E9D9}',      // Diagnostic
             Command::Sheet => '\u{E765}',        // KeyboardClassic
+            Command::Practice => '\u{E7FC}',     // Game
         }
     }
 }
@@ -995,6 +997,12 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
     );
     add(
         Section::Options,
+        tr(T::PalettePractice).to_string(),
+        "",
+        Command::Practice,
+    );
+    add(
+        Section::Options,
         tr(T::PaletteClean).to_string(),
         "",
         Command::Clean,
@@ -1360,7 +1368,8 @@ fn run(command: Command, app: Option<&str>) {
         Command::Settings => crate::settings::open(),
         Command::Clean => crate::clean::request_open(crate::clean::Mode::Clean),
         Command::KeyTest => crate::clean::request_open(crate::clean::Mode::Test),
-        Command::Sheet => crate::sheet::request_open(),
+        Command::Sheet => crate::sheet::request_open_for(PREVIOUS.load(Ordering::Acquire)),
+        Command::Practice => crate::practice::request_open(),
         Command::FixField => crate::manual::request_fix_field(PREVIOUS.load(Ordering::Acquire)),
         Command::Transform(kind) => {
             use righttype::layout as l;

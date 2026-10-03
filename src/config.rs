@@ -119,6 +119,8 @@ pub struct Config {
     pub shortcuts_in_english: bool,
     /// Ctrl held alone for a second opens the app's shortcut list.
     pub ctrl_hold_shortcuts: bool,
+    /// Typing practice keeps a score per lesson and day (practice.txt).
+    pub practice_keep_scores: bool,
     /// Keys a device types into the Run box faster than any hand are held
     /// back.
     pub guard_fake_keyboards: bool,
@@ -206,6 +208,7 @@ impl Default for Config {
             hold_for_accents: false,
             shortcuts_in_english: false,
             ctrl_hold_shortcuts: false,
+            practice_keep_scores: false,
             guard_fake_keyboards: true,
             snippets: Vec::new(),
             sync_settings: false,
@@ -274,6 +277,7 @@ pub fn apply(cfg: &Config) {
     hook::set_holds_for_accents(cfg.hold_for_accents);
     hook::set_shortcuts_in_english(cfg.shortcuts_in_english);
     hook::set_ctrl_hold_opens_sheet(cfg.ctrl_hold_shortcuts);
+    hook::set_practice_keeps_scores(cfg.practice_keep_scores);
     hook::set_guards_fake_keyboards(cfg.guard_fake_keyboards);
     hook::set_debounce_keys(
         cfg.debounce_keys
@@ -540,6 +544,7 @@ fn snapshot() -> Config {
         hold_for_accents: hook::holds_for_accents(),
         shortcuts_in_english: hook::shortcuts_in_english(),
         ctrl_hold_shortcuts: hook::ctrl_hold_opens_sheet(),
+        practice_keep_scores: hook::practice_keeps_scores(),
         guard_fake_keyboards: hook::guards_fake_keyboards(),
         debounce_keys: hook::debounce_keys()
             .iter()

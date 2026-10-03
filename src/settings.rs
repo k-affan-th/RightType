@@ -151,6 +151,7 @@ struct Ids {
     tools_clean: u16,
     tools_test: u16,
     tools_map: u16,
+    tools_practice: u16,
     health_again: u16,
     /// Per check: its status line and its fix button.
     health_status: [u16; crate::health::COUNT],
@@ -595,7 +596,7 @@ fn open_on(page: u8) {
     let t = PAGE_TOOLS;
     surface.set_page_height(t, TOOLS_HEIGHT);
     s.label(tr(T::NavTools), TextStyle::Title, (X0, 18, CW, 36), p.bg, t);
-    let tool_w = (CW - 32 - 16) / 3;
+    let tool_w = (CW - 32 - 24) / 4;
     let tool = |i: i32, label: T| {
         s.button(
             tr(label),
@@ -608,6 +609,7 @@ fn open_on(page: u8) {
     let tools_clean = tool(0, T::CleanTitle);
     let tools_test = tool(1, T::KeyTestTitle);
     let tools_map = tool(2, T::KeyMapTitle);
+    let tools_practice = tool(3, T::PracticeTitle);
     s.label(
         tr(T::HeadHealth),
         TextStyle::BodyStrong,
@@ -974,6 +976,7 @@ fn open_on(page: u8) {
         tools_clean,
         tools_test,
         tools_map,
+        tools_practice,
         health_again,
         health_status,
         health_fix,
@@ -1282,6 +1285,8 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         crate::clean::request_open(crate::clean::Mode::Test);
     } else if id == ids.tools_map {
         crate::keymap::request_toggle();
+    } else if id == ids.tools_practice {
+        crate::practice::request_open();
     } else if id == ids.health_again {
         fill_health(win);
     } else if let Some(i) = ids.health_fix.iter().position(|&b| b == id) {

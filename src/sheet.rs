@@ -52,8 +52,21 @@ thread_local! {
     static CURRENT: RefCell<Option<Rc<Sheet>>> = const { RefCell::new(None) };
 }
 
+thread_local! {
+    /// The app the list is asked for (0: the one in front when it opens).
+    static FOR: Cell<isize> = const { Cell::new(0) };
+}
+
 /// Open the list for the app in front (from the message loop).
 pub fn request_open() {
+    request_open_for(0);
+}
+
+/// Open the list for the app of window `hwnd` (the palette passes the
+/// window it was opened over: by the time the list opens, the palette may
+/// still be in front).
+pub fn request_open_for(hwnd: isize) {
+    FOR.with(|f| f.set(hwnd));
     unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
         let _ = KillTimer(None, id);
         open();
@@ -123,7 +136,10 @@ fn open() {
         close(&sheet);
         return;
     }
-    let target = unsafe { GetForegroundWindow() };
+    let target = match FOR.with(|f| f.replace(0)) {
+        0 => unsafe { GetForegroundWindow() },
+        h => HWND(h as *mut _),
+    };
     let exe = unsafe { crate::safety::foreground_exe(target) }.unwrap_or_default();
     let app = exe.trim_end_matches(".exe").to_string();
     // The menu's own, then the table's (skipping keys the menu already
