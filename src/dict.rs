@@ -1,7 +1,11 @@
 //! Word dictionaries used to decide whether a token is a real word.
 //!
-//! v1 uses simple hashed membership; the plan calls for swapping in an `fst`
-//! set later to shrink resident memory. The public API stays the same either way.
+//! Hashed membership. The words are borrowed from the program itself (the
+//! bundled lists are compiled in), not copied one by one: a word is copied
+//! only when its lookup form differs (an English word with capitals), and
+//! that copy lives as long as the program, as the dictionary does. This
+//! took the dictionaries' heap from 10.2 MB to about 6
+//! (`examples/startup_cost.rs`, docs/TYPING_BENCHMARK.md).
 
 use std::collections::HashSet;
 use std::sync::{OnceLock, RwLock};
@@ -12,12 +16,12 @@ use std::sync::{OnceLock, RwLock};
 /// answer *"could this token still grow into a word?"* — the question the live
 /// correction path has to ask before it may destroy an in-flight token.
 pub struct Dictionary {
-    words: HashSet<String>,
+    words: HashSet<&'static str>,
     /// Built on first prefix query only. Membership never needs it, and only
     /// the English list is ever asked for continuations, so the Thai list never
     /// pays for an index nobody reads — which matters against the resident-memory
     /// target in `docs/PLAN.md`.
-    sorted: OnceLock<Vec<Box<str>>>,
+    sorted: OnceLock<Vec<&'static str>>,
     /// Words the user taught at runtime (auto-learn). Kept apart from the
     /// bundled list so they can be forgotten wholesale and so the sorted
     /// prefix index never has to be rebuilt; the overlay stays small enough
@@ -26,18 +30,36 @@ pub struct Dictionary {
 }
 
 impl Dictionary {
-    /// Build a dictionary from any iterator of words (used by bundled lists and tests).
+    /// Build a dictionary from any iterator of words. The words are kept
+    /// for the life of the program: meant for fixed lists (and tests), not
+    /// for words that come and go (those are learned, see [`Self::learn`]).
     pub fn from_words<I, S>(iter: I) -> Self
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
+        Self::from_keys(iter.into_iter().map(|s| {
+            let key = normalize(s.as_ref());
+            &*Box::leak(key.into_boxed_str())
+        }))
+    }
+
+    /// Build a dictionary from words that live as long as the program (the
+    /// bundled lists): borrowed, not copied, when already in lookup form.
+    pub fn from_static(iter: impl IntoIterator<Item = &'static str>) -> Self {
+        Self::from_keys(iter.into_iter().map(|s| {
+            let t = s.trim();
+            if t.chars().any(char::is_uppercase) {
+                &*Box::leak(normalize(t).into_boxed_str())
+            } else {
+                t
+            }
+        }))
+    }
+
+    fn from_keys(keys: impl Iterator<Item = &'static str>) -> Self {
         Self {
-            words: iter
-                .into_iter()
-                .map(|s| normalize(s.as_ref()))
-                .filter(|s| !s.is_empty())
-                .collect(),
+            words: keys.filter(|s| !s.is_empty()).collect(),
             sorted: OnceLock::new(),
             overlay: RwLock::new(HashSet::new()),
         }
@@ -46,13 +68,13 @@ impl Dictionary {
     /// Is `word` a known word (case-insensitive)? Learned words count.
     pub fn contains(&self, word: &str) -> bool {
         let key = normalize(word);
-        self.words.contains(&key) || self.overlay_contains(&key)
+        self.words.contains(key.as_str()) || self.overlay_contains(&key)
     }
 
     /// Teach this dictionary a word at runtime. Returns `true` if it was new.
     pub fn learn(&self, word: &str) -> bool {
         let key = normalize(word);
-        if key.is_empty() || self.words.contains(&key) {
+        if key.is_empty() || self.words.contains(key.as_str()) {
             return false;
         }
         self.overlay
@@ -92,16 +114,12 @@ impl Dictionary {
         if prefix.is_empty() {
             return false;
         }
-        let sorted = self.sorted.get_or_init(|| {
-            let mut v: Vec<Box<str>> = self.words.iter().map(|w| w.as_str().into()).collect();
-            v.sort_unstable();
-            v
-        });
-        let from = sorted.partition_point(|w| w.as_ref() < prefix.as_str());
+        let sorted = self.sorted();
+        let from = sorted.partition_point(|w| *w < prefix.as_str());
         sorted[from..]
             .iter()
             .take_while(|w| w.starts_with(prefix.as_str()))
-            .any(|w| w.as_ref() != prefix.as_str())
+            .any(|w| *w != prefix.as_str())
             || self.overlay.read().is_ok_and(|o| {
                 o.iter()
                     .any(|w| w.len() > prefix.len() && w.starts_with(prefix.as_str()))
@@ -118,12 +136,8 @@ impl Dictionary {
         if prefix.is_empty() {
             return None;
         }
-        let sorted = self.sorted.get_or_init(|| {
-            let mut v: Vec<Box<str>> = self.words.iter().map(|w| w.as_str().into()).collect();
-            v.sort_unstable();
-            v
-        });
-        let from = sorted.partition_point(|w| w.as_ref() < prefix.as_str());
+        let sorted = self.sorted();
+        let from = sorted.partition_point(|w| *w < prefix.as_str());
         let mut common: Option<Vec<char>> = None;
         for w in sorted[from..]
             .iter()
@@ -142,6 +156,15 @@ impl Dictionary {
         }
         let common: String = common?.into_iter().collect();
         (common.chars().count() >= prefix.chars().count() + at_least).then_some(common)
+    }
+
+    /// The words in order, for prefix questions (built on the first).
+    fn sorted(&self) -> &[&'static str] {
+        self.sorted.get_or_init(|| {
+            let mut v: Vec<&'static str> = self.words.iter().copied().collect();
+            v.sort_unstable();
+            v
+        })
     }
 
     pub fn len(&self) -> usize {
@@ -163,7 +186,7 @@ fn normalize(s: &str) -> String {
 pub fn english() -> &'static Dictionary {
     static D: OnceLock<Dictionary> = OnceLock::new();
     D.get_or_init(|| {
-        Dictionary::from_words(
+        Dictionary::from_static(
             include_str!("../assets/en_words.txt")
                 .lines()
                 .chain(tech_terms()),
@@ -199,7 +222,7 @@ pub fn english_words() -> impl Iterator<Item = &'static str> {
 /// Bundled Thai dictionary.
 pub fn thai() -> &'static Dictionary {
     static D: OnceLock<Dictionary> = OnceLock::new();
-    D.get_or_init(|| Dictionary::from_words(include_str!("../assets/th_words.txt").lines()))
+    D.get_or_init(|| Dictionary::from_static(include_str!("../assets/th_words.txt").lines()))
 }
 
 #[cfg(test)]

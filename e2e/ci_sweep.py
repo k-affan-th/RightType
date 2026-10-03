@@ -1583,6 +1583,45 @@ def ui_timing():
         time.sleep(0.5)
 
 
+def memory_use():
+    """2.3 P3: RightType's memory (working set and private bytes) when idle
+    after starting, and once a word has been fixed (the dictionaries are in
+    use then). Printed, not judged: the build here is a debug build."""
+    class Counters(ctypes.Structure):
+        _fields_ = [("cb", wt.DWORD), ("PageFaultCount", wt.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t),
+                    ("PrivateUsage", ctypes.c_size_t)]
+
+    def measure(pid):
+        h = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED
+        c = Counters()
+        c.cb = ctypes.sizeof(c)
+        ok = ctypes.windll.psapi.GetProcessMemoryInfo(h, ctypes.byref(c), c.cb)
+        ctypes.windll.kernel32.CloseHandle(h)
+        mb = lambda n: f"{n / 1048576:.1f} MB"  # noqa: E731
+        return f"working set {mb(c.WorkingSetSize)}, private {mb(c.PrivateUsage)}" if ok else "unknown"
+
+    started = time.perf_counter()
+    proc = fs.start_rt()
+    print(f"  memory idle after start: {measure(proc.pid)}", flush=True)
+    try:
+        t = Notepad()
+        t.focus()
+        type_keys("l;ylfu8iy[ hello ")
+        time.sleep(1.5)
+        print(f"  memory after a fix: {measure(proc.pid)}", flush=True)
+        t.close()
+    except Exception as e:
+        print(f"  memory after a fix: not measured ({e})", flush=True)
+    finally:
+        subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
+    print(f"  (measured in {time.perf_counter() - started:.1f} s)", flush=True)
+
+
 def report_has_no_typed_text(target, results):
     """The problem report RightType kept while this target was typed in
     names what it did, never the words: none of the text the checks saw may
@@ -1699,6 +1738,7 @@ def main():
     if "instance" in want or not sys.argv[1:]:
         one_instance()
     ui_timing()
+    memory_use()
 
     failed, known, fixed = [], [], []
     for target, name, ok, got, expect in fs.RESULTS:

@@ -34,7 +34,7 @@ const MAX_PART_CHARS: usize = 20;
 fn core() -> &'static Dictionary {
     static D: OnceLock<Dictionary> = OnceLock::new();
     D.get_or_init(|| {
-        Dictionary::from_words(
+        Dictionary::from_static(
             include_str!("../assets/en_words.txt")
                 .lines()
                 .take(CORE_WORDS),
