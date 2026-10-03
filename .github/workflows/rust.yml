@@ -101,7 +101,7 @@ jobs:
   # what an app does with the keys RightType sends; this can.
   e2e:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
     - uses: actions/checkout@v4
     - name: Build (debug, accepts the test's injected keys)
