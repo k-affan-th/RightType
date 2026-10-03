@@ -52,6 +52,35 @@ thread_local! {
     static CURRENT: RefCell<Option<Rc<Sheet>>> = const { RefCell::new(None) };
 }
 
+/// The open list's window (0: none), for the keyboard hook.
+static OPEN: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+/// A key the hook hands the list (wParam: the key).
+const WM_SHEET_KEY: u32 = 0x8000 + 0x5A1;
+
+/// The keyboard hook hands the list in front Enter (press the shortcut),
+/// Esc (close) and Up/Down (move): the search box keeps the focus, and
+/// Enter in it is not left to the window's dialog handling (CI: Enter
+/// reached the box and nothing ran). Returns whether the list took `vk`.
+pub fn key(vk: u16) -> bool {
+    use std::sync::atomic::Ordering;
+    let open = OPEN.load(Ordering::Acquire);
+    if open == 0 || !matches!(vk, 0x0D | 0x1B | 0x26 | 0x28) {
+        return false;
+    }
+    if unsafe { GetForegroundWindow() }.0 as isize != open {
+        return false;
+    }
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+            HWND(open as *mut _),
+            WM_SHEET_KEY,
+            windows::Win32::Foundation::WPARAM(vk as usize),
+            windows::Win32::Foundation::LPARAM(0),
+        );
+    }
+    true
+}
+
 thread_local! {
     /// The app the list is asked for (0: the one in front when it opens).
     static FOR: Cell<isize> = const { Cell::new(0) };
@@ -121,6 +150,7 @@ fn menu_shortcuts(hwnd: HWND) -> Vec<Entry> {
 }
 
 fn close(sheet: &Rc<Sheet>) {
+    OPEN.store(0, std::sync::atomic::Ordering::Release);
     unsafe {
         let _ = KillTimer(sheet.surface.hwnd, sheet.timer.get());
     }
@@ -240,6 +270,33 @@ fn open() {
                     refilter(&sheet);
                     Some(0)
                 }
+                WM_SHEET_KEY => {
+                    let row = sheet.surface.selected_row(sheet.table).unwrap_or(0);
+                    match w as u16 {
+                        0x0D => {
+                            // What was typed last may not be filtered yet.
+                            refilter(&sheet);
+                            let row = sheet.surface.selected_row(sheet.table).unwrap_or(0);
+                            run(&sheet, row);
+                        }
+                        0x1B => {
+                            CURRENT.with(|c| c.borrow_mut().take());
+                            close(&sheet);
+                        }
+                        vk => {
+                            let n = sheet.shown.borrow().len();
+                            if n > 0 {
+                                let to = if vk == 0x26 {
+                                    row.saturating_sub(1)
+                                } else {
+                                    (row + 1).min(n - 1)
+                                };
+                                sheet.surface.select_row(sheet.table, to);
+                            }
+                        }
+                    }
+                    Some(0)
+                }
                 // Enter in the search box (IDOK): the first row.
                 WM_COMMAND if w & 0xFFFF == 1 => {
                     run(&sheet, sheet.surface.selected_row(sheet.table).unwrap_or(0));
@@ -262,6 +319,7 @@ fn open() {
         .ok();
     *sheet.handler.borrow_mut() = raw;
     crate::hook::trace_note("shortcut list: open");
+    OPEN.store(hwnd.0 as isize, std::sync::atomic::Ordering::Release);
     CURRENT.with(|c| *c.borrow_mut() = Some(sheet));
 }
 

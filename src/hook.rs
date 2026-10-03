@@ -1915,6 +1915,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             return true;
         }
     }
+    if !is_down(VK_CONTROL) && !is_down(VK_MENU) && crate::sheet::key(vk) {
+        return true;
+    }
 
     // Tab (alone) takes a Thai completion on offer; any other key drops it.
     let completion = COMPLETION.with(|c| c.borrow_mut().take());

@@ -393,17 +393,51 @@ unsafe extern "system" fn on_focus(
     DEPTH.with(|d| d.set(depth));
 }
 
+/// The field key standing for "one of RightType's own windows".
+const OWN_FIELD: u64 = 1;
+
+/// Is the window in front one of RightType's own?
+unsafe fn own_window_in_front() -> bool {
+    let fg = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
+    if fg.0.is_null() {
+        return false;
+    }
+    let mut pid = 0u32;
+    windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(fg, Some(&mut pid));
+    pid == windows::Win32::System::Threading::GetCurrentProcessId()
+}
+
 /// On the focus worker thread.
 unsafe fn on_focus_inner() {
     let started = std::time::Instant::now();
     let event_at = LAST_EVENT_AT.lock().ok().and_then(|at| *at);
-    let moved = moves_to_another_field();
+    // One of RightType's own windows (the palette, the shortcut list,
+    // Settings): its controls are served by the UI thread, which also runs
+    // the keyboard hook, so asking UI Automation about them made the hook
+    // late, and Windows let a key go past it (CI: the palette searched for
+    // `tet the keyboard`, the S lost while its rows moved). They hold no
+    // password and no app's text: nothing to ask.
+    let own = own_window_in_front();
+    let moved = if own {
+        FIELD.with(|f| *f.borrow_mut() = None);
+        FIELD_KEY.swap(OWN_FIELD, Ordering::Relaxed) != OWN_FIELD
+    } else {
+        moves_to_another_field()
+    };
     if moved {
         if let Ok(mut at) = MOVE_EVENT_AT.lock() {
             *at = event_at;
         }
         FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
-        refresh_status();
+        if own {
+            FIELD_STATUS.store(FIELD_SAFE, Ordering::Relaxed);
+            TEXT_FIELD.store(false, Ordering::Relaxed);
+            EDITING.store(false, Ordering::Relaxed);
+            INLINE_COMPLETION.store(false, Ordering::Relaxed);
+            crate::hook::e2e_trace("field status: RightType's own window".to_string());
+        } else {
+            refresh_status();
+        }
     }
     crate::hook::e2e_trace(format!(
         "focus event handled in {} ms (moved={moved})",

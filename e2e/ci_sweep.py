@@ -1636,7 +1636,9 @@ def report_has_no_typed_text(target, results):
     # whose words are not typed, and "clipboard" is in RightType's messages).
     # Nor the answers of checks that typed nothing ("yes", "True"): those
     # are the sweep's words, and the report says "yes" of its own.
-    answers = {"yes", "no", "True", "False"}
+    # (and the verdicts of checks that typed nothing: "kept", "shown",
+    # "opened" — the report says "shown as sent" of its own).
+    answers = {"yes", "no", "True", "False", "kept", "shown", "opened"}
     # Words of RightType's own report messages ("put back to the keys"):
     # the typo check types `teh` for "the".
     own = {"the"}
