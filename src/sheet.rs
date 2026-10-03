@@ -67,7 +67,18 @@ pub fn key(vk: u16) -> bool {
     if open == 0 || !matches!(vk, 0x0D | 0x1B | 0x26 | 0x28) {
         return false;
     }
-    if unsafe { GetForegroundWindow() }.0 as isize != open {
+    // Where the keys go: the hook runs on the list's thread, so its own
+    // focus says it best (on CI the window in front was not reported as
+    // the list while its search box had the keys).
+    let focus = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetFocus() };
+    let root = unsafe {
+        windows::Win32::UI::WindowsAndMessaging::GetAncestor(
+            focus,
+            windows::Win32::UI::WindowsAndMessaging::GA_ROOT,
+        )
+    };
+    let fg = unsafe { GetForegroundWindow() }.0 as isize;
+    if root.0 as isize != open && fg != open {
         return false;
     }
     unsafe {

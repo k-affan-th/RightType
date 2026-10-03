@@ -383,11 +383,13 @@ unsafe extern "system" fn on_focus(
         hwnd.0 as usize
     ));
     wake_worker();
-    // One of RightType's own windows: a settings page follows Tab.
-    if !hwnd.0.is_null()
+    // One of RightType's own windows: a settings page follows Tab, and the
+    // focus worker leaves it alone (see `on_focus_inner`).
+    let own = !hwnd.0.is_null()
         && windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(hwnd, None)
-            == windows::Win32::System::Threading::GetCurrentThreadId()
-    {
+            == windows::Win32::System::Threading::GetCurrentThreadId();
+    OWN_FOCUS.store(own, Ordering::Release);
+    if own {
         crate::ui::focus_moved_to(hwnd);
     }
     DEPTH.with(|d| d.set(depth));
@@ -396,8 +398,14 @@ unsafe extern "system" fn on_focus(
 /// The field key standing for "one of RightType's own windows".
 const OWN_FIELD: u64 = 1;
 
-/// Is the window in front one of RightType's own?
+/// The latest focus event came from one of RightType's own windows.
+static OWN_FOCUS: AtomicBool = AtomicBool::new(false);
+
+/// Is the focus (or the window in front) one of RightType's own?
 unsafe fn own_window_in_front() -> bool {
+    if OWN_FOCUS.load(Ordering::Acquire) {
+        return true;
+    }
     let fg = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
     if fg.0.is_null() {
         return false;
