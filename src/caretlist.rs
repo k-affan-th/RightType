@@ -36,6 +36,8 @@ const ROW_H: i32 = 36;
 const FOOT_H: i32 = 26;
 /// A key handed over by the hook (wParam: the key; lParam: its character).
 const WM_CARET_KEY: u32 = 0x8000 + 0x5A2;
+/// The search worker has rows (see [`RESULT`]).
+const WM_CARET_ROWS: u32 = 0x8000 + 0x5A3;
 /// Filter this long after the last key (a search can take a few ms).
 const FILTER_MS: u32 = 60;
 const TIMER_FILTER: usize = 1;
@@ -82,6 +84,12 @@ struct State {
     commands: Vec<Command>,
     /// A command that could lose work, picked once: Enter again runs it.
     armed: Option<usize>,
+    /// Counts changes to `query`; `shown` is the count the rows are for.
+    query_gen: u64,
+    shown_gen: u64,
+    /// Enter (or Tab) came before the rows for the search did: pick when
+    /// they come.
+    pick_pending: bool,
     /// The highlight slides from this row to `selected`, since `slide_at`.
     slide_from: f32,
     slide_at: Option<std::time::Instant>,
@@ -193,6 +201,10 @@ fn ensure() -> Option<HWND> {
         match msg {
             WM_CARET_KEY => {
                 on_key(w as u16, char::from_u32(l as u32).filter(|c| *c != '\0'));
+                Some(0)
+            }
+            WM_CARET_ROWS => {
+                rows_arrived();
                 Some(0)
             }
             WM_TIMER if w == TIMER_FILTER => {
@@ -430,23 +442,40 @@ fn on_key(vk: u16, ch: Option<char>) {
     let h = HWND(hwnd as *mut _);
     match (vk, ch) {
         (_, Some(c)) => {
-            STATE.with(|s| s.borrow_mut().query.push(c));
+            STATE.with(|s| {
+                let mut s = s.borrow_mut();
+                s.query.push(c);
+                s.query_gen += 1;
+            });
             unsafe {
                 SetTimer(h, TIMER_FILTER, FILTER_MS, None);
             }
         }
         (0x08, _) => {
             STATE.with(|s| {
-                s.borrow_mut().query.pop();
+                let mut s = s.borrow_mut();
+                s.query.pop();
+                s.query_gen += 1;
             });
             unsafe {
                 SetTimer(h, TIMER_FILTER, FILTER_MS, None);
             }
         }
         (0x0D | 0x09, _) => {
-            // What was typed last may not be filtered yet.
-            refilter();
-            pick();
+            // What was typed last may not be searched yet: pick once it is.
+            unsafe {
+                let _ = KillTimer(h, TIMER_FILTER);
+            }
+            let ready = STATE.with(|s| {
+                let s = s.borrow();
+                s.shown_gen == s.query_gen
+            });
+            if ready {
+                pick();
+            } else {
+                STATE.with(|s| s.borrow_mut().pick_pending = true);
+                refilter();
+            }
             return;
         }
         (0x1B, _) => {
@@ -477,41 +506,118 @@ fn on_key(vk: u16, ch: Option<char>) {
     ui::redraw_all(h);
 }
 
+/// A search for the worker.
+struct Job {
+    query_gen: u64,
+    query: zeroize::Zeroizing<String>,
+    snippets: Vec<righttype::snippets::Snippet>,
+    commands: Vec<Command>,
+    thai: bool,
+    hwnd: isize,
+}
+
+/// The worker's latest rows, and the search they are for.
+static RESULT: std::sync::Mutex<Option<(u64, Vec<Row>)>> = std::sync::Mutex::new(None);
+
+/// The search runs on a thread of its own: over every character Unicode
+/// names it takes milliseconds (hundreds in a debug build), and on the UI
+/// thread, which runs the keyboard hook, that long makes Windows hand keys
+/// straight to the app (CI: `ae` of `replace` reached Notepad).
+fn search_worker() -> &'static std::sync::Mutex<std::sync::mpsc::Sender<Job>> {
+    static TX: std::sync::OnceLock<std::sync::Mutex<std::sync::mpsc::Sender<Job>>> =
+        std::sync::OnceLock::new();
+    TX.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<Job>();
+        let _ = std::thread::Builder::new()
+            .name("caret list search".into())
+            .spawn(move || {
+                while let Ok(mut job) = rx.recv() {
+                    // Only the newest search matters.
+                    while let Ok(newer) = rx.try_recv() {
+                        job = newer;
+                    }
+                    let rows = atcaret::search(&job.query, &job.snippets, &job.commands, job.thai);
+                    if let Ok(mut r) = RESULT.lock() {
+                        *r = Some((job.query_gen, rows));
+                    }
+                    unsafe {
+                        let _ = PostMessageW(
+                            HWND(job.hwnd as *mut _),
+                            WM_CARET_ROWS,
+                            WPARAM(0),
+                            LPARAM(0),
+                        );
+                    }
+                }
+            });
+        std::sync::Mutex::new(tx)
+    })
+}
+
+/// Search for what is typed now (the rows come in [`rows_arrived`]).
 fn refilter() {
-    let rows = STATE.with(|s| {
+    let hwnd = OPEN.load(Ordering::Acquire);
+    if hwnd == 0 {
+        return;
+    }
+    let job = STATE.with(|s| {
         let s = s.borrow();
-        atcaret::search(
-            &s.query,
-            &crate::hook::snippets(),
-            &s.commands,
-            lang() == Lang::Th,
-        )
+        Job {
+            query_gen: s.query_gen,
+            query: zeroize::Zeroizing::new(s.query.clone()),
+            snippets: crate::hook::snippets(),
+            commands: s.commands.clone(),
+            thai: lang() == Lang::Th,
+            hwnd,
+        }
     });
+    if let Ok(tx) = search_worker().lock() {
+        let _ = tx.send(job);
+    }
+}
+
+/// The worker's rows: shown if they are for the search typed now, then
+/// picked from if Enter is waiting for them.
+fn rows_arrived() {
+    let Some((generation, rows)) = RESULT.lock().ok().and_then(|mut r| r.take()) else {
+        return;
+    };
+    let hwnd = OPEN.load(Ordering::Acquire);
+    let current = STATE.with(|s| s.borrow().query_gen == generation);
+    if hwnd == 0 || !current {
+        return;
+    }
     let n = rows.len();
-    STATE.with(|s| {
+    let pick_now = STATE.with(|s| {
         let mut s = s.borrow_mut();
         s.rows = rows;
+        s.shown_gen = generation;
         s.armed = None;
         s.selected = 0;
         s.slide_from = 0.0;
         s.slide_at = None;
-    });
-    let hwnd = OPEN.load(Ordering::Acquire);
-    if hwnd != 0 {
-        unsafe {
-            let h = HWND(hwnd as *mut _);
-            let _ = SetWindowPos(
-                h,
-                HWND_TOPMOST,
-                0,
-                0,
-                ui::px(W),
-                height(n),
-                SWP_NOACTIVATE | windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE,
-            );
-            round(h, height(n));
-            ui::redraw_all(h);
+        #[cfg(debug_assertions)]
+        if DEMO_ARMED.swap(false, Ordering::Relaxed) {
+            s.armed = Some(0);
         }
+        std::mem::take(&mut s.pick_pending)
+    });
+    unsafe {
+        let h = HWND(hwnd as *mut _);
+        let _ = SetWindowPos(
+            h,
+            HWND_TOPMOST,
+            0,
+            0,
+            ui::px(W),
+            height(n),
+            SWP_NOACTIVATE | windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE,
+        );
+        round(h, height(n));
+        ui::redraw_all(h);
+    }
+    if pick_now {
+        pick();
     }
 }
 
@@ -813,17 +919,21 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
 #[cfg(debug_assertions)]
 pub fn open_demo(query: &str) {
     open();
-    STATE.with(|s| s.borrow_mut().query = query.to_string());
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        s.query = query.to_string();
+        s.query_gen += 1;
+    });
     refilter();
 }
 
-/// The same, with the first row's Enter-again state showing.
+/// The same, with the first row's Enter-again state showing once the
+/// rows are in.
 #[cfg(debug_assertions)]
 pub fn open_demo_armed(query: &str) {
+    DEMO_ARMED.store(true, Ordering::Relaxed);
     open_demo(query);
-    STATE.with(|s| s.borrow_mut().armed = Some(0));
-    let hwnd = OPEN.load(Ordering::Acquire);
-    if hwnd != 0 {
-        ui::redraw_all(HWND(hwnd as *mut _));
-    }
 }
+
+#[cfg(debug_assertions)]
+static DEMO_ARMED: AtomicBool = AtomicBool::new(false);
