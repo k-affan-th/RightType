@@ -505,6 +505,35 @@ def caret_commands(t):
     fs.check(t.name, "the command's search is not typed", t.read().strip(), "")
 
 
+def language_tags(t):
+    """Evidence for Word's Thai line breaking (printed, not judged): which
+    language does a rich text box give each character of a word RightType
+    converted? Rich text tags typed text with the keyboard's language; Thai
+    tagged English is not broken into lines as Thai. UI Automation's
+    culture attribute (40034) per character, as Windows LCIDs (1054 Thai,
+    1033 English)."""
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_EN)
+    time.sleep(0.3)
+    type_keys("l;ylfu8iy[ ")
+    time.sleep(1.2)
+    try:
+        box = next(d for d in t.win.descendants()
+                   if d.element_info.class_name == "RichEditD2DPT")
+        tp = box.iface_text
+        r = tp.DocumentRange.Clone()
+        r.ExpandToEnclosingUnit(0)  # TextUnit_Character
+        tags = []
+        for _ in range(len(t.read())):
+            tags.append((r.GetText(-1), r.GetAttributeValue(40034)))
+            if r.Move(0, 1) == 0:
+                break
+        print(f"  language tags in {t.name}: {tags}", flush=True)
+    except Exception as e:
+        print(f"  language tags in {t.name}: could not read ({e})", flush=True)
+
+
 def ghosts(t):
     """2.4 C: `->` offers →, Tab takes it; without Tab the text stays as
     typed."""
@@ -1613,6 +1642,8 @@ def sweep(t):
         thai_text_tools(t)
         thai_word_delete(t)
         palette_text_tools(t)
+    if t.name == "notepad11":
+        language_tags(t)
     if t.name == "notepad":
         keyboard_map(t)
         keyboard_lock(t)

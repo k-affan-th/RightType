@@ -1398,6 +1398,14 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
             drop(done);
             if !nested {
                 righttype::timing::HOOK.record(started.elapsed().as_micros() as u64);
+                // A slow key is where keys typed meanwhile can slip past.
+                if started.elapsed() > Duration::from_millis(100) {
+                    e2e_trace(format!(
+                        "slow key vk={:#x}: {} ms in the hook",
+                        kb.vkCode,
+                        started.elapsed().as_millis()
+                    ));
+                }
                 let waited = crate::focus::take_wait_us();
                 if waited > 0 {
                     righttype::timing::WAITING.record(waited);
