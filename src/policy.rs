@@ -169,6 +169,9 @@ pub fn detect_token(
             if !has_latin || has_thai || english::is_compound(token.trim()) {
                 return None;
             }
+            if let Some(d) = us_layout_abbreviation(token, th) {
+                return Some(d);
+            }
             detect::detect(token, en, th)
                 .or_else(|| us_layout_thai_with_punctuation(token, en, th))
                 .filter(|d| !only_short_thai_words(&d.corrected, th))
@@ -182,7 +185,9 @@ pub fn detect_token(
                 return None;
             }
             // Thai text on screen is Thai, whatever its keys spell.
-            let is_thai = th.contains(token) || segment::is_fully_known(token, th);
+            let is_thai = th.contains(token)
+                || segment::is_fully_known(token, th)
+                || crate::abbrev::reads_as_abbreviation(token, th);
             (!is_thai && fixes_addresses())
                 .then(|| thai_layout_address(token).or_else(|| thai_layout_number(token, th)))
                 .flatten()
@@ -192,6 +197,23 @@ pub fn detect_token(
                 .or_else(|| thai_layout_trailing_mark(token, th))
         }
     }
+}
+
+/// A Thai abbreviation typed on the English layout: Kedmanee's period is the
+/// `"` key, so ก.ค. comes in as `d"8"` and ดร.สมชาย as `fi"l,=kp`. Only a
+/// reading made of known abbreviations ([`crate::abbrev`]) counts, so an
+/// English word before a closing quote (`it"`, ระ.) stays as typed.
+fn us_layout_abbreviation(token: &str, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    if !token.contains('"') || token.starts_with('"') {
+        return None;
+    }
+    let reading = crate::layout::en_to_th(token);
+    crate::abbrev::reads_as_abbreviation(&reading, th).then_some(Detection {
+        corrected: reading,
+        confidence: Confidence::High,
+        evidence: Evidence::ExactDictionary,
+    })
 }
 
 /// A Thai word typed on the English layout whose keys give no letters at all

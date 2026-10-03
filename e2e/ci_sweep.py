@@ -1584,6 +1584,8 @@ def sweep(t):
     run(t, "English computer word stays English (hyphen in prose)", "relogin ",
         prose(t, "re-login"))
     run(t, "English word with its own spelling stays", "reinstall ", "reinstall")
+    # Thai abbreviations: Kedmanee's period is the `"` key (ก.ค. is d"8").
+    run(t, "Thai abbreviation typed on the English layout", 'd"8" ', "ก.ค.")
     # A wrong correction is undone with one Shift+Backspace, wherever it
     # happened: in the middle of a word, after a long word was handed to the
     # Thai layout, or at the space.

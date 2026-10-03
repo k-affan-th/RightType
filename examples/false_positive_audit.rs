@@ -17,7 +17,8 @@
 //! - Thai phrases: 200,000 random runs of 2–4 dictionary words, as Thai is
 //!   written (no spaces).
 //! - English words, every one in the bundled dictionary, typed on the English
-//!   layout, alone and with `:`, `?`, `"`, `)` after them.
+//!   layout, alone and with `:`, `?`, `"`, `)` around them, and a closing
+//!   `"` right after them.
 //! - Ghost suggestions (2.4): the same words and the academic sample, typed
 //!   key by key, never bring up an offer.
 //!
@@ -175,6 +176,10 @@ fn main() {
             format!("{w}?"),
             format!("\"{w}\""),
             format!("({w})"),
+            // A closing quote right after it (`it"`): on Kedmanee `"` is
+            // the period of Thai abbreviations (ก.ค. is `d"8"`).
+            format!("{w}\""),
+            format!("{w}\"."),
         ] {
             total += 1;
             if let Some(c) = us_layout(&t) {
