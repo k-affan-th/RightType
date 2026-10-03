@@ -383,12 +383,10 @@ unsafe extern "system" fn on_focus(
         hwnd.0 as usize
     ));
     wake_worker();
-    // One of RightType's own windows: a settings page follows Tab, and the
-    // focus worker leaves it alone (see `on_focus_inner`).
+    // One of RightType's own windows: a settings page follows Tab.
     let own = !hwnd.0.is_null()
         && windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(hwnd, None)
             == windows::Win32::System::Threading::GetCurrentThreadId();
-    OWN_FOCUS.store(own, Ordering::Release);
     if own {
         crate::ui::focus_moved_to(hwnd);
     }
@@ -398,20 +396,28 @@ unsafe extern "system" fn on_focus(
 /// The field key standing for "one of RightType's own windows".
 const OWN_FIELD: u64 = 1;
 
-/// The latest focus event came from one of RightType's own windows.
-static OWN_FOCUS: AtomicBool = AtomicBool::new(false);
-
-/// Is the focus (or the window in front) one of RightType's own?
+/// Is the keyboard focus in one of RightType's own windows? Asked of
+/// Windows (the focused window of the thread in front), not taken from the
+/// focus event: RightType's hints (the Suggest pill, the TH/EN tag) raise
+/// focus events of their own while the app keeps the focus, and taking those
+/// for the focus left Chrome's fields unchecked (CI: Tab completion and Why?
+/// failed on the test page).
 unsafe fn own_window_in_front() -> bool {
-    if OWN_FOCUS.load(Ordering::Acquire) {
-        return true;
-    }
-    let fg = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
-    if fg.0.is_null() {
+    use windows::Win32::UI::WindowsAndMessaging::{GetGUIThreadInfo, GUITHREADINFO};
+    let mut info = GUITHREADINFO {
+        cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+        ..Default::default()
+    };
+    let focused = if GetGUIThreadInfo(0, &mut info).is_ok() && !info.hwndFocus.0.is_null() {
+        info.hwndFocus
+    } else {
+        windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow()
+    };
+    if focused.0.is_null() {
         return false;
     }
     let mut pid = 0u32;
-    windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(fg, Some(&mut pid));
+    windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(focused, Some(&mut pid));
     pid == windows::Win32::System::Threading::GetCurrentProcessId()
 }
 

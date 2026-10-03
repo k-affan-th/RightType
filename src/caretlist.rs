@@ -49,6 +49,11 @@ static ENABLED: AtomicBool = AtomicBool::new(true);
 static OPEN: AtomicIsize = AtomicIsize::new(0);
 /// The window the list types into.
 static TARGET: AtomicIsize = AtomicIsize::new(0);
+/// Shift was tapped twice and the list is about to open: keys typed in
+/// the meantime are the search's (CI: the `e` of `degree` reached Notepad
+/// before the list was there).
+static OPENING: AtomicBool = AtomicBool::new(false);
+static EARLY: std::sync::Mutex<Vec<(u16, Option<char>)>> = std::sync::Mutex::new(Vec::new());
 
 pub fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
@@ -104,6 +109,7 @@ thread_local! {
 /// Open the list (from the keyboard hook: the window is shown after the
 /// hook returns).
 pub fn request_open() {
+    OPENING.store(true, Ordering::Release);
     unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
         let _ = KillTimer(None, id);
         open();
@@ -119,7 +125,18 @@ pub fn request_open() {
 pub fn key(vk: u16, ch: Option<char>) -> bool {
     let open = OPEN.load(Ordering::Acquire);
     if open == 0 {
-        return false;
+        if !OPENING.load(Ordering::Acquire) {
+            return false;
+        }
+        // Still opening: kept for it, in order.
+        let printable = ch.is_some_and(|c| !c.is_control());
+        if !printable && !matches!(vk, 0x08 | 0x09 | 0x0D | 0x1B | 0x26 | 0x28) {
+            return false;
+        }
+        if let Ok(mut early) = EARLY.lock() {
+            early.push((vk, ch.filter(|c| !c.is_control())));
+        }
+        return true;
     }
     let fg = unsafe { GetForegroundWindow() }.0 as isize;
     if fg != TARGET.load(Ordering::Acquire) && fg != open {
@@ -206,6 +223,13 @@ fn ensure() -> Option<HWND> {
 }
 
 fn open() {
+    // However this ends, it is no longer opening; keys typed meanwhile go
+    // to the list (or, if it cannot open, nowhere: they were the search's).
+    OPENING.store(false, Ordering::Release);
+    let early: Vec<(u16, Option<char>)> = EARLY
+        .lock()
+        .map(|mut e| std::mem::take(&mut *e))
+        .unwrap_or_default();
     if is_open() {
         return;
     }
@@ -267,6 +291,12 @@ fn open() {
     }
     ui::redraw_all(hwnd);
     crate::hook::trace_note("caret list: open");
+    for (vk, ch) in early {
+        if !is_open() {
+            break;
+        }
+        on_key(vk, ch);
+    }
 }
 
 /// Round the window's corners to match the card drawn in it.
