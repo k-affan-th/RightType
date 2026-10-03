@@ -112,6 +112,8 @@ pub struct Config {
     pub debounce_keys: Vec<u16>,
     /// A barcode scanner's burst typed with the Thai keyboard on is put back.
     pub fix_scanners: bool,
+    /// Holding a key opens a list of the characters it does not type.
+    pub hold_for_accents: bool,
     /// Keys a device types into the Run box faster than any hand are held
     /// back.
     pub guard_fake_keyboards: bool,
@@ -196,6 +198,7 @@ impl Default for Config {
             complete_thai: false,
             debounce_keys: Vec::new(),
             fix_scanners: true,
+            hold_for_accents: false,
             guard_fake_keyboards: true,
             snippets: Vec::new(),
             sync_settings: false,
@@ -261,6 +264,7 @@ pub fn apply(cfg: &Config) {
     hook::set_guards_switch(cfg.guard_switch);
     hook::set_completes_thai(cfg.complete_thai);
     hook::set_fixes_scanners(cfg.fix_scanners);
+    hook::set_holds_for_accents(cfg.hold_for_accents);
     hook::set_guards_fake_keyboards(cfg.guard_fake_keyboards);
     hook::set_debounce_keys(
         cfg.debounce_keys
@@ -524,6 +528,7 @@ fn snapshot() -> Config {
         guard_switch: hook::guards_switch(),
         complete_thai: hook::completes_thai(),
         fix_scanners: hook::fixes_scanners(),
+        hold_for_accents: hook::holds_for_accents(),
         guard_fake_keyboards: hook::guards_fake_keyboards(),
         debounce_keys: hook::debounce_keys()
             .iter()

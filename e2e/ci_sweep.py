@@ -436,6 +436,29 @@ def devices(t):
     t.focus()
 
 
+def hold_for_accents(t):
+    """2.3: with the option on, holding e and pressing 1 types é in place of
+    the e."""
+    write_sweep_config(keys="hold_for_accents = true\n")
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.clear()
+        t.focus()
+        time.sleep(0.4)
+        fs.key(ord("E"))
+        for _ in range(8):  # held: Windows repeats the key-down
+            time.sleep(0.05)
+            fs.key(ord("E"))
+        fs.key(ord("E"), True)
+        time.sleep(0.4)
+        tap(ord("1"))
+        time.sleep(0.6)
+        fs.check(t.name, "holding e then 1 types é", t.read().strip(), "é")
+    finally:
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+
+
 def thai_word_delete(t):
     """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
     fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
@@ -1345,6 +1368,7 @@ def sweep(t):
         keyboard_health(t)
         key_bounce(t)
         devices(t)
+        hold_for_accents(t)
         enter_guard(t)
         app_keyboards(t)
     if t.name == "page":

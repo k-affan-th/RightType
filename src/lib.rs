@@ -30,6 +30,7 @@
 //! - [`snippets`] — a short trigger becomes a longer text, on either keyboard.
 //! - [`sim`] — the hook's Auto pipeline replayed on a string, for benchmarks and tests.
 
+pub mod accents;
 pub mod buffer;
 pub mod chatter;
 pub mod code;

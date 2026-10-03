@@ -1392,6 +1392,102 @@ fn came_in_a_burst(len: usize) -> bool {
     len >= SCANNER_MIN && FAST_RUN.with(|f| f.get().1) >= len
 }
 
+static HOLD_FOR_ACCENTS: AtomicBool = AtomicBool::new(false);
+
+pub fn holds_for_accents() -> bool {
+    HOLD_FOR_ACCENTS.load(Ordering::Relaxed)
+}
+pub fn set_holds_for_accents(on: bool) {
+    HOLD_FOR_ACCENTS.store(on, Ordering::Relaxed);
+}
+
+/// The list open near the cursor after a key was held: the key, what it
+/// offers, and when it opened.
+struct Pick {
+    vk: u16,
+    choices: Vec<String>,
+    opened: Instant,
+}
+
+thread_local! {
+    static PICK: RefCell<Option<Pick>> = const { RefCell::new(None) };
+}
+
+/// The list goes away by itself after this long.
+const PICK_OPEN: Duration = Duration::from_secs(6);
+
+/// Holding a key that has other characters (`.` → … · •, `e` → é è, a
+/// digit → its Thai numeral) opens a numbered list near the cursor at its
+/// first auto-repeat; a digit picks (replacing the one character typed),
+/// Esc closes it, any other key closes it and goes on as usual. `Some`
+/// when the key is decided here (`true`: swallowed).
+unsafe fn hold_to_pick(vk: u16, scan: u16, repeat: bool) -> Option<bool> {
+    let open = PICK.with(|p| {
+        p.borrow()
+            .as_ref()
+            .map(|p| (p.vk, p.choices.len(), p.opened.elapsed() < PICK_OPEN))
+    });
+    if let Some((held, count, fresh)) = open {
+        if !fresh {
+            PICK.with(|p| p.borrow_mut().take());
+        } else if vk == held && repeat {
+            return Some(true);
+        } else {
+            let digit = match vk {
+                0x31..=0x39 => Some((vk - 0x31) as usize),
+                0x61..=0x69 => Some((vk - 0x61) as usize),
+                _ => None,
+            };
+            let pick = PICK.with(|p| p.borrow_mut().take());
+            crate::overlay::dismiss();
+            if vk == VK_ESCAPE.0 {
+                return Some(true);
+            }
+            if let (Some(i), Some(pick)) = (digit.filter(|i| *i < count), pick) {
+                trace_note("held key: character picked");
+                // The character typed by the first press goes; the pick
+                // takes its place. What is on screen is no longer the word
+                // the buffer holds.
+                inject::apply(1, &pick.choices[i], None);
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    st.buf.clear();
+                    st.owned = None;
+                    st.mark = TokenMark::Plain;
+                    st.recent.clear();
+                });
+                return Some(true);
+            }
+            return None;
+        }
+    }
+    if !repeat
+        || !holds_for_accents()
+        || is_down(VK_CONTROL)
+        || is_down(VK_MENU)
+        || STATE.with(|s| s.borrow().sensitive_app)
+        || safety::is_password_field()
+        || crate::focus::is_password_field()
+        || !crate::focus::is_text_field()
+    {
+        return None;
+    }
+    let typed = translate(vk, scan)?;
+    let choices = righttype::accents::choices(typed)?;
+    let anchor = crate::caret::find_caret()
+        .map_or(crate::overlay::Anchor::Corner, crate::overlay::Anchor::Near);
+    crate::overlay::show_at(&righttype::accents::shown(&choices), anchor);
+    trace_note("held key: choices shown");
+    PICK.with(|p| {
+        *p.borrow_mut() = Some(Pick {
+            vk,
+            choices,
+            opened: Instant::now(),
+        })
+    });
+    Some(true)
+}
+
 /// The most one key may spend in the hook, waits included. Windows lets a
 /// key through by itself when the hook takes longer than it allows
 /// (`LowLevelHooksTimeout`, 300 ms or more) and removes a hook that does so
@@ -1591,6 +1687,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
     if capture_key(vk) {
         return true;
+    }
+    if let Some(swallow) = hold_to_pick(vk, kb.scanCode as u16, repeat) {
+        return swallow;
     }
     let action = hotkeys().action_for(vk, is_down(VK_CONTROL), is_down(VK_SHIFT), is_down(VK_MENU));
     if !is_modifier(vk) && is_down(VK_SHIFT) && (is_down(VK_CONTROL) || is_down(VK_MENU)) {

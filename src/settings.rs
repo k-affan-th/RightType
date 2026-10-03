@@ -67,7 +67,7 @@ const RESTART_Y: i32 = 486;
 /// the page is (it scrolls).
 const KB_PICK_Y: i32 = 98;
 const KB_TYPING_Y: i32 = 246;
-const KB_KEYS_Y: i32 = 558;
+const KB_KEYS_Y: i32 = 558 + ROW_H;
 const KB_DEV_Y: i32 = KB_KEYS_Y + 3 * ROW_H + 8 + 56;
 const KB_HEIGHT: i32 = KB_DEV_Y + 2 * ROW_H + 8 + 24;
 /// The Tools page: the tools' card, the health check's card, the page.
@@ -139,6 +139,7 @@ struct Ids {
     kb_complete: u16,
     kb_grave: u16,
     kb_guard: u16,
+    kb_accents: u16,
     kb_password_tag: u16,
     /// NumLock and Insert: off, warn, fix.
     kb_numlock: [u16; 3],
@@ -490,6 +491,13 @@ fn open_on(page: u8) {
         tr(T::RowGuardSwitch),
         tr(T::SubGuardSwitch),
         kb_row(KB_TYPING_Y, 3),
+        p.surface,
+        k,
+    );
+    let kb_accents = s.toggle(
+        tr(T::RowHoldAccents),
+        tr(T::SubHoldAccents),
+        kb_row(KB_TYPING_Y, 4),
         p.surface,
         k,
     );
@@ -939,6 +947,7 @@ fn open_on(page: u8) {
         kb_complete,
         kb_grave,
         kb_guard,
+        kb_accents,
         kb_password_tag,
         kb_numlock,
         kb_insert,
@@ -1085,6 +1094,7 @@ fn sync(win: &SettingsWindow) {
     s.set_checked(ids.kb_complete, hook::completes_thai());
     s.set_checked(ids.kb_grave, hook::grave_types());
     s.set_checked(ids.kb_guard, hook::guards_switch());
+    s.set_checked(ids.kb_accents, hook::holds_for_accents());
     s.set_checked(ids.kb_password_tag, crate::pwhint::is_enabled());
     s.set_checked(ids.kb_scanner, hook::fixes_scanners());
     s.set_checked(ids.kb_fake, hook::guards_fake_keyboards());
@@ -1268,6 +1278,9 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         config::persist();
     } else if id == ids.kb_grave {
         hook::set_grave_types(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_accents {
+        hook::set_holds_for_accents(s.checked(id));
         config::persist();
     } else if id == ids.kb_guard {
         hook::set_guards_switch(s.checked(id));
@@ -2071,8 +2084,8 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             let dy = ui::page_scroll();
             card(g, rect(X0, KB_PICK_Y - dy, CW, 100));
             track(g, rect(X0 + 16, KB_PICK_Y + 12 - dy, CW - 32, 48));
-            card(g, rect(X0, KB_TYPING_Y - dy, CW, 4 * ROW_H + 8));
-            for i in 1..4 {
+            card(g, rect(X0, KB_TYPING_Y - dy, CW, 5 * ROW_H + 8));
+            for i in 1..5 {
                 divider(hdc, X0 + 16, KB_TYPING_Y + i * ROW_H + 2 - dy, CW - 32);
             }
             card(g, rect(X0, KB_KEYS_Y - dy, CW, 3 * ROW_H + 8));

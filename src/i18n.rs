@@ -338,6 +338,8 @@ texts! {
     HealthFilterThem => "Filter", "กรองให้";
     HealthStopFilter => "Stop filtering", "เลิกกรอง";
     HeadDevices => "Devices", "อุปกรณ์";
+    RowHoldAccents => "Hold a key for more characters", "กดค้างเพื่อเลือกอักขระพิเศษ";
+    SubHoldAccents => "Hold . for … ·, e for é, a digit for its Thai numeral, then press a number.", "กดค้าง . ได้ … · กดค้าง e ได้ é กดค้างตัวเลขได้เลขไทย แล้วกดเลขเพื่อเลือก";
     RowScanner => "Barcode scanners", "เครื่องสแกนบาร์โค้ด";
     SubScanner => "With the Thai keyboard on, a scan comes back as its digits and letters.", "เมื่อแป้นไทยเปิดอยู่ ค่าที่สแกนจะกลับเป็นตัวเลขและตัวอักษรเดิม";
     RowFakeKeyboard => "Block fake keyboards", "กันคีย์บอร์ดปลอม";
