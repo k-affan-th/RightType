@@ -347,9 +347,18 @@ unsafe fn apply_review(keep: Vec<bool>) {
                 // Elsewhere, found by its text and selected; typed over only
                 // once the app says the selection is that word (a browser
                 // moves it a moment later: CI typed one word at the end).
+                // A browser rebuilds what it shares a moment after an edit:
+                // the next word, found and selected too soon, was not (CI:
+                // the selection stayed empty), so it is asked again.
                 None => {
-                    focus::select_in_field(&change.original, places[i])
-                        && selection_is(&change.original)
+                    let selected = (0..3).any(|attempt| {
+                        if attempt > 0 {
+                            thread::sleep(Duration::from_millis(150));
+                        }
+                        focus::select_in_field(&change.original, places[i])
+                            && selection_is(&change.original)
+                    });
+                    selected
                         && same_context(hwnd, generation)
                         && crate::inject::apply(0, &change.fixed, None)
                 }
