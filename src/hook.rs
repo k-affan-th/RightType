@@ -24,7 +24,6 @@
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::Mutex;
-#[cfg(debug_assertions)]
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
