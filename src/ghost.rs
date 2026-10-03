@@ -175,7 +175,7 @@ fn math(before: &str) -> Option<Ghost> {
         }
     }
     let text = crate::latex::to_unicode(&braced).ok()?;
-    (text != token && !text.contains(['^', '_'])).then(|| Ghost {
+    (text != token && !text.contains(['^', '_'])).then_some(Ghost {
         replace: chars.len(),
         text,
     })
