@@ -55,6 +55,8 @@ mod marks;
 #[cfg(feature = "winos")]
 mod onboard;
 #[cfg(feature = "winos")]
+mod onscreen;
+#[cfg(feature = "winos")]
 mod overlay;
 #[cfg(feature = "winos")]
 mod palette;
@@ -66,6 +68,8 @@ mod pwhint;
 mod ram;
 #[cfg(feature = "winos")]
 mod report;
+#[cfg(feature = "winos")]
+mod rest;
 #[cfg(feature = "winos")]
 mod safety;
 #[cfg(feature = "winos")]

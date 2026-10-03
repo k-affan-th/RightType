@@ -357,6 +357,12 @@ texts! {
     PracticeSpeed => "{n} per minute", "{n} ตัว/นาที";
     PracticeAccuracy => "{n}% right", "ถูก {n}%";
     PracticeLeft => "{t} left", "เหลือ {t}";
+    HeadComfort => "On screen and comfort", "บนจอและสุขภาพมือ";
+    RowShowKeys => "Show shortcuts on screen", "แสดงปุ่มลัดบนจอ";
+    SubShowKeys => "For teaching or recording: Ctrl+C, Alt+Tab… Never letters.", "Ctrl+C, Alt+Tab, Enter… สำหรับสอนหรืออัดคลิป ไม่แสดงตัวอักษรหรือรหัสผ่าน";
+    RowRest => "Remind me to rest my hands", "เตือนให้พักมือ";
+    SubRest => "After 50 minutes of typing with no 5-minute break. Counts only.", "เมื่อพิมพ์ต่อเนื่อง 50 นาทีโดยไม่พัก 5 นาที นับแค่จำนวน";
+    RestDue => "{minutes} minutes of typing ({keys} keys) — rest your hands for a few minutes", "พิมพ์มา {minutes} นาทีแล้ว ({keys} ปุ่ม) พักมือสักครู่นะ";
     PracticeOnScreen => "Keep this keyboard on screen", "เปิดแป้นนี้ค้างไว้บนจอ";
     PracticeOnScreenTip => "While you work, the keyboard map stays on top; keys you know from practice fade.", "ระหว่างทำงาน แผนผังแป้นอยู่บนสุด ปุ่มที่คล่องจากการฝึกจะจางลง";
     PracticeHelp => "Type the highlighted text. Tab: new text · Esc: start over. Works without the keyboard installed.", "พิมพ์ตามข้อความที่ไฮไลต์ Tab: ข้อความใหม่ · Esc: เริ่มใหม่ ฝึกได้แม้ยังไม่ได้ติดตั้งแป้นนั้น";

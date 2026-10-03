@@ -406,6 +406,25 @@ def key_bounce(t):
         CURRENT[0] = fs.start_rt()
 
 
+def keys_on_screen(t):
+    """2.3 C8: shortcuts shown on screen when turned on; letters never."""
+    write_sweep_config(keys="show_keys = true\n")
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.clear()
+        t.focus()
+        time.sleep(0.4)
+        def ctrl_home():
+            tap(0x24, CTRL)
+        fs.check(t.name, "a shortcut is shown",
+                 traced(ctrl_home, "keys on screen: Ctrl+Home"), "yes")
+        fs.check(t.name, "letters are not shown",
+                 traced(lambda: type_keys("ab"), "keys on screen: A"), "no")
+    finally:
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+
+
 def burst(keys):
     """Keys as fast as a machine sends them: no pause between them."""
     for vk in keys:
@@ -1469,6 +1488,7 @@ def sweep(t):
         keyboard_lock(t)
         keyboard_health(t)
         key_bounce(t)
+        keys_on_screen(t)
         devices(t)
         hold_for_accents(t)
         shortcut_list(t)

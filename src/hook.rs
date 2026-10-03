@@ -1190,6 +1190,9 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
                 return LRESULT(1);
             }
             let key = (kb.scanCode as u16, kb.flags.0 & 0x01 != 0);
+            if down && !is_modifier(kb.vkCode as u16) {
+                comfort_key(kb.vkCode as u16);
+            }
             match CHATTER.with(|c| c.borrow_mut().observe(key, down, kb.time)) {
                 righttype::chatter::Verdict::Pass => {}
                 righttype::chatter::Verdict::Bounce => {
@@ -1299,6 +1302,29 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         }
     }
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
+/// A key pressed on a keyboard: the rest reminder counts it, and keys on
+/// screen show it if it is a shortcut — never in a password field or an app
+/// on the safety list.
+unsafe fn comfort_key(vk: u16) {
+    crate::rest::key();
+    if !crate::onscreen::enabled()
+        || STATE.with(|s| s.borrow().sensitive_app)
+        || safety::is_password_field()
+        || crate::focus::is_password_field()
+    {
+        return;
+    }
+    let mods = righttype::keycast::Mods {
+        ctrl: is_down(VK_CONTROL),
+        alt: is_down(VK_MENU),
+        shift: is_down(VK_SHIFT),
+        win: is_down(VIRTUAL_KEY(0x5B)) || is_down(VIRTUAL_KEY(0x5C)),
+    };
+    if let Some(label) = righttype::keycast::label(vk, mods) {
+        crate::onscreen::show(label);
+    }
 }
 
 thread_local! {

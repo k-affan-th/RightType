@@ -488,6 +488,14 @@ pub fn run() {
             "help" => crate::onboard::show(false),
             "overlay" => overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastModeAuto)),
             "keymap" => crate::keymap::request_toggle(),
+            "keys" => {
+                crate::onscreen::set_enabled(true);
+                for k in ["Ctrl+C", "Ctrl+V", "Ctrl+V", "Alt+Tab"] {
+                    crate::onscreen::show(k.to_string());
+                    // One at a time: each waits for the message loop.
+                    crate::onscreen::flush();
+                }
+            }
             "keymap-learnt" => {
                 crate::practice::seed_demo();
                 crate::keymap::request_toggle();
@@ -534,6 +542,7 @@ pub fn run() {
         // follows hotkey and Settings changes without waiting for the menu.
         if msg == WM_TIMER {
             sync_state(&ui_t);
+            crate::rest::tick();
         }
         None
     })
