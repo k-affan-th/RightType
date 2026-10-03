@@ -1253,8 +1253,24 @@ impl Surface {
                 let mut rc = RECT::default();
                 let _ = GetClientRect(self.hwnd, &mut rc);
                 let (cw, ch) = (rc.right - rc.left, rc.bottom - rc.top);
-                let mem = CreateCompatibleDC(screen);
-                let bmp = CreateCompatibleBitmap(screen, cw.max(1), ch.max(1));
+                // Only for the window's own background: a control asks its
+                // parent to draw what is behind it too (one call per
+                // control), and a whole off-screen frame for each of those
+                // made the palette (dozens of rows) slow enough to repaint
+                // that Windows let typed keys past the keyboard hook (CI:
+                // the palette searched for `tet the keyboard`).
+                let own = windows::Win32::Graphics::Gdi::WindowFromDC(screen) == self.hwnd;
+                let (mem, bmp) = if own {
+                    (
+                        CreateCompatibleDC(screen),
+                        CreateCompatibleBitmap(screen, cw.max(1), ch.max(1)),
+                    )
+                } else {
+                    (
+                        HDC::default(),
+                        windows::Win32::Graphics::Gdi::HBITMAP::default(),
+                    )
+                };
                 let (hdc, old) = if mem.is_invalid() || bmp.is_invalid() {
                     (screen, None)
                 } else {

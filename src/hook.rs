@@ -1915,8 +1915,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             return true;
         }
     }
-    if !is_down(VK_CONTROL) && !is_down(VK_MENU) && crate::sheet::key(vk) {
-        return true;
+    if !is_down(VK_CONTROL) && !is_down(VK_MENU) {
+        let ch = translate(vk, kb.scanCode as u16);
+        if crate::sheet::key(vk, ch) {
+            return true;
+        }
     }
 
     // Tab (alone) takes a Thai completion on offer; any other key drops it.

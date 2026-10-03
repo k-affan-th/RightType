@@ -57,28 +57,27 @@ static OPEN: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::ne
 /// A key the hook hands the list (wParam: the key).
 const WM_SHEET_KEY: u32 = 0x8000 + 0x5A1;
 
-/// The keyboard hook hands the list in front Enter (press the shortcut),
-/// Esc (close) and Up/Down (move): the search box keeps the focus, and
-/// Enter in it is not left to the window's dialog handling (CI: Enter
-/// reached the box and nothing ran). Returns whether the list took `vk`.
-pub fn key(vk: u16) -> bool {
+/// The app the open list is for (0: none).
+static TARGET: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/// The keyboard hook hands the open list its keys, as it does for the
+/// palette: typing and Backspace edit the search, Enter presses the
+/// shortcut, Esc closes, Up/Down move. So the list works whether or not
+/// Windows let it come to the front (CI: it did not, the search went to
+/// Notepad behind it, and Enter pressed the first shortcut, Ctrl+N).
+/// Returns whether the list took the key (the hook then swallows it).
+pub fn key(vk: u16, ch: Option<char>) -> bool {
     use std::sync::atomic::Ordering;
     let open = OPEN.load(Ordering::Acquire);
-    if open == 0 || !matches!(vk, 0x0D | 0x1B | 0x26 | 0x28) {
+    if open == 0 {
         return false;
     }
-    // Where the keys go: the hook runs on the list's thread, so its own
-    // focus says it best (on CI the window in front was not reported as
-    // the list while its search box had the keys).
-    let focus = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetFocus() };
-    let root = unsafe {
-        windows::Win32::UI::WindowsAndMessaging::GetAncestor(
-            focus,
-            windows::Win32::UI::WindowsAndMessaging::GA_ROOT,
-        )
-    };
+    let printable = ch.is_some_and(|c| !c.is_control());
+    if !printable && !matches!(vk, 0x08 | 0x0D | 0x1B | 0x26 | 0x28) {
+        return false;
+    }
     let fg = unsafe { GetForegroundWindow() }.0 as isize;
-    if root.0 as isize != open && fg != open {
+    if fg != open && fg != TARGET.load(Ordering::Acquire) {
         return false;
     }
     unsafe {
@@ -86,7 +85,11 @@ pub fn key(vk: u16) -> bool {
             HWND(open as *mut _),
             WM_SHEET_KEY,
             windows::Win32::Foundation::WPARAM(vk as usize),
-            windows::Win32::Foundation::LPARAM(0),
+            windows::Win32::Foundation::LPARAM(if printable {
+                ch.map_or(0, |c| c as isize)
+            } else {
+                0
+            }),
         );
     }
     true
@@ -162,6 +165,7 @@ fn menu_shortcuts(hwnd: HWND) -> Vec<Entry> {
 
 fn close(sheet: &Rc<Sheet>) {
     OPEN.store(0, std::sync::atomic::Ordering::Release);
+    TARGET.store(0, std::sync::atomic::Ordering::Release);
     unsafe {
         let _ = KillTimer(sheet.surface.hwnd, sheet.timer.get());
     }
@@ -271,7 +275,7 @@ fn open() {
     });
     let weak = Rc::downgrade(&sheet);
     let raw =
-        nwg::bind_raw_event_handler(&sheet.window.handle, 0x5254_001B, move |_h, msg, w, _l| {
+        nwg::bind_raw_event_handler(&sheet.window.handle, 0x5254_001B, move |_h, msg, w, l| {
             const WM_TIMER: u32 = 0x0113;
             const WM_CLOSE: u32 = 0x0010;
             const WM_COMMAND: u32 = 0x0111;
@@ -282,30 +286,11 @@ fn open() {
                     Some(0)
                 }
                 WM_SHEET_KEY => {
-                    let row = sheet.surface.selected_row(sheet.table).unwrap_or(0);
-                    match w as u16 {
-                        0x0D => {
-                            // What was typed last may not be filtered yet.
-                            refilter(&sheet);
-                            let row = sheet.surface.selected_row(sheet.table).unwrap_or(0);
-                            run(&sheet, row);
-                        }
-                        0x1B => {
-                            CURRENT.with(|c| c.borrow_mut().take());
-                            close(&sheet);
-                        }
-                        vk => {
-                            let n = sheet.shown.borrow().len();
-                            if n > 0 {
-                                let to = if vk == 0x26 {
-                                    row.saturating_sub(1)
-                                } else {
-                                    (row + 1).min(n - 1)
-                                };
-                                sheet.surface.select_row(sheet.table, to);
-                            }
-                        }
-                    }
+                    on_key(
+                        &sheet,
+                        w as u16,
+                        char::from_u32(l as u32).filter(|c| *c != '\0'),
+                    );
                     Some(0)
                 }
                 // Enter in the search box (IDOK): the first row.
@@ -330,8 +315,58 @@ fn open() {
         .ok();
     *sheet.handler.borrow_mut() = raw;
     crate::hook::trace_note("shortcut list: open");
+    TARGET.store(target.0 as isize, std::sync::atomic::Ordering::Release);
     OPEN.store(hwnd.0 as isize, std::sync::atomic::Ordering::Release);
     CURRENT.with(|c| *c.borrow_mut() = Some(sheet));
+}
+
+/// A key handed over by the hook (see [`key`]).
+fn on_key(sheet: &Rc<Sheet>, vk: u16, ch: Option<char>) {
+    let row = sheet.surface.selected_row(sheet.table).unwrap_or(0);
+    match (vk, ch) {
+        (_, Some(c)) => edit_search(sheet, |q| q.push(c)),
+        (0x08, _) => edit_search(sheet, |q| {
+            q.pop();
+        }),
+        (0x0D, _) => {
+            refilter(sheet);
+            let row = sheet.surface.selected_row(sheet.table).unwrap_or(0);
+            run(sheet, row);
+        }
+        (0x1B, _) => {
+            CURRENT.with(|c| c.borrow_mut().take());
+            close(sheet);
+        }
+        _ => {
+            let n = sheet.shown.borrow().len();
+            if n > 0 {
+                let to = if vk == 0x26 {
+                    row.saturating_sub(1)
+                } else {
+                    (row + 1).min(n - 1)
+                };
+                sheet.surface.select_row(sheet.table, to);
+            }
+        }
+    }
+}
+
+/// Change the search text (shown in the box, caret at the end) and filter.
+fn edit_search(sheet: &Sheet, f: impl FnOnce(&mut String)) {
+    let mut q = sheet.surface.text_of(sheet.search);
+    f(&mut q);
+    sheet.surface.set_text(sheet.search, &q);
+    unsafe {
+        const EM_SETSEL: u32 = 0x00B1;
+        let n = q.encode_utf16().count();
+        let _ = windows::Win32::UI::WindowsAndMessaging::SendMessageW(
+            sheet.surface.hwnd_of(sheet.search),
+            EM_SETSEL,
+            windows::Win32::Foundation::WPARAM(n),
+            windows::Win32::Foundation::LPARAM(n as isize),
+        );
+    }
+    refilter(sheet);
 }
 
 fn fill(sheet: &Sheet) {
