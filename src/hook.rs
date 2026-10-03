@@ -947,6 +947,9 @@ unsafe fn undo_last_correction() {
         habit_correction(!has_thai(restored), has_thai(restored));
         if !matches!(rec.kind, UndoKind::Manual | UndoKind::Snippet) {
             note_rejection();
+            if let Some(exe) = current_app() {
+                crate::stats::app_event(&exe, righttype::app_quality::Event::Undone);
+            }
         }
         let mut kept_spelling = None;
         match rec.kind {
@@ -1749,7 +1752,7 @@ pub fn current_language() -> Option<policy::InputLayout> {
 
 /// The program the typist is typing in (its file name), as last seen.
 pub(crate) fn current_app() -> Option<String> {
-    STATE.with(|s| s.borrow().app_exe.clone())
+    STATE.with(|s| s.try_borrow().ok().and_then(|s| s.app_exe.clone()))
 }
 
 /// A fixed message for both the debug trace and the problem report

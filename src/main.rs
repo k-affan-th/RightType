@@ -15,6 +15,8 @@ mod announce;
 #[cfg(feature = "winos")]
 mod apps;
 #[cfg(feature = "winos")]
+mod by_app;
+#[cfg(feature = "winos")]
 mod caret;
 #[cfg(feature = "winos")]
 mod clean;

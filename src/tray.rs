@@ -488,6 +488,27 @@ pub fn run() {
             "help" => crate::onboard::show(false),
             "overlay" => overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastModeAuto)),
             "keymap" => crate::keymap::request_toggle(),
+            "by-app" => {
+                use righttype::app_quality::Event;
+                for (exe, fixed, right, wrong, undone) in [
+                    ("notepad.exe", 42, 40, 0, 1),
+                    ("chrome.exe", 31, 22, 0, 9),
+                    ("winword.exe", 12, 3, 4, 0),
+                    ("line.exe", 3, 0, 0, 0),
+                ] {
+                    for (e, n) in [
+                        (Event::Fixed, fixed),
+                        (Event::ShownRight, right),
+                        (Event::ShownWrong, wrong),
+                        (Event::Undone, undone),
+                    ] {
+                        for _ in 0..n {
+                            crate::stats::app_event(exe, e);
+                        }
+                    }
+                }
+                crate::by_app::open();
+            }
             "keys" => {
                 crate::onscreen::set_enabled(true);
                 for k in ["Ctrl+C", "Ctrl+V", "Ctrl+V", "Alt+Tab"] {

@@ -31,6 +31,7 @@
 //! - [`sim`] — the hook's Auto pipeline replayed on a string, for benchmarks and tests.
 
 pub mod accents;
+pub mod app_quality;
 pub mod breaks;
 pub mod buffer;
 pub mod chatter;

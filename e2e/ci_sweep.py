@@ -406,6 +406,18 @@ def key_bounce(t):
         CURRENT[0] = fs.start_rt()
 
 
+def by_app(t):
+    """2.3 P4: a word fixed in Notepad counts for Notepad (and its
+    read-back too, where it shares its text)."""
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_EN)
+    time.sleep(0.3)
+    fs.check(t.name, "a fix counts for the app",
+             traced(lambda: type_keys("l;ylfu8iy[ "), "app quality: notepad.exe Fixed"),
+             "yes")
+
+
 def keys_on_screen(t):
     """2.3 C8: shortcuts shown on screen when turned on; letters never."""
     write_sweep_config(keys="show_keys = true\n")
@@ -1489,6 +1501,7 @@ def sweep(t):
         keyboard_health(t)
         key_bounce(t)
         keys_on_screen(t)
+        by_app(t)
         devices(t)
         hold_for_accents(t)
         shortcut_list(t)
