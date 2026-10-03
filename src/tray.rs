@@ -479,6 +479,7 @@ pub fn run() {
             "keytest" => crate::clean::request_open(crate::clean::Mode::Test),
             "sheet" => crate::sheet::request_open(),
             "practice" => crate::practice::request_open(),
+            "practice-game" => crate::practice::open_game_demo(),
             "stats" => stats::open(),
             "palette" => crate::palette::request_open(),
             "fixer" => crate::fixer::open_demo(

@@ -398,7 +398,10 @@ texts! {
     PracticeBestToday => "Best today: {speed}", "ดีที่สุดวันนี้: {speed}";
     PracticeGameScore => "Score {n}", "คะแนน {n}";
     PracticeLives => "Lives {n}", "ชีวิต {n}";
-    PracticeGameOver => "Game over: {n} words. Tab plays again.", "จบเกม: {n} คำ กด Tab เพื่อเล่นใหม่";
+    PracticeLevel => "Level {n}", "ระดับ {n}";
+    PracticeCombo => "{n} in a row", "ต่อเนื่อง {n} คำ";
+    PracticeBestCombo => "Best run {n}", "ต่อเนื่องสูงสุด {n} คำ";
+    PracticeGameOver => "Game over: {n} points. Tab plays again.", "จบเกม: {n} คะแนน กด Tab เพื่อเล่นใหม่";
     RowKeepScores => "Keep a score per day", "เก็บคะแนนรายวัน";
     SubKeepScores => "Speed and accuracy per lesson and day, and which keys are missed. Never the text.", "ความเร็วและความถูกต้องต่อบทต่อวัน และปุ่มที่พลาดบ่อย ไม่เก็บข้อความ";
     PalettePractice => "Typing practice", "ฝึกพิมพ์";
