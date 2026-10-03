@@ -136,7 +136,7 @@ impl Rng {
         Rng(seed.max(1))
     }
 
-    pub fn next(&mut self) -> u64 {
+    pub fn next_u64(&mut self) -> u64 {
         // xorshift64
         let mut x = self.0;
         x ^= x << 13;
@@ -150,7 +150,7 @@ impl Rng {
         if n == 0 {
             0
         } else {
-            (self.next() % n as u64) as usize
+            (self.next_u64() % n as u64) as usize
         }
     }
 }
@@ -226,7 +226,7 @@ pub fn practice_text(
     let total: u64 = words.iter().map(|w| weight(w) as u64).sum();
     (0..count)
         .map(|_| {
-            let mut at = rng.next() % total.max(1);
+            let mut at = rng.next_u64() % total.max(1);
             for w in words {
                 let wt = weight(w) as u64;
                 if at < wt {
