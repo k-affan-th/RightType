@@ -629,6 +629,7 @@ mod tests {
             T::AboutVersion,
             T::WelcomeExample,
             T::PaletteHead,
+            T::LessonShift,
         ];
         for key in T::ALL {
             if SAME.contains(key) {
