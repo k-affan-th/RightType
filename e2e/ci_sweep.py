@@ -459,6 +459,40 @@ def hold_for_accents(t):
         CURRENT[0] = fs.start_rt()
 
 
+def shortcuts_in_english(t):
+    """2.3: with the Thai keyboard on, a web page sees Ctrl+ร for Ctrl+I;
+    with the option on, Ctrl switches to English while held, so it sees
+    Ctrl+i, and Thai is back after."""
+    from pywinauto import Desktop  # noqa: F401
+    def seen():
+        for d in t.win.descendants(control_type="Text"):
+            name = d.element_info.name or ""
+            if name.startswith("ctrl ") or name == "none":
+                return name
+        return "not found"
+    def ctrl_i():
+        t.focus()
+        t.layout(HKL_TH)
+        time.sleep(0.4)
+        fs.key(CTRL)
+        time.sleep(0.15)
+        tap(ord("I"))
+        fs.key(CTRL, True)
+        time.sleep(0.6)
+    ctrl_i()
+    fs.check(t.name, "Thai keyboard: a page sees Ctrl+ร", seen(), "ctrl ร")
+    write_sweep_config(keys="shortcuts_in_english = true\n")
+    try:
+        CURRENT[0] = fs.start_rt()
+        ctrl_i()
+        fs.check(t.name, "shortcuts in English: a page sees Ctrl+i", seen(), "ctrl i")
+        fs.check(t.name, "Thai keyboard back after the shortcut",
+                 f"{keyboard_of(t.hwnd):04X}", "041E")
+    finally:
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+
+
 def thai_word_delete(t):
     """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
     fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
@@ -1372,6 +1406,7 @@ def sweep(t):
         enter_guard(t)
         app_keyboards(t)
     if t.name == "page":
+        shortcuts_in_english(t)
         password_tag(t)
         outside_text(t)
         full_screen_browser_still_works(t)

@@ -1392,6 +1392,67 @@ fn came_in_a_burst(len: usize) -> bool {
     len >= SCANNER_MIN && FAST_RUN.with(|f| f.get().1) >= len
 }
 
+static SHORTCUTS_ENGLISH: AtomicBool = AtomicBool::new(false);
+
+pub fn shortcuts_in_english() -> bool {
+    SHORTCUTS_ENGLISH.load(Ordering::Relaxed)
+}
+pub fn set_shortcuts_in_english(on: bool) {
+    SHORTCUTS_ENGLISH.store(on, Ordering::Relaxed);
+}
+
+thread_local! {
+    /// The window switched to English for a Ctrl/Alt shortcut, to switch
+    /// back to Thai when the keys are let go.
+    static SHORTCUT_ENGLISH_IN: std::cell::Cell<Option<isize>> = const { std::cell::Cell::new(None) };
+}
+
+fn is_ctrl_or_alt(vk: u16) -> bool {
+    matches!(vk, 0x11 | 0x12 | 0xA2..=0xA5)
+}
+
+/// Ctrl or Alt pressed with the Thai keyboard on: English until they are
+/// let go, so the letter of the shortcut is a Latin letter (apps and web
+/// pages that read the character saw Ctrl+แ for Ctrl+C). The request is
+/// posted to the app now, and an app takes posted messages before its next
+/// key, so it lands before the letter.
+unsafe fn shortcut_keys_pressed(vk: u16) {
+    if !is_ctrl_or_alt(vk)
+        || !shortcuts_in_english()
+        || SHORTCUT_ENGLISH_IN.with(|s| s.get()).is_some()
+        || policy::supported_layout_id(layout_id(effective_layout()))
+            != Some(policy::InputLayout::ThaiKedmanee)
+    {
+        return;
+    }
+    SHORTCUT_ENGLISH_IN.with(|s| s.set(Some(GetForegroundWindow().0 as isize)));
+    trace_note("shortcut keys: English");
+    activate_layout(policy::InputLayout::UsQwerty);
+}
+
+/// Ctrl or Alt let go: back to Thai once neither is held, in the same
+/// window (Alt+Tab ends in another one, left as it is).
+unsafe fn shortcut_keys_released(vk: u16) {
+    let Some(hwnd) = SHORTCUT_ENGLISH_IN.with(|s| s.get()) else {
+        return;
+    };
+    if !is_ctrl_or_alt(vk) {
+        return;
+    }
+    // The key being let go still reads as down until this hook returns.
+    let still = [0xA2u16, 0xA3, 0xA4, 0xA5]
+        .iter()
+        .any(|&k| k != vk && is_down(VIRTUAL_KEY(k)));
+    if still {
+        return;
+    }
+    SHORTCUT_ENGLISH_IN.with(|s| s.set(None));
+    if GetForegroundWindow().0 as isize == hwnd {
+        trace_note("shortcut keys: back to Thai");
+        activate_layout(policy::InputLayout::ThaiKedmanee);
+    }
+}
+
 static HOLD_FOR_ACCENTS: AtomicBool = AtomicBool::new(false);
 
 pub fn holds_for_accents() -> bool {
@@ -1668,6 +1729,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         if vk == VK_BACK.0 {
             FLIP_DOWN.with(|f| f.set(None));
         }
+        shortcut_keys_released(vk);
         if vk == VK_CAPITAL.0 {
             if let Some(at) = CAPS_DOWN_AT.with(|c| c.take()) {
                 caps_released(at);
@@ -1687,6 +1749,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
     if capture_key(vk) {
         return true;
+    }
+    if !repeat {
+        shortcut_keys_pressed(vk);
     }
     if let Some(swallow) = hold_to_pick(vk, kb.scanCode as u16, repeat) {
         return swallow;

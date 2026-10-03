@@ -6,10 +6,21 @@
   #out{flex:6;font-size:24px;border:none;outline:none}
   #pw{flex:1;font-size:24px;border:none;outline:none}
   #tool{flex:0 0 24px}
+  #seen{flex:0 0 18px;font-size:12px}
 </style></head>
 <body>
 <textarea id="out" spellcheck="false"></textarea>
 <input id="pw" type="password" autocomplete="off">
 <button id="tool">tool</button>
+<div id="seen" role="status">none</div>
+<script>
+  // The letter a page sees with Ctrl held: web apps read this, and with
+  // the Thai keyboard on it was Thai (Ctrl+แ for Ctrl+C).
+  addEventListener("keydown", e => {
+    if (e.ctrlKey && e.key.length === 1) {
+      document.getElementById("seen").textContent = "ctrl " + e.key;
+    }
+  }, true);
+</script>
 </body>
 </html>

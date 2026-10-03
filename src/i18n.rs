@@ -338,6 +338,8 @@ texts! {
     HealthFilterThem => "Filter", "กรองให้";
     HealthStopFilter => "Stop filtering", "เลิกกรอง";
     HeadDevices => "Devices", "อุปกรณ์";
+    RowShortcutsEnglish => "Ctrl and Alt shortcuts in English", "ปุ่มลัด Ctrl / Alt เป็นภาษาอังกฤษ";
+    SubShortcutsEnglish => "With the Thai keyboard on, Ctrl+C stays Ctrl+C in web apps that read the letter.", "เมื่อแป้นไทยเปิดอยู่ Ctrl+C จะยังเป็น Ctrl+C ในเว็บแอปที่อ่านตัวอักษร";
     RowHoldAccents => "Hold a key for more characters", "กดค้างเพื่อเลือกอักขระพิเศษ";
     SubHoldAccents => "Hold . for … ·, e for é, a digit for its Thai numeral, then press a number.", "กดค้าง . ได้ … · กดค้าง e ได้ é กดค้างตัวเลขได้เลขไทย แล้วกดเลขเพื่อเลือก";
     RowScanner => "Barcode scanners", "เครื่องสแกนบาร์โค้ด";

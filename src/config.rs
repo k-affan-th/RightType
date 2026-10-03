@@ -114,6 +114,9 @@ pub struct Config {
     pub fix_scanners: bool,
     /// Holding a key opens a list of the characters it does not type.
     pub hold_for_accents: bool,
+    /// Ctrl and Alt switch to English while held (shortcuts that read the
+    /// typed letter).
+    pub shortcuts_in_english: bool,
     /// Keys a device types into the Run box faster than any hand are held
     /// back.
     pub guard_fake_keyboards: bool,
@@ -199,6 +202,7 @@ impl Default for Config {
             debounce_keys: Vec::new(),
             fix_scanners: true,
             hold_for_accents: false,
+            shortcuts_in_english: false,
             guard_fake_keyboards: true,
             snippets: Vec::new(),
             sync_settings: false,
@@ -265,6 +269,7 @@ pub fn apply(cfg: &Config) {
     hook::set_completes_thai(cfg.complete_thai);
     hook::set_fixes_scanners(cfg.fix_scanners);
     hook::set_holds_for_accents(cfg.hold_for_accents);
+    hook::set_shortcuts_in_english(cfg.shortcuts_in_english);
     hook::set_guards_fake_keyboards(cfg.guard_fake_keyboards);
     hook::set_debounce_keys(
         cfg.debounce_keys
@@ -529,6 +534,7 @@ fn snapshot() -> Config {
         complete_thai: hook::completes_thai(),
         fix_scanners: hook::fixes_scanners(),
         hold_for_accents: hook::holds_for_accents(),
+        shortcuts_in_english: hook::shortcuts_in_english(),
         guard_fake_keyboards: hook::guards_fake_keyboards(),
         debounce_keys: hook::debounce_keys()
             .iter()
