@@ -541,10 +541,18 @@ def shortcut_list(t):
         time.sleep(0.6)
         tap(ENTER)
         time.sleep(1.5)
-        dialogs = Desktop(backend="uia").windows(title_re="Replace|แทนที่")
+        # Notepad's Replace box is owned by Notepad: UI Automation lists it
+        # under Notepad's window, not the desktop.
+        dialogs = Desktop(backend="uia").windows(title_re="Replace|แทนที่") or [
+            d for d in t.win.descendants(control_type="Window")
+            if d.window_text() in ("Replace", "แทนที่")]
         result = "opened" if dialogs else "no Replace dialog"
         for d in dialogs:
             d.close()
+        if not dialogs:
+            # Whatever did open must not keep the focus from the cases after.
+            tap(0x1B)
+            time.sleep(0.3)
     except Exception as e:
         result = f"failed: {e}"
     fs.check(t.name, "shortcut list presses the shortcut found", result, "opened")
