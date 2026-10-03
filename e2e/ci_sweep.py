@@ -676,7 +676,7 @@ def devices(t):
 
 def hold_for_accents(t):
     """2.3: with the option on, holding e and pressing 1 types é in place of
-    the e."""
+    the e; 2.4: holding 2 offers ² first."""
     write_sweep_config(keys="hold_for_accents = true\n")
     try:
         CURRENT[0] = fs.start_rt()
@@ -692,6 +692,20 @@ def hold_for_accents(t):
         tap(ord("1"))
         time.sleep(0.6)
         fs.check(t.name, "holding e then 1 types é", t.read().strip(), "é")
+        # Superscripts as on a phone keyboard: x, then 2 held, then 1.
+        t.clear()
+        t.focus()
+        time.sleep(0.3)
+        type_keys("x")
+        fs.key(ord("2"))
+        for _ in range(8):
+            time.sleep(0.05)
+            fs.key(ord("2"))
+        fs.key(ord("2"), True)
+        time.sleep(0.4)
+        tap(ord("1"))
+        time.sleep(0.6)
+        fs.check(t.name, "holding 2 then 1 types a superscript", t.read().strip(), "x²")
     finally:
         write_sweep_config()
         CURRENT[0] = fs.start_rt()

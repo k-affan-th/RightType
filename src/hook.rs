@@ -742,8 +742,9 @@ pub fn set_ghosts(on: bool) {
 }
 
 /// How many characters before the caret are kept for ghost suggestions:
-/// the longest LaTeX command (`\\Leftrightarrow`) and the character before.
-const GHOST_TAIL: usize = 16;
+/// a bit of math like `x^2+y^2=z^2` or the longest LaTeX command
+/// (`\\Leftrightarrow`), and the character before.
+const GHOST_TAIL: usize = 24;
 
 struct GhostOffer {
     replace: usize,
