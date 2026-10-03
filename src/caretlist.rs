@@ -15,6 +15,7 @@ use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use native_windows_gui as nwg;
 use righttype::atcaret::{self, Kind, Row};
 use righttype::i18n::{lang, tr, Lang, T};
+use righttype::motion;
 use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     DeleteObject, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_RIGHT, DT_SINGLELINE,
@@ -39,6 +40,9 @@ const WM_CARET_KEY: u32 = 0x8000 + 0x5A2;
 const FILTER_MS: u32 = 60;
 const TIMER_FILTER: usize = 1;
 const TIMER_WATCH: usize = 2;
+/// Animation frames (Windows' timer resolution, about 60 a second).
+const TIMER_ANIM: usize = 3;
+const FRAME_MS: u32 = 15;
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 /// The open list's window (0: closed).
@@ -69,6 +73,27 @@ struct State {
     query: String,
     rows: Vec<Row>,
     selected: usize,
+    /// The highlight slides from this row to `selected`, since `slide_at`.
+    slide_from: f32,
+    slide_at: Option<std::time::Instant>,
+    /// Opening (fade in, rise into place) or closing (fade out), since.
+    fade: Option<(motion::Phase, std::time::Instant)>,
+    /// Where the window rests (screen pixels).
+    rest_y: i32,
+}
+
+impl State {
+    /// The highlight's row, part way through a slide.
+    fn highlight(&self) -> f32 {
+        let to = self.selected as f32;
+        match self.slide_at {
+            Some(at) => {
+                let t = motion::slide(at.elapsed().as_millis() as u32);
+                self.slide_from + (to - self.slide_from) * t
+            }
+            None => to,
+        }
+    }
 }
 
 thread_local! {
@@ -124,8 +149,9 @@ fn ensure() -> Option<HWND> {
         return Some(h);
     }
     let mut window = nwg::Window::default();
-    // Topmost, off the taskbar, never activated: the app keeps the focus.
-    const EX: u32 = 0x0000_0008 | 0x0000_0080 | 0x0800_0000;
+    // Topmost, off the taskbar, never activated (the app keeps the focus),
+    // layered (it fades in and out).
+    const EX: u32 = 0x0000_0008 | 0x0000_0080 | 0x0800_0000 | 0x0008_0000;
     nwg::Window::builder()
         .flags(nwg::WindowFlags::POPUP)
         .ex_flags(EX)
@@ -158,6 +184,10 @@ fn ensure() -> Option<HWND> {
                 if fg != TARGET.load(Ordering::Acquire) && fg != OPEN.load(Ordering::Acquire) {
                     close();
                 }
+                Some(0)
+            }
+            WM_TIMER if w == TIMER_ANIM => {
+                animate();
                 Some(0)
             }
             WM_MOUSEACTIVATE => Some(MA_NOACTIVATE),
@@ -214,10 +244,26 @@ fn open() {
         } else {
             y
         };
-        let _ = SetWindowPos(hwnd, HWND_TOPMOST, x, y, ui::px(W), h, SWP_NOACTIVATE);
+        STATE.with(|s| {
+            let mut s = s.borrow_mut();
+            s.rest_y = y;
+            s.fade = Some((motion::Phase::Enter, std::time::Instant::now()));
+        });
+        let first = motion::frame(motion::Phase::Enter, 0);
+        set_alpha(hwnd, first.alpha);
+        let _ = SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            x,
+            y + ui::px(first.drop_px.round() as i32),
+            ui::px(W),
+            h,
+            SWP_NOACTIVATE,
+        );
         round(hwnd, h);
         let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         SetTimer(hwnd, TIMER_WATCH, 300, None);
+        SetTimer(hwnd, TIMER_ANIM, FRAME_MS, None);
     }
     ui::redraw_all(hwnd);
     crate::hook::trace_note("caret list: open");
@@ -247,16 +293,83 @@ fn close() {
         s.query.zeroize();
         s.rows.clear();
         s.selected = 0;
+        s.slide_at = None;
+        s.fade = Some((motion::Phase::Exit, std::time::Instant::now()));
     });
     if hwnd != 0 {
         unsafe {
             let h = HWND(hwnd as *mut _);
             let _ = KillTimer(h, TIMER_WATCH);
             let _ = KillTimer(h, TIMER_FILTER);
-            let _ = ShowWindow(h, SW_HIDE);
+            // It fades out (see `animate`); typing goes to the app at once.
+            SetTimer(h, TIMER_ANIM, FRAME_MS, None);
         }
     }
     crate::hook::trace_note("caret list: closed");
+}
+
+fn set_alpha(hwnd: HWND, alpha: u8) {
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::SetLayeredWindowAttributes(
+            hwnd,
+            windows::Win32::Foundation::COLORREF(0),
+            alpha,
+            windows::Win32::UI::WindowsAndMessaging::LWA_ALPHA,
+        );
+    }
+}
+
+/// One animation frame: the fade (in or out) and the highlight's slide.
+fn animate() {
+    let Some(hwnd) = LIST.with(|l| l.borrow().as_ref().map(|l| l.surface.hwnd)) else {
+        return;
+    };
+    let (fade, sliding, rest_y) = STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        // A slide that has settled is over.
+        if s.slide_at
+            .is_some_and(|at| at.elapsed().as_millis() as u32 >= motion::SLIDE_MS)
+        {
+            s.slide_at = None;
+        }
+        (s.fade, s.slide_at.is_some(), s.rest_y)
+    });
+    let mut busy = sliding;
+    if let Some((phase, since)) = fade {
+        let f = motion::frame(phase, since.elapsed().as_millis() as u32);
+        set_alpha(hwnd, f.alpha);
+        unsafe {
+            if phase == motion::Phase::Enter {
+                let mut wr = RECT::default();
+                let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(hwnd, &mut wr);
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    wr.left,
+                    rest_y + ui::px(f.drop_px.round() as i32),
+                    0,
+                    0,
+                    SWP_NOACTIVATE | windows::Win32::UI::WindowsAndMessaging::SWP_NOSIZE,
+                );
+            }
+            if f.done {
+                STATE.with(|s| s.borrow_mut().fade = None);
+                if phase == motion::Phase::Exit {
+                    let _ = ShowWindow(hwnd, SW_HIDE);
+                }
+            } else {
+                busy = true;
+            }
+        }
+    }
+    if sliding {
+        ui::redraw_all(hwnd);
+    }
+    if !busy {
+        unsafe {
+            let _ = KillTimer(hwnd, TIMER_ANIM);
+        }
+    }
 }
 
 fn on_key(vk: u16, ch: Option<char>) {
@@ -290,17 +403,25 @@ fn on_key(vk: u16, ch: Option<char>) {
             close();
             return;
         }
-        (0x26 | 0x28, _) => STATE.with(|s| {
-            let mut s = s.borrow_mut();
-            let n = s.rows.len();
-            if n > 0 {
-                s.selected = if vk == 0x26 {
-                    s.selected.saturating_sub(1)
-                } else {
-                    (s.selected + 1).min(n - 1)
-                };
+        (0x26 | 0x28, _) => {
+            STATE.with(|s| {
+                let mut s = s.borrow_mut();
+                let n = s.rows.len();
+                if n > 0 {
+                    // From wherever the highlight is now, even mid-slide.
+                    s.slide_from = s.highlight();
+                    s.selected = if vk == 0x26 {
+                        s.selected.saturating_sub(1)
+                    } else {
+                        (s.selected + 1).min(n - 1)
+                    };
+                    s.slide_at = Some(std::time::Instant::now());
+                }
+            });
+            unsafe {
+                SetTimer(h, TIMER_ANIM, FRAME_MS, None);
             }
-        }),
+        }
         _ => {}
     }
     ui::redraw_all(h);
@@ -314,6 +435,8 @@ fn refilter() {
         let mut s = s.borrow_mut();
         s.rows = rows;
         s.selected = 0;
+        s.slide_from = 0.0;
+        s.slide_at = None;
     });
     let hwnd = OPEN.load(Ordering::Acquire);
     if hwnd != 0 {
@@ -353,6 +476,10 @@ fn pick() {
     crate::manual::request_type(target, text, false);
 }
 
+/// Icons (Segoe Fluent Icons / MDL2 Assets).
+const ICON_SEARCH: &str = "\u{E721}";
+const ICON_SNIPPET: &str = "\u{E70B}";
+
 fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
     let p = pal();
     g.fill_round(rc, ui::px(8) as f32, p.border);
@@ -360,13 +487,26 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
     let body = ui::make_font(14, 400);
     let dim = ui::make_font(12, 400);
     let big = ui::make_font(20, 400);
+    let icons = ui::make_icon_font(16);
     let one = DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX;
+    // An icon, or nothing where Windows has no icon font.
+    let icon = |s: &str, r: RECT, color| {
+        if let Some(f) = icons {
+            ui::text(hdc, s, r, f, color, DT_CENTER | one);
+        }
+    };
     STATE.with(|s| {
         let s = s.borrow();
-        // The search line.
+        // The search line: a magnifier, then what is typed (or a hint).
         let search = ui::rect(PAD, PAD, W - 2 * PAD, SEARCH_H - PAD);
         g.fill_round(search, ui::px(6) as f32, p.inset);
-        let text_rc = ui::rect(PAD + 12, PAD, W - 2 * PAD - 24, SEARCH_H - PAD);
+        icon(
+            ICON_SEARCH,
+            ui::rect(PAD + 4, PAD, 32, SEARCH_H - PAD),
+            p.text_dim,
+        );
+        let text_x = if icons.is_some() { PAD + 38 } else { PAD + 12 };
+        let text_rc = ui::rect(text_x, PAD, W - PAD - 12 - text_x, SEARCH_H - PAD);
         if s.query.is_empty() {
             ui::text(
                 hdc,
@@ -400,61 +540,86 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
                 p.accent,
             );
         }
-        // The rows.
+        let row_y = |i: f32| SEARCH_H + PAD / 2 + (i * ROW_H as f32).round() as i32;
         if s.rows.is_empty() && !s.query.is_empty() {
+            icon(
+                ICON_SEARCH,
+                ui::rect(PAD + 16, SEARCH_H, 32, ROW_H),
+                p.text_dim,
+            );
             ui::text(
                 hdc,
                 tr(T::CaretListNone),
-                ui::rect(PAD + 12, SEARCH_H, W - 2 * PAD - 24, ROW_H),
+                ui::rect(PAD + 56, SEARCH_H, W - 2 * PAD - 68, ROW_H),
                 body,
                 p.text_dim,
                 DT_LEFT | one,
             );
         }
+        // The highlight, where its slide has got to.
+        if !s.rows.is_empty() {
+            g.fill_round(
+                ui::rect(PAD, row_y(s.highlight()), W - 2 * PAD, ROW_H - 2),
+                ui::px(6) as f32,
+                p.accent,
+            );
+        }
         for (i, row) in s.rows.iter().enumerate() {
-            let y = SEARCH_H + PAD / 2 + i as i32 * ROW_H;
+            let y = row_y(i as f32);
             let selected = i == s.selected;
-            if selected {
-                g.fill_round(
-                    ui::rect(PAD, y, W - 2 * PAD, ROW_H - 2),
-                    ui::px(6) as f32,
-                    p.accent,
-                );
-            }
             let (ink, faint) = if selected {
                 (p.on_accent, p.on_accent)
             } else {
                 (p.text, p.text_dim)
             };
-            let glyph_font = if row.kind == Kind::Character {
-                big
-            } else {
-                dim
-            };
-            ui::text(
-                hdc,
-                &row.glyph,
-                ui::rect(PAD + 4, y, 56, ROW_H - 2),
-                glyph_font,
-                ink,
-                DT_CENTER | one | DT_END_ELLIPSIS,
-            );
-            ui::text(
-                hdc,
-                &row.label,
-                ui::rect(PAD + 68, y, W - 2 * PAD - 68 - 96, ROW_H - 2),
-                body,
-                ink,
-                DT_LEFT | one | DT_END_ELLIPSIS,
-            );
-            ui::text(
-                hdc,
-                &row.detail,
-                ui::rect(W - PAD - 100, y, 92, ROW_H - 2),
-                dim,
-                faint,
-                DT_RIGHT | one | DT_END_ELLIPSIS,
-            );
+            let glyph_rc = ui::rect(PAD + 4, y, 56, ROW_H - 2);
+            let label_rc = ui::rect(PAD + 68, y, W - 2 * PAD - 68 - 96, ROW_H - 2);
+            let detail_rc = ui::rect(W - PAD - 100, y, 92, ROW_H - 2);
+            match row.kind {
+                Kind::Character => {
+                    ui::text(hdc, &row.glyph, glyph_rc, big, ink, DT_CENTER | one);
+                    ui::text(
+                        hdc,
+                        &row.label,
+                        label_rc,
+                        body,
+                        ink,
+                        DT_LEFT | one | DT_END_ELLIPSIS,
+                    );
+                    ui::text(
+                        hdc,
+                        &row.detail,
+                        detail_rc,
+                        dim,
+                        faint,
+                        DT_RIGHT | one | DT_END_ELLIPSIS,
+                    );
+                }
+                Kind::Snippet => {
+                    if icons.is_some() {
+                        icon(ICON_SNIPPET, glyph_rc, ink);
+                    } else {
+                        ui::text(hdc, "…", glyph_rc, big, ink, DT_CENTER | one);
+                    }
+                    ui::text(
+                        hdc,
+                        &row.label,
+                        label_rc,
+                        body,
+                        ink,
+                        DT_LEFT | one | DT_END_ELLIPSIS,
+                    );
+                    // The trigger, like a key cap, at the right.
+                    ui::text(
+                        hdc,
+                        &row.glyph,
+                        detail_rc,
+                        dim,
+                        faint,
+                        DT_RIGHT | one | DT_END_ELLIPSIS,
+                    );
+                }
+            }
         }
         // How to use it, at the bottom.
         let foot_y = SEARCH_H + PAD / 2 + s.rows.len().max(1) as i32 * ROW_H;
@@ -468,7 +633,10 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
         );
     });
     unsafe {
-        for f in [body, dim, big] {
+        for f in [Some(body), Some(dim), Some(big), icons]
+            .into_iter()
+            .flatten()
+        {
             let _ = DeleteObject(HGDIOBJ(f.0));
         }
     }

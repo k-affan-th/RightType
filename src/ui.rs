@@ -552,7 +552,7 @@ fn installed(face: &str) -> bool {
 }
 
 /// The icon font at `size` 96-DPI pixels, if Windows has one.
-fn make_icon_font(size: i32) -> Option<HFONT> {
+pub fn make_icon_font(size: i32) -> Option<HFONT> {
     let face: Vec<u16> = format!("{}\0", icon_face()?).encode_utf16().collect();
     Some(unsafe {
         CreateFontW(
