@@ -32,6 +32,7 @@
 
 pub mod accents;
 pub mod app_quality;
+pub mod atcaret;
 pub mod breaks;
 pub mod buffer;
 pub mod chars;
@@ -61,6 +62,7 @@ pub mod shortcuts;
 pub mod sim;
 pub mod snippets;
 pub mod spelling;
+pub mod summon;
 pub mod thai_text;
 pub mod timing;
 pub mod trainer;

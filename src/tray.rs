@@ -509,6 +509,8 @@ pub fn run() {
                 }
                 crate::by_app::open();
             }
+            "caret-list" => crate::caretlist::open_demo("arrow"),
+            "caret-list-th" => crate::caretlist::open_demo("ลูกศร"),
             "keys" => {
                 crate::onscreen::set_enabled(true);
                 for k in ["Ctrl+C", "Ctrl+V", "Ctrl+V", "Alt+Tab"] {

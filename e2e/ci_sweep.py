@@ -432,6 +432,44 @@ def by_app(t):
              "yes")
 
 
+def caret_list(t):
+    """2.4 A: Shift tapped twice opens the list at the cursor; what is
+    searched never reaches the text; Enter types the character picked;
+    capitals (Shift with a letter) never open it; Esc closes it."""
+    def shift_twice():
+        for _ in range(2):
+            fs.key(SHIFT)
+            time.sleep(0.05)
+            fs.key(SHIFT, True)
+            time.sleep(0.12)
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_EN)
+    time.sleep(0.3)
+    fs.check(t.name, "Shift twice opens the list at the cursor",
+             traced(shift_twice, "caret list: open"), "yes")
+    time.sleep(0.4)
+    type_keys("degree")
+    time.sleep(0.5)
+    tap(ENTER)
+    time.sleep(1.2)
+    fs.check(t.name, "the list types the character; the search stays out",
+             t.read().strip(), "°")
+    t.clear()
+    t.focus()
+    fs.check(t.name, "capitals do not open the list",
+             traced(lambda: type_keys("Hello World "), "caret list: open"), "no")
+    t.clear()
+    t.focus()
+    shift_twice()
+    time.sleep(0.4)
+    fs.check(t.name, "Esc closes the list",
+             traced(lambda: (tap(0x1B), time.sleep(0.3)), "caret list: closed"), "yes")
+    type_keys("ok")
+    time.sleep(0.5)
+    fs.check(t.name, "typing goes to the app after the list", t.read().strip(), "ok")
+
+
 def keys_on_screen(t):
     """2.3 C8: shortcuts shown on screen when turned on; letters never."""
     write_sweep_config(keys="show_keys = true\n")
@@ -1523,6 +1561,7 @@ def sweep(t):
         keyboard_health(t)
         key_bounce(t)
         keys_on_screen(t)
+        caret_list(t)
         by_app(t)
         devices(t)
         hold_for_accents(t)

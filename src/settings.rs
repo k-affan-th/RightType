@@ -70,7 +70,8 @@ const KB_TYPING_Y: i32 = 246;
 const KB_KEYS_Y: i32 = 558 + 3 * ROW_H;
 const KB_DEV_Y: i32 = KB_KEYS_Y + 3 * ROW_H + 8 + 56;
 const KB_SHOW_Y: i32 = KB_DEV_Y + 2 * ROW_H + 8 + 56;
-const KB_HEIGHT: i32 = KB_SHOW_Y + 2 * ROW_H + 8 + 24;
+const KB_CARET_Y: i32 = KB_SHOW_Y + 2 * ROW_H + 8 + 56;
+const KB_HEIGHT: i32 = KB_CARET_Y + ROW_H + 8 + 24;
 /// The Tools page: the tools' card, the health check's card, the page.
 const TOOLS_Y: i32 = 98;
 const HEALTH_Y: i32 = 246;
@@ -151,6 +152,7 @@ struct Ids {
     kb_fake: u16,
     kb_show_keys: u16,
     kb_rest: u16,
+    kb_caret_list: u16,
     tools_clean: u16,
     tools_test: u16,
     tools_map: u16,
@@ -615,6 +617,20 @@ fn open_on(page: u8) {
         p.surface,
         k,
     );
+    s.label(
+        tr(T::HeadCaret),
+        TextStyle::BodyStrong,
+        (X0, KB_CARET_Y - 28, CW, 20),
+        p.bg,
+        k,
+    );
+    let kb_caret_list = s.toggle(
+        tr(T::RowCaretList),
+        tr(T::SubCaretList),
+        kb_row(KB_CARET_Y, 0),
+        p.surface,
+        k,
+    );
 
     // --- Tools ------------------------------------------------------------
     let t = PAGE_TOOLS;
@@ -999,6 +1015,7 @@ fn open_on(page: u8) {
         kb_fake,
         kb_show_keys,
         kb_rest,
+        kb_caret_list,
         tools_clean,
         tools_test,
         tools_map,
@@ -1149,6 +1166,7 @@ fn sync(win: &SettingsWindow) {
     s.set_checked(ids.kb_fake, hook::guards_fake_keyboards());
     s.set_checked(ids.kb_show_keys, crate::onscreen::enabled());
     s.set_checked(ids.kb_rest, crate::rest::enabled());
+    s.set_checked(ids.kb_caret_list, crate::caretlist::enabled());
     for (j, id) in ids.kb_numlock.iter().enumerate() {
         s.set_checked(*id, KEY_GUARDS[j] == hook::numlock_mode());
     }
@@ -1355,6 +1373,9 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         config::persist();
     } else if id == ids.kb_rest {
         crate::rest::set_enabled(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_caret_list {
+        crate::caretlist::set_enabled(s.checked(id));
         config::persist();
     } else if id == ids.kb_password_tag {
         crate::pwhint::set_enabled(s.checked(id));
@@ -2158,6 +2179,7 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             divider(hdc, X0 + 16, KB_DEV_Y + ROW_H + 2 - dy, CW - 32);
             card(g, rect(X0, KB_SHOW_Y - dy, CW, 2 * ROW_H + 8));
             divider(hdc, X0 + 16, KB_SHOW_Y + ROW_H + 2 - dy, CW - 32);
+            card(g, rect(X0, KB_CARET_Y - dy, CW, ROW_H + 8));
             for i in 1..3 {
                 divider(hdc, X0 + 16, KB_KEYS_Y + i * ROW_H + 2 - dy, CW - 32);
                 let x = X0 + CW - 24 - 3 * KB_SEG_W;

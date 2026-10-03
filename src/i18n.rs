@@ -373,6 +373,13 @@ texts! {
     ByAppUnknown => "Too few fixes to tell", "ยังแก้น้อยเกินจะบอกได้";
     ByAppEmpty => "No fixes yet in this session", "รอบนี้ยังไม่ได้แก้คำ";
     ByAppFoot => "Since RightType started. App names and counts only, never saved; not every app lets RightType read a fix back.", "นับตั้งแต่เปิด RightType มีแค่ชื่อแอปกับจำนวน ไม่บันทึก และบางแอปไม่ให้อ่านคำที่แก้กลับมาตรวจ";
+    CaretListTitle => "Search at the cursor", "ค้นที่เคอร์เซอร์";
+    CaretListHint => "Search characters and snippets: arrow, degree, ลูกศร…", "ค้นอักขระและคำย่อ: ลูกศร, องศา, arrow…";
+    CaretListNone => "Nothing found", "ไม่พบ";
+    CaretListKeys => "↑↓ choose · Enter type · Esc close", "↑↓ เลือก · Enter พิมพ์ · Esc ปิด";
+    HeadCaret => "At the text cursor", "ที่เคอร์เซอร์";
+    RowCaretList => "Tap Shift twice to search", "แตะ Shift สองครั้งเพื่อค้น";
+    SubCaretList => "Characters and snippets. The search never lands in your text.", "อักขระพิเศษและคำย่อ พิมพ์ลงตรงที่ใช้อยู่ คำที่ค้นไม่ลงไปในข้อความ";
     HeadComfort => "On screen and comfort", "บนจอและสุขภาพมือ";
     RowShowKeys => "Show shortcuts on screen", "แสดงปุ่มลัดบนจอ";
     SubShowKeys => "For teaching or recording: Ctrl+C, Alt+Tab… Never letters.", "Ctrl+C, Alt+Tab, Enter… สำหรับสอนหรืออัดคลิป ไม่แสดงตัวอักษรหรือรหัสผ่าน";

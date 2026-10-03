@@ -1121,6 +1121,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     /* WM_MOUSEMOVE */
     {
         ctrl_hold_input(None, false, false);
+        shift_tap_input(None, false);
     }
     if code == HC_ACTION as i32
         && matches!(
@@ -1592,6 +1593,40 @@ pub fn ctrl_hold_input(vk: Option<u16>, down: bool, repeat: bool) {
     }
 }
 
+thread_local! {
+    /// Shift tapped twice opens the list at the text cursor (2.4 A1).
+    static SHIFT_TAPS: RefCell<righttype::summon::DoubleTap> =
+        RefCell::new(righttype::summon::DoubleTap::new());
+}
+
+/// A key (or, with `None`, a mouse button) for the Shift double tap. Not
+/// in password fields, apps on the safety list, or RightType's own windows.
+pub fn shift_tap_input(vk: Option<u16>, down: bool) {
+    use righttype::summon::Input;
+    if !crate::caretlist::enabled() {
+        return;
+    }
+    let input = match vk {
+        Some(0x10 | 0xA0 | 0xA1) if down => Input::ShiftDown,
+        Some(0x10 | 0xA0 | 0xA1) => Input::ShiftUp,
+        _ => Input::Other,
+    };
+    let now = START.get_or_init(Instant::now).elapsed().as_millis() as u64;
+    if !SHIFT_TAPS.with(|t| t.borrow_mut().input(input, now)) {
+        return;
+    }
+    let private = STATE.with(|s| s.try_borrow().map_or(true, |s| s.sensitive_app))
+        || unsafe { safety::is_password_field() }
+        || crate::focus::is_password_field();
+    if private || crate::caretlist::is_open() || crate::palette::is_open() {
+        return;
+    }
+    trace_note("Shift twice: list at the cursor");
+    crate::caretlist::request_open();
+}
+
+static START: OnceLock<Instant> = OnceLock::new();
+
 static HOLD_FOR_ACCENTS: AtomicBool = AtomicBool::new(false);
 
 pub fn holds_for_accents() -> bool {
@@ -1865,6 +1900,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         false
     };
     ctrl_hold_input(Some(vk), down, repeat);
+    shift_tap_input(Some(vk), down);
     if !down {
         if vk == VK_BACK.0 {
             FLIP_DOWN.with(|f| f.set(None));
@@ -1917,7 +1953,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
     if !is_down(VK_CONTROL) && !is_down(VK_MENU) {
         let ch = translate(vk, kb.scanCode as u16);
-        if crate::sheet::key(vk, ch) {
+        if crate::sheet::key(vk, ch) || crate::caretlist::key(vk, ch) {
             return true;
         }
     }
