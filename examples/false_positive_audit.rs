@@ -420,7 +420,7 @@ fn main() {
             if c == ' ' {
                 tail = " ".into();
             }
-            while tail.chars().count() > 6 {
+            while tail.chars().count() > 16 {
                 tail.remove(0);
             }
             if let Some(g) = righttype::ghost::offer(&tail) {

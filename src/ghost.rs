@@ -78,6 +78,20 @@ pub fn offer(before: &str) -> Option<Ghost> {
             }
         }
     }
+    // \alpha, \leq, \infty: a LaTeX command for one symbol.
+    if let Some(at) = before.rfind('\\') {
+        let name = &before[at + 1..];
+        if !name.is_empty() && name.chars().all(|c| c.is_ascii_alphabetic()) {
+            if let Some(symbol) =
+                crate::latex::symbol(name).filter(|s| *s != name && !s.trim().is_empty())
+            {
+                return Some(Ghost {
+                    replace: name.len() + 1,
+                    text: symbol.to_string(),
+                });
+            }
+        }
+    }
     // The longest rule the text ends with.
     let (typed, text) = RULES
         .iter()
@@ -125,6 +139,8 @@ mod tests {
         assert_eq!(o("E = mc^2"), Some((2, "²".into())));
         assert_eq!(o("x^10"), Some((3, "¹⁰".into())));
         assert_eq!(o("a^n"), Some((2, "ⁿ".into())));
+        assert_eq!(o(r"let \alpha"), Some((6, "α".into())));
+        assert_eq!(o(r"\Rightarrow"), Some((11, "⇒".into())));
     }
 
     #[test]
@@ -140,6 +156,9 @@ mod tests {
         assert_eq!(o("x^"), None);
         assert_eq!(o("^2"), None, "nothing to raise");
         assert_eq!(o("x^abc"), None);
+        assert_eq!(o(r"\sin"), None, "a function name stays a word");
+        assert_eq!(o(r"\alphabet"), None);
+        assert_eq!(o(r"\quad"), None, "a space is not a symbol to offer");
         assert_eq!(o("...."), None, "more dots than an ellipsis");
     }
 }
