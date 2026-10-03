@@ -1,7 +1,9 @@
 //! What the list at the text cursor offers for a search (2.4 A4): special
 //! characters (every one Unicode names, see [`crate::chars`]) and the
-//! typist's own snippets, ranked together by [`crate::find`]. App commands
-//! and equations join in later steps.
+//! typist's own snippets, ranked together by [`crate::find`]; LaTeX typed
+//! into it (`\frac{1}{2}`, `x^2`) shows what it writes as Unicode first
+//! (2.4 D3), and `\al` lists the commands that start so. App commands join
+//! in a later step.
 //!
 //! No OS calls; the search text is the caller's to wipe.
 
@@ -14,6 +16,9 @@ use crate::snippets::Snippet;
 pub enum Kind {
     Character,
     Snippet,
+    /// LaTeX written as Unicode. With no `text`, `label` says why it cannot
+    /// be: nothing to pick.
+    Equation,
 }
 
 /// One row of the list.
@@ -41,27 +46,46 @@ pub fn search(typed: &str, snippets: &[Snippet], thai: bool) -> Vec<Row> {
     if query.is_empty() {
         return Vec::new();
     }
-    let mut rows: Vec<Row> = snippets
-        .iter()
-        // A misspelling of the typist's own is a fix, not something to type.
-        .filter(|s| s.scope != crate::snippets::Scope::Typo)
-        .filter_map(|s| {
-            let score = query.score_any([s.trigger.as_str(), s.text.as_str()])?;
-            let mut label: String = s.text.chars().take(40).collect();
-            if s.text.chars().count() > 40 {
-                label.push('…');
-            }
-            Some(Row {
-                kind: Kind::Snippet,
-                glyph: s.trigger.clone(),
-                label: label.replace(['\r', '\n'], " "),
+    let mut rows = equation(typed, thai);
+    // `\al`: the commands that start so, shortest first.
+    if let Some(prefix) = typed.strip_prefix('\\') {
+        if !prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_alphabetic()) {
+            let mut names: Vec<_> = crate::latex::names()
+                .filter(|(n, _)| n.starts_with(prefix))
+                .collect();
+            names.sort_by_key(|(n, _)| n.len());
+            rows.extend(names.into_iter().take(MAX_ROWS).map(|(n, s)| Row {
+                kind: Kind::Character,
+                glyph: s.to_string(),
+                label: format!("\\{n}"),
                 detail: String::new(),
-                text: s.text.clone(),
-                // The typist's own come first among equals.
-                score: score + 1,
-            })
-        })
-        .collect();
+                text: s.to_string(),
+                score: u32::MAX - 1 - n.len() as u32,
+            }));
+        }
+    }
+    rows.extend(
+        snippets
+            .iter()
+            // A misspelling of the typist's own is a fix, not something to type.
+            .filter(|s| s.scope != crate::snippets::Scope::Typo)
+            .filter_map(|s| {
+                let score = query.score_any([s.trigger.as_str(), s.text.as_str()])?;
+                let mut label: String = s.text.chars().take(40).collect();
+                if s.text.chars().count() > 40 {
+                    label.push('…');
+                }
+                Some(Row {
+                    kind: Kind::Snippet,
+                    glyph: s.trigger.clone(),
+                    label: label.replace(['\r', '\n'], " "),
+                    detail: String::new(),
+                    text: s.text.clone(),
+                    // The typist's own come first among equals.
+                    score: score + 1,
+                })
+            }),
+    );
     rows.extend(
         chars::search(&query, typed, MAX_ROWS)
             .into_iter()
@@ -78,6 +102,31 @@ pub fn search(typed: &str, snippets: &[Snippet], thai: bool) -> Vec<Row> {
     rows.sort_by_key(|r| std::cmp::Reverse(r.score));
     rows.truncate(MAX_ROWS);
     rows
+}
+
+/// The LaTeX row: what `typed` writes, or why it cannot, when it is LaTeX
+/// at all. A lone command being typed (`\al`) is left to the command rows.
+fn equation(typed: &str, thai: bool) -> Vec<Row> {
+    if !crate::latex::looks_like_latex(typed) {
+        return Vec::new();
+    }
+    let lone = typed
+        .strip_prefix('\\')
+        .is_some_and(|p| p.chars().all(|c| c.is_ascii_alphabetic()));
+    let (label, text) = match crate::latex::to_unicode(typed) {
+        Ok(text) if text != typed => (text.clone(), text),
+        Ok(_) => return Vec::new(),
+        Err(_) if lone => return Vec::new(),
+        Err(e) => (e.describe(thai), String::new()),
+    };
+    vec![Row {
+        kind: Kind::Equation,
+        glyph: String::new(),
+        label,
+        detail: "LaTeX".into(),
+        text,
+        score: u32::MAX,
+    }]
 }
 
 #[cfg(test)]
@@ -103,6 +152,22 @@ mod tests {
         assert_eq!(rows[0].kind, Kind::Snippet);
         assert_eq!(rows[0].label, "Best regards, Affan");
         assert_eq!(rows[0].text, "Best regards,\nAffan");
+    }
+
+    #[test]
+    fn latex_first() {
+        let rows = search(r"\frac{1}{2} + x^2", &[], false);
+        assert_eq!(rows[0].kind, Kind::Equation);
+        assert_eq!(rows[0].text, "½ + x²");
+        let rows = search(r"\frac{\frac{1}{2}}{3}", &[], true);
+        assert_eq!(rows[0].kind, Kind::Equation);
+        assert!(rows[0].text.is_empty(), "nothing to pick");
+        let rows = search(r"\alp", &[], false);
+        assert_eq!(rows[0].glyph, "α");
+        assert_eq!(rows[0].label, r"\alpha");
+        assert!(search("arrow", &[], false)
+            .iter()
+            .all(|r| r.kind != Kind::Equation));
     }
 
     #[test]

@@ -49,6 +49,7 @@ pub mod hotkeys;
 pub mod i18n;
 pub mod keyboard;
 pub mod keycast;
+pub mod latex;
 pub mod layout;
 pub mod motion;
 pub mod per_app;

@@ -511,6 +511,9 @@ pub fn run() {
             }
             "caret-list" => crate::caretlist::open_demo("arrow"),
             "caret-list-th" => crate::caretlist::open_demo("ลูกศร"),
+            "caret-latex" => crate::caretlist::open_demo(r"\sum_{i=1}^{n} x_i^2 \leq \frac{1}{2}"),
+            "caret-latex-bad" => crate::caretlist::open_demo(r"\frac{\frac{1}{2}}{3}"),
+            "caret-latex-cmd" => crate::caretlist::open_demo(r"\al"),
             "ghost" => crate::overlay::offer_at(
                 &hook::ghost_hint("!=", "≠"),
                 crate::overlay::Anchor::Near(windows::Win32::Foundation::RECT {

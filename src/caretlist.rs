@@ -494,13 +494,17 @@ fn pick() {
         let s = s.borrow();
         s.rows.get(s.selected).cloned()
     });
+    // A row saying why LaTeX cannot be written: stay open to fix the search.
+    if row.as_ref().is_some_and(|r| r.text.is_empty()) {
+        return;
+    }
     close();
     let Some(row) = row else {
         return;
     };
     let text = match row.kind {
         Kind::Snippet => righttype::snippets::fill(&row.text, &crate::hook::snippet_now()),
-        Kind::Character => row.text,
+        Kind::Character | Kind::Equation => row.text,
     };
     crate::hook::trace_note("caret list: row typed");
     crate::manual::request_type(target, text, false);
@@ -509,6 +513,8 @@ fn pick() {
 /// Icons (Segoe Fluent Icons / MDL2 Assets).
 const ICON_SEARCH: &str = "\u{E721}";
 const ICON_SNIPPET: &str = "\u{E70B}";
+const ICON_EQUATION: &str = "\u{E8EF}";
+const ICON_WARNING: &str = "\u{E7BA}";
 
 fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
     let p = pal();
@@ -643,6 +649,35 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
                     ui::text(
                         hdc,
                         &row.glyph,
+                        detail_rc,
+                        dim,
+                        faint,
+                        DT_RIGHT | one | DT_END_ELLIPSIS,
+                    );
+                }
+                Kind::Equation => {
+                    // What the LaTeX writes, large; or, dim, why it cannot.
+                    let ok = !row.text.is_empty();
+                    if icons.is_some() {
+                        icon(
+                            if ok { ICON_EQUATION } else { ICON_WARNING },
+                            glyph_rc,
+                            if ok { ink } else { faint },
+                        );
+                    } else {
+                        ui::text(hdc, "∑", glyph_rc, big, ink, DT_CENTER | one);
+                    }
+                    ui::text(
+                        hdc,
+                        &row.label,
+                        label_rc,
+                        if ok { big } else { body },
+                        if ok { ink } else { faint },
+                        DT_LEFT | one | DT_END_ELLIPSIS,
+                    );
+                    ui::text(
+                        hdc,
+                        &row.detail,
                         detail_rc,
                         dim,
                         faint,
