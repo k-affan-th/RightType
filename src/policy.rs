@@ -172,6 +172,26 @@ pub fn detect_token(
             if let Some(d) = us_layout_abbreviation(token, th) {
                 return Some(d);
             }
+            // `!` `?` `)` after a Thai word are meant as typed (no Thai word
+            // ends with their Kedmanee letters): read the word without them
+            // first, or the whole reading takes the mark as Kedmanee's
+            // (`-v[86I,kd8jt!` gave ขอบคุณมากค่ะ+). Not `:`, which is ซ.
+            // Only where the Thai layout in use gives that key no letter a
+            // word could end with (Pattachote gives some of them letters).
+            let trimmed = token.trim_end();
+            let mark_is_no_letter = trimmed
+                .chars()
+                .next_back()
+                .filter(|c| ['!', '?', ')'].contains(c))
+                .and_then(|c| en_to_th(&c.to_string()).chars().next())
+                .is_some_and(|t| !('\u{0E01}'..='\u{0E4E}').contains(&t) || t == 'ฦ');
+            if mark_is_no_letter {
+                if let Some(d) = us_layout_marks_kept(trimmed, en, th)
+                    .filter(|d| !only_short_thai_words(&d.corrected, th))
+                {
+                    return Some(d);
+                }
+            }
             detect::detect(token, en, th)
                 .or_else(|| us_layout_thai_with_punctuation(token, en, th))
                 .filter(|d| !only_short_thai_words(&d.corrected, th))
@@ -283,6 +303,12 @@ fn us_layout_thai_with_punctuation(
             evidence: Evidence::FullSegmentation,
         });
     }
+    us_layout_marks_kept(token, en, th)
+}
+
+/// The Thai reading of `token` without the ASCII marks at its edges
+/// ([`LEADING_ASCII`], [`TRAILING_ASCII`]), which stay as typed.
+fn us_layout_marks_kept(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
     let core = token.trim_start_matches(LEADING_ASCII);
     let lead = &token[..token.len() - core.len()];
     let inner = core.trim_end_matches(TRAILING_ASCII);

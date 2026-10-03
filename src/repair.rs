@@ -40,46 +40,87 @@ fn layout_of(word: &str) -> Option<InputLayout> {
 }
 
 /// Fix every wrong-layout word in `text`.
+///
+/// Each word is judged as the hook judges it at a boundary; then, as the
+/// whole text is there to see, a short Thai word the hook leaves alone on
+/// its own (รวม is `i;,`, short Thai words are too easily English typos) is
+/// fixed too when a word next to it is Thai: `(i;, VAT` between ราคา…บาท
+/// and แล้ว is (รวม VAT.
 pub fn repair(text: &str, en: &Dictionary, th: &Dictionary) -> Repaired {
-    let mut out = Repaired::default();
-    let mut chars = 0usize;
-    let mut word = String::new();
-    let flush = |word: &mut String, out: &mut Repaired, chars: &mut usize| {
-        if word.is_empty() {
-            return;
-        }
-        let fixed = layout_of(word)
-            .and_then(|layout| policy::detect_token(word, layout, en, th))
-            .map(|d| d.corrected)
-            .filter(|fixed| fixed != word.as_str());
-        match fixed {
-            Some(fixed) => {
-                out.changes.push(Change {
-                    start: *chars,
-                    original: std::mem::take(word),
-                    fixed: fixed.clone(),
-                });
-                *chars += fixed.chars().count();
-                out.text.push_str(&fixed);
-            }
-            None => {
-                *chars += word.chars().count();
-                out.text.push_str(word);
-                word.clear();
-            }
-        }
-    };
+    // Words and the whitespace between them, in order.
+    let mut parts: Vec<(String, bool)> = Vec::new();
     for c in text.chars() {
-        if c.is_whitespace() {
-            flush(&mut word, &mut out, &mut chars);
-            out.text.push(c);
-            chars += 1;
-        } else {
-            word.push(c);
+        let space = c.is_whitespace();
+        match parts.last_mut() {
+            Some((s, was_space)) if *was_space == space => s.push(c),
+            _ => parts.push((c.to_string(), space)),
         }
     }
-    flush(&mut word, &mut out, &mut chars);
+    let mut fixed: Vec<Option<String>> = parts
+        .iter()
+        .map(|(word, space)| {
+            if *space {
+                return None;
+            }
+            layout_of(word)
+                .and_then(|layout| policy::detect_token(word, layout, en, th))
+                .map(|d| d.corrected)
+                .filter(|f| f != word)
+        })
+        .collect();
+    let is_thai = |s: &str| s.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+    let words: Vec<usize> = (0..parts.len()).filter(|&i| !parts[i].1).collect();
+    for (k, &i) in words.iter().enumerate() {
+        if fixed[i].is_some() {
+            continue;
+        }
+        let shown = |j: usize| fixed[j].clone().unwrap_or_else(|| parts[j].0.clone());
+        let thai_beside = (k > 0 && is_thai(&shown(words[k - 1])))
+            || (k + 1 < words.len() && is_thai(&shown(words[k + 1])));
+        if thai_beside {
+            fixed[i] = short_thai_word(&parts[i].0, en, th);
+        }
+    }
+    let mut out = Repaired::default();
+    let mut chars = 0usize;
+    for ((word, _), fix) in parts.into_iter().zip(fixed) {
+        match fix {
+            Some(f) => {
+                out.changes.push(Change {
+                    start: chars,
+                    original: word,
+                    fixed: f.clone(),
+                });
+                chars += f.chars().count();
+                out.text.push_str(&f);
+            }
+            None => {
+                chars += word.chars().count();
+                out.text.push_str(&word);
+            }
+        }
+    }
     out
+}
+
+/// A Thai dictionary word typed on the English layout, with an opening
+/// bracket or quote kept as typed: `(i;,` is (รวม. Not an English word.
+fn short_thai_word(word: &str, en: &Dictionary, th: &Dictionary) -> Option<String> {
+    if !word.chars().any(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    let core = word.trim_start_matches(['(', '"']);
+    let lead = &word[..word.len() - core.len()];
+    // Letters only, it may be English (`ok`, `in`); with a Thai key's
+    // punctuation among them (`i;,`) it is not.
+    if core.is_empty()
+        || core.chars().all(|c| c.is_ascii_alphabetic())
+            && (crate::english::is_word(core, en) || en.contains(core))
+    {
+        return None;
+    }
+    let reading = crate::layout::en_to_th(core);
+    (reading.chars().count() >= 2 && th.contains(&reading)).then(|| format!("{lead}{reading}"))
 }
 
 /// Does a message of these `words` look typed on the wrong keyboard? At
@@ -191,6 +232,22 @@ mod tests {
     fn a_mixed_paragraph_keeps_its_right_words() {
         let r = fix("hello l;ylfu8iy[ middleware");
         assert_eq!(r.text, "hello สวัสดีครับ middleware");
+    }
+
+    #[test]
+    fn a_short_thai_word_between_thai_ones() {
+        // รวม alone is `i;,`, too short to fix on its own; between Thai
+        // words it is Thai.
+        let r = fix("ik8k 1,250 [km (i;, VAT c]h;)");
+        assert_eq!(r.text, "ราคา 1,250 บาท (รวม VAT แล้ว)");
+        // An English word next to Thai stays English.
+        assert_eq!(fix("ok l;ylfu8iy[").text, "ok สวัสดีครับ");
+        assert_eq!(fix("go to l;ylfu").text, "go to สวัสดี");
+    }
+
+    #[test]
+    fn marks_after_a_thai_word_stay_as_typed() {
+        assert_eq!(fix("-v[86I,kd8jt!").text, "ขอบคุณมากค่ะ!");
     }
 
     #[test]
