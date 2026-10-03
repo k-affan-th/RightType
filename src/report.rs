@@ -49,6 +49,14 @@ fn about() -> Vec<(&'static str, String)> {
         ("on", yes(crate::hook::is_enabled())),
         ("mode", format!("{:?}", crate::hook::mode())),
         ("keyboard hook working", yes(crate::session::is_healthy())),
+        (
+            "keyboard hook time",
+            righttype::timing::HOOK.summary().to_string(),
+        ),
+        (
+            "of it waiting for text boxes",
+            righttype::timing::WAITING.summary().to_string(),
+        ),
     ]
 }
 

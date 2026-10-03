@@ -109,12 +109,31 @@ remembered, and so is any word you *flip back* after RightType changed it
 (`Shift`+`Backspace` or Undo), immediately and in either language. Learned words
 take effect at once for every decision.
 
-Supported keyboards: Thai **Kedmanee** (default) or **Pattachote** (Settings →
-Hotkeys → Thai keyboard), with English on the **US** or **UK** keyboard — English
+Supported keyboards: Thai **Kedmanee** (default), **Pattachote** or
+**Manoonchai** (Settings → Keyboard), with English on the **US** or **UK** keyboard — English
 of any country typed on either (Australia, New Zealand, Canada set to US, …),
 found automatically. Dvorak and other layouts are left alone: RightType stays off
 while one is active. Hotkeys can be changed in Settings → Hotkeys, and each app
 can have its own mode (Settings → Apps).
+
+**Keyboard tools** (Settings → Tools, or the command palette `Ctrl`+`Alt`+`Space`):
+
+- **Typing practice** for Kedmanee, Pattachote, Manoonchai or English: a row of
+  keys at a time, practice text made of real words, 60-second rounds and a
+  falling-words game. It works without the keyboard installed, and nothing typed
+  there reaches any app. While you move to a new keyboard, its map can stay on
+  screen, and the keys you know fade.
+- **Clean the keyboard** (every key held for up to 2 minutes), a **key tester**,
+  and a **health check** for stuck keys, Sticky Keys, keys that type twice and
+  keyboard settings that cause trouble.
+- **This app's shortcuts**, searchable in Thai or English; **shortcuts in
+  English** while the Thai keyboard is on (opt-in); **hold a key** for … – ฿ ฯ
+  and accents (opt-in); **show shortcuts on screen** for recordings (opt-in,
+  never letters); a **rest reminder** (opt-in).
+- **Barcode scanners** work with the Thai keyboard on, and a device that types a
+  command faster than any hand is held back.
+
+![Typing practice](docs/img/practice-th.png)
 
 Short, genuinely ambiguous words (e.g. `ok` vs Thai `นา`, which share keys) are left for
 you to fix manually — no tool can resolve those without guessing.
@@ -151,8 +170,9 @@ A keyboard tool sees everything you type. RightType is designed so secrets never
   (`%APPDATA%\RightType\config.toml`, with the snippets you write yourself) and,
   only if you turn them on: the learned
   words (`learned.txt`, "Learn new words"), two numbers per day for the 7-day
-  chart (`stats.toml`) and per-field word counts for guessing a field's language
-  (`contexts.toml`). All are **off by default**, and learning never runs in the
+  chart (`stats.toml`), per-field word counts for guessing a field's language
+  (`contexts.toml`) and typing-practice scores (`practice.txt`: a score per
+  day and two counts per key, never the text). All are **off by default**, and learning never runs in the
   sensitive contexts above.
 
 The detailed data lifetimes, controls, and known residual risks are documented in
@@ -181,15 +201,15 @@ rather than a blanket ban on every individual BIP39 word.
 (once winget has accepted the release).
 
 **Installer (recommended, per-user, no admin):** download
-`RightType-2.2.0-setup.exe` from the
+`RightType-2.3.0-setup.exe` from the
 [latest release](https://github.com/k-affan-th/RightType/releases/latest) and run it.
 It installs RightType, offers a desktop shortcut and start-at-login, and registers
 a normal Windows uninstaller (Settings -> Apps -> RightType).
 
-**Windows on ARM** (Surface Pro X, Copilot+ PCs): use `RightType-2.2.0-arm64-setup.exe`
-or `RightType-2.2.0-arm64.zip`.
+**Windows on ARM** (Surface Pro X, Copilot+ PCs): use `RightType-2.3.0-arm64-setup.exe`
+or `RightType-2.3.0-arm64.zip`.
 
-**Portable zip:** extract `RightType-2.2.0-x64.zip` and run `righttype.exe` where it
+**Portable zip:** extract `RightType-2.3.0-x64.zip` and run `righttype.exe` where it
 sits. Put an empty file named `portable` next to it and settings and learned
 words stay in a `data` folder beside it (for a USB stick) instead of
 `%APPDATA%\RightType`. Or install it per-user from the extracted folder:
@@ -205,7 +225,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -Autostart
 - Verify what you downloaded against `SHA256.txt` before running it:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\RightType-2.2.0-setup.exe
+Get-FileHash -Algorithm SHA256 .\RightType-2.3.0-setup.exe
 ```
 - Unsigned builds show a SmartScreen prompt — "More info → Run anyway".
   Code signing is planned for a later release.

@@ -25,7 +25,9 @@ use windows::Win32::UI::Accessibility::{
     UIA_ListItemControlTypeId, UIA_MenuItemControlTypeId, UIA_TreeItemControlTypeId,
     UnhookWinEvent, HWINEVENTHOOK, UIA_CONTROLTYPE_ID,
 };
-use windows::Win32::UI::WindowsAndMessaging::{EVENT_OBJECT_FOCUS, WINEVENT_OUTOFCONTEXT};
+use windows::Win32::UI::WindowsAndMessaging::{
+    EVENT_OBJECT_FOCUS, EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT,
+};
 
 const FIELD_UNKNOWN: u8 = 0;
 const FIELD_SAFE: u8 = 1;
@@ -197,6 +199,36 @@ pub unsafe fn arm() {
         WINEVENT_OUTOFCONTEXT,
     );
     HOOK.with(|h| *h.borrow_mut() = Some(hook));
+    // Another window to the front: its app's own keyboard applies again,
+    // whether or not its field changes (CI: Notepad back from the taskbar
+    // kept the field it had, so no focus move was seen).
+    let fg = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND,
+        EVENT_SYSTEM_FOREGROUND,
+        None,
+        Some(on_foreground),
+        0,
+        0,
+        WINEVENT_OUTOFCONTEXT,
+    );
+    FG_HOOK.with(|h| *h.borrow_mut() = Some(fg));
+}
+
+thread_local! {
+    static FG_HOOK: std::cell::RefCell<Option<HWINEVENTHOOK>> = const { std::cell::RefCell::new(None) };
+}
+
+unsafe extern "system" fn on_foreground(
+    _hook: HWINEVENTHOOK,
+    _event: u32,
+    hwnd: HWND,
+    _idobj: i32,
+    _idchild: i32,
+    _thread: u32,
+    _time: u32,
+) {
+    crate::hook::e2e_trace(format!("window to the front: {:#x}", hwnd.0 as usize));
+    notify(WM_APP_TO_FRONT);
 }
 
 /// Where the focus worker reports "the caret moved to another field", so the
@@ -208,8 +240,6 @@ pub const WM_FOCUS_MOVED: u32 = 0x8000 + 0x551;
 /// Posted to [`NOTIFY_HWND`] when another window came to the front, even
 /// to the field it had before (an app's own keyboard applies then).
 pub const WM_APP_TO_FRONT: u32 = 0x8000 + 0x552;
-/// The foreground window when the focus worker last looked.
-static LAST_FOREGROUND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 
 fn notify(msg: u32) {
     let hwnd = NOTIFY_HWND.load(Ordering::Acquire);
@@ -245,6 +275,7 @@ const SETTLE_LIMIT: std::time::Duration = std::time::Duration::from_millis(150);
 /// word of a field came out wrong (CI). Normally a few milliseconds; a hung
 /// app costs `max` per key, and its keys go nowhere meanwhile anyway.
 pub fn settle(max: std::time::Duration) {
+    let max = crate::hook::budget_left(max);
     let asked = ASKED.load(Ordering::Acquire);
     if ANSWERED.load(Ordering::Acquire) >= asked {
         return;
@@ -329,6 +360,11 @@ pub unsafe fn disarm() {
             let _ = UnhookWinEvent(hook);
         }
     });
+    FG_HOOK.with(|h| {
+        if let Some(hook) = h.borrow_mut().take() {
+            let _ = UnhookWinEvent(hook);
+        }
+    });
 }
 
 unsafe extern "system" fn on_focus(
@@ -347,32 +383,74 @@ unsafe extern "system" fn on_focus(
         hwnd.0 as usize
     ));
     wake_worker();
+    // One of RightType's own windows: a settings page follows Tab, and the
+    // focus worker leaves it alone (see `on_focus_inner`).
+    let own = !hwnd.0.is_null()
+        && windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(hwnd, None)
+            == windows::Win32::System::Threading::GetCurrentThreadId();
+    OWN_FOCUS.store(own, Ordering::Release);
+    if own {
+        crate::ui::focus_moved_to(hwnd);
+    }
     DEPTH.with(|d| d.set(depth));
+}
+
+/// The field key standing for "one of RightType's own windows".
+const OWN_FIELD: u64 = 1;
+
+/// The latest focus event came from one of RightType's own windows.
+static OWN_FOCUS: AtomicBool = AtomicBool::new(false);
+
+/// Is the focus (or the window in front) one of RightType's own?
+unsafe fn own_window_in_front() -> bool {
+    if OWN_FOCUS.load(Ordering::Acquire) {
+        return true;
+    }
+    let fg = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
+    if fg.0.is_null() {
+        return false;
+    }
+    let mut pid = 0u32;
+    windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(fg, Some(&mut pid));
+    pid == windows::Win32::System::Threading::GetCurrentProcessId()
 }
 
 /// On the focus worker thread.
 unsafe fn on_focus_inner() {
     let started = std::time::Instant::now();
     let event_at = LAST_EVENT_AT.lock().ok().and_then(|at| *at);
-    let moved = moves_to_another_field();
+    // One of RightType's own windows (the palette, the shortcut list,
+    // Settings): its controls are served by the UI thread, which also runs
+    // the keyboard hook, so asking UI Automation about them made the hook
+    // late, and Windows let a key go past it (CI: the palette searched for
+    // `tet the keyboard`, the S lost while its rows moved). They hold no
+    // password and no app's text: nothing to ask.
+    let own = own_window_in_front();
+    let moved = if own {
+        FIELD.with(|f| *f.borrow_mut() = None);
+        FIELD_KEY.swap(OWN_FIELD, Ordering::Relaxed) != OWN_FIELD
+    } else {
+        moves_to_another_field()
+    };
     if moved {
         if let Ok(mut at) = MOVE_EVENT_AT.lock() {
             *at = event_at;
         }
         FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
-        refresh_status();
+        if own {
+            FIELD_STATUS.store(FIELD_SAFE, Ordering::Relaxed);
+            TEXT_FIELD.store(false, Ordering::Relaxed);
+            EDITING.store(false, Ordering::Relaxed);
+            INLINE_COMPLETION.store(false, Ordering::Relaxed);
+            crate::hook::e2e_trace("field status: RightType's own window".to_string());
+        } else {
+            refresh_status();
+        }
     }
     crate::hook::e2e_trace(format!(
         "focus event handled in {} ms (moved={moved})",
         started.elapsed().as_millis()
     ));
-    // Back to an app whose field still has focus is no move to another
-    // field, but the app came to the front (CI: Notepad, back from the
-    // taskbar, kept the Thai keyboard set for it as English).
-    let foreground = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize;
-    if LAST_FOREGROUND.swap(foreground, Ordering::AcqRel) != foreground {
-        notify(WM_APP_TO_FRONT);
-    }
     if !moved {
         return;
     }
@@ -728,16 +806,24 @@ impl TextBox {
     }
 
     fn ask_within(&self, msg: u32, w: usize, l: isize, ms: u32) -> Option<usize> {
+        // Inside the keyboard hook, never past the key's budget.
+        let ms = crate::hook::budget_left(std::time::Duration::from_millis(ms as u64)).as_millis()
+            as u32;
+        if ms == 0 {
+            return None;
+        }
         // While this waits, Windows may hand the keyboard hook the next key
         // on this thread (see `waiting_on_app`).
-        struct Waiting;
+        struct Waiting(std::time::Instant);
         impl Drop for Waiting {
             fn drop(&mut self) {
                 WAITING_ON_APP.with(|w| w.set(w.get() - 1));
+                let us = self.0.elapsed().as_micros() as u64;
+                WAIT_US.with(|w| w.set(w.get() + us));
             }
         }
         WAITING_ON_APP.with(|w| w.set(w.get() + 1));
-        let _waiting = Waiting;
+        let _waiting = Waiting(std::time::Instant::now());
         use windows::Win32::Foundation::{LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, SMTO_ABORTIFHUNG};
         let mut result = 0usize;
@@ -815,9 +901,7 @@ impl TextBox {
         before.zeroize();
         match (whole, part) {
             (Some(_), Some(n)) => Ok(n),
-            _ => Err(ReplaceError::Untouched(
-                "the box has not caught up with the keys",
-            )),
+            _ => Err(ReplaceError::Untouched(NOT_CAUGHT_UP)),
         }
     }
 
@@ -909,6 +993,17 @@ impl TextBox {
 const STEP_MS: u32 = 80;
 
 thread_local! {
+    /// Time this thread spent waiting for text boxes since last taken.
+    static WAIT_US: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// The time this thread waited for text boxes to answer since the last
+/// call (the hook counts it per key: [`righttype::timing::WAITING`]).
+pub fn take_wait_us() -> u64 {
+    WAIT_US.with(|w| w.replace(0))
+}
+
+thread_local! {
     static WAITING_ON_APP: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
@@ -918,6 +1013,9 @@ thread_local! {
 pub fn waiting_on_app() -> bool {
     WAITING_ON_APP.with(|w| w.get() > 0)
 }
+
+/// The box does not show yet what was typed last.
+pub const NOT_CAUGHT_UP: &str = "the box has not caught up with the keys";
 
 /// Why [`TextBox::replace_before_caret`] did not do the job.
 #[derive(Debug)]

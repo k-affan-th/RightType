@@ -3,8 +3,17 @@ name: Rust
 on:
   push:
     branches: [ "main" ]
+    paths-ignore: [ "docs/**", "**.md" ]
   pull_request:
     branches: [ "main" ]
+    paths-ignore: [ "docs/**", "**.md" ]
+
+# A new push to a pull request stops the runs of the commits before it:
+# only the newest commit's result counts, and the Windows typing tests take
+# half an hour.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -92,7 +101,7 @@ jobs:
   # what an app does with the keys RightType sends; this can.
   e2e:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
     - uses: actions/checkout@v4
     - name: Build (debug, accepts the test's injected keys)

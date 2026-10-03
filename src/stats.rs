@@ -39,7 +39,28 @@ static OPEN_STATS: AtomicIsize = AtomicIsize::new(0);
 const WM_CLOSE: u32 = 0x0010;
 
 /// Record one correction made automatically (Auto mode: boundary or live).
+/// How corrections land per app, this session (memory only).
+static QUALITY: Mutex<Option<righttype::app_quality::Book>> = Mutex::new(None);
+
+pub fn app_event(exe: &str, event: righttype::app_quality::Event) {
+    crate::hook::e2e_trace(format!("app quality: {exe} {event:?}"));
+    if let Ok(mut b) = QUALITY.lock() {
+        b.get_or_insert_with(Default::default).record(exe, event);
+    }
+}
+
+pub fn app_rows() -> Vec<(String, righttype::app_quality::Quality)> {
+    QUALITY
+        .lock()
+        .ok()
+        .and_then(|b| b.as_ref().map(|b| b.rows()))
+        .unwrap_or_default()
+}
+
 pub fn record_auto() {
+    if let Some(exe) = crate::hook::current_app() {
+        app_event(&exe, righttype::app_quality::Event::Fixed);
+    }
     AUTO.fetch_add(1, Ordering::Relaxed);
     with_daily(|d, today| d.record_auto(today));
 }
@@ -312,6 +333,13 @@ pub fn open() {
         0,
     );
     s.set_checked(keep, keeps_daily());
+    let by_app = s.button(
+        tr(T::ByAppButton),
+        false,
+        (X, H - 28 - 34, 150, 34),
+        p.bg,
+        0,
+    );
     let close = s.button(
         tr(T::BtnClose),
         false,
@@ -343,6 +371,8 @@ pub fn open() {
                 finish(&win);
                 open();
             }
+        } else if id == by_app {
+            crate::by_app::open();
         } else if id == close {
             if let Some(win) = weak.upgrade() {
                 finish(&win);

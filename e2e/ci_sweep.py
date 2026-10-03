@@ -168,9 +168,23 @@ def palette_text_tools(t):
         fs.run(t, "fix this field after checking", "l;ylfu 8iy[", "สวัสดี ครับ",
                then=[palette_search("fix this", settle=1.5), lambda: tap(ENTER),
                      lambda: time.sleep(1.5)])
+        # Space only once the words are listed, as the typist would see them
+        # first (reading the field can take seconds: CI once took 3.6 s).
+        def listed_then(*steps):
+            def go():
+                start = fs.log_size()
+                palette_search("fix this", settle=0.3)()
+                deadline = time.time() + 8
+                while time.time() < deadline and \
+                        "words to fix listed" not in fs.log_since(start):
+                    time.sleep(0.2)
+                time.sleep(0.4)
+                for step in steps:
+                    step()
+            return go
         fs.run(t, "fix this field with a word unticked", "l;ylfu 8iy[", "l;ylfu ครับ",
-               then=[palette_search("fix this", settle=1.5), lambda: tap(fs.SPACE),
-                     lambda: time.sleep(0.3), lambda: tap(ENTER), lambda: time.sleep(1.5)])
+               then=[listed_then(lambda: tap(fs.SPACE), lambda: time.sleep(0.3),
+                                 lambda: tap(ENTER), lambda: time.sleep(1.5))])
     finally:
         fs.set_mode("auto")
 
@@ -294,6 +308,310 @@ def keyboard_map(t):
         tap(ord("K"), CTRL, fs.ALT)  # closed again
         time.sleep(0.5)
     fs.check(t.name, "keyboard map types the key clicked", typed, "ส")
+
+
+def keyboard_lock(t):
+    """2.3: cleaning locks the keyboard (nothing reaches the app) until
+    unlocked; the key tester takes keys and closes on Esc held."""
+    from pywinauto import Desktop
+    t.clear()
+    t.focus()
+    palette_search("clean the keyboard", settle=1.5)()
+    typed = "no window"
+    try:
+        win = Desktop(backend="uia").window(title_re="Clean the keyboard|ทำความสะอาดคีย์บอร์ด")
+        win.child_window(title_re="Lock and start|ล็อกและเริ่มเช็ด",
+                         control_type="Button").invoke()
+        time.sleep(3.8)  # the lead-in before the lock
+        t.focus()
+        time.sleep(0.4)
+        type_keys("locked ")
+        time.sleep(0.6)
+        typed = t.read().strip()
+        win.child_window(title_re="Unlock|ปลดล็อก", control_type="Button").invoke()
+        time.sleep(0.6)
+        # The window's own Close, not the title bar's.
+        next(b for b in win.descendants(control_type="Button")
+             if b.window_text() in ("Close", "ปิด")
+             and b.parent().element_info.control_type != "TitleBar").invoke()
+        time.sleep(0.6)
+    except Exception as e:
+        typed = f"failed: {e}"
+    fs.check(t.name, "cleaning lock keeps keys from the app", typed, "")
+    t.focus()
+    time.sleep(0.3)
+    type_keys("ok ")
+    time.sleep(0.6)
+    fs.check(t.name, "keys work again after cleaning", t.read().strip(), "ok")
+    t.clear()
+    palette_search("test the keyboard", settle=1.5)()
+    def hold_esc():
+        fs.key(0x1B)
+        for _ in range(12):  # auto-repeat, as a held key sends
+            time.sleep(0.2)
+            fs.key(0x1B)
+        fs.key(0x1B, True)
+        time.sleep(0.8)
+    type_keys("abc")
+    fs.check(t.name, "key tester closes on Esc held",
+             traced(hold_esc, "keyboard lock: off"), "yes")
+    t.focus()
+    time.sleep(0.3)
+    type_keys("ok ")
+    time.sleep(0.6)
+    fs.check(t.name, "keys work again after the key tester", t.read().strip(), "ok")
+
+
+def keyboard_health(t):
+    """2.3: the Tools page's health check finds CapsLock on, and its fix
+    turns it off."""
+    from pywinauto import Desktop
+    t.focus()
+    result = "no window"
+    try:
+        set_capslock(True)
+        palette_search("settings", settle=2.0)()
+        win = Desktop(backend="uia").window(title_re="RightType — .*")
+        win.child_window(title_re="Tools|เครื่องมือ", control_type="RadioButton").invoke()
+        time.sleep(0.8)
+        win.child_window(title_re="Check again|ตรวจอีกครั้ง", control_type="Button").invoke()
+        time.sleep(0.8)
+        def fix_caps():
+            buttons = [b for b in win.descendants(control_type="Button")
+                       if b.window_text() in ("Turn off", "ปิด") and b.is_visible()]
+            # CapsLock is the last check on the page.
+            buttons[-1].invoke()
+        result = traced(fix_caps, "health: fix CapsOff")
+        win.close()
+        time.sleep(0.5)
+    except Exception as e:
+        result = f"failed: {e}"
+    finally:
+        set_capslock(False)
+    fs.check(t.name, "health check turns CapsLock off", result, "yes")
+
+
+def key_bounce(t):
+    """2.3: a key that types twice by itself (pressed again a few ms after
+    letting go): counted, and dropped for a key chosen to be filtered (h)."""
+    write_sweep_config(keys="debounce_keys = [0x23]\n")  # h
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.clear()
+        t.focus()
+        time.sleep(0.4)
+        def bounce(vk):
+            fs.key(vk)
+            time.sleep(0.06)
+            fs.key(vk, True)
+            time.sleep(0.005)  # a bounce: no finger is this quick
+            fs.key(vk)
+            time.sleep(0.02)
+            fs.key(vk, True)
+            time.sleep(0.3)
+        fs.check(t.name, "a bounce of a filtered key is dropped",
+                 traced(lambda: bounce(ord("H")), "key bounce dropped"), "yes")
+        fs.check(t.name, "a bounce of another key is counted",
+                 traced(lambda: bounce(ord("J")), "key bounce: scan 0x24"), "yes")
+        time.sleep(0.4)
+        fs.check(t.name, "the filtered key typed once", t.read().strip(), "hjj")
+    finally:
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+
+
+def by_app(t):
+    """2.3 P4: a word fixed in Notepad counts for Notepad (and its
+    read-back too, where it shares its text)."""
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_EN)
+    time.sleep(0.3)
+    fs.check(t.name, "a fix counts for the app",
+             traced(lambda: type_keys("l;ylfu8iy[ "), "app quality: notepad.exe Fixed"),
+             "yes")
+
+
+def keys_on_screen(t):
+    """2.3 C8: shortcuts shown on screen when turned on; letters never."""
+    write_sweep_config(keys="show_keys = true\n")
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.clear()
+        t.focus()
+        time.sleep(0.4)
+        def ctrl_home():
+            tap(0x24, CTRL)
+        fs.check(t.name, "a shortcut is shown",
+                 traced(ctrl_home, "keys on screen: Ctrl+Home"), "yes")
+        fs.check(t.name, "letters are not shown",
+                 traced(lambda: type_keys("ab"), "keys on screen: A"), "no")
+    finally:
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+
+
+def burst(keys):
+    """Keys as fast as a machine sends them: no pause between them."""
+    for vk in keys:
+        fs.key(vk)
+        fs.key(vk, True)
+
+
+def devices(t):
+    """2.3: a barcode scanner's burst with the Thai keyboard on comes back as
+    digits; a device typing into the Run box faster than a hand is held
+    back."""
+    t.clear()
+    t.focus()
+    t.layout(HKL_TH)
+    time.sleep(0.4)
+    code = "8851234567890"
+    burst([ord(c) for c in code] + [ENTER])
+    time.sleep(1.0)
+    fs.check(t.name, "scanner burst comes back as digits", t.read().strip(), code)
+    t.clear()
+    t.layout(HKL_EN)
+    def run_box():
+        tap(ord("R"), 0x5B)  # Win+R
+        time.sleep(0.8)
+        burst([ord(c) for c in "NOTEPAD"] + [0xBE, ord("E"), ord("X"), ord("E"), ENTER])
+        time.sleep(1.5)
+        tap(0x1B)  # close the Run box (the device has gone quiet)
+        time.sleep(0.5)
+    fs.check(t.name, "fake keyboard typing into Run is held back",
+             traced(run_box, "fake keyboard: keys held back"), "yes")
+    t.focus()
+
+
+def hold_for_accents(t):
+    """2.3: with the option on, holding e and pressing 1 types é in place of
+    the e."""
+    write_sweep_config(keys="hold_for_accents = true\n")
+    try:
+        CURRENT[0] = fs.start_rt()
+        t.clear()
+        t.focus()
+        time.sleep(0.4)
+        fs.key(ord("E"))
+        for _ in range(8):  # held: Windows repeats the key-down
+            time.sleep(0.05)
+            fs.key(ord("E"))
+        fs.key(ord("E"), True)
+        time.sleep(0.4)
+        tap(ord("1"))
+        time.sleep(0.6)
+        fs.check(t.name, "holding e then 1 types é", t.read().strip(), "é")
+    finally:
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+
+
+def shortcuts_in_english(t):
+    """2.3: with the Thai keyboard on, a web page sees Ctrl+ร for Ctrl+I;
+    with the option on, Ctrl switches to English while held, so it sees
+    Ctrl+i, and Thai is back after."""
+    from pywinauto import Desktop  # noqa: F401
+    def seen():
+        for d in t.win.descendants(control_type="Text"):
+            name = d.element_info.name or ""
+            if name.startswith("ctrl ") or name == "none":
+                return name
+        return "not found"
+    def ctrl_i():
+        t.focus()
+        t.layout(HKL_TH)
+        time.sleep(0.4)
+        fs.key(CTRL)
+        time.sleep(0.15)
+        tap(ord("I"))
+        fs.key(CTRL, True)
+        time.sleep(0.6)
+    ctrl_i()
+    fs.check(t.name, "Thai keyboard: a page sees Ctrl+ร", seen(), "ctrl ร")
+    write_sweep_config(keys="shortcuts_in_english = true\n")
+    try:
+        CURRENT[0] = fs.start_rt()
+        ctrl_i()
+        fs.check(t.name, "shortcuts in English: a page sees Ctrl+i", seen(), "ctrl i")
+        fs.check(t.name, "Thai keyboard back after the shortcut",
+                 f"{keyboard_of(t.hwnd):04X}", "041E")
+    finally:
+        write_sweep_config()
+        CURRENT[0] = fs.start_rt()
+
+
+def shortcut_list(t):
+    """2.3: the app's shortcut list: searched, and Enter presses the
+    shortcut in the app (Notepad's Replace, Ctrl+H)."""
+    from pywinauto import Desktop
+    t.clear()
+    t.focus()
+    result = "no list"
+    try:
+        palette_search("app's shortcuts", settle=1.5)()
+        time.sleep(0.5)
+        type_keys("replace")
+        time.sleep(0.6)
+        tap(ENTER)
+        time.sleep(1.5)
+        # Notepad's Replace box is owned by Notepad: UI Automation lists it
+        # under Notepad's window, not the desktop.
+        dialogs = Desktop(backend="uia").windows(title_re="Replace|แทนที่") or [
+            d for d in t.win.descendants(control_type="Window")
+            if d.window_text() in ("Replace", "แทนที่")]
+        result = "opened" if dialogs else "no Replace dialog"
+        for d in dialogs:
+            d.close()
+        if not dialogs:
+            # Whatever did open must not keep the focus from the cases after.
+            tap(0x1B)
+            time.sleep(0.3)
+    except Exception as e:
+        result = f"failed: {e}"
+    fs.check(t.name, "shortcut list presses the shortcut found", result, "opened")
+    t.focus()
+
+
+def typing_practice(t):
+    """2.3: typing practice takes the keys while it is in front (nothing
+    reaches the app behind), and the app gets them again once it closes."""
+    from pywinauto import Desktop
+    t.clear()
+    t.focus()
+    result = "no window"
+    try:
+        palette_search("typing practice", settle=2.0)()
+        win = Desktop(backend="uia").window(title_re="Typing practice|ฝึกพิมพ์")
+        win.set_focus()
+        time.sleep(0.4)
+        type_keys("asdf")
+        time.sleep(0.5)
+        # The keys went to the practice, not to Notepad behind it.
+        result = "kept" if t.read().strip() == "" else f"leaked: {t.read().strip()!r}"
+        # T5: the practised keyboard stays on screen while working.
+        on_screen = "no map"
+        try:
+            win.child_window(title_re="Keep this keyboard on screen|เปิดแป้นนี้ค้างไว้บนจอ",
+                             control_type="Button").invoke()
+            time.sleep(1.0)
+            if Desktop(backend="uia").window(title="Keyboard map").exists(timeout=2):
+                on_screen = "shown"
+        except Exception as e:
+            on_screen = f"failed: {e}"
+        win.close()
+        time.sleep(0.6)
+        if on_screen == "shown":
+            tap(ord("K"), CTRL, fs.ALT)  # closed again
+            time.sleep(0.5)
+        fs.check(t.name, "practice keeps its keyboard on screen", on_screen, "shown")
+    except Exception as e:
+        result = f"failed: {e}"
+    fs.check(t.name, "typing practice keeps its keys", result, "kept")
+    t.focus()
+    type_keys("ok ")
+    time.sleep(0.6)
+    fs.check(t.name, "keys reach the app after practice", t.read().strip(), "ok")
 
 
 def thai_word_delete(t):
@@ -1201,9 +1519,19 @@ def sweep(t):
         palette_text_tools(t)
     if t.name == "notepad":
         keyboard_map(t)
+        keyboard_lock(t)
+        keyboard_health(t)
+        key_bounce(t)
+        keys_on_screen(t)
+        by_app(t)
+        devices(t)
+        hold_for_accents(t)
+        shortcut_list(t)
+        typing_practice(t)
         enter_guard(t)
         app_keyboards(t)
     if t.name == "page":
+        shortcuts_in_english(t)
         password_tag(t)
         outside_text(t)
         full_screen_browser_still_works(t)
@@ -1277,6 +1605,45 @@ def ui_timing():
         time.sleep(0.5)
 
 
+def memory_use():
+    """2.3 P3: RightType's memory (working set and private bytes) when idle
+    after starting, and once a word has been fixed (the dictionaries are in
+    use then). Printed, not judged: the build here is a debug build."""
+    class Counters(ctypes.Structure):
+        _fields_ = [("cb", wt.DWORD), ("PageFaultCount", wt.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t),
+                    ("PrivateUsage", ctypes.c_size_t)]
+
+    def measure(pid):
+        h = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED
+        c = Counters()
+        c.cb = ctypes.sizeof(c)
+        ok = ctypes.windll.psapi.GetProcessMemoryInfo(h, ctypes.byref(c), c.cb)
+        ctypes.windll.kernel32.CloseHandle(h)
+        mb = lambda n: f"{n / 1048576:.1f} MB"  # noqa: E731
+        return f"working set {mb(c.WorkingSetSize)}, private {mb(c.PrivateUsage)}" if ok else "unknown"
+
+    started = time.perf_counter()
+    proc = fs.start_rt()
+    print(f"  memory idle after start: {measure(proc.pid)}", flush=True)
+    try:
+        t = Notepad()
+        t.focus()
+        type_keys("l;ylfu8iy[ hello ")
+        time.sleep(1.5)
+        print(f"  memory after a fix: {measure(proc.pid)}", flush=True)
+        t.close()
+    except Exception as e:
+        print(f"  memory after a fix: not measured ({e})", flush=True)
+    finally:
+        subprocess.run(["taskkill", "/IM", "righttype.exe", "/F"], capture_output=True)
+    print(f"  (measured in {time.perf_counter() - started:.1f} s)", flush=True)
+
+
 def report_has_no_typed_text(target, results):
     """The problem report RightType kept while this target was typed in
     names what it did, never the words: none of the text the checks saw may
@@ -1291,7 +1658,9 @@ def report_has_no_typed_text(target, results):
     # whose words are not typed, and "clipboard" is in RightType's messages).
     # Nor the answers of checks that typed nothing ("yes", "True"): those
     # are the sweep's words, and the report says "yes" of its own.
-    answers = {"yes", "no", "True", "False"}
+    # (and the verdicts of checks that typed nothing: "kept", "shown",
+    # "opened" — the report says "shown as sent" of its own).
+    answers = {"yes", "no", "True", "False", "kept", "shown", "opened"}
     # Words of RightType's own report messages ("put back to the keys"):
     # the typo check types `teh` for "the".
     own = {"the"}
@@ -1303,6 +1672,20 @@ def report_has_no_typed_text(target, results):
     leaked = sorted(w for w in words
                     if re.search(rf"(?<![\w\u0E00-\u0E7F]){re.escape(w)}(?![\w\u0E00-\u0E7F])", report))
     fs.check(target, "problem report has no typed text", " ".join(leaked), "")
+    # How long the hook took per key in this target (2.3 P2: numbers only).
+    # Every wait in the hook draws on a 200 ms budget per key: 250 ms is the
+    # line no key may cross (Windows passes keys on by itself after 300).
+    import re
+    slowest = None
+    for line in report.splitlines():
+        if line.startswith(("keyboard hook time", "of it waiting")):
+            print(f"[{target}] {line}", flush=True)
+        m = re.match(r"keyboard hook time: .*slowest ([0-9.]+) ms", line)
+        if m:
+            slowest = float(m.group(1))
+    if slowest is not None:
+        fs.check(target, "keyboard hook stays under 250 ms per key",
+                 "yes" if slowest < 250 else f"slowest {slowest} ms", "yes")
     fs.check(target, "problem report records word ends",
              "yes" if "word end" in report else "no", "yes")
 
@@ -1379,6 +1762,7 @@ def main():
     if "instance" in want or not sys.argv[1:]:
         one_instance()
     ui_timing()
+    memory_use()
 
     failed, known, fixed = [], [], []
     for target, name, ok, got, expect in fs.RESULTS:

@@ -106,6 +106,28 @@ pub struct Config {
     pub guard_switch: bool,
     /// Offer the rest of a long Thai word, for Tab (opt-in).
     pub complete_thai: bool,
+    /// Keys whose bounces (a second press a few ms after the release) are
+    /// dropped: scan codes, plus 0x100 for extended keys.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub debounce_keys: Vec<u16>,
+    /// A barcode scanner's burst typed with the Thai keyboard on is put back.
+    pub fix_scanners: bool,
+    /// Holding a key opens a list of the characters it does not type.
+    pub hold_for_accents: bool,
+    /// Ctrl and Alt switch to English while held (shortcuts that read the
+    /// typed letter).
+    pub shortcuts_in_english: bool,
+    /// Ctrl held alone for a second opens the app's shortcut list.
+    pub ctrl_hold_shortcuts: bool,
+    /// Typing practice keeps a score per lesson and day (practice.txt).
+    pub practice_keep_scores: bool,
+    /// Show shortcuts pressed on screen (2.3 C8; never letters).
+    pub show_keys: bool,
+    /// Remind to rest after long typing (2.3 C9; counts in memory only).
+    pub rest_reminder: bool,
+    /// Keys a device types into the Run box faster than any hand are held
+    /// back.
+    pub guard_fake_keyboards: bool,
     /// Put right common Thai misspellings (opt-in).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fix_spelling: bool,
@@ -185,6 +207,15 @@ impl Default for Config {
             fix_addresses: true,
             guard_switch: false,
             complete_thai: false,
+            debounce_keys: Vec::new(),
+            fix_scanners: true,
+            hold_for_accents: false,
+            shortcuts_in_english: false,
+            ctrl_hold_shortcuts: false,
+            practice_keep_scores: false,
+            show_keys: false,
+            rest_reminder: false,
+            guard_fake_keyboards: true,
             snippets: Vec::new(),
             sync_settings: false,
         }
@@ -248,6 +279,20 @@ pub fn apply(cfg: &Config) {
     righttype::policy::set_fixes_addresses(cfg.fix_addresses);
     hook::set_guards_switch(cfg.guard_switch);
     hook::set_completes_thai(cfg.complete_thai);
+    hook::set_fixes_scanners(cfg.fix_scanners);
+    hook::set_holds_for_accents(cfg.hold_for_accents);
+    hook::set_shortcuts_in_english(cfg.shortcuts_in_english);
+    hook::set_ctrl_hold_opens_sheet(cfg.ctrl_hold_shortcuts);
+    hook::set_practice_keeps_scores(cfg.practice_keep_scores);
+    crate::onscreen::set_enabled(cfg.show_keys);
+    crate::rest::set_enabled(cfg.rest_reminder);
+    hook::set_guards_fake_keyboards(cfg.guard_fake_keyboards);
+    hook::set_debounce_keys(
+        cfg.debounce_keys
+            .iter()
+            .map(|k| (k & 0xFF, k & 0x100 != 0))
+            .collect(),
+    );
     hook::set_snippets(
         cfg.snippets
             .iter()
@@ -503,6 +548,18 @@ fn snapshot() -> Config {
         fix_addresses: righttype::policy::fixes_addresses(),
         guard_switch: hook::guards_switch(),
         complete_thai: hook::completes_thai(),
+        fix_scanners: hook::fixes_scanners(),
+        hold_for_accents: hook::holds_for_accents(),
+        shortcuts_in_english: hook::shortcuts_in_english(),
+        ctrl_hold_shortcuts: hook::ctrl_hold_opens_sheet(),
+        practice_keep_scores: hook::practice_keeps_scores(),
+        show_keys: crate::onscreen::enabled(),
+        rest_reminder: crate::rest::enabled(),
+        guard_fake_keyboards: hook::guards_fake_keyboards(),
+        debounce_keys: hook::debounce_keys()
+            .iter()
+            .map(|(scan, ext)| scan | if *ext { 0x100 } else { 0 })
+            .collect(),
         sync_settings: SYNC_SETTINGS.load(std::sync::atomic::Ordering::Relaxed),
         snippets: hook::snippets()
             .into_iter()

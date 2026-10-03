@@ -332,6 +332,39 @@ impl Hotkeys {
     }
 }
 
+/// Shortcuts most apps already use: a RightType hotkey on one of these
+/// takes it from every app (the keyboard hook sees it first), so Settings
+/// says so. `(ctrl, shift, alt, key)` and what the shortcut does.
+const COMMON: &[(bool, bool, bool, u16, crate::i18n::T)] = {
+    use crate::i18n::T;
+    &[
+        (true, false, false, b'C' as u16, T::ScCopy),
+        (true, false, false, b'V' as u16, T::ScPaste),
+        (true, false, false, b'X' as u16, T::ScCut),
+        (true, false, false, b'Z' as u16, T::ScUndo),
+        (true, false, false, b'Y' as u16, T::ScRedo),
+        (true, false, false, b'A' as u16, T::ScSelectAll),
+        (true, false, false, b'S' as u16, T::ScSave),
+        (true, false, false, b'F' as u16, T::ScFind),
+        (true, false, false, b'P' as u16, T::ScPrint),
+        (true, false, false, b'N' as u16, T::ScNew),
+        (true, false, false, b'T' as u16, T::ScNewTab),
+        (true, false, false, b'W' as u16, T::ScCloseTab),
+        (true, true, false, b'T' as u16, T::ScReopenTab),
+        (true, true, false, 0x1B, T::ScTaskManager),
+        (false, false, true, 0x73, T::ScCloseWindow),
+        (false, false, true, 0x09, T::ScSwitchWindow),
+    ]
+};
+
+/// What most apps already do with `chord`, if anything.
+pub fn common_use(chord: Chord) -> Option<crate::i18n::T> {
+    COMMON
+        .iter()
+        .find(|(c, s, a, k, _)| (*c, *s, *a, *k) == (chord.ctrl, chord.shift, chord.alt, chord.key))
+        .map(|(.., what)| *what)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,5 +464,24 @@ mod tests {
         let h = Hotkeys::from_config([("palette", "Ctrl + CapsLock")]);
         assert_eq!(h.chord(Action::Palette), default_chord(Action::Palette));
         assert_eq!(h.chord(Action::Cycle), default_chord(Action::Cycle));
+    }
+
+    #[test]
+    fn common_shortcuts_are_named() {
+        use crate::i18n::T;
+        assert_eq!(
+            common_use(Chord::new(true, false, false, b'C' as u16)),
+            Some(T::ScCopy)
+        );
+        assert_eq!(
+            common_use(Chord::new(false, false, true, 0x73)),
+            Some(T::ScCloseWindow)
+        );
+        assert_eq!(common_use(Chord::new(true, true, false, 0x08)), None);
+        // RightType's own defaults take nothing apps commonly use.
+        for action in Action::ALL {
+            let chord = Hotkeys::default().chord(action);
+            assert_eq!(common_use(chord), None, "{action:?}");
+        }
     }
 }

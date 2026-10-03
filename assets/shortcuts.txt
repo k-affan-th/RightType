@@ -1,0 +1,153 @@
+# App shortcuts for the "this app's shortcuts" list (2.3 K2).
+# A section names its programs (exe names, lower case); each line below is
+#   keys | what it does (English) | what it does (Thai)
+# Keys are written as Windows shows them: Ctrl, Shift, Alt, Win, then the key.
+# Only shortcuts that are the same in every recent version are listed.
+
+[windows]
+Win+D | Show the desktop | แสดงเดสก์ท็อป
+Win+E | Open File Explorer | เปิด File Explorer
+Win+L | Lock the PC | ล็อกเครื่อง
+Win+V | Clipboard history | ประวัติคลิปบอร์ด
+Win+Shift+S | Snip part of the screen | จับภาพบางส่วนของหน้าจอ
+Win+. | Emoji and symbols | อีโมจิและสัญลักษณ์
+Win+Space | Switch keyboard language | สลับภาษาแป้นพิมพ์
+Win+Tab | All windows and desktops | หน้าต่างทั้งหมดและเดสก์ท็อป
+Win+Left | Snap the window left | ชิดหน้าต่างไปทางซ้าย
+Win+Right | Snap the window right | ชิดหน้าต่างไปทางขวา
+Win+Up | Maximize the window | ขยายหน้าต่างเต็มจอ
+Win+I | Settings | เปิดการตั้งค่า
+Alt+Tab | Switch windows | สลับหน้าต่าง
+Alt+F4 | Close the window | ปิดหน้าต่าง
+Ctrl+Shift+Esc | Task Manager | ตัวจัดการงาน
+
+[chrome.exe msedge.exe brave.exe opera.exe vivaldi.exe firefox.exe]
+Ctrl+T | New tab | เปิดแท็บใหม่
+Ctrl+W | Close the tab | ปิดแท็บ
+Ctrl+Shift+T | Reopen the closed tab | เปิดแท็บที่ปิดไปกลับมา
+Ctrl+Tab | Next tab | แท็บถัดไป
+Ctrl+Shift+Tab | Previous tab | แท็บก่อนหน้า
+Ctrl+L | Go to the address bar | ไปที่ช่องที่อยู่
+Ctrl+F | Find on the page | ค้นหาในหน้า
+Ctrl+R | Reload | โหลดหน้าใหม่
+Ctrl+D | Bookmark the page | บุ๊กมาร์กหน้านี้
+Ctrl+H | History | ประวัติการเข้าชม
+Ctrl+J | Downloads | ไฟล์ที่ดาวน์โหลด
+Ctrl+Shift+N | New private window | หน้าต่างส่วนตัวใหม่
+Ctrl+Plus | Zoom in | ขยาย
+Ctrl+Minus | Zoom out | ย่อ
+Ctrl+0 | Actual size | ขนาดปกติ
+Alt+Left | Back | ย้อนกลับ
+Alt+Right | Forward | ไปข้างหน้า
+F11 | Full screen | เต็มจอ
+
+[code.exe cursor.exe]
+Ctrl+Shift+P | Command palette | รายการคำสั่ง
+Ctrl+P | Go to a file | ไปที่ไฟล์
+Ctrl+Shift+F | Search in all files | ค้นหาในทุกไฟล์
+Ctrl+/ | Comment the line | ใส่ / เอาคอมเมนต์ออก
+Ctrl+D | Select the next match | เลือกคำเดียวกันถัดไป
+Alt+Up | Move the line up | ย้ายบรรทัดขึ้น
+Alt+Down | Move the line down | ย้ายบรรทัดลง
+Shift+Alt+Down | Copy the line down | คัดลอกบรรทัดลงไป
+Ctrl+Shift+K | Delete the line | ลบบรรทัด
+Ctrl+B | Show or hide the side bar | แสดง / ซ่อนแถบด้านข้าง
+Ctrl+` | Terminal | เทอร์มินัล
+F2 | Rename the symbol | เปลี่ยนชื่อ
+F12 | Go to the definition | ไปที่นิยาม
+Shift+Alt+F | Format the document | จัดรูปแบบเอกสาร
+
+[explorer.exe]
+Ctrl+N | New window | หน้าต่างใหม่
+Ctrl+Shift+N | New folder | โฟลเดอร์ใหม่
+F2 | Rename | เปลี่ยนชื่อ
+Alt+Enter | Properties | คุณสมบัติ
+Alt+Up | Up one folder | ขึ้นไปหนึ่งโฟลเดอร์
+Alt+Left | Back | ย้อนกลับ
+Ctrl+L | Go to the address bar | ไปที่ช่องที่อยู่
+Ctrl+E | Search | ค้นหา
+Shift+Delete | Delete without the Recycle Bin | ลบโดยไม่ผ่านถังขยะ
+Ctrl+Shift+C | Copy the path | คัดลอกที่อยู่ไฟล์
+
+[winword.exe]
+Ctrl+B | Bold | ตัวหนา
+Ctrl+I | Italic | ตัวเอียง
+Ctrl+U | Underline | ขีดเส้นใต้
+Ctrl+E | Center | จัดกึ่งกลาง
+Ctrl+L | Align left | ชิดซ้าย
+Ctrl+R | Align right | ชิดขวา
+Ctrl+J | Justify | จัดเต็มแนว
+Ctrl+Enter | Page break | ขึ้นหน้าใหม่
+Ctrl+H | Replace | แทนที่
+Ctrl+K | Insert a link | แทรกลิงก์
+Ctrl+Shift+C | Copy formatting | คัดลอกรูปแบบ
+Ctrl+Shift+V | Paste formatting | วางรูปแบบ
+Shift+F3 | Change case | เปลี่ยนตัวพิมพ์ใหญ่ / เล็ก
+F7 | Spelling | ตรวจการสะกด
+
+[excel.exe]
+F2 | Edit the cell | แก้ไขเซลล์
+Ctrl+; | Today's date | ใส่วันที่วันนี้
+Ctrl+Shift+; | The time now | ใส่เวลาตอนนี้
+Alt+Enter | New line in the cell | ขึ้นบรรทัดใหม่ในเซลล์
+Ctrl+D | Fill down | เติมลงล่าง
+Ctrl+R | Fill right | เติมไปทางขวา
+Ctrl+Down | Jump to the end of the data | กระโดดไปท้ายข้อมูล
+Ctrl+Space | Select the column | เลือกทั้งคอลัมน์
+Shift+Space | Select the row | เลือกทั้งแถว
+Ctrl+Shift+L | Filter | ตัวกรอง
+Ctrl+T | Make a table | สร้างตาราง
+F4 | Fix the reference ($) | ล็อกตำแหน่งอ้างอิง ($)
+Ctrl+1 | Format the cells | จัดรูปแบบเซลล์
+Ctrl+PageDown | Next sheet | ชีตถัดไป
+
+[powerpnt.exe]
+F5 | Start the show | เริ่มนำเสนอ
+Shift+F5 | Start from this slide | เริ่มจากสไลด์นี้
+Ctrl+M | New slide | สไลด์ใหม่
+Ctrl+D | Duplicate | ทำซ้ำ
+Ctrl+G | Group | จัดกลุ่ม
+Ctrl+Shift+G | Ungroup | ยกเลิกกลุ่ม
+B | Black screen (in the show) | หน้าจอดำ (ระหว่างนำเสนอ)
+
+[outlook.exe]
+Ctrl+N | New item | สร้างรายการใหม่
+Ctrl+R | Reply | ตอบกลับ
+Ctrl+Shift+R | Reply all | ตอบกลับทั้งหมด
+Ctrl+F | Forward | ส่งต่อ
+Ctrl+Enter | Send | ส่ง
+Ctrl+1 | Mail | อีเมล
+Ctrl+2 | Calendar | ปฏิทิน
+Ctrl+E | Search | ค้นหา
+Insert | Flag | ปักธง
+
+[discord.exe]
+Ctrl+K | Find a chat | ค้นหาแชท
+Ctrl+Shift+M | Mute | ปิดไมค์
+Ctrl+Shift+D | Deafen | ปิดเสียงทั้งหมด
+Alt+Up | Previous channel | ช่องก่อนหน้า
+Alt+Down | Next channel | ช่องถัดไป
+Ctrl+/ | All shortcuts | ปุ่มลัดทั้งหมด
+
+[ms-teams.exe teams.exe]
+Ctrl+Shift+M | Mute | ปิดไมค์
+Ctrl+Shift+O | Camera | กล้อง
+Ctrl+E | Search | ค้นหา
+Ctrl+N | New chat | แชทใหม่
+Ctrl+. | All shortcuts | ปุ่มลัดทั้งหมด
+
+[slack.exe]
+Ctrl+K | Jump to a conversation | ไปที่การสนทนา
+Ctrl+Shift+A | All unread | ข้อความที่ยังไม่อ่าน
+Alt+Up | Previous channel | ช่องก่อนหน้า
+Alt+Down | Next channel | ช่องถัดไป
+Ctrl+/ | All shortcuts | ปุ่มลัดทั้งหมด
+
+[notepad.exe]
+Ctrl+N | New | ใหม่
+Ctrl+O | Open | เปิด
+Ctrl+S | Save | บันทึก
+Ctrl+H | Replace | แทนที่
+Ctrl+G | Go to line | ไปที่บรรทัด
+F5 | Date and time | ใส่วันที่และเวลา
+Ctrl+Plus | Zoom in | ขยาย

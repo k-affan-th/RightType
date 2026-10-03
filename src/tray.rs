@@ -69,6 +69,8 @@ struct Tray {
     m_learn: nwg::MenuItem,
     m_startup: nwg::MenuItem,
     m_fix: nwg::MenuItem,
+    m_clean: nwg::MenuItem,
+    m_keytest: nwg::MenuItem,
     m_settings: nwg::MenuItem,
     m_stats: nwg::MenuItem,
     m_help: nwg::MenuItem,
@@ -261,6 +263,8 @@ pub fn run() {
         .expect("startup item");
 
     let m_fix = item(&menu, tr(T::TrayFix));
+    let m_clean = item(&menu, tr(T::PaletteClean));
+    let m_keytest = item(&menu, tr(T::PaletteKeyTest));
 
     let mut m_settings = nwg::MenuItem::default();
     nwg::MenuItem::builder()
@@ -333,6 +337,8 @@ pub fn run() {
         m_learn,
         m_startup,
         m_fix,
+        m_clean,
+        m_keytest,
         m_settings,
         m_stats,
         m_help,
@@ -429,6 +435,10 @@ pub fn run() {
                     ui_h.m_startup.set_checked(on);
                 } else if handle == ui_h.m_fix.handle {
                     crate::fixer::open();
+                } else if handle == ui_h.m_clean.handle {
+                    crate::clean::request_open(crate::clean::Mode::Clean);
+                } else if handle == ui_h.m_keytest.handle {
+                    crate::clean::request_open(crate::clean::Mode::Test);
                 } else if handle == ui_h.m_settings.handle {
                     settings::open();
                 } else if handle == ui_h.m_stats.handle {
@@ -463,6 +473,12 @@ pub fn run() {
             "settings-blocked" => settings::open_page(4),
             "settings-about" => settings::open_page(5),
             "settings-snippets" => settings::open_page(6),
+            "settings-keyboard" => settings::open_page(7),
+            "settings-tools" => settings::open_page(8),
+            "clean" => crate::clean::request_open(crate::clean::Mode::Clean),
+            "keytest" => crate::clean::request_open(crate::clean::Mode::Test),
+            "sheet" => crate::sheet::request_open(),
+            "practice" => crate::practice::request_open(),
             "stats" => stats::open(),
             "palette" => crate::palette::request_open(),
             "fixer" => crate::fixer::open_demo(
@@ -472,6 +488,39 @@ pub fn run() {
             "help" => crate::onboard::show(false),
             "overlay" => overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastModeAuto)),
             "keymap" => crate::keymap::request_toggle(),
+            "by-app" => {
+                use righttype::app_quality::Event;
+                for (exe, fixed, right, wrong, undone) in [
+                    ("notepad.exe", 42, 40, 0, 1),
+                    ("chrome.exe", 31, 22, 0, 9),
+                    ("winword.exe", 12, 3, 4, 0),
+                    ("line.exe", 3, 0, 0, 0),
+                ] {
+                    for (e, n) in [
+                        (Event::Fixed, fixed),
+                        (Event::ShownRight, right),
+                        (Event::ShownWrong, wrong),
+                        (Event::Undone, undone),
+                    ] {
+                        for _ in 0..n {
+                            crate::stats::app_event(exe, e);
+                        }
+                    }
+                }
+                crate::by_app::open();
+            }
+            "keys" => {
+                crate::onscreen::set_enabled(true);
+                for k in ["Ctrl+C", "Ctrl+V", "Ctrl+V", "Alt+Tab"] {
+                    crate::onscreen::show(k.to_string());
+                    // One at a time: each waits for the message loop.
+                    crate::onscreen::flush();
+                }
+            }
+            "keymap-learnt" => {
+                crate::practice::seed_demo();
+                crate::keymap::request_toggle();
+            }
             "badge" => overlay::badge_at(
                 "TH",
                 windows::Win32::Foundation::RECT {
@@ -514,6 +563,7 @@ pub fn run() {
         // follows hotkey and Settings changes without waiting for the menu.
         if msg == WM_TIMER {
             sync_state(&ui_t);
+            crate::rest::tick();
         }
         None
     })
@@ -635,6 +685,8 @@ fn sync_state(ui: &Rc<Tray>) {
             (&ui.m_learn, T::TrayLearn),
             (&ui.m_startup, T::TrayStartup),
             (&ui.m_fix, T::TrayFix),
+            (&ui.m_clean, T::PaletteClean),
+            (&ui.m_keytest, T::PaletteKeyTest),
             (&ui.m_settings, T::TraySettings),
             (&ui.m_stats, T::TrayStats),
             (&ui.m_help, T::TrayHelp),

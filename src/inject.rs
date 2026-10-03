@@ -33,6 +33,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use crate::hook::{held_modifiers, INJECTING, INJECT_TAG};
 use zeroize::Zeroize;
 
+/// How often, and how long apart, a text box behind the keys is asked again.
+const CATCH_UP_TRIES: usize = 2;
+const CATCH_UP_WAIT: std::time::Duration = std::time::Duration::from_millis(25);
+
 /// Replace the just-typed word with `text`.
 ///
 /// `backspaces` characters are deleted first (the mistyped word plus the boundary
@@ -66,8 +70,23 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
             }
             other => other,
         };
-        let replaced =
+        // A box a few keys behind (Windows 11 Notepad while keys are still
+        // arriving) catches up within milliseconds: ask again before falling
+        // back to keys, which that box garbles (CI: `l;ครับ บบบบ`).
+        let mut replaced =
             tb.replace_before_caret(backspaces, &whole, context.as_deref().map(|s| s.as_str()));
+        for _ in 0..CATCH_UP_TRIES {
+            if crate::hook::budget_left(CATCH_UP_WAIT * 4) < CATCH_UP_WAIT * 4 {
+                break;
+            }
+            if !matches!(replaced, Err(crate::focus::ReplaceError::Untouched(why)) if why == crate::focus::NOT_CAUGHT_UP)
+            {
+                break;
+            }
+            std::thread::sleep(CATCH_UP_WAIT);
+            replaced =
+                tb.replace_before_caret(backspaces, &whole, context.as_deref().map(|s| s.as_str()));
+        }
         whole.zeroize();
         match replaced {
             Ok(()) => {
@@ -164,7 +183,8 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     let (first, rest) = inputs.split_at(split.unwrap_or(inputs.len()));
     let mut sent = SendInput(first, size_of::<INPUT>() as i32) as usize;
     if sent == first.len() && !rest.is_empty() {
-        std::thread::sleep(gap);
+        // The pause, within what is left of the key's time in the hook.
+        std::thread::sleep(crate::hook::budget_left(gap));
         sent += SendInput(rest, size_of::<INPUT>() as i32) as usize;
     }
     INJECTING.store(false, Ordering::SeqCst);
@@ -217,6 +237,26 @@ pub fn expect_before_caret(text: &str) {
 /// Calls `SendInput`.
 pub unsafe fn toggle_numlock() {
     let _ = send(&[key(0x90, false), key(0x90, true)]);
+}
+
+/// Press a shortcut: `keys` down in order (modifiers first), then up in
+/// reverse. Tagged as ours, so the keyboard hook lets it through.
+///
+/// # Safety
+/// Calls `SendInput`.
+pub unsafe fn press_chord(keys: &[u16]) -> bool {
+    let mut inputs: Vec<INPUT> = keys.iter().map(|&vk| key(vk, false)).collect();
+    inputs.extend(keys.iter().rev().map(|&vk| key(vk, true)));
+    send(&inputs)
+}
+
+/// Send the key-up of each of `keys` (keys Windows counts as held down).
+///
+/// # Safety
+/// Calls `SendInput`.
+pub unsafe fn release_keys(keys: &[u16]) {
+    let ups: Vec<INPUT> = keys.iter().map(|&vk| key(vk, true)).collect();
+    let _ = send(&ups);
 }
 
 /// Press CapsLock once (ours: the hook lets it through untouched).

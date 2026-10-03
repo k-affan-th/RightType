@@ -32,6 +32,9 @@ use windows::Win32::Graphics::Dwm::{
     DWMWINDOWATTRIBUTE,
 };
 use windows::Win32::Graphics::Gdi::{
+    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, SRCCOPY,
+};
+use windows::Win32::Graphics::Gdi::{
     CreateFontW, CreateSolidBrush, DeleteObject, DrawTextW, FillRect, InvalidateRect, SelectObject,
     SetBkMode, SetTextColor, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET,
     DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_RIGHT,
@@ -66,6 +69,16 @@ use zeroize::Zeroize;
 
 /// A colour as `0xRRGGBB`.
 pub type Rgb = u32;
+
+/// `a` moved `percent` (0–100) of the way to `b`.
+pub fn blend(a: Rgb, b: Rgb, percent: u8) -> Rgb {
+    let t = percent.min(100) as u32;
+    let ch = |c: Rgb, s: u32| (c >> s) & 0xFF;
+    [0, 8, 16]
+        .iter()
+        .map(|&sh| ((ch(a, sh) * (100 - t) + ch(b, sh) * t) / 100) << sh)
+        .sum()
+}
 
 /// Every colour the windows use.
 #[derive(Clone, PartialEq, Eq)]
@@ -659,6 +672,25 @@ pub fn size_and_center(hwnd: HWND, w: i32, h: i32) {
         let x = wa.left + ((wa.right - wa.left) - ww).max(0) / 2;
         let y = wa.top + ((wa.bottom - wa.top) - wh).max(0) / 2;
         let _ = SetWindowPos(hwnd, None, x, y, ww, wh, SWP_NOZORDER | SWP_NOACTIVATE);
+        redraw_all(hwnd);
+    }
+}
+
+/// Repaint a window and its controls in full. A window drawn before it
+/// reached its final size and place can otherwise keep showing the plain
+/// background where the first drawing was lost (seen at 144 DPI: the
+/// typing practice text and keyboard missing until something changed).
+pub fn redraw_all(hwnd: HWND) {
+    use windows::Win32::Graphics::Gdi::{
+        RedrawWindow, RDW_ALLCHILDREN, RDW_ERASE, RDW_FRAME, RDW_INVALIDATE,
+    };
+    unsafe {
+        let _ = RedrawWindow(
+            hwnd,
+            None,
+            None,
+            RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME,
+        );
     }
 }
 
@@ -962,6 +994,8 @@ pub enum TableEvent {
     Delete,
     /// The selection moved.
     Selected,
+    /// A row double-clicked, or Enter pressed on it.
+    Activated,
 }
 
 /// Receives table events.
@@ -999,7 +1033,45 @@ pub struct Surface {
     handler: RefCell<Option<nwg::RawEventHandler>>,
     on_click: RefCell<Option<ClickHandler>>,
     on_table: RefCell<Option<TableHandler>>,
+    /// How far the shown page is scrolled down, in 96-DPI units.
+    scroll: std::cell::Cell<i32>,
+    /// The height of pages taller than the window, in 96-DPI units: those
+    /// scroll with the mouse wheel.
+    page_heights: RefCell<HashMap<u8, i32>>,
+    /// Buttons whose label is faded toward their fill, 0–100 (percent).
+    faded: RefCell<HashMap<isize, u8>>,
 }
+
+thread_local! {
+    /// The scroll of the page being painted, for its painter.
+    static PAINT_SCROLL: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
+}
+
+thread_local! {
+    /// The open themed windows (UI thread), for [`focus_moved_to`].
+    static SURFACES: RefCell<Vec<std::rc::Weak<Surface>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Keyboard focus went to `hwnd` (a focus event on the UI thread): if it is
+/// a control of a scrolled page, bring it into view (Tab through a page
+/// taller than the window).
+pub fn focus_moved_to(hwnd: HWND) {
+    let surfaces: Vec<Rc<Surface>> =
+        SURFACES.with(|v| v.borrow().iter().filter_map(|w| w.upgrade()).collect());
+    for s in surfaces {
+        s.scroll_into_view(hwnd);
+    }
+}
+
+/// While a [`Painter`] runs: how far its page is scrolled down, in 96-DPI
+/// units (0 for pages that do not scroll).
+pub fn page_scroll() -> i32 {
+    PAINT_SCROLL.with(|s| s.get())
+}
+
+/// One wheel notch scrolls this far (96-DPI units): three lines of text.
+const WHEEL_STEP: i32 = 60;
+const WM_MOUSEWHEEL: u32 = 0x020A;
 
 const WM_ERASEBKGND: u32 = 0x0014;
 const WM_COMMAND: u32 = 0x0111;
@@ -1096,6 +1168,9 @@ impl Surface {
             handler: RefCell::new(None),
             on_click: RefCell::new(None),
             on_table: RefCell::new(None),
+            scroll: std::cell::Cell::new(0),
+            page_heights: RefCell::new(HashMap::new()),
+            faded: RefCell::new(HashMap::new()),
         });
         let weak = Rc::downgrade(&surface);
         let handler =
@@ -1105,6 +1180,11 @@ impl Surface {
             })
             .ok();
         *surface.handler.borrow_mut() = handler;
+        SURFACES.with(|v| {
+            let mut v = v.borrow_mut();
+            v.retain(|w| w.strong_count() > 0);
+            v.push(Rc::downgrade(&surface));
+        });
         surface
     }
 
@@ -1166,14 +1246,59 @@ impl Surface {
                 Some(LRESULT(0))
             }
             WM_ERASEBKGND => {
-                let hdc = HDC(w as *mut c_void);
+                // Drawn off screen, then copied at once: a window repainted
+                // often (practice, 30 times a second) never shows half a
+                // frame.
+                let screen = HDC(w as *mut c_void);
                 let mut rc = RECT::default();
                 let _ = GetClientRect(self.hwnd, &mut rc);
+                let (cw, ch) = (rc.right - rc.left, rc.bottom - rc.top);
+                // Only for the window's own background: a control asks its
+                // parent to draw what is behind it too (one call per
+                // control), and a whole off-screen frame for each of those
+                // made the palette (dozens of rows) slow enough to repaint
+                // that Windows let typed keys past the keyboard hook (CI:
+                // the palette searched for `tet the keyboard`).
+                let own = windows::Win32::Graphics::Gdi::WindowFromDC(screen) == self.hwnd;
+                let (mem, bmp) = if own {
+                    (
+                        CreateCompatibleDC(screen),
+                        CreateCompatibleBitmap(screen, cw.max(1), ch.max(1)),
+                    )
+                } else {
+                    (
+                        HDC::default(),
+                        windows::Win32::Graphics::Gdi::HBITMAP::default(),
+                    )
+                };
+                let (hdc, old) = if mem.is_invalid() || bmp.is_invalid() {
+                    (screen, None)
+                } else {
+                    (mem, Some(SelectObject(mem, HGDIOBJ(bmp.0))))
+                };
                 fill(hdc, rc, pal().bg);
                 if let Some(g) = Gfx::new(hdc) {
+                    PAINT_SCROLL.with(|s| s.set(self.scroll.get()));
                     (self.painter)(&g, hdc, rc, self.page.get());
+                    PAINT_SCROLL.with(|s| s.set(0));
+                    self.paint_scroll_thumb(&g, rc);
+                }
+                if let Some(old) = old {
+                    let _ = BitBlt(screen, 0, 0, cw, ch, mem, 0, 0, SRCCOPY);
+                    SelectObject(mem, old);
+                }
+                if !bmp.is_invalid() {
+                    let _ = DeleteObject(HGDIOBJ(bmp.0));
+                }
+                if !mem.is_invalid() {
+                    let _ = DeleteDC(mem);
                 }
                 Some(LRESULT(1))
+            }
+            WM_MOUSEWHEEL if self.max_scroll() > 0 => {
+                let notches = ((w >> 16) & 0xFFFF) as u16 as i16 as i32 / 120;
+                self.scroll_to(self.scroll.get() - notches * WHEEL_STEP);
+                Some(LRESULT(0))
             }
             WM_DRAWITEM => {
                 let di = &*(l as *const DrawItem);
@@ -1227,16 +1352,7 @@ impl Surface {
         // one, so the old set is freed only after the loop.
         let old_fonts = self.fonts.replace(Fonts::new());
         for c in self.controls.borrow().iter() {
-            let (x, y, w, h) = c.rc96;
-            let _ = SetWindowPos(
-                c.hwnd,
-                None,
-                px(x),
-                px(y),
-                px(w),
-                px(h),
-                SWP_NOZORDER | SWP_NOACTIVATE,
-            );
+            self.place(c);
             let font = self.font_for(&c.kind);
             SendMessageW(c.hwnd, WM_SETFONT, WPARAM(font.0 as usize), LPARAM(0));
         }
@@ -1258,6 +1374,118 @@ impl Surface {
                 | windows::Win32::Graphics::Gdi::RDW_INVALIDATE
                 | windows::Win32::Graphics::Gdi::RDW_ALLCHILDREN,
         );
+    }
+
+    /// Put a control where it belongs, the shown page's scroll taken off.
+    unsafe fn place(&self, c: &Control) {
+        let (x, y, w, h) = c.rc96;
+        let dy = if c.page != 0 && c.page == self.page.get() {
+            self.scroll.get()
+        } else {
+            0
+        };
+        let _ = SetWindowPos(
+            c.hwnd,
+            None,
+            px(x),
+            px(y - dy),
+            px(w),
+            px(h),
+            SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+    }
+
+    /// Let `page` scroll: its content is `height` tall (96-DPI units).
+    pub fn set_page_height(&self, page: u8, height: i32) {
+        self.page_heights.borrow_mut().insert(page, height);
+    }
+
+    /// How far the shown page can scroll (96-DPI units; 0 if it fits).
+    fn max_scroll(&self) -> i32 {
+        let Some(&height) = self.page_heights.borrow().get(&self.page.get()) else {
+            return 0;
+        };
+        let mut rc = RECT::default();
+        unsafe {
+            let _ = GetClientRect(self.hwnd, &mut rc);
+        }
+        let shown = (rc.bottom - rc.top) * 96 / self.dpi.get().max(1) as i32;
+        (height - shown).max(0)
+    }
+
+    /// Scroll the shown page to `y` (clamped), moving its controls with it.
+    fn scroll_to(&self, y: i32) {
+        let y = y.clamp(0, self.max_scroll());
+        if y == self.scroll.get() {
+            return;
+        }
+        self.scroll.set(y);
+        const WM_SETREDRAW: u32 = 0x000B;
+        unsafe {
+            SendMessageW(self.hwnd, WM_SETREDRAW, WPARAM(0), LPARAM(0));
+            for c in self.controls.borrow().iter() {
+                if c.page != 0 && c.page == self.page.get() {
+                    self.place(c);
+                }
+            }
+            SendMessageW(self.hwnd, WM_SETREDRAW, WPARAM(1), LPARAM(0));
+            let _ = windows::Win32::Graphics::Gdi::RedrawWindow(
+                self.hwnd,
+                None,
+                None,
+                windows::Win32::Graphics::Gdi::RDW_ERASE
+                    | windows::Win32::Graphics::Gdi::RDW_INVALIDATE
+                    | windows::Win32::Graphics::Gdi::RDW_ALLCHILDREN,
+            );
+        }
+    }
+
+    /// Bring a control of the shown page into view (keyboard focus moved to
+    /// it): scroll as little as needed.
+    pub fn scroll_into_view(&self, hwnd: HWND) {
+        let Some((y, h)) = self
+            .controls
+            .borrow()
+            .iter()
+            .find(|c| c.hwnd == hwnd && c.page == self.page.get() && c.page != 0)
+            .map(|c| (c.rc96.1, c.rc96.3))
+        else {
+            return;
+        };
+        let mut rc = RECT::default();
+        unsafe {
+            let _ = GetClientRect(self.hwnd, &mut rc);
+        }
+        let shown = (rc.bottom - rc.top) * 96 / self.dpi.get().max(1) as i32;
+        let top = self.scroll.get();
+        const MARGIN: i32 = 16;
+        if y - MARGIN < top {
+            self.scroll_to(y - MARGIN);
+        } else if y + h + MARGIN > top + shown {
+            self.scroll_to(y + h + MARGIN - shown);
+        }
+    }
+
+    /// A slim bar at the right edge while the shown page is scrolled or can
+    /// be: where in the page the window is, and that there is more.
+    fn paint_scroll_thumb(&self, g: &Gfx, rc: RECT) {
+        let max = self.max_scroll();
+        if max <= 0 {
+            return;
+        }
+        let shown = rc.bottom - rc.top;
+        let total = shown + px(max);
+        let thumb = (shown * shown / total).max(px(32));
+        let top = (shown - thumb) * px(self.scroll.get()) / px(max).max(1);
+        let w = px(3);
+        let x = rc.right - w - px(3);
+        let bar = RECT {
+            left: x,
+            top: rc.top + top + px(4),
+            right: x + w,
+            bottom: rc.top + top + thumb - px(4),
+        };
+        g.fill_round(bar, w as f32 / 2.0, pal().toggle_off);
     }
 
     fn font_for(&self, kind: &Kind) -> HFONT {
@@ -1445,9 +1673,21 @@ impl Surface {
                 } else {
                     p.button
                 };
-                g.fill_round(rc, radius, p.border);
+                let fade = self
+                    .faded
+                    .borrow()
+                    .get(&(nm.hdr.hwnd_from.0 as isize))
+                    .copied()
+                    .unwrap_or(0);
+                let edge = blend(p.border, fillc, fade);
+                g.fill_round(rc, radius, edge);
                 g.fill_round(inset(rc, px(1)), radius, fillc);
-                text(hdc, &label, rc, f.body, p.text, center);
+                let ink = if hot || pressed {
+                    p.text
+                } else {
+                    blend(p.text, fillc, fade)
+                };
+                text(hdc, &label, rc, f.body, ink, center);
             }
             Kind::Toggle { sub } => {
                 if hot {
@@ -2038,6 +2278,8 @@ impl Surface {
     /// A table told its parent something (`WM_NOTIFY`).
     unsafe fn table_notify(&self, hwnd: HWND, id: u16, code: u32, l: isize) {
         const NM_RCLICK: u32 = (-5i32) as u32;
+        const NM_DBLCLK: u32 = (-3i32) as u32;
+        const VK_RETURN: u16 = 0x0D;
         const LVN_KEYDOWN: u32 = (-155i32) as u32;
         const LVN_ITEMCHANGED: u32 = (-101i32) as u32;
         const VK_DELETE: u16 = 0x2E;
@@ -2056,6 +2298,7 @@ impl Surface {
             }
             LVN_KEYDOWN => match (*(l as *const NmKey)).vkey {
                 VK_DELETE => Some(TableEvent::Delete),
+                VK_RETURN => Some(TableEvent::Activated),
                 VK_APPS => {
                     let mut rc = RECT::default();
                     let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(hwnd, &mut rc);
@@ -2067,6 +2310,7 @@ impl Surface {
                 _ => None,
             },
             LVN_ITEMCHANGED => Some(TableEvent::Selected),
+            NM_DBLCLK => Some(TableEvent::Activated),
             _ => None,
         };
         let Some(event) = event else { return };
@@ -2103,6 +2347,19 @@ impl Surface {
         }
     }
 
+    /// Fade a button's label and edge toward its fill (`percent` 0–100);
+    /// it shows in full again under the mouse.
+    pub fn set_fade(&self, id: u16, percent: u8) {
+        let hwnd = self.hwnd_of(id);
+        let percent = percent.min(100);
+        let old = self.faded.borrow_mut().insert(hwnd.0 as isize, percent);
+        if old != Some(percent) {
+            unsafe {
+                let _ = InvalidateRect(hwnd, None, true);
+            }
+        }
+    }
+
     pub fn text_of(&self, id: u16) -> String {
         window_text(self.hwnd_of(id))
     }
@@ -2118,6 +2375,12 @@ impl Surface {
     /// Show the controls of `page` (and the always-visible ones).
     pub fn show_page(&self, page: u8) {
         self.page.set(page);
+        // Each page opens at its top.
+        if self.scroll.replace(0) != 0 {
+            for c in self.controls.borrow().iter() {
+                unsafe { self.place(c) };
+            }
+        }
         // Swap the pages' controls with drawing off, then paint once: showing
         // them one by one repainted the window dozens of times.
         const WM_SETREDRAW: u32 = 0x000B;

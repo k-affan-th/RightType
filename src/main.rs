@@ -15,7 +15,11 @@ mod announce;
 #[cfg(feature = "winos")]
 mod apps;
 #[cfg(feature = "winos")]
+mod by_app;
+#[cfg(feature = "winos")]
 mod caret;
+#[cfg(feature = "winos")]
+mod clean;
 #[cfg(feature = "winos")]
 mod clipboard;
 #[cfg(feature = "winos")]
@@ -29,11 +33,15 @@ mod focus;
 #[cfg(feature = "winos")]
 mod habits;
 #[cfg(feature = "winos")]
+mod health;
+#[cfg(feature = "winos")]
 mod hook;
 #[cfg(feature = "winos")]
 mod inject;
 #[cfg(feature = "winos")]
 mod instance;
+#[cfg(feature = "winos")]
+mod kbdraw;
 #[cfg(feature = "winos")]
 mod keyboards;
 #[cfg(feature = "winos")]
@@ -41,15 +49,21 @@ mod keymap;
 #[cfg(feature = "winos")]
 mod learn;
 #[cfg(feature = "winos")]
+mod lock;
+#[cfg(feature = "winos")]
 mod manual;
 #[cfg(feature = "winos")]
 mod marks;
 #[cfg(feature = "winos")]
 mod onboard;
 #[cfg(feature = "winos")]
+mod onscreen;
+#[cfg(feature = "winos")]
 mod overlay;
 #[cfg(feature = "winos")]
 mod palette;
+#[cfg(feature = "winos")]
+mod practice;
 #[cfg(feature = "winos")]
 mod pwhint;
 #[cfg(feature = "winos")]
@@ -57,11 +71,15 @@ mod ram;
 #[cfg(feature = "winos")]
 mod report;
 #[cfg(feature = "winos")]
+mod rest;
+#[cfg(feature = "winos")]
 mod safety;
 #[cfg(feature = "winos")]
 mod session;
 #[cfg(feature = "winos")]
 mod settings;
+#[cfg(feature = "winos")]
+mod sheet;
 #[cfg(feature = "winos")]
 mod startup;
 #[cfg(feature = "winos")]

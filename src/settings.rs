@@ -42,9 +42,13 @@ const PAGE_LEARNED: u8 = 3;
 const PAGE_BLOCKED: u8 = 4;
 const PAGE_ABOUT: u8 = 5;
 const PAGE_SNIPPETS: u8 = 6;
+const PAGE_KEYBOARD: u8 = 7;
+const PAGE_TOOLS: u8 = 8;
 /// Sidebar entries, top to bottom, and their pages.
-const NAV: [(T, u8); 6] = [
+const NAV: [(T, u8); 8] = [
     (T::NavGeneral, PAGE_GENERAL),
+    (T::NavKeyboard, PAGE_KEYBOARD),
+    (T::NavTools, PAGE_TOOLS),
     (T::NavHotkeys, PAGE_HOTKEYS),
     (T::NavLearned, PAGE_LEARNED),
     (T::NavSnippets, PAGE_SNIPPETS),
@@ -59,8 +63,20 @@ const CARD_B_Y: i32 = 282;
 const PREDICT_Y: i32 = 548;
 /// The restart-after-a-crash card on the Privacy & about page.
 const RESTART_Y: i32 = 486;
-/// The Thai keyboard picker on the Hotkeys page.
-const KEYBOARD_Y: i32 = 568;
+/// The Keyboard page: its three cards (y of each card's top) and how tall
+/// the page is (it scrolls).
+const KB_PICK_Y: i32 = 98;
+const KB_TYPING_Y: i32 = 246;
+const KB_KEYS_Y: i32 = 558 + 3 * ROW_H;
+const KB_DEV_Y: i32 = KB_KEYS_Y + 3 * ROW_H + 8 + 56;
+const KB_SHOW_Y: i32 = KB_DEV_Y + 2 * ROW_H + 8 + 56;
+const KB_HEIGHT: i32 = KB_SHOW_Y + 2 * ROW_H + 8 + 24;
+/// The Tools page: the tools' card, the health check's card, the page.
+const TOOLS_Y: i32 = 98;
+const HEALTH_Y: i32 = 246;
+const TOOLS_HEIGHT: i32 = HEALTH_Y + crate::health::COUNT as i32 * ROW_H + 8 + 24;
+/// The segment buttons at the right of a Keyboard-page row.
+const KB_SEG_W: i32 = 68;
 
 /// The label of each hotkey action.
 pub fn action_label(action: Action) -> T {
@@ -86,7 +102,7 @@ pub fn hotkey_rows() -> Vec<(T, String)> {
 }
 
 struct Ids {
-    nav: [u16; 6],
+    nav: [u16; 8],
     snip_table: u16,
     snip_trigger: u16,
     snip_text: u16,
@@ -120,6 +136,29 @@ struct Ids {
     kedmanee: u16,
     pattachote: u16,
     manoonchai: u16,
+    kb_addresses: u16,
+    kb_complete: u16,
+    kb_grave: u16,
+    kb_guard: u16,
+    kb_accents: u16,
+    kb_shortcuts: u16,
+    kb_ctrl_hold: u16,
+    kb_password_tag: u16,
+    /// NumLock and Insert: off, warn, fix.
+    kb_numlock: [u16; 3],
+    kb_insert: [u16; 3],
+    kb_scanner: u16,
+    kb_fake: u16,
+    kb_show_keys: u16,
+    kb_rest: u16,
+    tools_clean: u16,
+    tools_test: u16,
+    tools_map: u16,
+    tools_practice: u16,
+    health_again: u16,
+    /// Per check: its status line and its fix button.
+    health_status: [u16; crate::health::COUNT],
+    health_fix: [u16; crate::health::COUNT],
     save_learned: u16,
     clear_learned: u16,
     apps_table: u16,
@@ -140,6 +179,49 @@ struct Ids {
     this_pc: u16,
     sync_settings: u16,
 }
+
+thread_local! {
+    /// The health check's last results, for the fix buttons and the painter.
+    static HEALTH: RefCell<Vec<crate::health::Check>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Run the health check and show it.
+fn fill_health(win: &SettingsWindow) {
+    let s = &win.surface;
+    let checks = crate::health::run();
+    for (i, check) in checks.iter().enumerate().take(crate::health::COUNT) {
+        s.set_text(win.ids.health_status[i], &check.status);
+        let button = s.hwnd_of(win.ids.health_fix[i]);
+        match &check.fix {
+            Some((label, _)) => {
+                s.set_text(win.ids.health_fix[i], tr(*label));
+                unsafe {
+                    let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                        button,
+                        windows::Win32::UI::WindowsAndMessaging::SW_SHOW,
+                    );
+                }
+            }
+            None => unsafe {
+                let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                    button,
+                    windows::Win32::UI::WindowsAndMessaging::SW_HIDE,
+                );
+            },
+        }
+    }
+    HEALTH.with(|h| *h.borrow_mut() = checks);
+    unsafe {
+        let _ = windows::Win32::Graphics::Gdi::InvalidateRect(s.hwnd, None, true);
+    }
+}
+
+/// The choices for NumLock and Insert, in button order.
+const KEY_GUARDS: [hook::KeyGuard; 3] = [
+    hook::KeyGuard::Off,
+    hook::KeyGuard::Warn,
+    hook::KeyGuard::Fix,
+];
 
 /// The modes offered for an app on the Apps page, in button order.
 const APP_MODE_CHOICES: [AppMode; 5] = [
@@ -191,7 +273,7 @@ pub fn open() {
 /// Open on a given page (1 = General … 5 = Privacy & about); debug harness use.
 #[cfg(debug_assertions)]
 pub fn open_page(page: u8) {
-    open_on(page.clamp(PAGE_GENERAL, PAGE_SNIPPETS));
+    open_on(page.clamp(PAGE_GENERAL, PAGE_TOOLS));
 }
 
 fn open_on(page: u8) {
@@ -227,7 +309,7 @@ fn open_on(page: u8) {
         p.bg,
         0,
     );
-    let mut nav = [0u16; 6];
+    let mut nav = [0u16; 8];
     for (i, (label, _)) in NAV.iter().enumerate() {
         nav[i] = s.nav(tr(*label), i == 0, (12, 84 + i as i32 * 40, 196, 36));
     }
@@ -353,41 +435,247 @@ fn open_on(page: u8) {
         p.bg,
         h,
     );
+    // --- Keyboard ---------------------------------------------------------
+    let k = PAGE_KEYBOARD;
+    surface.set_page_height(k, KB_HEIGHT);
+    s.label(
+        tr(T::NavKeyboard),
+        TextStyle::Title,
+        (X0, 18, CW, 36),
+        p.bg,
+        k,
+    );
     s.label(
         tr(T::HeadThaiKeyboard),
         TextStyle::BodyStrong,
-        (X0, KEYBOARD_Y + 6, 200, 22),
+        (X0, KB_PICK_Y - 28, CW, 20),
         p.bg,
-        h,
+        k,
     );
-    let kedmanee = s.segment(
-        "Kedmanee",
-        true,
-        (X0 + CW - 20 - 3 * 104, KEYBOARD_Y + 4, 104, 32),
-        p.inset,
-        h,
-    );
-    let pattachote = s.segment(
-        "Pattachote",
-        false,
-        (X0 + CW - 20 - 2 * 104, KEYBOARD_Y + 4, 104, 32),
-        p.inset,
-        h,
-    );
-    let manoonchai = s.segment(
-        "Manoonchai",
-        false,
-        (X0 + CW - 20 - 104, KEYBOARD_Y + 4, 104, 32),
-        p.inset,
-        h,
-    );
+    let kb_seg_w = (CW - 32 - 8) / 3;
+    let kb_seg = |i: i32| (X0 + 20 + i * kb_seg_w, KB_PICK_Y + 16, kb_seg_w, 40);
+    let kedmanee = s.segment("Kedmanee", true, kb_seg(0), p.inset, k);
+    let pattachote = s.segment("Pattachote", false, kb_seg(1), p.inset, k);
+    let manoonchai = s.segment("Manoonchai", false, kb_seg(2), p.inset, k);
     s.label(
         tr(T::NoteKeyboards),
-        TextStyle::Small,
-        (X0, KEYBOARD_Y + 46, CW, 22),
-        p.bg,
-        h,
+        TextStyle::Dim,
+        (X0 + 20, KB_PICK_Y + 66, CW - 40, 22),
+        p.surface,
+        k,
     );
+    s.label(
+        tr(T::HeadWhileTyping),
+        TextStyle::BodyStrong,
+        (X0, KB_TYPING_Y - 28, CW, 20),
+        p.bg,
+        k,
+    );
+    let kb_row = |top: i32, i: i32| (X0 + 4, top + 4 + i * ROW_H, CW - 8, ROW_H - 4);
+    let kb_addresses = s.toggle(
+        tr(T::RowAddresses),
+        tr(T::SubAddresses),
+        kb_row(KB_TYPING_Y, 0),
+        p.surface,
+        k,
+    );
+    let kb_complete = s.toggle(
+        tr(T::RowComplete),
+        tr(T::SubComplete),
+        kb_row(KB_TYPING_Y, 1),
+        p.surface,
+        k,
+    );
+    let kb_grave = s.toggle(
+        tr(T::RowGrave),
+        tr(T::SubGrave),
+        kb_row(KB_TYPING_Y, 2),
+        p.surface,
+        k,
+    );
+    let kb_guard = s.toggle(
+        tr(T::RowGuardSwitch),
+        tr(T::SubGuardSwitch),
+        kb_row(KB_TYPING_Y, 3),
+        p.surface,
+        k,
+    );
+    let kb_accents = s.toggle(
+        tr(T::RowHoldAccents),
+        tr(T::SubHoldAccents),
+        kb_row(KB_TYPING_Y, 4),
+        p.surface,
+        k,
+    );
+    let kb_shortcuts = s.toggle(
+        tr(T::RowShortcutsEnglish),
+        tr(T::SubShortcutsEnglish),
+        kb_row(KB_TYPING_Y, 5),
+        p.surface,
+        k,
+    );
+    let kb_ctrl_hold = s.toggle(
+        tr(T::RowCtrlHold),
+        tr(T::SubCtrlHold),
+        kb_row(KB_TYPING_Y, 6),
+        p.surface,
+        k,
+    );
+    s.label(
+        tr(T::HeadStateKeys),
+        TextStyle::BodyStrong,
+        (X0, KB_KEYS_Y - 28, CW, 20),
+        p.bg,
+        k,
+    );
+    let kb_password_tag = s.toggle(
+        tr(T::RowPasswordTag),
+        tr(T::SubPasswordTag),
+        kb_row(KB_KEYS_Y, 0),
+        p.surface,
+        k,
+    );
+    // A row with three choices: title and description left, the choices
+    // right where a toggle's switch would be.
+    let guard_row = |i: i32, title: T, sub: T, last: T| -> [u16; 3] {
+        let top = KB_KEYS_Y + 4 + i * ROW_H;
+        let text_w = CW - 40 - 3 * KB_SEG_W - 16;
+        s.label(
+            tr(title),
+            TextStyle::Body,
+            (X0 + 20, top + 8, text_w, 22),
+            p.surface,
+            k,
+        );
+        s.label(
+            tr(sub),
+            TextStyle::Small,
+            (X0 + 20, top + 30, text_w, 30),
+            p.surface,
+            k,
+        );
+        let x = X0 + CW - 20 - 3 * KB_SEG_W;
+        [T::GuardOff, T::GuardWarn, last]
+            .iter()
+            .enumerate()
+            .map(|(j, label)| {
+                s.segment(
+                    tr(*label),
+                    j == 0,
+                    (x + j as i32 * KB_SEG_W, top + 14, KB_SEG_W, 32),
+                    p.inset,
+                    k,
+                )
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap_or([0; 3])
+    };
+    let kb_numlock = guard_row(1, T::RowNumLock, T::SubNumLock, T::GuardFix);
+    let kb_insert = guard_row(2, T::RowInsertKey, T::SubInsertKey, T::GuardBlock);
+    s.label(
+        tr(T::HeadDevices),
+        TextStyle::BodyStrong,
+        (X0, KB_DEV_Y - 28, CW, 20),
+        p.bg,
+        k,
+    );
+    let kb_scanner = s.toggle(
+        tr(T::RowScanner),
+        tr(T::SubScanner),
+        kb_row(KB_DEV_Y, 0),
+        p.surface,
+        k,
+    );
+    let kb_fake = s.toggle(
+        tr(T::RowFakeKeyboard),
+        tr(T::SubFakeKeyboard),
+        kb_row(KB_DEV_Y, 1),
+        p.surface,
+        k,
+    );
+    s.label(
+        tr(T::HeadComfort),
+        TextStyle::BodyStrong,
+        (X0, KB_SHOW_Y - 28, CW, 20),
+        p.bg,
+        k,
+    );
+    let kb_show_keys = s.toggle(
+        tr(T::RowShowKeys),
+        tr(T::SubShowKeys),
+        kb_row(KB_SHOW_Y, 0),
+        p.surface,
+        k,
+    );
+    let kb_rest = s.toggle(
+        tr(T::RowRest),
+        tr(T::SubRest),
+        kb_row(KB_SHOW_Y, 1),
+        p.surface,
+        k,
+    );
+
+    // --- Tools ------------------------------------------------------------
+    let t = PAGE_TOOLS;
+    surface.set_page_height(t, TOOLS_HEIGHT);
+    s.label(tr(T::NavTools), TextStyle::Title, (X0, 18, CW, 36), p.bg, t);
+    let tool_w = (CW - 32 - 24) / 4;
+    let tool = |i: i32, label: T| {
+        s.button(
+            tr(label),
+            false,
+            (X0 + 16 + i * (tool_w + 8), TOOLS_Y + 16, tool_w, 40),
+            p.surface,
+            t,
+        )
+    };
+    let tools_clean = tool(0, T::ToolClean);
+    let tools_test = tool(1, T::ToolTest);
+    let tools_map = tool(2, T::KeyMapTitle);
+    let tools_practice = tool(3, T::PracticeTitle);
+    s.label(
+        tr(T::HeadHealth),
+        TextStyle::BodyStrong,
+        (X0, HEALTH_Y - 28, CW - 160, 20),
+        p.bg,
+        t,
+    );
+    let health_again = s.button(
+        tr(T::BtnCheckAgain),
+        false,
+        (X0 + CW - 140, HEALTH_Y - 36, 140, 30),
+        p.bg,
+        t,
+    );
+    let checks = crate::health::run();
+    let mut health_status = [0u16; crate::health::COUNT];
+    let mut health_fix = [0u16; crate::health::COUNT];
+    for (i, check) in checks.iter().enumerate().take(crate::health::COUNT) {
+        let top = HEALTH_Y + 4 + i as i32 * ROW_H;
+        let text_w = CW - 56 - 160;
+        s.label(
+            tr(check.title),
+            TextStyle::Body,
+            (X0 + 56, top + 8, text_w, 22),
+            p.surface,
+            t,
+        );
+        health_status[i] = s.label(
+            "",
+            TextStyle::Small,
+            (X0 + 56, top + 30, text_w, 30),
+            p.surface,
+            t,
+        );
+        health_fix[i] = s.button(
+            "",
+            false,
+            (X0 + CW - 16 - 140, top + 14, 140, 34),
+            p.surface,
+            t,
+        );
+    }
 
     // --- Learned words ----------------------------------------------------
     let l = PAGE_LEARNED;
@@ -697,6 +985,27 @@ fn open_on(page: u8) {
         kedmanee,
         pattachote,
         manoonchai,
+        kb_addresses,
+        kb_complete,
+        kb_grave,
+        kb_guard,
+        kb_accents,
+        kb_shortcuts,
+        kb_ctrl_hold,
+        kb_password_tag,
+        kb_numlock,
+        kb_insert,
+        kb_scanner,
+        kb_fake,
+        kb_show_keys,
+        kb_rest,
+        tools_clean,
+        tools_test,
+        tools_map,
+        tools_practice,
+        health_again,
+        health_status,
+        health_fix,
         save_learned,
         clear_learned,
         apps_table,
@@ -736,6 +1045,9 @@ fn open_on(page: u8) {
         win.surface.set_checked(win.ids.nav[i], true);
     }
     win.surface.show_page(page);
+    if page == PAGE_TOOLS {
+        fill_health(&win);
+    }
     if let Some(h) = win.window.handle.hwnd() {
         crate::ui::present(HWND(h as _), "settings", started);
     } else {
@@ -825,6 +1137,24 @@ fn sync(win: &SettingsWindow) {
         ids.manoonchai,
         variant == righttype::layout::ThaiVariant::Manoonchai,
     );
+    s.set_checked(ids.kb_addresses, righttype::policy::fixes_addresses());
+    s.set_checked(ids.kb_complete, hook::completes_thai());
+    s.set_checked(ids.kb_grave, hook::grave_types());
+    s.set_checked(ids.kb_guard, hook::guards_switch());
+    s.set_checked(ids.kb_accents, hook::holds_for_accents());
+    s.set_checked(ids.kb_shortcuts, hook::shortcuts_in_english());
+    s.set_checked(ids.kb_ctrl_hold, hook::ctrl_hold_opens_sheet());
+    s.set_checked(ids.kb_password_tag, crate::pwhint::is_enabled());
+    s.set_checked(ids.kb_scanner, hook::fixes_scanners());
+    s.set_checked(ids.kb_fake, hook::guards_fake_keyboards());
+    s.set_checked(ids.kb_show_keys, crate::onscreen::enabled());
+    s.set_checked(ids.kb_rest, crate::rest::enabled());
+    for (j, id) in ids.kb_numlock.iter().enumerate() {
+        s.set_checked(*id, KEY_GUARDS[j] == hook::numlock_mode());
+    }
+    for (j, id) in ids.kb_insert.iter().enumerate() {
+        s.set_checked(*id, KEY_GUARDS[j] == hook::insert_mode());
+    }
     s.set_text(
         ids.folder_label,
         &match learn::folder() {
@@ -846,6 +1176,9 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     let s = &win.surface;
     if let Some(i) = ids.nav.iter().position(|&n| n == id) {
         s.show_page(NAV[i].1);
+        if NAV[i].1 == PAGE_TOOLS {
+            fill_health(win);
+        }
         return;
     }
     if id == ids.edit_learned {
@@ -974,6 +1307,64 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
             righttype::layout::ThaiVariant::Kedmanee
         });
         config::persist();
+    } else if id == ids.tools_clean {
+        crate::clean::request_open(crate::clean::Mode::Clean);
+    } else if id == ids.tools_test {
+        crate::clean::request_open(crate::clean::Mode::Test);
+    } else if id == ids.tools_map {
+        crate::keymap::request_toggle();
+    } else if id == ids.tools_practice {
+        crate::practice::request_open();
+    } else if id == ids.health_again {
+        fill_health(win);
+    } else if let Some(i) = ids.health_fix.iter().position(|&b| b == id) {
+        let fix = HEALTH.with(|h| h.borrow().get(i).and_then(|c| c.fix.clone()));
+        if let Some((_, fix)) = fix {
+            crate::health::apply(&fix);
+            fill_health(win);
+        }
+    } else if id == ids.kb_addresses {
+        righttype::policy::set_fixes_addresses(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_complete {
+        hook::set_completes_thai(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_grave {
+        hook::set_grave_types(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_ctrl_hold {
+        hook::set_ctrl_hold_opens_sheet(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_shortcuts {
+        hook::set_shortcuts_in_english(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_accents {
+        hook::set_holds_for_accents(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_guard {
+        hook::set_guards_switch(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_scanner {
+        hook::set_fixes_scanners(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_fake {
+        hook::set_guards_fake_keyboards(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_show_keys {
+        crate::onscreen::set_enabled(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_rest {
+        crate::rest::set_enabled(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_password_tag {
+        crate::pwhint::set_enabled(s.checked(id));
+        config::persist();
+    } else if let Some(j) = ids.kb_numlock.iter().position(|&b| b == id) {
+        hook::set_numlock_mode(KEY_GUARDS[j]);
+        config::persist();
+    } else if let Some(j) = ids.kb_insert.iter().position(|&b| b == id) {
+        hook::set_insert_mode(KEY_GUARDS[j]);
+        config::persist();
     } else if id == ids.keys_reset {
         hook::cancel_capture();
         hook::set_hotkeys(Hotkeys::default());
@@ -1037,7 +1428,7 @@ fn fill_snippets(win: &SettingsWindow, trigger: Option<&str>) {
 fn snippet_table_event(win: &Rc<SettingsWindow>, event: ui::TableEvent) {
     match event {
         ui::TableEvent::Delete => remove_snippet(win),
-        ui::TableEvent::Selected | ui::TableEvent::Menu { .. } => {
+        ui::TableEvent::Selected | ui::TableEvent::Activated | ui::TableEvent::Menu { .. } => {
             let Some(i) = win.surface.selected_row(win.ids.snip_table) else {
                 return;
             };
@@ -1221,7 +1612,7 @@ fn sync_app_choice(win: &SettingsWindow) {
 
 fn app_table_event(win: &Rc<SettingsWindow>, event: ui::TableEvent) {
     match event {
-        ui::TableEvent::Selected => sync_app_choice(win),
+        ui::TableEvent::Selected | ui::TableEvent::Activated => sync_app_choice(win),
         ui::TableEvent::Delete => remove_app(win),
         ui::TableEvent::Menu { x, y } => app_menu(win, x, y),
     }
@@ -1642,12 +2033,49 @@ fn captured(win: &SettingsWindow) {
             hook::set_hotkeys(keys);
             config::persist();
             show_hotkeys(win);
-            win.surface.set_text(status, tr(T::ToastSaved));
+            // Saved either way; the typist is told when the keys were
+            // already someone else's (RightType's hook sees them first).
+            let note = if let Some(what) = righttype::hotkeys::common_use(chord) {
+                trf(T::HkSavedCommon, &[("v", tr(what))])
+            } else if registered_elsewhere(chord) {
+                tr(T::HkSavedElsewhere).to_string()
+            } else {
+                tr(T::ToastSaved).to_string()
+            };
+            win.surface.set_text(status, &note);
         }
         Err(Refusal::Unusable) => win.surface.set_text(status, tr(T::HkUnusable)),
         Err(Refusal::Taken(other)) => win
             .surface
             .set_text(status, &trf(T::HkTaken, &[("v", tr(action_label(other)))])),
+    }
+}
+
+/// Has another program registered `chord` as its own system-wide hotkey?
+/// Trying to register it tells (and it is let go at once).
+fn registered_elsewhere(chord: righttype::hotkeys::Chord) -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT,
+        MOD_SHIFT,
+    };
+    const PROBE: i32 = 0xBF00;
+    let mut mods = MOD_NOREPEAT;
+    for (on, m) in [
+        (chord.ctrl, MOD_CONTROL),
+        (chord.shift, MOD_SHIFT),
+        (chord.alt, MOD_ALT),
+    ] {
+        if on {
+            mods = HOT_KEY_MODIFIERS(mods.0 | m.0);
+        }
+    }
+    unsafe {
+        if RegisterHotKey(None, PROBE, mods, chord.key as u32).is_ok() {
+            let _ = UnregisterHotKey(None, PROBE);
+            false
+        } else {
+            true
+        }
     }
 }
 
@@ -1686,8 +2114,60 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
                 divider(hdc, X0 + 16, CARD_B_Y + i * ROW_H + 2, CW - 32);
             }
         }
+        PAGE_TOOLS => {
+            let dy = ui::page_scroll();
+            card(g, rect(X0, TOOLS_Y - dy, CW, 72));
+            card(
+                g,
+                rect(
+                    X0,
+                    HEALTH_Y - dy,
+                    CW,
+                    crate::health::COUNT as i32 * ROW_H + 8,
+                ),
+            );
+            let ok = HEALTH.with(|h| h.borrow().iter().map(|c| c.ok).collect::<Vec<_>>());
+            for (i, ok) in ok.iter().enumerate() {
+                let top = HEALTH_Y + 4 + i as i32 * ROW_H - dy;
+                if i > 0 {
+                    divider(hdc, X0 + 16, top - 2, CW - 32);
+                }
+                // A check mark when fine; an accent "!" where something is
+                // off, so problems stand out in the list.
+                let c = rect(X0 + 18, top + 18, 24, 24);
+                let (fill, ink, mark) = if *ok {
+                    (pal().inset, pal().text_dim, "✓")
+                } else {
+                    (pal().accent, pal().on_accent, "!")
+                };
+                g.fill_round(c, ui::px(12) as f32, fill);
+                ui::glyph(hdc, mark, c, ink);
+            }
+        }
+        PAGE_KEYBOARD => {
+            // The page scrolls: everything moves up by the scroll.
+            let dy = ui::page_scroll();
+            card(g, rect(X0, KB_PICK_Y - dy, CW, 100));
+            track(g, rect(X0 + 16, KB_PICK_Y + 12 - dy, CW - 32, 48));
+            card(g, rect(X0, KB_TYPING_Y - dy, CW, 7 * ROW_H + 8));
+            for i in 1..7 {
+                divider(hdc, X0 + 16, KB_TYPING_Y + i * ROW_H + 2 - dy, CW - 32);
+            }
+            card(g, rect(X0, KB_KEYS_Y - dy, CW, 3 * ROW_H + 8));
+            card(g, rect(X0, KB_DEV_Y - dy, CW, 2 * ROW_H + 8));
+            divider(hdc, X0 + 16, KB_DEV_Y + ROW_H + 2 - dy, CW - 32);
+            card(g, rect(X0, KB_SHOW_Y - dy, CW, 2 * ROW_H + 8));
+            divider(hdc, X0 + 16, KB_SHOW_Y + ROW_H + 2 - dy, CW - 32);
+            for i in 1..3 {
+                divider(hdc, X0 + 16, KB_KEYS_Y + i * ROW_H + 2 - dy, CW - 32);
+                let x = X0 + CW - 24 - 3 * KB_SEG_W;
+                track(
+                    g,
+                    rect(x, KB_KEYS_Y + 4 + i * ROW_H + 10 - dy, 3 * KB_SEG_W + 8, 40),
+                );
+            }
+        }
         PAGE_HOTKEYS => {
-            track(g, rect(X0 + CW - 24 - 3 * 104, KEYBOARD_Y, 3 * 104 + 8, 40));
             card(g, rect(X0, 68, CW, Action::ALL.len() as i32 * 52 + 8));
             for i in 1..Action::ALL.len() as i32 {
                 divider(hdc, X0 + 16, 74 + i * 52 - 1, CW - 32);

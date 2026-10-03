@@ -947,6 +947,9 @@ unsafe fn undo_last_correction() {
         habit_correction(!has_thai(restored), has_thai(restored));
         if !matches!(rec.kind, UndoKind::Manual | UndoKind::Snippet) {
             note_rejection();
+            if let Some(exe) = current_app() {
+                crate::stats::app_event(&exe, righttype::app_quality::Event::Undone);
+            }
         }
         let mut kept_spelling = None;
         match rec.kind {
@@ -1109,6 +1112,16 @@ pub unsafe fn reinstall() -> windows::core::Result<()> {
 /// recorded about the text before it can be trusted any more — the same as an
 /// arrow key. Only the event type is looked at, never where the click was.
 unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // The keyboard lock with the mouse locked too (cleaning).
+    if code == HC_ACTION as i32 && crate::lock::mouse_event() {
+        return LRESULT(1);
+    }
+    // A click or the wheel while Ctrl is held: not a hold for the list.
+    if code == HC_ACTION as i32 && wparam.0 as u32 != 0x0200
+    /* WM_MOUSEMOVE */
+    {
+        ctrl_hold_input(None, false, false);
+    }
     if code == HC_ACTION as i32
         && matches!(
             wparam.0 as u32,
@@ -1144,6 +1157,57 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
     if code == HC_ACTION as i32 {
         let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
         LAST_HOOK_TICK.store(kb.time, Ordering::Relaxed);
+        // The keyboard lock (cleaning, the key tester) comes before
+        // everything: no key gets through, ours aside.
+        let msg = wparam.0 as u32;
+        if kb.dwExtraInfo != INJECT_TAG
+            && crate::lock::key_event(
+                kb.scanCode as u16,
+                kb.flags.0 & 0x01 != 0,
+                msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN,
+            )
+        {
+            return LRESULT(1);
+        }
+        // Typing practice in front: its keys go to it, by their place on
+        // the keyboard (so a keyboard not installed can be practised), and
+        // nowhere else. Alt and Windows-key shortcuts still work.
+        if kb.dwExtraInfo != INJECT_TAG && practice_takes(kb, msg) {
+            return LRESULT(1);
+        }
+        // A key that types twice by itself: counted, and dropped for the
+        // keys the typist chose to filter. Hardware only (and the e2e
+        // test's keys): other programs' keys do not bounce.
+        if kb.dwExtraInfo != INJECT_TAG
+            && ((kb.flags.0 & LLKHF_INJECTED.0) == 0 || debug_e2e_accepts_injected())
+        {
+            let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+            if down && !is_modifier(kb.vkCode as u16) {
+                FAST_RUN.with(|f| {
+                    let (last, run) = f.get();
+                    let quick = kb.time.wrapping_sub(last) <= SCANNER_GAP_MS;
+                    f.set((kb.time, if quick { run + 1 } else { 0 }));
+                });
+            }
+            if fake_keyboard_blocks(kb.vkCode as u16, down, kb.time) {
+                return LRESULT(1);
+            }
+            let key = (kb.scanCode as u16, kb.flags.0 & 0x01 != 0);
+            if down && !is_modifier(kb.vkCode as u16) {
+                comfort_key(kb.vkCode as u16);
+            }
+            match CHATTER.with(|c| c.borrow_mut().observe(key, down, kb.time)) {
+                righttype::chatter::Verdict::Pass => {}
+                righttype::chatter::Verdict::Bounce => {
+                    e2e_trace(format!("key bounce: scan {:#x}", key.0));
+                    diag::note("key bounce", &[]);
+                }
+                righttype::chatter::Verdict::Drop => {
+                    e2e_trace(format!("key bounce dropped: scan {:#x}", key.0));
+                    return LRESULT(1);
+                }
+            }
+        }
         // Skip anything we generated: our tag is authoritative and timing-free.
         let externally_injected = (kb.flags.0 & LLKHF_INJECTED.0) != 0;
         let ours = kb.dwExtraInfo == INJECT_TAG
@@ -1209,8 +1273,22 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
                 });
             }
             let done = Done(nested);
+            let started = Instant::now();
+            if !nested {
+                HOOK_DEADLINE.with(|d| d.set(Some(started + HOOK_BUDGET)));
+            }
             let swallow = process(wparam.0 as u32, kb);
+            if !nested {
+                HOOK_DEADLINE.with(|d| d.set(None));
+            }
             drop(done);
+            if !nested {
+                righttype::timing::HOOK.record(started.elapsed().as_micros() as u64);
+                let waited = crate::focus::take_wait_us();
+                if waited > 0 {
+                    righttype::timing::WAITING.record(waited);
+                }
+            }
             if NESTED_KEY.with(|n| n.replace(false)) {
                 STATE.with(|s| {
                     let mut st = s.borrow_mut();
@@ -1227,6 +1305,407 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         }
     }
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
+/// A key pressed on a keyboard: the rest reminder counts it, and keys on
+/// screen show it if it is a shortcut — never in a password field or an app
+/// on the safety list.
+unsafe fn comfort_key(vk: u16) {
+    crate::rest::key();
+    if !crate::onscreen::enabled()
+        || STATE.with(|s| s.borrow().sensitive_app)
+        || safety::is_password_field()
+        || crate::focus::is_password_field()
+    {
+        return;
+    }
+    let mods = righttype::keycast::Mods {
+        ctrl: is_down(VK_CONTROL),
+        alt: is_down(VK_MENU),
+        shift: is_down(VK_SHIFT),
+        win: is_down(VIRTUAL_KEY(0x5B)) || is_down(VIRTUAL_KEY(0x5C)),
+    };
+    if let Some(label) = righttype::keycast::label(vk, mods) {
+        crate::onscreen::show(label);
+    }
+}
+
+thread_local! {
+    /// Keys that type twice by themselves (see righttype::chatter).
+    static CHATTER: RefCell<righttype::chatter::Chatter> =
+        RefCell::new(righttype::chatter::Chatter::new());
+}
+
+pub fn set_debounce_keys(keys: Vec<righttype::chatter::KeyId>) {
+    CHATTER.with(|c| c.borrow_mut().set_filtered(keys));
+}
+
+pub fn debounce_keys() -> Vec<righttype::chatter::KeyId> {
+    CHATTER.with(|c| c.borrow().filtered().to_vec())
+}
+
+/// Keys seen bouncing (scan code and extended flag) and how often.
+pub fn chatter_suspects() -> Vec<(righttype::chatter::KeyId, u32)> {
+    CHATTER.with(|c| c.borrow().suspects())
+}
+
+/// Keys this close together (ms) come from a machine, not fingers: a
+/// barcode scanner (or a device pretending to be a keyboard). Windows
+/// stamps keys with a clock that ticks every 15.6 ms, so keys sent back to
+/// back can read 16 ms apart.
+const SCANNER_GAP_MS: u32 = 20;
+/// A scanner's burst is at least this many characters.
+const SCANNER_MIN: usize = 6;
+
+thread_local! {
+    /// The last key's time, and how many keys in a row came within
+    /// [`SCANNER_GAP_MS`] of the one before.
+    static FAST_RUN: std::cell::Cell<(u32, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+static FIXES_SCANNERS: AtomicBool = AtomicBool::new(true);
+static GUARDS_FAKE_KEYBOARDS: AtomicBool = AtomicBool::new(true);
+
+pub fn fixes_scanners() -> bool {
+    FIXES_SCANNERS.load(Ordering::Relaxed)
+}
+pub fn set_fixes_scanners(on: bool) {
+    FIXES_SCANNERS.store(on, Ordering::Relaxed);
+}
+pub fn guards_fake_keyboards() -> bool {
+    GUARDS_FAKE_KEYBOARDS.load(Ordering::Relaxed)
+}
+pub fn set_guards_fake_keyboards(on: bool) {
+    GUARDS_FAKE_KEYBOARDS.store(on, Ordering::Relaxed);
+}
+
+/// After Win+R, this long (ms) for a fast run to count as a device typing a
+/// command into the Run box.
+const RUN_BOX_WINDOW_MS: u32 = 3000;
+/// A run this long, as fast as a machine, is a device typing.
+const FAKE_RUN: usize = 8;
+/// Keys stay held back until the device has been quiet this long (ms).
+const FAKE_QUIET_MS: u32 = 1000;
+
+thread_local! {
+    /// When Win+R was pressed; whether keys are being held back now.
+    static RUN_BOX_AT: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+    static HOLDING_FAKE: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+}
+
+/// A device posing as a keyboard (a "BadUSB" stick) opens the Run box with
+/// Win+R and types a command into it faster than any hand, then Enter. Once
+/// such a run starts, every key is held back (Enter included) until the
+/// device goes quiet; the typist is told. A hand never types 8 keys within
+/// 20 ms of each other.
+unsafe fn fake_keyboard_blocks(vk: u16, down: bool, time: u32) -> bool {
+    if !guards_fake_keyboards() {
+        return false;
+    }
+    if let Some(last) = HOLDING_FAKE.with(|h| h.get()) {
+        if time.wrapping_sub(last) < FAKE_QUIET_MS {
+            HOLDING_FAKE.with(|h| h.set(Some(time)));
+            return true;
+        }
+        HOLDING_FAKE.with(|h| h.set(None));
+    }
+    if down && vk == b'R' as u16 && (is_down(VIRTUAL_KEY(0x5B)) || is_down(VIRTUAL_KEY(0x5C))) {
+        RUN_BOX_AT.with(|r| r.set(Some(time)));
+        return false;
+    }
+    let armed = RUN_BOX_AT
+        .with(|r| r.get())
+        .is_some_and(|at| time.wrapping_sub(at) < RUN_BOX_WINDOW_MS);
+    if armed && down && FAST_RUN.with(|f| f.get().1) >= FAKE_RUN {
+        RUN_BOX_AT.with(|r| r.set(None));
+        HOLDING_FAKE.with(|h| h.set(Some(time)));
+        trace_note("fake keyboard: keys held back");
+        diag::note("fake keyboard: keys held back", &[]);
+        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastFakeKeyboard));
+        return true;
+    }
+    false
+}
+
+/// The word just ended (`len` characters, then its boundary key) came in
+/// one machine-fast burst.
+fn came_in_a_burst(len: usize) -> bool {
+    len >= SCANNER_MIN && FAST_RUN.with(|f| f.get().1) >= len
+}
+
+static SHORTCUTS_ENGLISH: AtomicBool = AtomicBool::new(false);
+
+pub fn shortcuts_in_english() -> bool {
+    SHORTCUTS_ENGLISH.load(Ordering::Relaxed)
+}
+pub fn set_shortcuts_in_english(on: bool) {
+    SHORTCUTS_ENGLISH.store(on, Ordering::Relaxed);
+}
+
+thread_local! {
+    /// The window switched to English for a Ctrl/Alt shortcut, to switch
+    /// back to Thai when the keys are let go.
+    static SHORTCUT_ENGLISH_IN: std::cell::Cell<Option<isize>> = const { std::cell::Cell::new(None) };
+}
+
+fn is_ctrl_or_alt(vk: u16) -> bool {
+    matches!(vk, 0x11 | 0x12 | 0xA2..=0xA5)
+}
+
+/// Ctrl or Alt pressed with the Thai keyboard on: English until they are
+/// let go, so the letter of the shortcut is a Latin letter (apps and web
+/// pages that read the character saw Ctrl+แ for Ctrl+C). The request is
+/// posted to the app now, and an app takes posted messages before its next
+/// key, so it lands before the letter.
+unsafe fn shortcut_keys_pressed(vk: u16) {
+    if !is_ctrl_or_alt(vk)
+        || !shortcuts_in_english()
+        || SHORTCUT_ENGLISH_IN.with(|s| s.get()).is_some()
+        || policy::supported_layout_id(layout_id(effective_layout()))
+            != Some(policy::InputLayout::ThaiKedmanee)
+    {
+        return;
+    }
+    SHORTCUT_ENGLISH_IN.with(|s| s.set(Some(GetForegroundWindow().0 as isize)));
+    trace_note("shortcut keys: English");
+    activate_layout(policy::InputLayout::UsQwerty);
+}
+
+/// Ctrl or Alt let go: back to Thai once neither is held, in the same
+/// window (Alt+Tab ends in another one, left as it is).
+unsafe fn shortcut_keys_released(vk: u16) {
+    let Some(hwnd) = SHORTCUT_ENGLISH_IN.with(|s| s.get()) else {
+        return;
+    };
+    if !is_ctrl_or_alt(vk) {
+        return;
+    }
+    // The key being let go still reads as down until this hook returns.
+    let still = [0xA2u16, 0xA3, 0xA4, 0xA5]
+        .iter()
+        .any(|&k| k != vk && is_down(VIRTUAL_KEY(k)));
+    if still {
+        return;
+    }
+    SHORTCUT_ENGLISH_IN.with(|s| s.set(None));
+    if GetForegroundWindow().0 as isize == hwnd {
+        trace_note("shortcut keys: back to Thai");
+        activate_layout(policy::InputLayout::ThaiKedmanee);
+    }
+}
+
+/// The typing practice window, while it is open (0: none).
+pub static PRACTICE_WINDOW: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+/// Posted to the practice window per key pressed: wParam the character its
+/// place types on a US keyboard (with Shift as held; 0 for none), lParam
+/// the virtual key.
+pub const WM_PRACTICE_KEY: u32 = 0x8000 + 0x5A0;
+
+unsafe fn practice_takes(kb: &KBDLLHOOKSTRUCT, msg: u32) -> bool {
+    let window = PRACTICE_WINDOW.load(Ordering::Acquire);
+    if window == 0 || GetForegroundWindow().0 as isize != window {
+        return false;
+    }
+    let vk = kb.vkCode as u16;
+    if is_down(VK_MENU) || is_down(VIRTUAL_KEY(0x5B)) || is_down(VIRTUAL_KEY(0x5C)) {
+        return false;
+    }
+    if is_modifier(vk) || matches!(vk, 0x12 | 0x5B | 0x5C | 0xA4 | 0xA5) {
+        return false;
+    }
+    if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
+        let shift = is_down(VK_SHIFT);
+        let us = righttype::keyboard::index_of(kb.scanCode as u16, kb.flags.0 & 0x01 != 0)
+            .and_then(|i| righttype::keyboard::KEYS[i].us)
+            .or((vk == VK_SPACE.0).then_some(' '))
+            .map(|c| {
+                if shift {
+                    righttype::trainer::shifted(c).unwrap_or(c)
+                } else {
+                    c
+                }
+            });
+        let _ = PostMessageW(
+            HWND(window as *mut c_void),
+            WM_PRACTICE_KEY,
+            WPARAM(us.map_or(0, |c| c as usize)),
+            LPARAM(vk as isize),
+        );
+    }
+    true
+}
+
+static PRACTICE_KEEPS_SCORES: AtomicBool = AtomicBool::new(false);
+
+pub fn practice_keeps_scores() -> bool {
+    PRACTICE_KEEPS_SCORES.load(Ordering::Relaxed)
+}
+pub fn set_practice_keeps_scores(on: bool) {
+    PRACTICE_KEEPS_SCORES.store(on, Ordering::Relaxed);
+}
+
+static CTRL_HOLD_SHEET: AtomicBool = AtomicBool::new(false);
+
+pub fn ctrl_hold_opens_sheet() -> bool {
+    CTRL_HOLD_SHEET.load(Ordering::Relaxed)
+}
+pub fn set_ctrl_hold_opens_sheet(on: bool) {
+    CTRL_HOLD_SHEET.store(on, Ordering::Relaxed);
+}
+
+/// Ctrl held this long on its own opens the app's shortcut list.
+const CTRL_HOLD: Duration = Duration::from_millis(1000);
+
+thread_local! {
+    /// When Ctrl went down on its own (any other key or a mouse button
+    /// since cancels it).
+    static CTRL_ALONE: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+}
+
+/// Ctrl, another key, a mouse button or the wheel: Ctrl held alone for
+/// [`CTRL_HOLD`] opens the list; anything else in between cancels it
+/// (Ctrl+scroll to zoom, Ctrl+click).
+pub fn ctrl_hold_input(vk: Option<u16>, down: bool, repeat: bool) {
+    let is_ctrl = matches!(vk, Some(0x11 | 0xA2 | 0xA3));
+    if is_ctrl && down && !repeat && ctrl_hold_opens_sheet() {
+        CTRL_ALONE.with(|c| c.set(Some(Instant::now())));
+        unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
+            let _ = windows::Win32::UI::WindowsAndMessaging::KillTimer(None, id);
+            let held = CTRL_ALONE
+                .with(|c| c.take())
+                .is_some_and(|at| at.elapsed() >= CTRL_HOLD - Duration::from_millis(50));
+            if held && (is_down(VK_CONTROL)) && !crate::sheet::is_open() {
+                trace_note("Ctrl held: shortcut list");
+                crate::sheet::request_open();
+            }
+        }
+        unsafe {
+            windows::Win32::UI::WindowsAndMessaging::SetTimer(
+                None,
+                0,
+                CTRL_HOLD.as_millis() as u32,
+                Some(fire),
+            );
+        }
+    } else if !(is_ctrl && down) {
+        CTRL_ALONE.with(|c| c.set(None));
+    }
+}
+
+static HOLD_FOR_ACCENTS: AtomicBool = AtomicBool::new(false);
+
+pub fn holds_for_accents() -> bool {
+    HOLD_FOR_ACCENTS.load(Ordering::Relaxed)
+}
+pub fn set_holds_for_accents(on: bool) {
+    HOLD_FOR_ACCENTS.store(on, Ordering::Relaxed);
+}
+
+/// The list open near the cursor after a key was held: the key, what it
+/// offers, and when it opened.
+struct Pick {
+    vk: u16,
+    choices: Vec<String>,
+    opened: Instant,
+}
+
+thread_local! {
+    static PICK: RefCell<Option<Pick>> = const { RefCell::new(None) };
+}
+
+/// The list goes away by itself after this long.
+const PICK_OPEN: Duration = Duration::from_secs(6);
+
+/// Holding a key that has other characters (`.` → … · •, `e` → é è, a
+/// digit → its Thai numeral) opens a numbered list near the cursor at its
+/// first auto-repeat; a digit picks (replacing the one character typed),
+/// Esc closes it, any other key closes it and goes on as usual. `Some`
+/// when the key is decided here (`true`: swallowed).
+unsafe fn hold_to_pick(vk: u16, scan: u16, repeat: bool) -> Option<bool> {
+    let open = PICK.with(|p| {
+        p.borrow()
+            .as_ref()
+            .map(|p| (p.vk, p.choices.len(), p.opened.elapsed() < PICK_OPEN))
+    });
+    if let Some((held, count, fresh)) = open {
+        if !fresh {
+            PICK.with(|p| p.borrow_mut().take());
+        } else if vk == held && repeat {
+            return Some(true);
+        } else {
+            let digit = match vk {
+                0x31..=0x39 => Some((vk - 0x31) as usize),
+                0x61..=0x69 => Some((vk - 0x61) as usize),
+                _ => None,
+            };
+            let pick = PICK.with(|p| p.borrow_mut().take());
+            crate::overlay::dismiss();
+            if vk == VK_ESCAPE.0 {
+                return Some(true);
+            }
+            if let (Some(i), Some(pick)) = (digit.filter(|i| *i < count), pick) {
+                trace_note("held key: character picked");
+                // The character typed by the first press goes; the pick
+                // takes its place. What is on screen is no longer the word
+                // the buffer holds.
+                inject::apply(1, &pick.choices[i], None);
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    st.buf.clear();
+                    st.owned = None;
+                    st.mark = TokenMark::Plain;
+                    st.recent.clear();
+                });
+                return Some(true);
+            }
+            return None;
+        }
+    }
+    if !repeat
+        || !holds_for_accents()
+        || is_down(VK_CONTROL)
+        || is_down(VK_MENU)
+        || STATE.with(|s| s.borrow().sensitive_app)
+        || safety::is_password_field()
+        || crate::focus::is_password_field()
+        || !crate::focus::is_text_field()
+    {
+        return None;
+    }
+    let typed = translate(vk, scan)?;
+    let choices = righttype::accents::choices(typed)?;
+    let anchor = crate::caret::find_caret()
+        .map_or(crate::overlay::Anchor::Corner, crate::overlay::Anchor::Near);
+    crate::overlay::show_at(&righttype::accents::shown(&choices), anchor);
+    trace_note("held key: choices shown");
+    PICK.with(|p| {
+        *p.borrow_mut() = Some(Pick {
+            vk,
+            choices,
+            opened: Instant::now(),
+        })
+    });
+    Some(true)
+}
+
+/// The most one key may spend in the hook, waits included. Windows lets a
+/// key through by itself when the hook takes longer than it allows
+/// (`LowLevelHooksTimeout`, 300 ms or more) and removes a hook that does so
+/// often; every wait on the way (focus answers, text boxes, the pause
+/// between deletions and text) takes from this budget, so their sum stays
+/// inside it.
+const HOOK_BUDGET: Duration = Duration::from_millis(200);
+
+thread_local! {
+    /// When the key being handled must be done by.
+    static HOOK_DEADLINE: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+}
+
+/// How much of the key's [`HOOK_BUDGET`] is left; `max` outside the hook.
+pub fn budget_left(max: Duration) -> Duration {
+    HOOK_DEADLINE.with(|d| d.get()).map_or(max, |at| {
+        at.saturating_duration_since(Instant::now()).min(max)
+    })
 }
 
 thread_local! {
@@ -1273,7 +1752,7 @@ pub fn current_language() -> Option<policy::InputLayout> {
 
 /// The program the typist is typing in (its file name), as last seen.
 pub(crate) fn current_app() -> Option<String> {
-    STATE.with(|s| s.borrow().app_exe.clone())
+    STATE.with(|s| s.try_borrow().ok().and_then(|s| s.app_exe.clone()))
 }
 
 /// A fixed message for both the debug trace and the problem report
@@ -1385,10 +1864,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         let _ = HELD_KEY.compare_exchange(vk, 0, Ordering::Relaxed, Ordering::Relaxed);
         false
     };
+    ctrl_hold_input(Some(vk), down, repeat);
     if !down {
         if vk == VK_BACK.0 {
             FLIP_DOWN.with(|f| f.set(None));
         }
+        shortcut_keys_released(vk);
         if vk == VK_CAPITAL.0 {
             if let Some(at) = CAPS_DOWN_AT.with(|c| c.take()) {
                 caps_released(at);
@@ -1409,6 +1890,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     if capture_key(vk) {
         return true;
     }
+    if !repeat {
+        shortcut_keys_pressed(vk);
+    }
+    if let Some(swallow) = hold_to_pick(vk, kb.scanCode as u16, repeat) {
+        return swallow;
+    }
     let action = hotkeys().action_for(vk, is_down(VK_CONTROL), is_down(VK_SHIFT), is_down(VK_MENU));
     if !is_modifier(vk) && is_down(VK_SHIFT) && (is_down(VK_CONTROL) || is_down(VK_MENU)) {
         let hkl = STATE.with(|s| s.borrow().last_hkl);
@@ -1425,6 +1912,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     {
         let ch = translate(vk, kb.scanCode as u16);
         if crate::palette::key(vk, ch) {
+            return true;
+        }
+    }
+    if !is_down(VK_CONTROL) && !is_down(VK_MENU) {
+        let ch = translate(vk, kb.scanCode as u16);
+        if crate::sheet::key(vk, ch) {
             return true;
         }
     }
@@ -2037,6 +2530,32 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
 
     let active_layout = policy::supported_layout_id(layout_id(effective_layout()));
+
+    // A barcode scanner types like a US keyboard, as fast as a machine:
+    // with the Thai keyboard on, `8851234567890` came out as Thai. A burst
+    // no finger could type, ended by Enter or Tab, goes back to the
+    // scanner's characters, in every mode.
+    if fixes_scanners()
+        && active_layout == Some(policy::InputLayout::ThaiKedmanee)
+        && (vk == VK_RETURN.0 || vk == VK_TAB.0)
+        && came_in_a_burst(word.chars().count())
+    {
+        let mut scanned = righttype::layout::th_to_en(&word);
+        if scanned != *word && scanned.chars().all(|c| c.is_ascii_graphic()) {
+            e2e_trace(format!("scanner burst put back ({} keys)", scanned.len()));
+            diag::note(
+                "scanner burst put back",
+                &[("length", scanned.len().into())],
+            );
+            inject::expect_before_caret(&word);
+            let done = inject::apply(word.chars().count(), &scanned, Some(vk));
+            scanned.zeroize();
+            STATE.with(|s| s.borrow_mut().recent.clear());
+            word.zeroize();
+            return done;
+        }
+        scanned.zeroize();
+    }
 
     // A snippet's trigger: its text instead, in every mode.
     let snippet = active_layout.and_then(|layout| {

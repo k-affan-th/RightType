@@ -135,6 +135,9 @@ pub fn after_keys(expected: &str, exe: Option<String>) {
             }
             if shown.ends_with(expected.as_str()) {
                 crate::hook::trace_note("verify: correction shown as sent");
+                if let Some(exe) = exe.as_deref() {
+                    crate::stats::app_event(exe, righttype::app_quality::Event::ShownRight);
+                }
                 return;
             }
             // Word, Outlook, Google Docs and the like rewrite a word once it
@@ -164,6 +167,7 @@ pub fn after_keys(expected: &str, exe: Option<String>) {
             );
             if let Some(exe) = exe.as_deref() {
                 mark_slow(exe);
+                crate::stats::app_event(exe, righttype::app_quality::Event::ShownWrong);
             }
             crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastVerifyDiffers));
         });
