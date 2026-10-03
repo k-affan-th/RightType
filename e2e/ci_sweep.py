@@ -493,6 +493,30 @@ def shortcuts_in_english(t):
         CURRENT[0] = fs.start_rt()
 
 
+def shortcut_list(t):
+    """2.3: the app's shortcut list: searched, and Enter presses the
+    shortcut in the app (Notepad's Replace, Ctrl+H)."""
+    from pywinauto import Desktop
+    t.clear()
+    t.focus()
+    result = "no list"
+    try:
+        palette_search("this app", settle=1.5)()
+        time.sleep(0.5)
+        type_keys("replace")
+        time.sleep(0.6)
+        tap(ENTER)
+        time.sleep(1.5)
+        dialogs = Desktop(backend="uia").windows(title_re="Replace|แทนที่")
+        result = "opened" if dialogs else "no Replace dialog"
+        for d in dialogs:
+            d.close()
+    except Exception as e:
+        result = f"failed: {e}"
+    fs.check(t.name, "shortcut list presses the shortcut found", result, "opened")
+    t.focus()
+
+
 def thai_word_delete(t):
     """2.1: Ctrl+Backspace after Thai takes one Thai word, not the run."""
     fs.run(t, "Ctrl+Backspace deletes one Thai word", "l;ylfu8iy[", "สวัสดี",
@@ -1403,6 +1427,7 @@ def sweep(t):
         key_bounce(t)
         devices(t)
         hold_for_accents(t)
+        shortcut_list(t)
         enter_guard(t)
         app_keyboards(t)
     if t.name == "page":

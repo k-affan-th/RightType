@@ -239,6 +239,17 @@ pub unsafe fn toggle_numlock() {
     let _ = send(&[key(0x90, false), key(0x90, true)]);
 }
 
+/// Press a shortcut: `keys` down in order (modifiers first), then up in
+/// reverse. Tagged as ours, so the keyboard hook lets it through.
+///
+/// # Safety
+/// Calls `SendInput`.
+pub unsafe fn press_chord(keys: &[u16]) -> bool {
+    let mut inputs: Vec<INPUT> = keys.iter().map(|&vk| key(vk, false)).collect();
+    inputs.extend(keys.iter().rev().map(|&vk| key(vk, true)));
+    send(&inputs)
+}
+
 /// Send the key-up of each of `keys` (keys Windows counts as held down).
 ///
 /// # Safety

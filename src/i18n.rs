@@ -338,6 +338,14 @@ texts! {
     HealthFilterThem => "Filter", "กรองให้";
     HealthStopFilter => "Stop filtering", "เลิกกรอง";
     HeadDevices => "Devices", "อุปกรณ์";
+    SheetTitle => "Shortcuts: {app}", "ปุ่มลัด: {app}";
+    SheetSearch => "Search", "ค้นหา";
+    SheetKeys => "Keys", "ปุ่ม";
+    SheetWhat => "What it does", "ทำอะไร";
+    SheetNote => "Enter or a double-click uses the shortcut in the app. Esc closes.", "กด Enter หรือดับเบิลคลิกเพื่อใช้ปุ่มลัดนั้นในแอป กด Esc เพื่อปิด";
+    PaletteSheet => "This app's shortcuts", "ปุ่มลัดของแอปนี้";
+    RowCtrlHold => "Hold Ctrl to see the app's shortcuts", "กด Ctrl ค้างเพื่อดูปุ่มลัดของแอป";
+    SubCtrlHold => "A second with no other key. The list is also in the command palette.", "ค้างไว้ 1 วินาทีโดยไม่กดปุ่มอื่น (เปิดจากเมนูคำสั่งได้ด้วย)";
     RowShortcutsEnglish => "Ctrl and Alt shortcuts in English", "ปุ่มลัด Ctrl / Alt เป็นภาษาอังกฤษ";
     SubShortcutsEnglish => "With the Thai keyboard on, Ctrl+C stays Ctrl+C in web apps that read the letter.", "เมื่อแป้นไทยเปิดอยู่ Ctrl+C จะยังเป็น Ctrl+C ในเว็บแอปที่อ่านตัวอักษร";
     RowHoldAccents => "Hold a key for more characters", "กดค้างเพื่อเลือกอักขระพิเศษ";

@@ -67,7 +67,7 @@ const RESTART_Y: i32 = 486;
 /// the page is (it scrolls).
 const KB_PICK_Y: i32 = 98;
 const KB_TYPING_Y: i32 = 246;
-const KB_KEYS_Y: i32 = 558 + 2 * ROW_H;
+const KB_KEYS_Y: i32 = 558 + 3 * ROW_H;
 const KB_DEV_Y: i32 = KB_KEYS_Y + 3 * ROW_H + 8 + 56;
 const KB_HEIGHT: i32 = KB_DEV_Y + 2 * ROW_H + 8 + 24;
 /// The Tools page: the tools' card, the health check's card, the page.
@@ -141,6 +141,7 @@ struct Ids {
     kb_guard: u16,
     kb_accents: u16,
     kb_shortcuts: u16,
+    kb_ctrl_hold: u16,
     kb_password_tag: u16,
     /// NumLock and Insert: off, warn, fix.
     kb_numlock: [u16; 3],
@@ -506,6 +507,13 @@ fn open_on(page: u8) {
         tr(T::RowShortcutsEnglish),
         tr(T::SubShortcutsEnglish),
         kb_row(KB_TYPING_Y, 5),
+        p.surface,
+        k,
+    );
+    let kb_ctrl_hold = s.toggle(
+        tr(T::RowCtrlHold),
+        tr(T::SubCtrlHold),
+        kb_row(KB_TYPING_Y, 6),
         p.surface,
         k,
     );
@@ -957,6 +965,7 @@ fn open_on(page: u8) {
         kb_guard,
         kb_accents,
         kb_shortcuts,
+        kb_ctrl_hold,
         kb_password_tag,
         kb_numlock,
         kb_insert,
@@ -1105,6 +1114,7 @@ fn sync(win: &SettingsWindow) {
     s.set_checked(ids.kb_guard, hook::guards_switch());
     s.set_checked(ids.kb_accents, hook::holds_for_accents());
     s.set_checked(ids.kb_shortcuts, hook::shortcuts_in_english());
+    s.set_checked(ids.kb_ctrl_hold, hook::ctrl_hold_opens_sheet());
     s.set_checked(ids.kb_password_tag, crate::pwhint::is_enabled());
     s.set_checked(ids.kb_scanner, hook::fixes_scanners());
     s.set_checked(ids.kb_fake, hook::guards_fake_keyboards());
@@ -1289,6 +1299,9 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     } else if id == ids.kb_grave {
         hook::set_grave_types(s.checked(id));
         config::persist();
+    } else if id == ids.kb_ctrl_hold {
+        hook::set_ctrl_hold_opens_sheet(s.checked(id));
+        config::persist();
     } else if id == ids.kb_shortcuts {
         hook::set_shortcuts_in_english(s.checked(id));
         config::persist();
@@ -1376,7 +1389,7 @@ fn fill_snippets(win: &SettingsWindow, trigger: Option<&str>) {
 fn snippet_table_event(win: &Rc<SettingsWindow>, event: ui::TableEvent) {
     match event {
         ui::TableEvent::Delete => remove_snippet(win),
-        ui::TableEvent::Selected | ui::TableEvent::Menu { .. } => {
+        ui::TableEvent::Selected | ui::TableEvent::Activated | ui::TableEvent::Menu { .. } => {
             let Some(i) = win.surface.selected_row(win.ids.snip_table) else {
                 return;
             };
@@ -1560,7 +1573,7 @@ fn sync_app_choice(win: &SettingsWindow) {
 
 fn app_table_event(win: &Rc<SettingsWindow>, event: ui::TableEvent) {
     match event {
-        ui::TableEvent::Selected => sync_app_choice(win),
+        ui::TableEvent::Selected | ui::TableEvent::Activated => sync_app_choice(win),
         ui::TableEvent::Delete => remove_app(win),
         ui::TableEvent::Menu { x, y } => app_menu(win, x, y),
     }
@@ -2097,8 +2110,8 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             let dy = ui::page_scroll();
             card(g, rect(X0, KB_PICK_Y - dy, CW, 100));
             track(g, rect(X0 + 16, KB_PICK_Y + 12 - dy, CW - 32, 48));
-            card(g, rect(X0, KB_TYPING_Y - dy, CW, 6 * ROW_H + 8));
-            for i in 1..6 {
+            card(g, rect(X0, KB_TYPING_Y - dy, CW, 7 * ROW_H + 8));
+            for i in 1..7 {
                 divider(hdc, X0 + 16, KB_TYPING_Y + i * ROW_H + 2 - dy, CW - 32);
             }
             card(g, rect(X0, KB_KEYS_Y - dy, CW, 3 * ROW_H + 8));

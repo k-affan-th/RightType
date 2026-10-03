@@ -52,6 +52,7 @@ pub mod render;
 pub mod repair;
 pub mod secret;
 pub mod segment;
+pub mod shortcuts;
 pub mod sim;
 pub mod snippets;
 pub mod spelling;

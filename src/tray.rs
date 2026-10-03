@@ -477,6 +477,7 @@ pub fn run() {
             "settings-tools" => settings::open_page(8),
             "clean" => crate::clean::request_open(crate::clean::Mode::Clean),
             "keytest" => crate::clean::request_open(crate::clean::Mode::Test),
+            "sheet" => crate::sheet::request_open(),
             "stats" => stats::open(),
             "palette" => crate::palette::request_open(),
             "fixer" => crate::fixer::open_demo(

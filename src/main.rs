@@ -69,6 +69,8 @@ mod session;
 #[cfg(feature = "winos")]
 mod settings;
 #[cfg(feature = "winos")]
+mod sheet;
+#[cfg(feature = "winos")]
 mod startup;
 #[cfg(feature = "winos")]
 mod stats;

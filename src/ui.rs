@@ -962,6 +962,8 @@ pub enum TableEvent {
     Delete,
     /// The selection moved.
     Selected,
+    /// A row double-clicked, or Enter pressed on it.
+    Activated,
 }
 
 /// Receives table events.
@@ -2192,6 +2194,8 @@ impl Surface {
     /// A table told its parent something (`WM_NOTIFY`).
     unsafe fn table_notify(&self, hwnd: HWND, id: u16, code: u32, l: isize) {
         const NM_RCLICK: u32 = (-5i32) as u32;
+        const NM_DBLCLK: u32 = (-3i32) as u32;
+        const VK_RETURN: u16 = 0x0D;
         const LVN_KEYDOWN: u32 = (-155i32) as u32;
         const LVN_ITEMCHANGED: u32 = (-101i32) as u32;
         const VK_DELETE: u16 = 0x2E;
@@ -2210,6 +2214,7 @@ impl Surface {
             }
             LVN_KEYDOWN => match (*(l as *const NmKey)).vkey {
                 VK_DELETE => Some(TableEvent::Delete),
+                VK_RETURN => Some(TableEvent::Activated),
                 VK_APPS => {
                     let mut rc = RECT::default();
                     let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(hwnd, &mut rc);
@@ -2221,6 +2226,7 @@ impl Surface {
                 _ => None,
             },
             LVN_ITEMCHANGED => Some(TableEvent::Selected),
+            NM_DBLCLK => Some(TableEvent::Activated),
             _ => None,
         };
         let Some(event) = event else { return };

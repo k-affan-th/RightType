@@ -1113,6 +1113,12 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     if code == HC_ACTION as i32 && crate::lock::mouse_event() {
         return LRESULT(1);
     }
+    // A click or the wheel while Ctrl is held: not a hold for the list.
+    if code == HC_ACTION as i32 && wparam.0 as u32 != 0x0200
+    /* WM_MOUSEMOVE */
+    {
+        ctrl_hold_input(None, false, false);
+    }
     if code == HC_ACTION as i32
         && matches!(
             wparam.0 as u32,
@@ -1453,6 +1459,54 @@ unsafe fn shortcut_keys_released(vk: u16) {
     }
 }
 
+static CTRL_HOLD_SHEET: AtomicBool = AtomicBool::new(false);
+
+pub fn ctrl_hold_opens_sheet() -> bool {
+    CTRL_HOLD_SHEET.load(Ordering::Relaxed)
+}
+pub fn set_ctrl_hold_opens_sheet(on: bool) {
+    CTRL_HOLD_SHEET.store(on, Ordering::Relaxed);
+}
+
+/// Ctrl held this long on its own opens the app's shortcut list.
+const CTRL_HOLD: Duration = Duration::from_millis(1000);
+
+thread_local! {
+    /// When Ctrl went down on its own (any other key or a mouse button
+    /// since cancels it).
+    static CTRL_ALONE: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+}
+
+/// Ctrl, another key, a mouse button or the wheel: Ctrl held alone for
+/// [`CTRL_HOLD`] opens the list; anything else in between cancels it
+/// (Ctrl+scroll to zoom, Ctrl+click).
+pub fn ctrl_hold_input(vk: Option<u16>, down: bool, repeat: bool) {
+    let is_ctrl = matches!(vk, Some(0x11 | 0xA2 | 0xA3));
+    if is_ctrl && down && !repeat && ctrl_hold_opens_sheet() {
+        CTRL_ALONE.with(|c| c.set(Some(Instant::now())));
+        unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
+            let _ = windows::Win32::UI::WindowsAndMessaging::KillTimer(None, id);
+            let held = CTRL_ALONE
+                .with(|c| c.take())
+                .is_some_and(|at| at.elapsed() >= CTRL_HOLD - Duration::from_millis(50));
+            if held && (is_down(VK_CONTROL)) && !crate::sheet::is_open() {
+                trace_note("Ctrl held: shortcut list");
+                crate::sheet::request_open();
+            }
+        }
+        unsafe {
+            windows::Win32::UI::WindowsAndMessaging::SetTimer(
+                None,
+                0,
+                CTRL_HOLD.as_millis() as u32,
+                Some(fire),
+            );
+        }
+    } else if !(is_ctrl && down) {
+        CTRL_ALONE.with(|c| c.set(None));
+    }
+}
+
 static HOLD_FOR_ACCENTS: AtomicBool = AtomicBool::new(false);
 
 pub fn holds_for_accents() -> bool {
@@ -1725,6 +1779,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         let _ = HELD_KEY.compare_exchange(vk, 0, Ordering::Relaxed, Ordering::Relaxed);
         false
     };
+    ctrl_hold_input(Some(vk), down, repeat);
     if !down {
         if vk == VK_BACK.0 {
             FLIP_DOWN.with(|f| f.set(None));
