@@ -1955,12 +1955,49 @@ fn captured(win: &SettingsWindow) {
             hook::set_hotkeys(keys);
             config::persist();
             show_hotkeys(win);
-            win.surface.set_text(status, tr(T::ToastSaved));
+            // Saved either way; the typist is told when the keys were
+            // already someone else's (RightType's hook sees them first).
+            let note = if let Some(what) = righttype::hotkeys::common_use(chord) {
+                trf(T::HkSavedCommon, &[("v", tr(what))])
+            } else if registered_elsewhere(chord) {
+                tr(T::HkSavedElsewhere).to_string()
+            } else {
+                tr(T::ToastSaved).to_string()
+            };
+            win.surface.set_text(status, &note);
         }
         Err(Refusal::Unusable) => win.surface.set_text(status, tr(T::HkUnusable)),
         Err(Refusal::Taken(other)) => win
             .surface
             .set_text(status, &trf(T::HkTaken, &[("v", tr(action_label(other)))])),
+    }
+}
+
+/// Has another program registered `chord` as its own system-wide hotkey?
+/// Trying to register it tells (and it is let go at once).
+fn registered_elsewhere(chord: righttype::hotkeys::Chord) -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT,
+        MOD_SHIFT,
+    };
+    const PROBE: i32 = 0xBF00;
+    let mut mods = MOD_NOREPEAT;
+    for (on, m) in [
+        (chord.ctrl, MOD_CONTROL),
+        (chord.shift, MOD_SHIFT),
+        (chord.alt, MOD_ALT),
+    ] {
+        if on {
+            mods = HOT_KEY_MODIFIERS(mods.0 | m.0);
+        }
+    }
+    unsafe {
+        if RegisterHotKey(None, PROBE, mods, chord.key as u32).is_ok() {
+            let _ = UnregisterHotKey(None, PROBE);
+            false
+        } else {
+            true
+        }
     }
 }
 
