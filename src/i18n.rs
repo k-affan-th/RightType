@@ -376,6 +376,8 @@ texts! {
     CaretListTitle => "Search at the cursor", "ค้นที่เคอร์เซอร์";
     CaretListHint => "Search characters and snippets: arrow, degree, ลูกศร…", "ค้นอักขระและคำย่อ: ลูกศร, องศา, arrow…";
     CaretListNone => "Nothing found", "ไม่พบ";
+    CaretListNextTime => "Next time: {keys}", "ครั้งหน้ากด {keys} ได้เลย";
+    CaretListAgain => "Enter again: {what}", "กด Enter อีกครั้ง: {what}";
     CaretListKeys => "↑↓ choose · Enter type · Esc close", "↑↓ เลือก · Enter พิมพ์ · Esc ปิด";
     HeadCaret => "At the text cursor", "ที่เคอร์เซอร์";
     RowCaretList => "Tap Shift twice to search", "แตะ Shift สองครั้งเพื่อค้น";

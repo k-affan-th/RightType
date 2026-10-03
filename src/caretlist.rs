@@ -13,8 +13,8 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 
 use native_windows_gui as nwg;
-use righttype::atcaret::{self, Kind, Row};
-use righttype::i18n::{lang, tr, Lang, T};
+use righttype::atcaret::{self, Command, Kind, Row};
+use righttype::i18n::{lang, tr, trf, Lang, T};
 use righttype::motion;
 use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -78,6 +78,10 @@ struct State {
     query: String,
     rows: Vec<Row>,
     selected: usize,
+    /// The app's commands, read when the list opened (names and keys only).
+    commands: Vec<Command>,
+    /// A command that could lose work, picked once: Enter again runs it.
+    armed: Option<usize>,
     /// The highlight slides from this row to `selected`, since `slide_at`.
     slide_from: f32,
     slide_at: Option<std::time::Instant>,
@@ -241,7 +245,13 @@ fn open() {
     let Some(hwnd) = ensure() else {
         return;
     };
-    STATE.with(|s| *s.borrow_mut() = State::default());
+    let commands = crate::sheet::app_commands(target);
+    STATE.with(|s| {
+        *s.borrow_mut() = State {
+            commands,
+            ..State::default()
+        }
+    });
     TARGET.store(target.0 as isize, Ordering::Release);
     OPEN.store(hwnd.0 as isize, Ordering::Release);
     // Under the text cursor; without one, near the top of the window.
@@ -322,6 +332,8 @@ fn close() {
         let mut s = s.borrow_mut();
         s.query.zeroize();
         s.rows.clear();
+        s.commands.clear();
+        s.armed = None;
         s.selected = 0;
         s.slide_at = None;
         s.fade = Some((motion::Phase::Exit, std::time::Instant::now()));
@@ -458,12 +470,20 @@ fn on_key(vk: u16, ch: Option<char>) {
 }
 
 fn refilter() {
-    let query = STATE.with(|s| s.borrow().query.clone());
-    let rows = atcaret::search(&query, &crate::hook::snippets(), lang() == Lang::Th);
+    let rows = STATE.with(|s| {
+        let s = s.borrow();
+        atcaret::search(
+            &s.query,
+            &crate::hook::snippets(),
+            &s.commands,
+            lang() == Lang::Th,
+        )
+    });
     let n = rows.len();
     STATE.with(|s| {
         let mut s = s.borrow_mut();
         s.rows = rows;
+        s.armed = None;
         s.selected = 0;
         s.slide_from = 0.0;
         s.slide_at = None;
@@ -498,13 +518,45 @@ fn pick() {
     if row.as_ref().is_some_and(|r| r.text.is_empty()) {
         return;
     }
+    // A command that could lose work takes Enter twice.
+    if let Some(r) = row.as_ref().filter(|r| r.kind == Kind::Command) {
+        let cmd = Command {
+            name: r.label.clone(),
+            keys: r.text.clone(),
+            other: String::new(),
+        };
+        let first = STATE.with(|s| {
+            let mut s = s.borrow_mut();
+            let first = atcaret::needs_confirming(&cmd) && s.armed != Some(s.selected);
+            if first {
+                s.armed = Some(s.selected);
+            }
+            first
+        });
+        if first {
+            crate::hook::trace_note("caret list: command needs Enter again");
+            let hwnd = OPEN.load(Ordering::Acquire);
+            if hwnd != 0 {
+                ui::redraw_all(HWND(hwnd as *mut _));
+            }
+            return;
+        }
+    }
     close();
     let Some(row) = row else {
         return;
     };
+    if row.kind == Kind::Command {
+        crate::hook::trace_note("caret list: command run");
+        if crate::sheet::press_in(target, &row.text) {
+            // The keys for next time (2.4 E3).
+            crate::overlay::show(&trf(T::CaretListNextTime, &[("keys", &row.text)]));
+        }
+        return;
+    }
     let text = match row.kind {
         Kind::Snippet => righttype::snippets::fill(&row.text, &crate::hook::snippet_now()),
-        Kind::Character | Kind::Equation => row.text,
+        _ => row.text,
     };
     crate::hook::trace_note("caret list: row typed");
     crate::manual::request_type(target, text, false);
@@ -514,6 +566,7 @@ fn pick() {
 const ICON_SEARCH: &str = "\u{E721}";
 const ICON_SNIPPET: &str = "\u{E70B}";
 const ICON_EQUATION: &str = "\u{E8EF}";
+const ICON_COMMAND: &str = "\u{E945}";
 const ICON_WARNING: &str = "\u{E7BA}";
 
 fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
@@ -655,6 +708,39 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
                         DT_RIGHT | one | DT_END_ELLIPSIS,
                     );
                 }
+                Kind::Command => {
+                    let armed = s.armed == Some(i);
+                    if icons.is_some() {
+                        icon(
+                            if armed { ICON_WARNING } else { ICON_COMMAND },
+                            glyph_rc,
+                            ink,
+                        );
+                    } else {
+                        ui::text(hdc, "⌘", glyph_rc, big, ink, DT_CENTER | one);
+                    }
+                    let label = if armed {
+                        trf(T::CaretListAgain, &[("what", &row.label)])
+                    } else {
+                        row.label.clone()
+                    };
+                    ui::text(
+                        hdc,
+                        &label,
+                        label_rc,
+                        body,
+                        ink,
+                        DT_LEFT | one | DT_END_ELLIPSIS,
+                    );
+                    ui::text(
+                        hdc,
+                        &row.detail,
+                        detail_rc,
+                        dim,
+                        faint,
+                        DT_RIGHT | one | DT_END_ELLIPSIS,
+                    );
+                }
                 Kind::Equation => {
                     // What the LaTeX writes, large; or, dim, why it cannot.
                     let ok = !row.text.is_empty();
@@ -713,4 +799,15 @@ pub fn open_demo(query: &str) {
     open();
     STATE.with(|s| s.borrow_mut().query = query.to_string());
     refilter();
+}
+
+/// The same, with the first row's Enter-again state showing.
+#[cfg(debug_assertions)]
+pub fn open_demo_armed(query: &str) {
+    open_demo(query);
+    STATE.with(|s| s.borrow_mut().armed = Some(0));
+    let hwnd = OPEN.load(Ordering::Acquire);
+    if hwnd != 0 {
+        ui::redraw_all(HWND(hwnd as *mut _));
+    }
 }

@@ -470,6 +470,41 @@ def caret_list(t):
     fs.check(t.name, "typing goes to the app after the list", t.read().strip(), "ok")
 
 
+def caret_commands(t):
+    """2.4 E: the app's commands are in the list at the cursor; Enter
+    presses the shortcut (Notepad's Replace, Ctrl+H); nothing is typed."""
+    from pywinauto import Desktop
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_EN)
+    time.sleep(0.3)
+    result = "no list"
+    try:
+        for _ in range(2):
+            fs.key(SHIFT)
+            time.sleep(0.05)
+            fs.key(SHIFT, True)
+            time.sleep(0.12)
+        time.sleep(0.4)
+        type_keys("replace")
+        time.sleep(0.5)
+        ran = traced(lambda: (tap(ENTER), time.sleep(1.2)), "caret list: command run")
+        dialogs = Desktop(backend="uia").windows(title_re="Replace|แทนที่") or [
+            d for d in t.win.descendants(control_type="Window")
+            if d.window_text() in ("Replace", "แทนที่")]
+        result = "opened" if ran == "yes" and dialogs else f"ran={ran} dialogs={len(dialogs)}"
+        for d in dialogs:
+            d.close()
+        if not dialogs:
+            tap(0x1B)
+            time.sleep(0.3)
+    except Exception as e:
+        result = f"failed: {e}"
+    fs.check(t.name, "a command from the list at the cursor runs", result, "opened")
+    t.focus()
+    fs.check(t.name, "the command's search is not typed", t.read().strip(), "")
+
+
 def ghosts(t):
     """2.4 C: `->` offers →, Tab takes it; without Tab the text stays as
     typed."""
@@ -1583,6 +1618,7 @@ def sweep(t):
         key_bounce(t)
         keys_on_screen(t)
         caret_list(t)
+        caret_commands(t)
         ghosts(t)
         by_app(t)
         devices(t)

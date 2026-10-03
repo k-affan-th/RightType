@@ -3,7 +3,9 @@
 //! typist's own snippets, ranked together by [`crate::find`]; LaTeX typed
 //! into it (`\frac{1}{2}`, `x^2`) shows what it writes as Unicode first
 //! (2.4 D3), and `\al` lists the commands that start so. App commands join
-//! in a later step.
+//! in a later step: the app's own commands (its menus, then the bundled
+//! shortcut table) are rows too, and picking one presses its shortcut
+//! (2.4 E).
 //!
 //! No OS calls; the search text is the caller's to wipe.
 
@@ -16,6 +18,8 @@ use crate::snippets::Snippet;
 pub enum Kind {
     Character,
     Snippet,
+    /// An app command: `label` is its name, `text` (and `detail`) its keys.
+    Command,
     /// LaTeX written as Unicode. With no `text`, `label` says why it cannot
     /// be: nothing to pick.
     Equation,
@@ -36,12 +40,50 @@ pub struct Row {
     score: u32,
 }
 
+/// A command of the app in front: its name (in the interface language) and
+/// the keys that run it (`Ctrl+H`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Command {
+    pub name: String,
+    pub keys: String,
+    /// Its name in the other language, when known (the bundled table has
+    /// both): `close` finds ปิดหน้าต่าง in the Thai interface.
+    pub other: String,
+}
+
+/// Whether running `cmd` from a list could lose work (closing a window or a
+/// tab, deleting, quitting): it then takes Enter twice.
+pub fn needs_confirming(cmd: &Command) -> bool {
+    let keys = cmd.keys.to_ascii_lowercase();
+    let name = cmd.name.to_lowercase();
+    let closes = matches!(
+        keys.as_str(),
+        "alt+f4" | "ctrl+w" | "ctrl+shift+w" | "ctrl+f4" | "shift+delete" | "shift+del"
+    );
+    let says_so = [
+        "delete",
+        "exit",
+        "quit",
+        "close",
+        "remove",
+        "ลบ",
+        "ปิด",
+        "ออกจาก",
+    ]
+    .iter()
+    .any(|w| name.contains(w));
+    closes || says_so
+}
+
+/// How far an app command ranks ahead of a character matching as well.
+const COMMAND_BONUS: u32 = 200;
+
 /// Rows shown at most.
 pub const MAX_ROWS: usize = 8;
 
 /// The rows for `typed`, best first. `thai`: the interface language, for
 /// the characters' names.
-pub fn search(typed: &str, snippets: &[Snippet], thai: bool) -> Vec<Row> {
+pub fn search(typed: &str, snippets: &[Snippet], commands: &[Command], thai: bool) -> Vec<Row> {
     let query = Query::new(typed);
     if query.is_empty() {
         return Vec::new();
@@ -64,6 +106,19 @@ pub fn search(typed: &str, snippets: &[Snippet], thai: bool) -> Vec<Row> {
             }));
         }
     }
+    rows.extend(commands.iter().filter_map(|c| {
+        let score = query.score_any([c.name.as_str(), c.other.as_str(), c.keys.as_str()])?;
+        Some(Row {
+            kind: Kind::Command,
+            glyph: String::new(),
+            label: c.name.clone(),
+            detail: c.keys.clone(),
+            text: c.keys.clone(),
+            // The app's own commands before characters that match as well:
+            // `close` is the window before it is a bracket.
+            score: score + COMMAND_BONUS,
+        })
+    }));
     rows.extend(
         snippets
             .iter()
@@ -144,11 +199,11 @@ mod tests {
 
     #[test]
     fn characters_and_snippets_together() {
-        let rows = search("degree", &sig(), false);
+        let rows = search("degree", &sig(), &[], false);
         assert_eq!(rows[0].glyph, "°");
         assert_eq!(rows[0].detail, "U+00B0");
         assert_eq!(rows[0].kind, Kind::Character);
-        let rows = search("regards", &sig(), false);
+        let rows = search("regards", &sig(), &[], false);
         assert_eq!(rows[0].kind, Kind::Snippet);
         assert_eq!(rows[0].label, "Best regards, Affan");
         assert_eq!(rows[0].text, "Best regards,\nAffan");
@@ -156,26 +211,61 @@ mod tests {
 
     #[test]
     fn latex_first() {
-        let rows = search(r"\frac{1}{2} + x^2", &[], false);
+        let rows = search(r"\frac{1}{2} + x^2", &[], &[], false);
         assert_eq!(rows[0].kind, Kind::Equation);
         assert_eq!(rows[0].text, "½ + x²");
-        let rows = search(r"\frac{\frac{1}{2}}{3}", &[], true);
+        let rows = search(r"\frac{\frac{1}{2}}{3}", &[], &[], true);
         assert_eq!(rows[0].kind, Kind::Equation);
         assert!(rows[0].text.is_empty(), "nothing to pick");
-        let rows = search(r"\alp", &[], false);
+        let rows = search(r"\alp", &[], &[], false);
         assert_eq!(rows[0].glyph, "α");
         assert_eq!(rows[0].label, r"\alpha");
-        assert!(search("arrow", &[], false)
+        assert!(search("arrow", &[], &[], false)
             .iter()
             .all(|r| r.kind != Kind::Equation));
     }
 
     #[test]
+    fn app_commands() {
+        let cmds = vec![
+            Command {
+                name: "Replace".into(),
+                keys: "Ctrl+H".into(),
+                other: "แทนที่".into(),
+            },
+            Command {
+                name: "Close the tab".into(),
+                keys: "Ctrl+W".into(),
+                other: "ปิดแท็บ".into(),
+            },
+        ];
+        let rows = search("replace", &[], &cmds, false);
+        assert_eq!(rows[0].kind, Kind::Command);
+        assert_eq!(rows[0].detail, "Ctrl+H");
+        let rows = search("close", &[], &cmds, false);
+        assert_eq!(rows[0].label, "Close the tab", "before close parenthesis");
+        assert!(!needs_confirming(&cmds[0]));
+        assert!(needs_confirming(&cmds[1]));
+        assert!(!needs_confirming(&Command {
+            name: "Bookmark the page".into(),
+            keys: "Ctrl+D".into(),
+            other: String::new(),
+        }));
+        assert!(needs_confirming(&Command {
+            name: "ลบไฟล์".into(),
+            keys: "Del".into(),
+            other: String::new(),
+        }));
+        let rows = search("แทนที่", &[], &cmds, false);
+        assert_eq!(rows[0].label, "Replace", "found by its other name");
+    }
+
+    #[test]
     fn thai_names_in_the_thai_interface() {
-        let rows = search("ยูโร", &[], true);
+        let rows = search("ยูโร", &[], &[], true);
         let euro = rows.iter().find(|r| r.glyph == "€").expect("€");
         assert!(euro.label.contains("ยูโร"), "{}", euro.label);
-        assert!(search("", &sig(), true).is_empty());
-        assert!(search("anything at all", &[], false).len() <= MAX_ROWS);
+        assert!(search("", &sig(), &[], true).is_empty());
+        assert!(search("anything at all", &[], &[], false).len() <= MAX_ROWS);
     }
 }
