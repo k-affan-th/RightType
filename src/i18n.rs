@@ -378,6 +378,7 @@ texts! {
     CaretListNone => "Nothing found", "ไม่พบ";
     CaretListNextTime => "Next time: {keys}", "ครั้งหน้ากด {keys} ได้เลย";
     CaretListAgain => "Enter again: {what}", "กด Enter อีกครั้ง: {what}";
+    CaretListKeysRun => "↑↓ choose · Enter run · Esc close", "↑↓ เลือก · Enter สั่งงาน · Esc ปิด";
     CaretListKeys => "↑↓ choose · Enter type · Esc close", "↑↓ เลือก · Enter พิมพ์ · Esc ปิด";
     HeadCaret => "At the text cursor", "ที่เคอร์เซอร์";
     RowCaretList => "Tap Shift twice to search", "แตะ Shift สองครั้งเพื่อค้น";

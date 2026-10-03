@@ -774,9 +774,17 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
         }
         // How to use it, at the bottom.
         let foot_y = SEARCH_H + PAD / 2 + s.rows.len().max(1) as i32 * ROW_H;
+        let on_command = s
+            .rows
+            .get(s.selected)
+            .is_some_and(|r| r.kind == Kind::Command);
         ui::text(
             hdc,
-            tr(T::CaretListKeys),
+            tr(if on_command {
+                T::CaretListKeysRun
+            } else {
+                T::CaretListKeys
+            }),
             ui::rect(PAD + 12, foot_y, W - 2 * PAD - 24, FOOT_H),
             dim,
             p.text_dim,
