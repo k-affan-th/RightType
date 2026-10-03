@@ -81,6 +81,20 @@ pub fn english_variant() -> EnglishVariant {
     }
 }
 
+/// The table of a given Thai keyboard (whichever is in use elsewhere).
+pub fn thai_table(variant: ThaiVariant) -> &'static dyn Layout {
+    match variant {
+        ThaiVariant::Kedmanee => &Kedmanee,
+        ThaiVariant::Pattachote => &Pattachote,
+        ThaiVariant::Manoonchai => &Manoonchai,
+    }
+}
+
+/// The US English table.
+pub fn us_table() -> &'static dyn Layout {
+    &QwertyEn
+}
+
 fn thai_layout() -> &'static dyn Layout {
     match thai_variant() {
         ThaiVariant::Kedmanee => &Kedmanee,

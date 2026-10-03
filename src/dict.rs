@@ -180,6 +180,22 @@ pub fn tech_terms() -> impl Iterator<Item = &'static str> {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
 }
 
+/// The bundled Thai words, as listed (practice text is made from them).
+pub fn thai_words() -> impl Iterator<Item = &'static str> {
+    include_str!("../assets/th_words.txt")
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+}
+
+/// The bundled English words, as listed.
+pub fn english_words() -> impl Iterator<Item = &'static str> {
+    include_str!("../assets/en_words.txt")
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+}
+
 /// Bundled Thai dictionary.
 pub fn thai() -> &'static Dictionary {
     static D: OnceLock<Dictionary> = OnceLock::new();
