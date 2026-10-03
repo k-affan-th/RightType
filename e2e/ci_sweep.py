@@ -470,6 +470,27 @@ def caret_list(t):
     fs.check(t.name, "typing goes to the app after the list", t.read().strip(), "ok")
 
 
+def ghosts(t):
+    """2.4 C: `->` offers →, Tab takes it; without Tab the text stays as
+    typed."""
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_EN)
+    time.sleep(0.3)
+    fs.check(t.name, "a symbol is offered for ->",
+             traced(lambda: (type_keys("a ->"), time.sleep(0.3)), "ghost offered: U+2192"), "yes")
+    tap(0x09)
+    time.sleep(0.5)
+    type_keys(" b")
+    time.sleep(0.8)
+    fs.check(t.name, "Tab puts the symbol in", t.read().strip(), "a \u2192 b")
+    t.clear()
+    t.focus()
+    type_keys("x != y")
+    time.sleep(0.8)
+    fs.check(t.name, "without Tab the text stays as typed", t.read().strip(), "x != y")
+
+
 def keys_on_screen(t):
     """2.3 C8: shortcuts shown on screen when turned on; letters never."""
     write_sweep_config(keys="show_keys = true\n")
@@ -1562,6 +1583,7 @@ def sweep(t):
         key_bounce(t)
         keys_on_screen(t)
         caret_list(t)
+        ghosts(t)
         by_app(t)
         devices(t)
         hold_for_accents(t)

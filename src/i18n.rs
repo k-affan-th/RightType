@@ -379,6 +379,8 @@ texts! {
     CaretListKeys => "↑↓ choose · Enter type · Esc close", "↑↓ เลือก · Enter พิมพ์ · Esc ปิด";
     HeadCaret => "At the text cursor", "ที่เคอร์เซอร์";
     RowCaretList => "Tap Shift twice to search", "แตะ Shift สองครั้งเพื่อค้น";
+    RowGhosts => "Offer symbols for what you type, Tab takes it", "เสนอสัญลักษณ์จากที่พิมพ์ กด Tab เพื่อใช้";
+    SubGhosts => "-> becomes →, != becomes ≠, x^2 becomes x². Not in code editors.", "-> เป็น →  != เป็น ≠  x^2 เป็น x² ไม่ทำในโปรแกรมเขียนโค้ด";
     SubCaretList => "Characters and snippets. The search never lands in your text.", "อักขระพิเศษและคำย่อ พิมพ์ลงตรงที่ใช้อยู่ คำที่ค้นไม่ลงไปในข้อความ";
     HeadComfort => "On screen and comfort", "บนจอและสุขภาพมือ";
     RowShowKeys => "Show shortcuts on screen", "แสดงปุ่มลัดบนจอ";

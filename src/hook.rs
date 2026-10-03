@@ -727,6 +727,111 @@ fn offer_completion() {
     run.zeroize();
 }
 
+/// Ghost suggestions (2.4 C): `->` offers →, `x^2` offers x², for Tab.
+static GHOSTS: AtomicBool = AtomicBool::new(true);
+
+pub fn ghosts() -> bool {
+    GHOSTS.load(Ordering::Relaxed)
+}
+
+pub fn set_ghosts(on: bool) {
+    GHOSTS.store(on, Ordering::Relaxed);
+    if !on {
+        ghost_forget();
+    }
+}
+
+/// How many characters before the caret are kept for ghost suggestions:
+/// the longest rule (`---`, `x^10`) and the character before it.
+const GHOST_TAIL: usize = 6;
+
+struct GhostOffer {
+    replace: usize,
+    text: String,
+    hwnd: isize,
+    focus_generation: u64,
+    created: Instant,
+}
+
+thread_local! {
+    /// The last few characters typed, in memory only, zeroized when let go.
+    static GHOST_TYPED: RefCell<String> = const { RefCell::new(String::new()) };
+    static GHOST: RefCell<Option<GhostOffer>> = const { RefCell::new(None) };
+}
+
+fn ghost_forget() {
+    GHOST_TYPED.with(|t| t.borrow_mut().zeroize());
+    if GHOST.with(|g| g.borrow_mut().take()).is_some() {
+        crate::overlay::dismiss();
+    }
+}
+
+/// Follows what a key did to the text before the caret: a character adds to
+/// it, Backspace takes one off, Space starts afresh after a space, anything
+/// else (Enter, Tab, arrows, a chord) forgets it.
+fn ghost_track(key: Key, vk: u16) {
+    GHOST_TYPED.with(|t| {
+        let mut t = t.borrow_mut();
+        match key {
+            Key::Char(c) => {
+                t.push(c);
+                while t.chars().count() > GHOST_TAIL {
+                    let first = t.chars().next().map_or(0, char::len_utf8);
+                    t.replace_range(..first, "");
+                }
+            }
+            Key::Backspace => {
+                t.pop();
+            }
+            Key::Boundary if vk == VK_SPACE.0 => {
+                t.zeroize();
+                t.push(' ');
+            }
+            _ => t.zeroize(),
+        }
+    });
+}
+
+/// The hint for an offer: what was typed, what Tab makes of it.
+pub fn ghost_hint(typed: &str, symbol: &str) -> String {
+    format!("{typed}  →  {symbol}   ·   Tab")
+}
+
+/// After a character: show the symbol it can become, for Tab.
+fn offer_ghost() {
+    let offer = GHOST_TYPED.with(|t| righttype::ghost::offer(&t.borrow()));
+    let Some(offer) = offer else {
+        return;
+    };
+    let mut typed: String = GHOST_TYPED.with(|t| {
+        let t = t.borrow();
+        let skip = t.chars().count().saturating_sub(offer.replace);
+        t.chars().skip(skip).collect()
+    });
+    let mut hint = ghost_hint(&typed, &offer.text);
+    typed.zeroize();
+    crate::overlay::offer_at(&hint, crate::caret::hint_anchor());
+    hint.zeroize();
+    e2e_trace(format!(
+        "ghost offered: {}",
+        offer
+            .text
+            .chars()
+            .map(|c| format!("U+{:04X}", c as u32))
+            .collect::<Vec<_>>()
+            .join(" ")
+    ));
+    GHOST.with(|g| {
+        *g.borrow_mut() = Some(GhostOffer {
+            replace: offer.replace,
+            text: offer.text,
+            hwnd: unsafe { GetForegroundWindow() }.0 as isize,
+            focus_generation: crate::focus::generation(),
+            created: Instant::now(),
+        })
+    });
+}
+
 /// Why the last word was fixed or left (a `righttype::why::Why`).
 static LAST_WHY: AtomicU8 = AtomicU8::new(0);
 
@@ -1137,6 +1242,15 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
 /// word in progress, a run we own (left on screen as it is), the Undo record,
 /// the recent words and a pending suggestion.
 fn caret_may_have_moved() {
+    GHOST_TYPED.with(|t| {
+        if let Ok(mut t) = t.try_borrow_mut() {
+            t.zeroize();
+        }
+    });
+    let offered = GHOST.with(|g| g.try_borrow_mut().ok().and_then(|mut g| g.take()));
+    if offered.is_some() {
+        crate::overlay::dismiss();
+    }
     STATE.with(|s| {
         // Never re-entered from inside the keyboard path, but do not panic if
         // a nested hook call ever finds the state borrowed.
@@ -1986,6 +2100,38 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         }
     }
 
+    // Tab (alone) takes a ghost suggestion on offer; any other key drops it.
+    let ghost = GHOST.with(|g| g.borrow_mut().take());
+    if let Some(offer) = ghost {
+        let fresh = offer.hwnd == GetForegroundWindow().0 as isize
+            && offer.focus_generation == crate::focus::generation()
+            && offer.created.elapsed() < Duration::from_millis(crate::overlay::OFFER_MS.into());
+        if vk == VK_TAB.0
+            && fresh
+            && !is_down(VK_SHIFT)
+            && !is_down(VK_CONTROL)
+            && !is_down(VK_MENU)
+            && !safety::is_password_field()
+            && !crate::focus::is_password_field()
+        {
+            crate::overlay::dismiss();
+            if inject::apply(offer.replace, &offer.text, None) {
+                trace_note("ghost suggestion taken with Tab");
+                GHOST_TYPED.with(|t| t.borrow_mut().zeroize());
+                // What was typed is a symbol now: no word to decide on.
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    st.buf.clear();
+                    st.mark = TokenMark::Plain;
+                    st.recent.clear();
+                });
+                return true;
+            }
+        } else if !is_modifier(vk) {
+            crate::overlay::dismiss();
+        }
+    }
+
     // Tab (alone) right after a Suggest hint takes it, like Alt+CapsLock. The
     // hint exists only until the next key, so Tab is otherwise untouched.
     // This runs ahead of the context checks below, so it checks for itself
@@ -2146,6 +2292,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             crate::focus::is_password_field()
         ));
         STATE.with(|s| s.borrow_mut().suggestion = None);
+        ghost_forget();
         return false;
     }
     // Switched off in this app (its per-app mode): touch nothing, like a
@@ -2159,6 +2306,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             st.live_hint = None;
             st.recent.clear();
         });
+        ghost_forget();
         return false;
     };
 
@@ -2415,9 +2563,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // clearing here made it forget the word it was pressed to flip.
         if !is_modifier(vk) {
             STATE.with(|s| s.borrow_mut().recent.clear());
+            ghost_forget();
         }
         return false;
     };
+    ghost_track(key, vk);
 
     // Backspace right after a spelling fix takes the fix back.
     if key == Key::Backspace
@@ -2493,9 +2643,18 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         {
             if reconcile_run() {
                 take_down_preview();
+                // The screen holds another reading now, not the keys typed.
+                ghost_forget();
                 return true;
             }
             show_preview();
+        }
+        if matches!(key, Key::Char(_))
+            && ghosts()
+            && mode_now != Mode::Code
+            && !current_app().is_some_and(|e| righttype::code::is_code_editor(&e))
+        {
+            offer_ghost();
         }
         // Navigation and focus events move the caret away from the run, so the
         // text we rendered is no longer ours to edit. Let go without touching it.
@@ -4110,6 +4269,7 @@ unsafe fn sync_context() {
             st.recent.clear();
             st.suggestion = None;
             st.live_hint = None;
+            GHOST_TYPED.with(|t| t.borrow_mut().zeroize());
             st.last_hwnd = hwnd_i;
             st.last_hkl = hkl_i;
             st.last_focus_generation = focus_generation;

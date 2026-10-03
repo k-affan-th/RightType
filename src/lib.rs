@@ -44,6 +44,7 @@ pub mod diag;
 pub mod dict;
 pub mod english;
 pub mod find;
+pub mod ghost;
 pub mod hotkeys;
 pub mod i18n;
 pub mod keyboard;

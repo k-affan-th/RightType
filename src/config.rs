@@ -125,6 +125,8 @@ pub struct Config {
     pub show_keys: bool,
     /// Shift tapped twice opens the list at the text cursor (2.4 A).
     pub caret_list: bool,
+    /// `->` offers →, `x^2` offers x², for Tab (2.4 C; not in code editors).
+    pub ghosts: bool,
     /// Remind to rest after long typing (2.3 C9; counts in memory only).
     pub rest_reminder: bool,
     /// Keys a device types into the Run box faster than any hand are held
@@ -217,6 +219,7 @@ impl Default for Config {
             practice_keep_scores: false,
             show_keys: false,
             caret_list: true,
+            ghosts: true,
             rest_reminder: false,
             guard_fake_keyboards: true,
             snippets: Vec::new(),
@@ -289,6 +292,7 @@ pub fn apply(cfg: &Config) {
     hook::set_practice_keeps_scores(cfg.practice_keep_scores);
     crate::onscreen::set_enabled(cfg.show_keys);
     crate::caretlist::set_enabled(cfg.caret_list);
+    hook::set_ghosts(cfg.ghosts);
     crate::rest::set_enabled(cfg.rest_reminder);
     hook::set_guards_fake_keyboards(cfg.guard_fake_keyboards);
     hook::set_debounce_keys(
@@ -559,6 +563,7 @@ fn snapshot() -> Config {
         practice_keep_scores: hook::practice_keeps_scores(),
         show_keys: crate::onscreen::enabled(),
         caret_list: crate::caretlist::enabled(),
+        ghosts: hook::ghosts(),
         rest_reminder: crate::rest::enabled(),
         guard_fake_keyboards: hook::guards_fake_keyboards(),
         debounce_keys: hook::debounce_keys()
