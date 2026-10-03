@@ -139,6 +139,22 @@ pub fn looks_mistyped(words: &[&str], en: &Dictionary, th: &Dictionary) -> bool 
 }
 
 impl Repaired {
+    /// For each change (made from `text`), how many times its word appears
+    /// in `text` before it: which match of it to look for in the app.
+    pub fn places_in(&self, text: &str) -> Vec<usize> {
+        let mut shift: isize = 0;
+        self.changes
+            .iter()
+            .map(|c| {
+                let len = c.original.chars().count();
+                let at = (c.start as isize - shift).max(0) as usize;
+                shift += c.fixed.chars().count() as isize - len as isize;
+                let byte = text.char_indices().nth(at).map_or(text.len(), |(b, _)| b);
+                text[..byte].matches(c.original.as_str()).count()
+            })
+            .collect()
+    }
+
     /// The text with only the changes `keep` says yes to (by their place in
     /// [`Repaired::changes`]); the others go back to what was typed.
     pub fn with_only(&self, keep: &[bool]) -> String {
@@ -243,6 +259,14 @@ mod tests {
         // An English word next to Thai stays English.
         assert_eq!(fix("ok l;ylfu8iy[").text, "ok สวัสดีครับ");
         assert_eq!(fix("go to l;ylfu").text, "go to สวัสดี");
+    }
+
+    #[test]
+    fn which_match_of_each_word() {
+        let text = "l;ylfu hello l;ylfu 8iy[ l;ylfu";
+        let r = fix(text);
+        assert_eq!(r.changes.len(), 4);
+        assert_eq!(r.places_in(text), vec![0, 1, 0, 2]);
     }
 
     #[test]

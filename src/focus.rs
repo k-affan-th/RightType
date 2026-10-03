@@ -765,6 +765,52 @@ pub fn field_boxes(spans: &[(usize, usize)]) -> Vec<Option<windows::Win32::Found
         .collect()
 }
 
+/// Select the `nth` (from 0) place `word` appears in the focused field,
+/// found by its text through UI Automation, and check the selection holds
+/// just that. Text, not character counts: one UI Automation "character"
+/// can be a whole Thai cluster in some apps (Word), so counted positions
+/// would land on the wrong letters. Any thread but the keyboard hook's.
+pub fn select_in_field(word: &str, nth: usize) -> bool {
+    use windows::core::BSTR;
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationTextPattern, TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
+        UIA_TextPatternId,
+    };
+    let select = || unsafe {
+        let element = uia_here()?.GetFocusedElement().ok()?;
+        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            return None;
+        }
+        let pattern = element
+            .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+            .ok()?;
+        let search = pattern.DocumentRange().ok()?;
+        let needle = BSTR::from(word);
+        for i in 0..=nth {
+            let found = search.FindText(&needle, false, false).ok()?;
+            if i == nth {
+                let mut shown = found.GetText(-1).ok()?.to_string();
+                let same = shown == word;
+                zeroize::Zeroize::zeroize(&mut shown);
+                if !same {
+                    return None;
+                }
+                found.Select().ok()?;
+                return Some(());
+            }
+            search
+                .MoveEndpointByRange(
+                    TextPatternRangeEndpoint_Start,
+                    &found,
+                    TextPatternRangeEndpoint_End,
+                )
+                .ok()?;
+        }
+        None
+    };
+    select().is_some()
+}
+
 /// The focused standard Windows text box (Edit, RichEdit: classic and
 /// Windows 11 Notepad, WordPad, many dialogs), which can be asked and told
 /// things directly with its own messages — Windows copies their text

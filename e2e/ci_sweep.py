@@ -185,6 +185,12 @@ def palette_text_tools(t):
         fs.run(t, "fix this field with a word unticked", "l;ylfu 8iy[", "l;ylfu ครับ",
                then=[listed_then(lambda: tap(fs.SPACE), lambda: time.sleep(0.3),
                                  lambda: tap(ENTER), lambda: time.sleep(1.5))])
+        # Only the wrong word is typed over; the rest of the field (quotes,
+        # numbers, English) is left exactly as it is, never retyped (Word
+        # turned every quote curly and lost text when the whole field was).
+        fs.run(t, "fix this field touches only the wrong word",
+               'see "Unicode" 1,975 l;ylfu ok', 'see "Unicode" 1,975 สวัสดี ok',
+               then=[listed_then(lambda: tap(ENTER), lambda: time.sleep(1.5))])
     finally:
         fs.set_mode("auto")
 
