@@ -1087,6 +1087,8 @@ enum ContextAsk {
     ),
     /// Is text selected in the focused field?
     Selected(std::sync::mpsc::SyncSender<bool>),
+    /// Where the text cursor is, by UI Automation.
+    Caret(std::sync::mpsc::SyncSender<Option<windows::Win32::Foundation::RECT>>),
 }
 static CONTEXT_WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<ContextAsk>> =
     std::sync::OnceLock::new();
@@ -1109,6 +1111,20 @@ pub fn has_selection_within(max: std::time::Duration) -> bool {
 /// cross-process calls itself: asked of a worker, waiting at most `max`
 /// (`None` past that — the caller treats it as "cannot tell"). Code mode
 /// asks this at a word's end, only for a word it would otherwise fix.
+/// The text cursor by UI Automation, asked of the context worker and waited
+/// for at most `max`. UI Automation waits on the app (seconds for a busy
+/// one), and the UI thread runs the keyboard hook: while it waits there,
+/// Windows gives up on the hook and the keys go straight to the app (CI:
+/// `eg` of a search reached Notepad while the list at the cursor looked for
+/// the caret). `None` past `max`, or when the worker is busy.
+pub fn uia_caret_rect_within(max: std::time::Duration) -> Option<windows::Win32::Foundation::RECT> {
+    let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+    context_worker()
+        .try_send(ContextAsk::Caret(reply_tx))
+        .ok()?;
+    reply_rx.recv_timeout(max).ok().flatten()
+}
+
 pub fn text_before_caret_within(
     n: usize,
     max: std::time::Duration,
@@ -1136,6 +1152,9 @@ fn context_worker() -> &'static std::sync::mpsc::SyncSender<ContextAsk> {
                         }
                         ContextAsk::Selected(reply) => {
                             let _ = reply.try_send(uia_selected_text().is_some());
+                        }
+                        ContextAsk::Caret(reply) => {
+                            let _ = reply.try_send(uia_caret_rect());
                         }
                         ContextAsk::Boxes(spans, reply) => {
                             let _ = reply.try_send(boxes_before_caret(&spans));
@@ -1351,7 +1370,7 @@ fn edit_text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
 /// pixels — for apps that draw their own cursor and keep no system caret
 /// (many Chromium/Electron editors). Slow (a cross-process call), so never
 /// called from inside the keyboard hook.
-pub fn uia_caret_rect() -> Option<windows::Win32::Foundation::RECT> {
+fn uia_caret_rect() -> Option<windows::Win32::Foundation::RECT> {
     use windows::Win32::UI::Accessibility::{
         IUIAutomationTextPattern, IUIAutomationTextRange, TextUnit_Character, UIA_TextPatternId,
     };

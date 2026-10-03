@@ -144,6 +144,9 @@ pub fn key(vk: u16, ch: Option<char>) -> bool {
     }
     let fg = unsafe { GetForegroundWindow() }.0 as isize;
     if fg != TARGET.load(Ordering::Acquire) && fg != open {
+        crate::hook::e2e_trace(format!(
+            "caret list: key {vk:#x} passed on, another window in front ({fg:#x})"
+        ));
         return false;
     }
     let printable = ch.is_some_and(|c| !c.is_control());
@@ -237,6 +240,7 @@ fn open() {
     if is_open() {
         return;
     }
+    let started = std::time::Instant::now();
     let target = unsafe { GetForegroundWindow() };
     if target.0.is_null() {
         return;
@@ -300,6 +304,10 @@ fn open() {
         SetTimer(hwnd, TIMER_ANIM, FRAME_MS, None);
     }
     ui::redraw_all(hwnd);
+    crate::hook::e2e_trace(format!(
+        "caret list: opened in {} ms",
+        started.elapsed().as_millis()
+    ));
     crate::hook::trace_note("caret list: open");
     for (vk, ch) in early {
         if !is_open() {
