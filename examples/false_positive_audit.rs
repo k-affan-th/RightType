@@ -17,7 +17,10 @@
 //! - Thai phrases: 200,000 random runs of 2–4 dictionary words, as Thai is
 //!   written (no spaces).
 //! - English words, every one in the bundled dictionary, typed on the English
-//!   layout, alone and with `:`, `?`, `"`, `)` after them.
+//!   layout, alone and with `:`, `?`, `"`, `)` around them, and a closing
+//!   `"` right after them.
+//! - Ghost suggestions (2.4): the same words and the academic sample, typed
+//!   key by key, never bring up an offer.
 //!
 //! With `--check` it is CI's quality gate (RightType 2.0, M0): it exits
 //! non-zero when a dictionary word or phrase typed correctly is changed, when
@@ -173,6 +176,10 @@ fn main() {
             format!("{w}?"),
             format!("\"{w}\""),
             format!("({w})"),
+            // A closing quote right after it (`it"`): on Kedmanee `"` is
+            // the period of Thai abbreviations (ก.ค. is `d"8"`).
+            format!("{w}\""),
+            format!("{w}\"."),
         ] {
             total += 1;
             if let Some(c) = us_layout(&t) {
@@ -400,6 +407,50 @@ fn main() {
     if changed_uk > 0 {
         failures.push(format!(
             "UK: {changed_uk} English words changed (must be 0)"
+        ));
+    }
+
+    // Ghost suggestions (2.4 C4): typed key by key, ordinary words and the
+    // academic sample never bring up an offer. (An offer only shows; the
+    // text changes with Tab alone, but a hint on plain prose is noise.)
+    let ghost_offers = |text: &str| -> Vec<String> {
+        let mut seen = Vec::new();
+        let mut tail = String::new();
+        for c in text.chars() {
+            if c == '\n' || c == '\t' {
+                tail.clear();
+                continue;
+            }
+            tail.push(c);
+            if c == ' ' {
+                tail = " ".into();
+            }
+            while tail.chars().count() > 16 {
+                tail.remove(0);
+            }
+            if let Some(g) = righttype::ghost::offer(&tail) {
+                seen.push(format!("{tail:?} -> {}", g.text));
+            }
+        }
+        seen
+    };
+    let ghost_words: usize = thai_words
+        .iter()
+        .chain(english_words.iter())
+        .map(|w| ghost_offers(&format!("{w} ({w}) {w}, {w}. \"{w}\" {w}: {w}?")).len())
+        .sum();
+    let ghost_prose = ghost_offers(include_str!("data/academic_th_en.txt"));
+    println!(
+        "Ghost suggestions: dictionary words {ghost_words}, academic sample {}",
+        ghost_prose.len()
+    );
+    for g in &ghost_prose {
+        println!("  {g}");
+    }
+    if ghost_words + ghost_prose.len() > 0 {
+        failures.push(format!(
+            "ghost suggestions offered on plain text: {} (must be 0)",
+            ghost_words + ghost_prose.len()
         ));
     }
 

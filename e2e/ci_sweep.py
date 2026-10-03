@@ -185,6 +185,12 @@ def palette_text_tools(t):
         fs.run(t, "fix this field with a word unticked", "l;ylfu 8iy[", "l;ylfu ครับ",
                then=[listed_then(lambda: tap(fs.SPACE), lambda: time.sleep(0.3),
                                  lambda: tap(ENTER), lambda: time.sleep(1.5))])
+        # Only the wrong word is typed over; the rest of the field (quotes,
+        # numbers, English) is left exactly as it is, never retyped (Word
+        # turned every quote curly and lost text when the whole field was).
+        fs.run(t, "fix this field touches only the wrong word",
+               'see "Unicode" 1,975 l;ylfu ok', 'see "Unicode" 1,975 สวัสดี ok',
+               then=[listed_then(lambda: tap(ENTER), lambda: time.sleep(1.5))])
     finally:
         fs.set_mode("auto")
 
@@ -432,6 +438,190 @@ def by_app(t):
              "yes")
 
 
+def caret_list(t):
+    """2.4 A: Shift tapped twice opens the list at the cursor; what is
+    searched never reaches the text; Enter types the character picked;
+    capitals (Shift with a letter) never open it; Esc closes it."""
+    def shift_twice():
+        for _ in range(2):
+            fs.key(SHIFT)
+            time.sleep(0.05)
+            fs.key(SHIFT, True)
+            time.sleep(0.12)
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_EN)
+    time.sleep(0.3)
+    fs.check(t.name, "Shift twice opens the list at the cursor",
+             traced(shift_twice, "caret list: open"), "yes")
+    time.sleep(0.4)
+    type_keys("degree")
+    time.sleep(0.5)
+    tap(ENTER)
+    time.sleep(1.2)
+    fs.check(t.name, "the list types the character; the search stays out",
+             t.read().strip(), "°")
+    t.clear()
+    t.focus()
+    fs.check(t.name, "capitals do not open the list",
+             traced(lambda: type_keys("Hello World "), "caret list: open"), "no")
+    t.clear()
+    t.focus()
+    shift_twice()
+    time.sleep(0.4)
+    fs.check(t.name, "Esc closes the list",
+             traced(lambda: (tap(0x1B), time.sleep(0.3)), "caret list: closed"), "yes")
+    type_keys("ok")
+    time.sleep(0.5)
+    fs.check(t.name, "typing goes to the app after the list", t.read().strip(), "ok")
+
+
+def caret_commands(t):
+    """2.4 E: the app's commands are in the list at the cursor; Enter
+    presses the shortcut (Notepad's Replace, Ctrl+H); nothing is typed."""
+    from pywinauto import Desktop
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_EN)
+    time.sleep(0.3)
+    result = "no list"
+    try:
+        for _ in range(2):
+            fs.key(SHIFT)
+            time.sleep(0.05)
+            fs.key(SHIFT, True)
+            time.sleep(0.12)
+        time.sleep(0.4)
+        type_keys("replace")
+        time.sleep(0.5)
+        ran = traced(lambda: (tap(ENTER), time.sleep(1.2)), "caret list: command run")
+        dialogs = Desktop(backend="uia").windows(title_re="Replace|แทนที่") or [
+            d for d in t.win.descendants(control_type="Window")
+            if d.window_text() in ("Replace", "แทนที่")]
+        result = "opened" if ran == "yes" and dialogs else f"ran={ran} dialogs={len(dialogs)}"
+        for d in dialogs:
+            d.close()
+        if not dialogs:
+            tap(0x1B)
+            time.sleep(0.3)
+    except Exception as e:
+        result = f"failed: {e}"
+    fs.check(t.name, "a command from the list at the cursor runs", result, "opened")
+    t.focus()
+    fs.check(t.name, "the command's search is not typed", t.read().strip(), "")
+
+
+def language_tags(t):
+    """Evidence for Word's Thai line breaking (printed, not judged): which
+    language does a rich text box give each character of a word RightType
+    converted? Rich text tags typed text with the keyboard's language; Thai
+    tagged English is not broken into lines as Thai. UI Automation's
+    culture attribute (40034) per character, as Windows LCIDs (1054 Thai,
+    1033 English)."""
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_EN)
+    time.sleep(0.3)
+    type_keys("l;ylfu8iy[ ")
+    time.sleep(1.2)
+    try:
+        print(f"  language tags in {t.name}, converted by RightType: {richedit_lcids(t)}",
+              flush=True)
+    except Exception as e:
+        print(f"  language tags in {t.name}: could not read ({e})", flush=True)
+    # For comparison: the same word typed with the Thai keyboard on.
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_TH)
+    time.sleep(0.3)
+    type_keys("l;ylfu8iy[ ")
+    time.sleep(1.2)
+    try:
+        print(f"  language tags in {t.name}, typed on the Thai keyboard: {richedit_lcids(t)}",
+              flush=True)
+    except Exception as e:
+        print(f"  language tags in {t.name}: could not read ({e})", flush=True)
+    t.layout(fs.HKL_EN)
+
+
+def richedit_lcids(t):
+    """(character, LCID) for each character of the RichEdit box in `t`, read
+    with EM_GETCHARFORMAT on a one-character selection (the structure lives
+    in Notepad's memory, as the message wants)."""
+    import ctypes.wintypes as wt
+    k32 = ctypes.windll.kernel32
+    k32.VirtualAllocEx.restype = ctypes.c_void_p
+    k32.VirtualAllocEx.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.c_size_t, wt.DWORD, wt.DWORD]
+    k32.ReadProcessMemory.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]
+    k32.WriteProcessMemory.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]
+    k32.VirtualFreeEx.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.c_size_t, wt.DWORD]
+
+    class CHARFORMAT2W(ctypes.Structure):
+        _fields_ = [("cbSize", wt.UINT), ("dwMask", wt.DWORD), ("dwEffects", wt.DWORD),
+                    ("yHeight", wt.LONG), ("yOffset", wt.LONG), ("crTextColor", wt.DWORD),
+                    ("bCharSet", ctypes.c_ubyte), ("bPitchAndFamily", ctypes.c_ubyte),
+                    ("szFaceName", ctypes.c_wchar * 32), ("wWeight", wt.WORD),
+                    ("sSpacing", ctypes.c_short), ("crBackColor", wt.DWORD), ("lcid", wt.DWORD),
+                    ("dwCookie", wt.DWORD), ("sStyle", ctypes.c_short), ("wKerning", wt.WORD),
+                    ("bUnderlineType", ctypes.c_ubyte), ("bAnimation", ctypes.c_ubyte),
+                    ("bRevAuthor", ctypes.c_ubyte), ("bUnderlineColor", ctypes.c_ubyte)]
+
+    found = []
+    cls = ctypes.create_unicode_buffer(64)
+
+    @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+    def each(h, _):
+        user32.GetClassNameW(h, cls, 64)
+        if cls.value.startswith("RichEdit"):
+            found.append(h)
+        return True
+
+    user32.EnumChildWindows(t.hwnd, each, 0)
+    if not found:
+        return "no RichEdit window"
+    box = found[0]
+    pid = wt.DWORD()
+    user32.GetWindowThreadProcessId(box, ctypes.byref(pid))
+    proc = k32.OpenProcess(0x0008 | 0x0010 | 0x0020, False, pid.value)
+    remote = k32.VirtualAllocEx(proc, None, ctypes.sizeof(CHARFORMAT2W), 0x3000, 0x04)
+    text = t.read()
+    out = []
+    try:
+        for i, ch in enumerate(text):
+            user32.SendMessageW(box, 0x00B1, i, i + 1)  # EM_SETSEL
+            cf = CHARFORMAT2W(cbSize=ctypes.sizeof(CHARFORMAT2W), dwMask=0x02000000)  # CFM_LCID
+            k32.WriteProcessMemory(proc, remote, ctypes.byref(cf), ctypes.sizeof(cf), None)
+            user32.SendMessageW(box, 0x043A, 1, ctypes.c_void_p(remote))  # EM_GETCHARFORMAT, SCF_SELECTION
+            k32.ReadProcessMemory(proc, remote, ctypes.byref(cf), ctypes.sizeof(cf), None)
+            out.append((ch, cf.lcid))
+    finally:
+        k32.VirtualFreeEx(proc, remote, 0, 0x8000)
+        k32.CloseHandle(proc)
+        user32.SendMessageW(box, 0x00B1, len(text), len(text))
+    return out
+
+
+def ghosts(t):
+    """2.4 C: `->` offers →, Tab takes it; without Tab the text stays as
+    typed."""
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_EN)
+    time.sleep(0.3)
+    fs.check(t.name, "a symbol is offered for ->",
+             traced(lambda: (type_keys("a ->"), time.sleep(0.3)), "ghost offered: U+2192"), "yes")
+    tap(0x09)
+    time.sleep(0.5)
+    type_keys(" b")
+    time.sleep(0.8)
+    fs.check(t.name, "Tab puts the symbol in", t.read().strip(), "a \u2192 b")
+    t.clear()
+    t.focus()
+    type_keys("x != y")
+    time.sleep(0.8)
+    fs.check(t.name, "without Tab the text stays as typed", t.read().strip(), "x != y")
+
+
 def keys_on_screen(t):
     """2.3 C8: shortcuts shown on screen when turned on; letters never."""
     write_sweep_config(keys="show_keys = true\n")
@@ -486,7 +676,7 @@ def devices(t):
 
 def hold_for_accents(t):
     """2.3: with the option on, holding e and pressing 1 types é in place of
-    the e."""
+    the e; 2.4: holding 2 offers ² first."""
     write_sweep_config(keys="hold_for_accents = true\n")
     try:
         CURRENT[0] = fs.start_rt()
@@ -502,6 +692,20 @@ def hold_for_accents(t):
         tap(ord("1"))
         time.sleep(0.6)
         fs.check(t.name, "holding e then 1 types é", t.read().strip(), "é")
+        # Superscripts as on a phone keyboard: x, then 2 held, then 1.
+        t.clear()
+        t.focus()
+        time.sleep(0.3)
+        type_keys("x")
+        fs.key(ord("2"))
+        for _ in range(8):
+            time.sleep(0.05)
+            fs.key(ord("2"))
+        fs.key(ord("2"), True)
+        time.sleep(0.4)
+        tap(ord("1"))
+        time.sleep(0.6)
+        fs.check(t.name, "holding 2 then 1 types a superscript", t.read().strip(), "x²")
     finally:
         write_sweep_config()
         CURRENT[0] = fs.start_rt()
@@ -1490,6 +1694,8 @@ def sweep(t):
     run(t, "English computer word stays English (hyphen in prose)", "relogin ",
         prose(t, "re-login"))
     run(t, "English word with its own spelling stays", "reinstall ", "reinstall")
+    # Thai abbreviations: Kedmanee's period is the `"` key (ก.ค. is d"8").
+    run(t, "Thai abbreviation typed on the English layout", 'd"8" ', "ก.ค.")
     # A wrong correction is undone with one Shift+Backspace, wherever it
     # happened: in the middle of a word, after a long word was handed to the
     # Thai layout, or at the space.
@@ -1517,12 +1723,17 @@ def sweep(t):
         thai_text_tools(t)
         thai_word_delete(t)
         palette_text_tools(t)
+    if t.name == "notepad11":
+        language_tags(t)
     if t.name == "notepad":
         keyboard_map(t)
         keyboard_lock(t)
         keyboard_health(t)
         key_bounce(t)
         keys_on_screen(t)
+        caret_list(t)
+        caret_commands(t)
+        ghosts(t)
         by_app(t)
         devices(t)
         hold_for_accents(t)

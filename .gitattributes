@@ -6,3 +6,4 @@ packaging/windows/Thai.isl -whitespace
 
 # cmd.exe misreads some batch files with LF line endings.
 *.bat text eol=crlf
+assets/chars/names.bin binary

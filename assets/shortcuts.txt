@@ -84,6 +84,33 @@ Ctrl+Shift+C | Copy formatting | คัดลอกรูปแบบ
 Ctrl+Shift+V | Paste formatting | วางรูปแบบ
 Shift+F3 | Change case | เปลี่ยนตัวพิมพ์ใหญ่ / เล็ก
 F7 | Spelling | ตรวจการสะกด
+Ctrl+Alt+1 | Heading 1 | หัวเรื่อง 1
+Ctrl+Alt+2 | Heading 2 | หัวเรื่อง 2
+Ctrl+Alt+3 | Heading 3 | หัวเรื่อง 3
+Ctrl+Shift+N | Normal style | สไตล์ปกติ
+Ctrl+Shift+L | Bulleted list | รายการสัญลักษณ์แสดงหัวข้อย่อย
+Ctrl+Shift+S | Apply a style | ใช้สไตล์
+Alt+= | Insert an equation | แทรกสมการ
+Ctrl+Shift+= | Superscript | ตัวยก
+Ctrl+= | Subscript | ตัวห้อย
+Ctrl+Space | Clear character formatting | ล้างรูปแบบตัวอักษร
+Ctrl+Q | Clear paragraph formatting | ล้างรูปแบบย่อหน้า
+Ctrl+1 | Single line spacing | ระยะบรรทัดเดี่ยว
+Ctrl+5 | 1.5 line spacing | ระยะบรรทัด 1.5
+Ctrl+2 | Double line spacing | ระยะบรรทัดคู่
+Ctrl+] | Bigger font | ขยายตัวอักษร
+Ctrl+[ | Smaller font | ย่อตัวอักษร
+Ctrl+M | Indent | เยื้องเข้า
+Ctrl+Shift+M | Outdent | เยื้องออก
+Ctrl+Shift+A | All capitals | ตัวพิมพ์ใหญ่ทั้งหมด
+Ctrl+Shift+K | Small capitals | ตัวพิมพ์ใหญ่ขนาดเล็ก
+Ctrl+D | Font | แบบอักษร
+Ctrl+Shift+8 | Show formatting marks | แสดงเครื่องหมายการจัดรูปแบบ
+Ctrl+Alt+M | New comment | ข้อคิดเห็นใหม่
+Ctrl+Shift+E | Track changes | ติดตามการเปลี่ยนแปลง
+Ctrl+Alt+F | Footnote | เชิงอรรถ
+Alt+Shift+D | Insert the date | แทรกวันที่
+Alt+Shift+T | Insert the time | แทรกเวลา
 
 [excel.exe]
 F2 | Edit the cell | แก้ไขเซลล์
@@ -102,6 +129,7 @@ Ctrl+1 | Format the cells | จัดรูปแบบเซลล์
 Ctrl+PageDown | Next sheet | ชีตถัดไป
 
 [powerpnt.exe]
+Alt+= | Insert an equation | แทรกสมการ
 F5 | Start the show | เริ่มนำเสนอ
 Shift+F5 | Start from this slide | เริ่มจากสไลด์นี้
 Ctrl+M | New slide | สไลด์ใหม่
@@ -151,3 +179,11 @@ Ctrl+H | Replace | แทนที่
 Ctrl+G | Go to line | ไปที่บรรทัด
 F5 | Date and time | ใส่วันที่และเวลา
 Ctrl+Plus | Zoom in | ขยาย
+
+[onenote.exe]
+Alt+= | Insert an equation | แทรกสมการ
+Ctrl+Shift+= | Superscript | ตัวยก
+Ctrl+= | Subscript | ตัวห้อย
+Ctrl+1 | To Do tag | แท็กสิ่งที่ต้องทำ
+Ctrl+Alt+1 | Heading 1 | หัวเรื่อง 1
+Ctrl+Alt+2 | Heading 2 | หัวเรื่อง 2

@@ -74,11 +74,14 @@ pub fn caret_rect() -> Option<RECT> {
     }
 }
 
-/// The text cursor from the system caret or, failing that, UI Automation.
-/// UI thread, outside the keyboard hook.
+/// The text cursor from the system caret or, failing that, UI Automation
+/// (asked off the UI thread, waited for at most [`UIA_WAIT`]: the keyboard
+/// hook runs on the UI thread, and a key it does not answer in time goes to
+/// the app unseen). UI thread, outside the keyboard hook.
 pub fn find_caret() -> Option<RECT> {
     let started = std::time::Instant::now();
-    let found = caret_rect().or_else(crate::focus::uia_caret_rect);
+    let found = caret_rect()
+        .or_else(|| crate::focus::uia_caret_rect_within(crate::hook::budget_left(UIA_WAIT)));
     crate::hook::e2e_trace(format!(
         "caret lookup in {} ms (found={})",
         started.elapsed().as_millis(),
@@ -86,6 +89,10 @@ pub fn find_caret() -> Option<RECT> {
     ));
     found
 }
+
+/// How long [`find_caret`] waits for UI Automation: well inside the time
+/// Windows gives a low-level keyboard hook.
+const UIA_WAIT: std::time::Duration = std::time::Duration::from_millis(80);
 
 /// RightType just switched the layout to `layout`: flash its tag at the caret
 /// (found after the hook returns; no caret, no tag).

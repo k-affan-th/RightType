@@ -87,14 +87,16 @@ pub fn chars_on_screen(expected: &str, before_caret: &str) -> Option<usize> {
         if j > 0 && e[i - 1] == b[j - 1] {
             i -= 1;
             j -= 1;
-        } else if droppable(e[i - 1]) && i > 1 {
-            // Never the first character: something must have landed.
+        } else if droppable(e[i - 1]) {
+            // The first ones too: `Unicode` on the Thai layout is ๊ืรแนกำ,
+            // and Word keeps รแนกำ (marks with no letter before them).
             i -= 1;
         } else {
             return None;
         }
     }
-    Some(b.len() - j)
+    // Something must have landed (of a word there is to find).
+    (e.is_empty() || j < b.len()).then_some(b.len() - j)
 }
 
 #[cfg(test)]
@@ -104,6 +106,15 @@ mod tests {
     fn d(rendered: &str, target: &str) -> (usize, String) {
         let delta = delta(rendered, target);
         (delta.backspaces, delta.insert.clone())
+    }
+
+    #[test]
+    fn marks_dropped_at_the_start_of_a_word() {
+        // Word's sequence checking: `Unicode` on the Thai layout.
+        assert_eq!(chars_on_screen("๊ืรแนกำ", "ใช้ รแนกำ"), Some(5));
+        assert_eq!(chars_on_screen("ะ้ำพำ", "x ะพำ"), Some(3));
+        assert_eq!(chars_on_screen("๊ื", "ใช้ "), None, "nothing landed");
+        assert_eq!(chars_on_screen("สวัสดี", "สวัสดี"), Some(6));
     }
 
     #[test]

@@ -305,14 +305,13 @@ unsafe fn apply_review(keep: Vec<bool>) {
         return;
     }
     let generation = focus::generation();
-    if !send_chord(0x41) {
-        return;
-    }
-    thread::sleep(Duration::from_millis(120));
-    if !same_context(hwnd, generation) {
-        return;
-    }
-    let Some(text) = focus::selected_text() else {
+    // A standard text box is read itself: its positions are what it is told.
+    let text_box = focus::TextBox::focused().ok();
+    let text = match &text_box {
+        Some(tb) => tb.text(),
+        None => focus::field_text(MAX_FIELD_CHARS),
+    };
+    let Some(text) = text else {
         overlay::show(tr(T::ErrSelectionNotShared));
         return;
     };
@@ -322,14 +321,67 @@ unsafe fn apply_review(keep: Vec<bool>) {
     if now != pending.pairs {
         crate::hook::trace_note("fix field: the text changed since it was checked");
         overlay::show(tr(T::ToastFieldChanged));
-    } else if same_context(hwnd, generation) {
-        let mut out = repaired.with_only(&keep);
-        type_over_selection(hwnd, generation, &out);
-        out.zeroize();
-        overlay::show(&righttype::i18n::trf(
-            T::ToastFixedWords,
-            &[("n", &n.to_string())],
-        ));
+    } else {
+        // Only the words picked, each found by its text and typed over on
+        // its own, from the last one back so the places of the others stay
+        // put. Never the whole field: retyping it all loses an editor's
+        // formatting and lets its AutoFormat rewrite every quote (Word).
+        let places = repaired.places_in(&text);
+        let starts = repaired.starts_in(&text);
+        let mut fixed = 0usize;
+        for (i, change) in repaired.changes.iter().enumerate().rev() {
+            if !keep.get(i).copied().unwrap_or(false) {
+                continue;
+            }
+            if !same_context(hwnd, generation) {
+                break;
+            }
+            let done = match &text_box {
+                // A standard text box is told to replace the word itself,
+                // where it is (UTF-16 positions), once it still holds it.
+                Some(tb) => {
+                    let from: usize = text.chars().take(starts[i]).map(char::len_utf16).sum();
+                    let to = from + change.original.encode_utf16().count();
+                    tb.replace_range(from, to, &change.original, &change.fixed)
+                }
+                // Elsewhere, found by its text and selected; typed over only
+                // once the app says the selection is that word (a browser
+                // moves it a moment later: CI typed one word at the end).
+                // A browser rebuilds what it shares a moment after an edit:
+                // the next word, found and selected too soon, was not (CI:
+                // the selection stayed empty), so it is asked again.
+                None => {
+                    let selected = (0..3).any(|attempt| {
+                        if attempt > 0 {
+                            thread::sleep(Duration::from_millis(150));
+                        }
+                        focus::select_in_field(&change.original, places[i])
+                            && selection_is(&change.original)
+                    });
+                    selected
+                        && same_context(hwnd, generation)
+                        && crate::inject::apply(0, &change.fixed, None)
+                }
+            };
+            if !done {
+                crate::hook::trace_note("fix field: a word could not be found to fix");
+                break;
+            }
+            fixed += 1;
+        }
+        if fixed > 0 {
+            crate::stats::record_manual();
+            crate::hook::trace_note("fix field: words typed over one by one");
+            overlay::show(&righttype::i18n::trf(
+                T::ToastFixedWords,
+                &[("n", &fixed.to_string())],
+            ));
+        } else {
+            // The app cannot find its own text: the Fix text window, where
+            // nothing is typed into the app.
+            crate::tray::on_ui(crate::tray::UI_FIX_WINDOW);
+            overlay::show(tr(T::ToastOpenedFixWindow));
+        }
     }
     for (a, b) in &mut now {
         a.zeroize();
@@ -339,6 +391,21 @@ unsafe fn apply_review(keep: Vec<bool>) {
     for c in &mut repaired.changes {
         c.original.zeroize();
         c.fixed.zeroize();
+    }
+}
+
+/// Whether the app's selection is `word`, asked for a short while (an app
+/// may move it a moment after being told to).
+fn selection_is(word: &str) -> bool {
+    let until = Instant::now() + Duration::from_millis(400);
+    loop {
+        if focus::selected_text().is_some_and(|s| s.as_str() == word) {
+            return true;
+        }
+        if Instant::now() >= until {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(25));
     }
 }
 

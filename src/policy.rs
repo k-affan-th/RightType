@@ -169,6 +169,29 @@ pub fn detect_token(
             if !has_latin || has_thai || english::is_compound(token.trim()) {
                 return None;
             }
+            if let Some(d) = us_layout_abbreviation(token, th) {
+                return Some(d);
+            }
+            // `!` `?` `)` after a Thai word are meant as typed (no Thai word
+            // ends with their Kedmanee letters): read the word without them
+            // first, or the whole reading takes the mark as Kedmanee's
+            // (`-v[86I,kd8jt!` gave ขอบคุณมากค่ะ+). Not `:`, which is ซ.
+            // Only where the Thai layout in use gives that key no letter a
+            // word could end with (Pattachote gives some of them letters).
+            let trimmed = token.trim_end();
+            let mark_is_no_letter = trimmed
+                .chars()
+                .next_back()
+                .filter(|c| ['!', '?', ')'].contains(c))
+                .and_then(|c| en_to_th(&c.to_string()).chars().next())
+                .is_some_and(|t| !('\u{0E01}'..='\u{0E4E}').contains(&t) || t == 'ฦ');
+            if mark_is_no_letter {
+                if let Some(d) = us_layout_marks_kept(trimmed, en, th)
+                    .filter(|d| !only_short_thai_words(&d.corrected, th))
+                {
+                    return Some(d);
+                }
+            }
             detect::detect(token, en, th)
                 .or_else(|| us_layout_thai_with_punctuation(token, en, th))
                 .filter(|d| !only_short_thai_words(&d.corrected, th))
@@ -182,7 +205,9 @@ pub fn detect_token(
                 return None;
             }
             // Thai text on screen is Thai, whatever its keys spell.
-            let is_thai = th.contains(token) || segment::is_fully_known(token, th);
+            let is_thai = th.contains(token)
+                || segment::is_fully_known(token, th)
+                || crate::abbrev::reads_as_abbreviation(token, th);
             (!is_thai && fixes_addresses())
                 .then(|| thai_layout_address(token).or_else(|| thai_layout_number(token, th)))
                 .flatten()
@@ -192,6 +217,23 @@ pub fn detect_token(
                 .or_else(|| thai_layout_trailing_mark(token, th))
         }
     }
+}
+
+/// A Thai abbreviation typed on the English layout: Kedmanee's period is the
+/// `"` key, so ก.ค. comes in as `d"8"` and ดร.สมชาย as `fi"l,=kp`. Only a
+/// reading made of known abbreviations ([`crate::abbrev`]) counts, so an
+/// English word before a closing quote (`it"`, ระ.) stays as typed.
+fn us_layout_abbreviation(token: &str, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    if !token.contains('"') || token.starts_with('"') {
+        return None;
+    }
+    let reading = crate::layout::en_to_th(token);
+    crate::abbrev::reads_as_abbreviation(&reading, th).then_some(Detection {
+        corrected: reading,
+        confidence: Confidence::High,
+        evidence: Evidence::ExactDictionary,
+    })
 }
 
 /// A Thai word typed on the English layout whose keys give no letters at all
@@ -261,6 +303,12 @@ fn us_layout_thai_with_punctuation(
             evidence: Evidence::FullSegmentation,
         });
     }
+    us_layout_marks_kept(token, en, th)
+}
+
+/// The Thai reading of `token` without the ASCII marks at its edges
+/// ([`LEADING_ASCII`], [`TRAILING_ASCII`]), which stay as typed.
+fn us_layout_marks_kept(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
     let core = token.trim_start_matches(LEADING_ASCII);
     let lead = &token[..token.len() - core.len()];
     let inner = core.trim_end_matches(TRAILING_ASCII);

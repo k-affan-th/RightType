@@ -1,0 +1,128 @@
+# Thai abbreviations (อักษรย่อ), each ending with its period, for words
+# typed on the English layout where Kedmanee's period is the `"` key:
+# ก.ค. comes in as d"8". One per line; `!` marks a title or a place word that
+# a name follows without a space (ดร.สมชาย, ถ.สุขุมวิท).
+# Written for RightType from common usage; not copied from a list.
+
+# Months.
+ม.ค.
+ก.พ.
+มี.ค.
+เม.ย.
+พ.ค.
+มิ.ย.
+ก.ค.
+ส.ค.
+ก.ย.
+ต.ค.
+พ.ย.
+ธ.ค.
+
+# Eras and time.
+พ.ศ.
+ค.ศ.
+จ.ศ.
+ร.ศ.
+น.
+ชม.
+
+# Units.
+กก.
+กม.
+ซม.
+มม.
+มล.
+ตร.ม.
+ตร.กม.
+ลบ.ม.
+สต.
+
+# Titles and ranks (a name follows).
+ดร.!
+นพ.!
+พญ.!
+ทพ.!
+ทพญ.!
+ภก.!
+ภญ.!
+ศ.!
+รศ.!
+ผศ.!
+อ.!
+น.ส.!
+ด.ช.!
+ด.ญ.!
+ม.ร.ว.!
+ม.ล.!
+ม.จ.!
+พล.อ.!
+พล.ท.!
+พล.ต.!
+พ.อ.!
+พ.ท.!
+พ.ต.!
+ร.อ.!
+ร.ท.!
+ร.ต.!
+พ.ต.อ.!
+พ.ต.ท.!
+พ.ต.ต.!
+ร.ต.อ.!
+ร.ต.ท.!
+ร.ต.ต.!
+จ.ส.อ.!
+ส.ต.อ.!
+
+# Places in an address (a name follows).
+จ.!
+ต.!
+ถ.!
+ซ.!
+ม.!
+รพ.!
+ร.พ.!
+รร.!
+ร.ร.!
+ป.!
+
+# Bodies and offices.
+ส.ส.
+ส.ว.
+ส.ก.
+ส.จ.
+ครม.
+กทม.
+รมว.
+รมต.
+ผวจ.
+ผอ.
+ผบ.
+ผกก.
+อบต.
+อบจ.
+สพฐ.
+ศธ.
+สธ.
+ตร.
+ทบ.
+ทร.
+ทอ.
+กสทช.
+ป.ป.ช.
+ป.ป.ส.
+ก.ล.ต.
+ธปท.
+นศ.
+นร.
+บก.
+
+# Laws and others.
+พ.ร.บ.
+พ.ร.ก.
+พ.ร.ฎ.
+รธน.
+ค.ร.น.
+ห.ร.ม.
+ป.ล.
+ส.ค.ส.
+นสพ.

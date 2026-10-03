@@ -19,6 +19,8 @@ mod by_app;
 #[cfg(feature = "winos")]
 mod caret;
 #[cfg(feature = "winos")]
+mod caretlist;
+#[cfg(feature = "winos")]
 mod clean;
 #[cfg(feature = "winos")]
 mod clipboard;

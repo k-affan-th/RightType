@@ -479,6 +479,7 @@ pub fn run() {
             "keytest" => crate::clean::request_open(crate::clean::Mode::Test),
             "sheet" => crate::sheet::request_open(),
             "practice" => crate::practice::request_open(),
+            "practice-game" => crate::practice::open_game_demo(),
             "stats" => stats::open(),
             "palette" => crate::palette::request_open(),
             "fixer" => crate::fixer::open_demo(
@@ -509,6 +510,22 @@ pub fn run() {
                 }
                 crate::by_app::open();
             }
+            "caret-list" => crate::caretlist::open_demo("arrow"),
+            "caret-list-th" => crate::caretlist::open_demo("ลูกศร"),
+            "caret-latex" => crate::caretlist::open_demo(r"\sum_{i=1}^{n} x_i^2 \leq \frac{1}{2}"),
+            "caret-latex-bad" => crate::caretlist::open_demo(r"\frac{\frac{1}{2}}{3}"),
+            "caret-commands" => crate::caretlist::open_demo("window"),
+            "caret-commands-armed" => crate::caretlist::open_demo_armed("close"),
+            "caret-latex-cmd" => crate::caretlist::open_demo(r"\al"),
+            "ghost" => crate::overlay::offer_at(
+                &hook::ghost_hint("!=", "≠"),
+                crate::overlay::Anchor::Near(windows::Win32::Foundation::RECT {
+                    left: 330,
+                    top: 205,
+                    right: 331,
+                    bottom: 225,
+                }),
+            ),
             "keys" => {
                 crate::onscreen::set_enabled(true);
                 for k in ["Ctrl+C", "Ctrl+V", "Ctrl+V", "Alt+Tab"] {
