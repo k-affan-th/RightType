@@ -519,19 +519,80 @@ def language_tags(t):
     type_keys("l;ylfu8iy[ ")
     time.sleep(1.2)
     try:
-        box = next(d for d in t.win.descendants()
-                   if d.element_info.class_name == "RichEditD2DPT")
-        tp = box.iface_text
-        r = tp.DocumentRange.Clone()
-        r.ExpandToEnclosingUnit(0)  # TextUnit_Character
-        tags = []
-        for _ in range(len(t.read())):
-            tags.append((r.GetText(-1), r.GetAttributeValue(40034)))
-            if r.Move(0, 1) == 0:
-                break
-        print(f"  language tags in {t.name}: {tags}", flush=True)
+        print(f"  language tags in {t.name}, converted by RightType: {richedit_lcids(t)}",
+              flush=True)
     except Exception as e:
         print(f"  language tags in {t.name}: could not read ({e})", flush=True)
+    # For comparison: the same word typed with the Thai keyboard on.
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_TH)
+    time.sleep(0.3)
+    type_keys("l;ylfu8iy[ ")
+    time.sleep(1.2)
+    try:
+        print(f"  language tags in {t.name}, typed on the Thai keyboard: {richedit_lcids(t)}",
+              flush=True)
+    except Exception as e:
+        print(f"  language tags in {t.name}: could not read ({e})", flush=True)
+    t.layout(fs.HKL_EN)
+
+
+def richedit_lcids(t):
+    """(character, LCID) for each character of the RichEdit box in `t`, read
+    with EM_GETCHARFORMAT on a one-character selection (the structure lives
+    in Notepad's memory, as the message wants)."""
+    import ctypes.wintypes as wt
+    k32 = ctypes.windll.kernel32
+    k32.VirtualAllocEx.restype = ctypes.c_void_p
+    k32.VirtualAllocEx.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.c_size_t, wt.DWORD, wt.DWORD]
+    k32.ReadProcessMemory.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]
+    k32.WriteProcessMemory.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]
+    k32.VirtualFreeEx.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.c_size_t, wt.DWORD]
+
+    class CHARFORMAT2W(ctypes.Structure):
+        _fields_ = [("cbSize", wt.UINT), ("dwMask", wt.DWORD), ("dwEffects", wt.DWORD),
+                    ("yHeight", wt.LONG), ("yOffset", wt.LONG), ("crTextColor", wt.DWORD),
+                    ("bCharSet", ctypes.c_ubyte), ("bPitchAndFamily", ctypes.c_ubyte),
+                    ("szFaceName", ctypes.c_wchar * 32), ("wWeight", wt.WORD),
+                    ("sSpacing", ctypes.c_short), ("crBackColor", wt.DWORD), ("lcid", wt.DWORD),
+                    ("dwCookie", wt.DWORD), ("sStyle", ctypes.c_short), ("wKerning", wt.WORD),
+                    ("bUnderlineType", ctypes.c_ubyte), ("bAnimation", ctypes.c_ubyte),
+                    ("bRevAuthor", ctypes.c_ubyte), ("bUnderlineColor", ctypes.c_ubyte)]
+
+    found = []
+    cls = ctypes.create_unicode_buffer(64)
+
+    @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+    def each(h, _):
+        user32.GetClassNameW(h, cls, 64)
+        if cls.value.startswith("RichEdit"):
+            found.append(h)
+        return True
+
+    user32.EnumChildWindows(t.hwnd, each, 0)
+    if not found:
+        return "no RichEdit window"
+    box = found[0]
+    pid = wt.DWORD()
+    user32.GetWindowThreadProcessId(box, ctypes.byref(pid))
+    proc = k32.OpenProcess(0x0008 | 0x0010 | 0x0020, False, pid.value)
+    remote = k32.VirtualAllocEx(proc, None, ctypes.sizeof(CHARFORMAT2W), 0x3000, 0x04)
+    text = t.read()
+    out = []
+    try:
+        for i, ch in enumerate(text):
+            user32.SendMessageW(box, 0x00B1, i, i + 1)  # EM_SETSEL
+            cf = CHARFORMAT2W(cbSize=ctypes.sizeof(CHARFORMAT2W), dwMask=0x02000000)  # CFM_LCID
+            k32.WriteProcessMemory(proc, remote, ctypes.byref(cf), ctypes.sizeof(cf), None)
+            user32.SendMessageW(box, 0x043A, 1, ctypes.c_void_p(remote))  # EM_GETCHARFORMAT, SCF_SELECTION
+            k32.ReadProcessMemory(proc, remote, ctypes.byref(cf), ctypes.sizeof(cf), None)
+            out.append((ch, cf.lcid))
+    finally:
+        k32.VirtualFreeEx(proc, remote, 0, 0x8000)
+        k32.CloseHandle(proc)
+        user32.SendMessageW(box, 0x00B1, len(text), len(text))
+    return out
 
 
 def ghosts(t):
