@@ -1118,6 +1118,7 @@ pub fn open_review() {
             close(&existing, false);
         }
         open_with(review);
+        crate::hook::trace_note("palette: words to fix listed");
     }
 }
 

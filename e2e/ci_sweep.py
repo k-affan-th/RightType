@@ -168,9 +168,23 @@ def palette_text_tools(t):
         fs.run(t, "fix this field after checking", "l;ylfu 8iy[", "สวัสดี ครับ",
                then=[palette_search("fix this", settle=1.5), lambda: tap(ENTER),
                      lambda: time.sleep(1.5)])
+        # Space only once the words are listed, as the typist would see them
+        # first (reading the field can take seconds: CI once took 3.6 s).
+        def listed_then(*steps):
+            def go():
+                start = fs.log_size()
+                palette_search("fix this", settle=0.3)()
+                deadline = time.time() + 8
+                while time.time() < deadline and \
+                        "words to fix listed" not in fs.log_since(start):
+                    time.sleep(0.2)
+                time.sleep(0.4)
+                for step in steps:
+                    step()
+            return go
         fs.run(t, "fix this field with a word unticked", "l;ylfu 8iy[", "l;ylfu ครับ",
-               then=[palette_search("fix this", settle=1.5), lambda: tap(fs.SPACE),
-                     lambda: time.sleep(0.3), lambda: tap(ENTER), lambda: time.sleep(1.5)])
+               then=[listed_then(lambda: tap(fs.SPACE), lambda: time.sleep(0.3),
+                                 lambda: tap(ENTER), lambda: time.sleep(1.5))])
     finally:
         fs.set_mode("auto")
 
