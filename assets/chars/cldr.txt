@@ -1,0 +1,1975 @@
+!	เครื่องหมายอัศเจรีย์|การอุทาน|ปัง	exclamation mark|bang|exclamation|mark|point
+#	เครื่องหมายแฮช|เครื่องหมายสี่เหลี่ยม|ตัวเลข|แฮช|แฮชแท็ก	hash sign|hash|hashtag|lb|number|pound|sign
+$	ดอลลาร์|เงิน|ดอลลาร์สหรัฐ|เปโซ	dollar|money|peso|USD
+%	เปอร์เซ็นต์	percent|cent|per|per-cent
+&	เครื่องหมายและ|และ|แอมเพอร์แซนด์	ampersand|and|et
+>	มากกว่า|แท็ก|แท็กปิด	greater-than|close|greater|tag|than
+<	น้อยกว่า|แท็ก|แท็กเปิด	less-than|less|open|tag|than
+'	อัญประกาศเดี่ยวแบบพิมพ์ดีด|เครื่องหมายคำพูดเดี่ยว|อัญประกาศ|อัญประกาศเดี่ยว	typewriter apostrophe|apostrophe|quote|single|typewriter
+)	วงเล็บปิด|นขลิขิต|วงเล็บ|วงเล็บโค้ง|วงเล็บเหลี่ยม	close parenthesis|bracket|close|paren|parens|parenthesis|round
+*	เครื่องหมายดอกจัน|ดอกจัน|อักขระตัวแทน	asterisk|star|wildcard
++	เครื่องหมายบวก|บวก|เพิ่ม	plus sign|add|plus|sign
+,	จุลภาค	comma
+-	ยัติภังค์-เครื่องหมายลบ|ขีดกลาง|เครื่องหมายลบ|ยัติภังค์	hyphen-minus|dash|hyphen|minus
+.	มหัพภาค|เครื่องหมายจุด|จุด	period|dot|full|stop
+/	เครื่องหมายทับ|เฉียง|ทับ|เส้นขีด|เส้นแบ่ง|หวด	slash|oblique|solidus|stroke|virgule|whack
+0⃣	ปุ่มกดเลข: 0|0|ปุ่มกดเลข|ศูนย์	keycap: 0|0|keycap|zero
+1⃣	ปุ่มกดเลข: 1|1|ปุ่มกดเลข|หนึ่ง	keycap: 1|1|keycap|one
+2⃣	ปุ่มกดเลข: 2|2|ปุ่มกดเลข|สอง	keycap: 2|2|keycap|two
+3⃣	ปุ่มกดเลข: 3|3|ปุ่มกดเลข|สาม	keycap: 3|3|keycap|three
+4⃣	ปุ่มกดเลข: 4|4|ปุ่มกดเลข|สี่	keycap: 4|4|four|keycap
+5⃣	ปุ่มกดเลข: 5|5|ปุ่มกดเลข|ห้า	keycap: 5|5|five|keycap
+6⃣	ปุ่มกดเลข: 6|6|ปุ่มกดเลข|หก	keycap: 6|6|keycap|six
+7⃣	ปุ่มกดเลข: 7|7|เจ็ด|ปุ่มกดเลข	keycap: 7|7|keycap|seven
+8⃣	ปุ่มกดเลข: 8|8|ปุ่มกดเลข|แปด	keycap: 8|8|eight|keycap
+9⃣	ปุ่มกดเลข: 9|9|เก้า|ปุ่มกดเลข	keycap: 9|9|keycap|nine
+:	ทวิภาค	colon
+;	อัฒภาค	semicolon|semi-colon
+=	เท่ากับ|เท่ากัน	equal|equals
+?	เครื่องหมายปรัศนี|คำถาม	question mark|mark|question
+@	แอทไซน์|เครื่องหมาย @|เครื่องหมายแอท|สตรูเดล|อาร์โรบา|อาโรบาเซ|แอมเปอร์แซท	at-sign|ampersat|arobase|arroba|at|commercial|mark|sign|strudel
+[	วงเล็บเหลี่ยมเปิด|วงเล็บตะขอ|วงเล็บสี่เหลี่ยม|วงเล็บเหลี่ยม	open square bracket|bracket|crotchet|open|square
+\	เครื่องหมายทับขวา|ทับกลับหลัง|หวด	backslash|reverse|solidus|whack
+]	วงเล็บเหลี่ยมปิด|วงเล็บตะขอ|วงเล็บสี่เหลี่ยม|วงเล็บเหลี่ยม	close square bracket|bracket|close|crotchet|square
+^	ตัวกำกับเสียงเซอร์คัมเฟล็กซ์|การเน้นเสียง|เครื่องหมาย|เซอร์คัมเฟล็กซ์|ตัวกำกับเสียง|ตัวชี้|บั้ง|มวก|ยกกำลัง|รูปสามเหลี่ยม	circumflex accent|accent|caret|chevron|circumflex|control|hat|pointer|power|sign|wedge|xor
+_	สัญประกาศ|ขีดกลาง|ขีดล่าง|ขีดเส้นใต้|เส้น|เส้นใต้	low line|dash|line|low|underdash|underline
+`	เกรฟแอกเซนต์|เกรฟ|โทน|แอกเซนต์	grave accent|accent|grave|tone
+{	วงเล็บปีกกาเปิด|เครื่องหมายปีกกา|ปีกกา|วงเล็บ|วงเล็บปีกกา	open curly bracket|brace|bracket|curly|gullwing|open
+|	เส้นแนวตั้ง|เชฟเฟอร์สโตรก|แถบแนวตั้ง|แท่ง|ไปป์|วีบาร์|เส้น	vertical line|bar|line|pike|pipe|sheffer|stick|stroke|vbar|vertical
+}	วงเล็บปีกกาปิด|เครื่องหมายปีกกา|ปีกกา|วงเล็บ|วงเล็บปีกกา	close curly bracket|brace|bracket|close|curly|gullwing
+~	ตัวหนอน	tilde
+¡	เครื่องหมายอัศเจรีย์กลับหัว|กลับหัว|การอุทาน|เครื่องหมายตกใจ|เครื่องหมายอัศเจรีย์|ปัง	inverted exclamation mark|bang|exclamation|inverted|mark|point
+¢	เซ็นต์	cent
+£	ปอนด์|เงินปอนด์อังกฤษ (GBP)|เงินปอนด์อียิปต์ (EGP)|สกุลเงิน	pound|currency|EGP|GBP
+¥	เยน|เงินเยนญี่ปุ่น (JPY)|เงินหยวนจีน (CNY)|สกุลเงิน|หยวน	yen|CNY|currency|JPY|yuan
+§	สัญลักษณ์ระบุว่าเป็นตอน|ตอน|ย่อหน้า|ส่วน|สัญลักษณ์ระบุส่วนของหนังสือ	section|paragraph|part|silcrow
+¨	เครื่องหมายไดเอเรซิส|ไดเอเรซิส|เทรม่า|อุมเล้าท์	diaeresis|tréma|umlaut
+©	ลิขสิทธิ์|เครื่องหมาย|สงวน|สัญลักษณ์	copyright|C
+«	กิลเลอเมตเปิด|เครื่องหมายตก|เครื่องหมายอ้างอิง|บั้ง|เปิด|มุม|วงเล็บ	left guillemet|angle|brackets|carets|chevron|guillemet|left|quote
+¬	ค่าลบ|ไม่	negation|not
+®	จดทะเบียน|เครื่องหมาย|สัญลักษณ์	registered|R
+°	องศา|การพิสูจน์|ชั่วโมง	degree|hour|proof
+±	บวกหรือลบ	plus-minus
+²	ตัวยกเลขสอง|ตัวยก|ยกกำลังสอง|สอง	superscript two|squared|superscript|two
+³	ตัวยกเลขสาม|ตัวยก|ยกกำลังสาม|สาม	superscript three|cubed|superscript|three
+´	เครื่องหมายกำกับเสียงสูง|การเน้นเสียง|โทน|เสียงสูง	acute accent|accent|acute|tone
+µ	สัญลักษณ์ไมโคร|การวัด	micro sign|measure|micro|sign
+¶	เครื่องหมายย่อหน้า|ย่อหน้า	paragraph mark|alinea|mark|paragraph|paraph|pilcrow
+·	จุดกลาง|กลาง|จุด|จุดตรงกลาง	middle dot|dot|interpunct|middle|middot
+¹	ตัวยกเลขหนึ่ง|หนึ่ง	superscript one|one|superscript
+»	กิลเลอเมตปิด|เครื่องหมายตก|เครื่องหมายอ้างอิง|บั้ง|ปิด|มุม|วงเล็บ	right guillemet|angle|brackets|carets|chevron|guillemet|quote|right
+¿	เครื่องหมายปรัศนีกลับหัว|กลับหัว|คำถาม|เครื่องหมายปรัศนี	inverted question mark|inverted|mark|question
+×	สัญลักษณ์คูณ|การคูณ|เครื่องหมายคูณ|เท่า	multiplication sign|multiplication|multiply|sign|times
+÷	สัญลักษณ์หาร|การหาร|หาร|ออเบอลุส	division sign|divide|division|obelus|sign
+،	จุลภาคแบบอารบิก|จุลภาค|อารบิก	arabic comma|arabic|comma
+؛	อัฒภาคแบบอารบิก|อัฒภาค|อารบิก	arabic semicolon|arabic|semi-colon|semicolon
+؟	เครื่องหมายปรัศนีแบบอารบิก|คำถาม|เครื่องหมายปรัศนี|อารบิก	arabic question mark|arabic|mark|question
+‐	ยัติภังค์|เส้นประ	hyphen|dash
+–	เส้นประสั้น|ขีดกลาง|ขีดสั้น	en dash|dash|en
+—	เส้นประยาว|ขีดกลาง|ขีดยาว	em dash|dash|em
+―	เส้นแนวนอน|ขีดกลาง|บาร์|เส้น	horizontal bar|bar|dash|horizontal|line
+‘	อัญประกาศเปิดเดี่ยว|เครื่องหมายคำพูดเดี่ยว|อัญประกาศ|อัญประกาศเดี่ยว|อัญประกาศอัจฉริยะ	left apostrophe|apostrophe|left|quote|single|smart
+’	อัญประกาศปิดเดี่ยว|เครื่องหมายคำพูดเดี่ยว|อัญประกาศ|อัญประกาศเดี่ยว|อัญประกาศอัจฉริยะ	right apostrophe|apostrophe|quote|right|single|smart
+‚	อัญประกาศปิดเดี่ยวล่าง|อัญประกาศ|อัญประกาศเดี่ยว|อัญประกาศเดี่ยวล่าง	low right apostrophe|apostrophe|low|quote|right
+“	เครื่องหมายอัญประกาศเปิด|เครื่องหมายคำพูด|อัญประกาศ|อัญประกาศคู่|อัญประกาศอัจฉริยะ	left quotation mark|double|left|mark|quotation|quote|smart
+”	เครื่องหมายอัญประกาศปิด|เครื่องหมายคำพูด|อัญประกาศ|อัญประกาศคู่|อัญประกาศอัจฉริยะ	right quotation mark|double|mark|quotation|quote|right|smart
+„	เครื่องหมายอัญประกาศปิดล่าง|เครื่องหมายคำพูด|อัญประกาศ|อัญประกาศคู่|อัญประกาศล่าง|อัญประกาศอัจฉริยะ	low right quotation mark|double|low|mark|quotation|quote|right|smart
+†	เครื่องหมายกริช|กริช|สัญลักษณ์อ้างอิง|ออเบอลุส	dagger sign|dagger|obelisk|obelus|sign
+‡	สัญลักษณ์กริชคู่|กริช|คู่|สัญลักษณ์อ้างอิง|ออเบอลุส	double dagger sign|dagger|double|obelisk|obelus|sign
+•	สัญลักษณ์หัวข้อย่อย|จุด	bullet|dot
+…	จุดไข่ปลา|จุดหลายจุด|เอลลิปซิส	ellipsis|dots|omission
+‧	จุดแบบยัติภังค์|ขีดกลาง|จุด|ยัติภังค์	hyphenation point|dash|hyphen|hyphenation|point
+‰	ต่อหนึ่งพัน|ในหนึ่งพัน|เปอร์มิลล์|ส่วนในพันส่วน	per mille|mil|mille|per|permil|permille
+′	ไพรม์เดี่ยว|ไพรม์	prime
+″	ไพรม์คู่|ไพรม์	double prime|double|prime
+‴	ทริปเปิลไพรม์|ไพรม์	triple prime|prime|triple
+‸	แคเรต	caret
+※	เครื่องหมายอ้างอิง	reference mark|mark|reference
+‼	เครื่องหมายอัศเจรีย์คู่|!|!!|เครื่องหมาย|ตกใจ|ปังปัง|วรรคตอน|อัศเจรีย์|อัศเจรีย์คู่	double exclamation mark|!|!!|bangbang|double|exclamation|mark|punctuation
+‽	อินเทอร์โรแบง	interrobang|interabang
+‾	ขีดบน	overline|overstrike|vinculum
+⁂	แอสเทอริซึม|ดอกจัน|ดาว	asterism|dinkus|stars
+⁄	สแลชเศษส่วน|เส้นแบ่ง	fraction slash|fraction|slash|stroke|virgule
+⁉	เครื่องหมายอัศเจรีย์และคำถาม|!|!?|?|คำถาม|เครื่องหมาย|ตกใจ|วรรคตอน|อัศเจรีย์|อัศเจรีย์และคำถาม	exclamation question mark|!|!?|?|exclamation|interrobang|mark|punctuation|question
+⁻	ตัวยกเครื่องหมายลบ|ตัวยก|ลบ	superscript minus|minus|superscript
+₢	ครูเซโร|BRB|สกุลเงิน	cruzeiro|BRB|currency
+₣	ฟรังก์ฝรั่งเศส|ฟรังก์|สกุลเงิน	french franc|currency|franc|french
+₤	ลีรา|สกุลเงิน	lira|currency
+₥	มิลล์|มิล	mill|mil
+₨	รูปี|สกุลเงิน	rupee|currency
+₩	วอน|เงินวอน|วอนเกาหลีใต้	won|KPW|KRW
+€	ยูโร|เงินยูโร (EUR)|สกุลเงิน	euro|currency|EUR
+₰	เพนนีเยอรมัน|สกุลเงิน|เหรียญทองแดงเยอรมัน	german penny|currency|german|penny|pfennig
+₱	เปโซ	peso
+₳	ออสทรัล|ARA|สกุลเงิน	austral|ARA|currency
+₶	เงินปอนด์ตูนัวส์|สกุลเงิน	livre tournois|currency|livre|tournois
+₷	สเปสมิโล|สกุลเงิน	spesmilo|currency
+₹	รูปีอินเดีย|รูปี|สกุลเงิน	indian rupee|currency|indian|rupee
+₽	รูเบิล|สกุลเงิน	ruble|currency
+₿	บิตคอยน์|เงินดิจิทัลบิตคอยน์	bitcoin|BTC
+℗	ลิขสิทธิ์แถบบันทึกเสียง|ลิขสิทธิ์|เสียง|เสียงบันทึก	sound recording copyright|copyright|recording|sound
+™	เครื่องหมายการค้า|ป้ายเครื่องหมายการค้า	trade mark|mark|TM|trade|trademark
+ℹ	แหล่งข้อมูล|ข้อมูล|ที่มา|แหล่ง	information|I
+←	ลูกศรชี้ซ้าย|ซ้าย|ลูกศร	left-pointing arrow|arrow|left|left-pointing
+↑	ลูกศรแบบชี้ขึ้น|ขึ้น|ลูกศร	up-pointing arrow|arrow|up|up-pointing
+→	ลูกศรชี้ขวา|ขวา|ลูกศร	right-pointing arrow|arrow|right|right-pointing
+↓	ลูกศรแบบชี้ลง|ลง|ลูกศร	down-pointing arrow|arrow|down|down-pointing
+↔	ลูกศรชี้ซ้ายขวา|ขวา|ซ้าย|ลูกศร	left-right arrow|arrow|left-right
+↕	ลูกศรชี้ขึ้นลง|ขี้น|ลง|ลูกศร	up-down arrow|arrow|up-down
+↖	ลูกศรชี้มุมซ้ายบน|ตะวันตกเฉียงเหนือ|ทิศทาง|ลูกศร	up-left arrow|arrow|direction|intercardinal|northwest|up-left
+↗	ลูกศรชี้มุมขวาบน|ตะวันออกเฉียงเหนือ|ทิศทาง|มุมขวาบน|ลูกศร	up-right arrow|arrow|direction|intercardinal|northeast|up-right
+↘	ลูกศรชี้มุมขวาล่าง|ตะวันออกเฉียงใต้|ทิศทาง|ลูกศร	down-right arrow|arrow|direction|down-right|intercardinal|southeast
+↙	ลูกศรชี้มุุมซ้ายล่าง|ชี้ลง|ตะวันตกเฉียงใต้|ทิศทาง|มุมซ้ายล่าง|ลูกศร	down-left arrow|arrow|direction|down-left|intercardinal|southwest
+↚	ขีดทับลูกศรซ้าย	leftwards arrow stroke|arrow|leftwards|stroke
+↛	ขีดทับลูกศรขวา	rightwards arrow stroke|arrow|rightwards|stroke
+↜	ลูกศรคลื่นซ้าย	leftwards wave arrow|arrow|leftwards|wave
+↝	ลูกศรคลื่นขวา	rightwards wave arrow|arrow|rightwards|wave
+↞	ลูกศรสองหัวซ้าย	leftwards two headed arrow|arrow|headed|leftwards|two
+↟	ลูกศรสองหัวขึ้น	upwards two headed arrow|arrow|headed|two|upwards
+↠	ลูกศรสองหัวขวา	rightwards two headed arrow|arrow|headed|rightwards|two
+↡	ลูกศรสองหัวลง	downwards two headed arrow|arrow|downwards|headed|two
+↢	หางลูกศรซ้าย	leftwards arrow tail|arrow|leftwards|tail
+↣	หางลูกศรขวา	rightwards arrow tail|arrow|rightwards|tail
+↤	ลูกศรซ้ายจากแท่ง	leftwards arrow from bar|arrow|bar|from|leftwards
+↥	ลูกศรขึ้นจากแท่ง	upwards arrow from bar|arrow|bar|from|upwards
+↦	ลูกศรขวาจากแท่ง	rightwards arrow from bar|arrow|bar|from|rightwards
+↧	ลูกศรลงจากแท่ง	downwards arrow from bar|arrow|bar|downwards|from
+↨	ลูกศรขึ้นลงมีฐาน	up down arrow with base|arrow|base|down|up|with
+↩	ลูกศรวนซ้าย|ซ้าย|ลูกศร|วน	right arrow curving left|arrow|curving|left|right
+↪	ลูกศรวนขวา|ขวา|ลูกศร|วน	left arrow curving right|arrow|curving|left|right
+↫	ลูกศรซ้ายหางม้วน	leftwards arrow loop|arrow|leftwards|loop
+↬	ลูกศรขวาหางม้วน	rightwards arrow loop|arrow|loop|rightwards
+↭	ลูกศรคลื่นซ้ายขวา	left right wave arrow|arrow|left|right|wave
+↮	ขีดทับลูกศรซ้ายขวา	left right arrow stroke|arrow|left|right|stroke
+↯	ลูกศรซิกแซกลง|ซิกแซก	downwards zigzag arrow|arrow|downwards|zigzag
+↰	ลูกศรขึ้นปลายซ้าย	upwards arrow tip leftwards|arrow|leftwards|tip|upwards
+↱	ลูกศรขึ้นปลายขวา	upwards arrow tip rightwards|arrow|rightwards|tip|upwards
+↲	ลูกศรลงปลายซ้าย	downwards arrow tip leftwards|arrow|downwards|leftwards|tip
+↳	ลูกศรลงปลายขวา	downwards arrow tip rightwards|arrow|downwards|rightwards|tip
+↴	ลูกศรมุมขวาลง	rightwards arrow corner downwards|arrow|corner|downwards|rightwards
+↵	ลูกศรมุมลงซ้าย	downwards arrow corner leftwards|arrow|corner|downwards|leftwards
+↶	ลูกศรครึ่งวงกลมบนทวนเข็มนาฬิกา	anticlockwise top semicircle arrow|anticlockwise|arrow|semicircle|top
+↷	ลูกศรครึ่งวงกลมบนตามเข็มนาฬิกา	clockwise top semicircle arrow|arrow|clockwise|semicircle|top
+↸	ลูกศรแท่งยาวตะวันตกเฉียงเหนือ	north west arrow long bar|arrow|bar|long|north|west
+↹	แท่งลูกศรซ้ายเหนือแท่งลูกศรขวา|ทางขวา|ทางซ้าย|แท่ง|ลูกศร	leftwards over rightwards arrow bars|arrow|bar|bars|leftwards|over|rightwards
+↺	ลูกศรวงกลมเปิดทวนเข็มนาฬิกา	anticlockwise open circle arrow|anticlockwise|arrow|circle|open
+↻	ลูกศรวงกลมเปิดตามเข็มนาฬิกา	clockwise open circle arrow|arrow|circle|clockwise|open
+↼	เงี่ยงฉมวกซ้ายขึ้น|เงี่ยง	leftwards harpoon barb upwards|barb|harpoon|leftwards|upwards
+↽	เงี่ยงฉมวกซ้ายลง	leftwards harpoon barb downwards|barb|downwards|harpoon|leftwards
+↾	เงี่ยงฉมวกขึ้นขวา|เงี่ยง	upwards harpoon barb rightwards|barb|harpoon|rightwards|upwards
+↿	เงี่ยงฉมวกขึ้นซ้าย|เงี่ยง	upwards harpoon barb leftwards|barb|harpoon|leftwards|upwards
+⇀	เงี่ยงฉมวกขวาขึ้น|เงี่ยง	rightwards harpoon barb upwards|barb|harpoon|rightwards|upwards
+⇁	เงี่ยงฉมวกขวาลง|เงี่ยง	rightwards harpoon barb downwards|barb|downwards|harpoon|rightwards
+⇂	เงี่ยงฉมวกลงขวา|เงี่ยง	downwards harpoon barb rightwards|barb|downwards|harpoon|rightwards
+⇃	เงี่ยงฉมวกลงซ้าย|เงี่ยง	downwards harpoon barb leftwards|barb|downwards|harpoon|leftwards
+⇄	ลูกศรขวาเหนือลูกศรซ้าย	rightwards arrow over leftwards arrow|arrow|leftwards|over|rightwards
+⇅	ลูกศรชี้ขึ้นและลูกศรชี้ลง|ขึ้น|ลง|ลูกศร	up-pointing and down-pointing arrows|and|arrow|arrows|down|down-pointing|up|up-pointing
+⇆	ลูกศรชี้ซ้ายเหนือลูกศรชี้ขวา|ขวา|ซ้าย|ลูกศร	left-pointing over right-pointing arrows|arrow|arrows|left|left-pointing|over|right|right-pointing
+⇇	ลูกศรคู่ซ้าย	leftwards paired arrows|arrows|leftwards|paired
+⇈	ลูกศรคู่ขึ้น	upwards paired arrows|arrows|paired|upwards
+⇉	ลูกศรคู่ขวา	rightwards paired arrows|arrows|paired|rightwards
+⇊	ลูกศรคู่ลง	downwards paired arrows|arrows|downwards|paired
+⇋	ฉมวกซ้ายเหนือฉมวกขวา	leftwards harpoon over rightwards harpoon|harpoon|leftwards|over|rightwards
+⇌	ฉมวกขวาเหนือฉมวกซ้าย	rightwards harpoon over leftwards harpoon|harpoon|leftwards|over|rightwards
+⇍	ลูกศรซ้อนซ้ายขีดทับ	leftwards double arrow stroke|arrow|double|leftwards|stroke
+⇎	ลูกศรซ้อนซ้ายขวาขีดทับ	left right double arrow stroke|arrow|double|left|right|stroke
+⇏	ลูกศรซ้อนขวาขีดทับ	rightwards double arrow stroke|arrow|double|rightwards|stroke
+⇐	ลูกศรซ้อนซ้าย	leftwards double arrow|arrow|double|leftwards
+⇑	ลูกศรซ้อนขึ้น	upwards double arrow|arrow|double|upwards
+⇒	ลูกศรซ้อนขวา	rightwards double arrow|arrow|double|rightwards
+⇓	ลูกศรซ้อนลง	downwards double arrow|arrow|double|downwards
+⇔	ลูกศรซ้อนซ้ายขวา	left right double arrow|arrow|double|left|right
+⇖	ลูกศรซ้อนตะวันตกเฉียงเหนือ	north west double arrow|arrow|double|north|west
+⇗	ลูกศรซ้อนตะวันออกเฉียงเหนือ	north east double arrow|arrow|double|east|north
+⇘	ลูกศรซ้อนตะวันออกเฉียงใต้	south east double arrow|arrow|double|east|south
+⇙	ลูกศรซ้อนตะวันตกเฉียงใต้	south west double arrow|arrow|double|south|west
+⇚	ลูกศรซ้อนสามซ้าย	leftwards triple arrow|arrow|leftwards|triple
+⇛	ลูกศรซ้อนสามขวา	rightwards triple arrow|arrow|rightwards|triple
+⇜	ลูกศรยึกยือซ้าย	leftwards squiggle arrow|arrow|leftwards|squiggle
+⇝	ลูกศรยึกยือขวา	rightwards squiggle arrow|arrow|rightwards|squiggle
+⇞	ลูกศรขึ้นขีดทับคู่	upwards arrow double stroke|arrow|double|stroke|upwards
+⇟	ลูกศรลงขีดทับคู่	downwards arrow double stroke|arrow|double|downwards|stroke
+⇠	ลูกศรเส้นประซ้าย	leftwards dashed arrow|arrow|dashed|leftwards
+⇡	ลูกศรเส้นประขึ้น	upwards dashed arrow|arrow|dashed|upwards
+⇢	ลูกศรเส้นประขวา	rightwards dashed arrow|arrow|dashed|rightwards
+⇣	ลูกศรเส้นประลง	downwards dashed arrow|arrow|dashed|downwards
+⇤	แท่งลูกศรซ้าย	leftwards arrow bar|arrow|bar|leftwards
+⇥	แท่งลูกศรขวา	rightwards arrow bar|arrow|bar|rightwards
+⇦	ลูกศรกลวงซ้าย	leftwards hollow arrow|arrow|hollow|leftwards
+⇧	ลูกศรกลวงขึ้น	upwards hollow arrow|arrow|hollow|upwards
+⇨	ลูกศรกลวงขวา	rightwards hollow arrow|arrow|hollow|rightwards
+⇩	ลูกศรกลวงลง	downwards hollow arrow|arrow|downwards|hollow
+⇪	ลูกศรกลวงขึ้นจากแท่ง	upwards hollow arrow from bar|arrow|bar|from|hollow|upwards
+⇵	ลูกศรลงด้านซ้ายลูกศรขึ้น	downwards arrow leftwards upwards arrow|arrow|downwards|leftwards|upwards
+∀	ตัวบ่งปริมาณแบบทั้งหมด|ทั้งหมด|แบบทั้งหมด|สำหรับทั้งหมด	for all|all|any|for|given|universal
+∂	ผลต่างเชิงอนุพันธ์ย่อย|ผลต่างเชิงอนุพันธ์	partial differential|differential|partial
+∃	ตัวบ่งปริมาณแบบบางตัว	there exists|exists|there
+∅	เซตว่าง|คณิตศาสตร์|ตัวดำเนินการของเซต	empty set|empty|mathematics|operator|set
+∆	การเพิ่มค่า|สามเหลี่ยม	increment|triangle
+∇	เดล|นาบลา|สามเหลี่ยม	nabla|triangle
+∈	เป็นสมาชิกของ|ความเป็นสมาชิก|เซต|ประกอบด้วย|สมาชิก	element of|contains|element|membership|of|set
+∉	ไม่เป็นสมาชิก|สมาชิก	not an element|an|element|not
+∋	มีในฐานะสมาชิก|เป็นสมาชิก|สมาชิก	contains as member|as|contains|element|member
+∎	พิสูจน์เสร็จสิ้นแล้ว|จบการพิสูจน์|ซ.ต.พ.	end proof|end|halmos|proof|q.e.d.|qed|tombstone
+∏	เครื่องหมายผลคูณจำนวนมาก|ตรรกศาสตร์|ผลคูณ|ผลคูณจำนวนมาก	n-ary product|logic|n-ary|product
+∑	ผลรวมจำนวนมาก|คณิตศาสตร์|ผมรวมจำนวนมาก|ผลรวม	n-ary summation|mathematics|n-ary|summation
+−	เครื่องหมายลบ|ลบ|หักออก	minus sign|minus|sign|subtract
+∓	ลบหรือบวก|บวกลบ	minus-or-plus|plus-minus
+∕	สแลชหาร|สแลช	division slash|division|slash|stroke|virgule
+∗	ตัวดำเนินการดอกจัน|ดอกจัน	asterisk operator|asterisk|operator|star
+∘	ตัวดำเนินการวงแหวน|ตัวดำเนินการ|ตัวประกอบ	ring operator|composition|operator|ring
+∙	ตัวดำเนินการบุลเลต|ตัวดำเนินการ	bullet operator|bullet|operator
+√	รากที่สอง|ฐาน|ราก|รูต|สแควร์|เสิร์ด	square root|radical|radix|root|square|surd
+∝	ได้สัดส่วน|ตามสัดส่วน	proportional|proportionality
+∞	สัญลักษณ์อนันต์|อนันต์	infinity sign|infinity|sign
+∟	มุมฉาก|คณิตศาสตร์	right angle|angle|mathematics|right
+∠	มุม|มุมแหลม	angle|acute
+∣	แบ่ง|ตัวแบ่ง	divides|divisor
+∥	เส้นขนาน	parallel
+∧	และตรรกศาสตร์|และ	logical and|ac|and|atque|logical|wedge
+∩	อินเตอร์เซกชั่น|เซต	intersection|set
+∪	ยูเนียน|เซต|หมู่	union|collection|set
+∫	อินทิกรัล|แคลคูลัส	integral|calculus
+∬	อินทิกรัลสองชั้น|แคลคูลัส	double integral|calculus|double|integral
+∮	คอนทัวร์อินทิกรัล	contour integral|contour|integral
+∴	ดังนั้น|ตรรกศาสตร์	therefore|logic
+∵	เนื่องจาก|ตรรกศาสตร์	because|logic
+∶	อัตราส่วน	ratio
+∷	สัดส่วน|ได้สัดส่วน|ตามสัดส่วน	proportion|proportionality
+∼	ตัวดำเนินการตัวหนอน|ตัวดำเนินการ	tilde operator|operator|tilde
+∽	ตัวหนอนกลับด้าน|ตัวหนอน	reversed tilde|reversed|tilde
+∾	เลซี่ เอสกลับหัว	inverted lazy s|inverted|lazy|s
+≃	เท่ากันเชิงเส้นกำกับ|คณิตศาสตร์|เส้นกำกับ	asymptotically equal|asymptote|asymptotically|equal|mathematics
+≅	เท่ากันโดยประมาณ|คณิตศาสตร์|เท่ากัน|สมภาค|สมสัณฐาน	approximately equal|approximately|congruence|equal|equality|isomorphism|mathematics
+≈	เกือบเท่ากับ|ใกล้เคียง|ประมาณ	almost equal|almost|approximate|approximation|equal
+≌	เท่ากันทุกประการ|คณิตศาสตร์|เท่ากัน|เท่ากันทั้งหมด	all equal|all|equal|equality|mathematics
+≒	ภาพเท่ากันโดยประมาณ	approximately equal the image|approximately|equal|image|the
+≖	วงแหวนในเท่ากัน|คณิตศาสตร์|เท่ากัน	ring in equal|equal|equality|in|mathematics|ring
+≠	ไม่เท่ากับ|เครื่องหมายไม่เท่ากับ|อสมการ	not equal|equal|inequality|inequation|not
+≡	เหมือนกับ|ตรงกัน|สามขีด|เหมือน	identical to|exact|identical|to|triple
+≣	เท่ากันโดยแท้|คณิตศาสตร์|เท่ากัน	strictly equivalent|equality|equivalent|mathematics|strictly
+≤	น้อยกว่าหรือเท่ากับ|เท่ากัน|เท่ากับ|น้อยกว่า|อสมการ	less-than or equal|equal|equals|inequality|less-than|or
+≥	มากกว่าหรือเท่ากับ|เท่ากัน|เท่ากับ|มากกว่า|อสมการ	greater-than or equal|equal|equals|greater-than|inequality|or
+≦	น้อยกว่าเหนือเท่ากัน|คณิตศาสตร์|ไม่เท่ากัน	less-than over equal|equal|inequality|less-than|mathematics|over
+≧	มากกว่าเหนือเท่ากัน|คณิตศาสตร์|ไม่เท่ากัน	greater-than over equal|equal|greater-than|inequality|mathematics|over
+≪	น้อยกว่ามาก|คณิตศาสตร์|ไม่เท่ากัน	much less-than|inequality|less-than|mathematics|much
+≫	มากกว่ามาก|คณิตศาสตร์|ไม่เท่ากัน	much greater-than|greater-than|inequality|mathematics|much
+≬	ระหว่าง	between
+≮	ไม่น้อยกว่า|คณิตศาสตร์|ไม่เท่ากัน	not less-than|inequality|less-than|mathematics|not
+≯	ไม่มากกว่า|คณิตศาสตร์|ไม่เท่ากัน	not greater-than|greater-than|inequality|mathematics|not
+≳	เท่ากันมากกว่า|คณิตศาสตร์|ไม่เท่ากัน	greater-than equivalent|equivalent|greater-than|inequality|mathematics
+≺	นำหน้า|คณิตศาสตร์|ตัวดำเนินการของเซต	precedes|mathematics|operator|set
+≻	ตามหลัง|คณิตศาสตร์|ตัวดำเนินการของเซต	succeeds|mathematics|operator|set
+⊁	ไม่ตามหลัง|คณิตศาสตร์|ตัวดำเนินการของเซต	does not succeed|does|mathematics|not|operator|set|succeed
+⊂	เซตย่อยของ|เซต|เซตย่อย	subset of|of|set|subset
+⊃	ซุปเปอร์เซต|คณิตศาสตร์|ตัวดำเนินการของเซต	superset|mathematics|operator|set
+⊆	เท่ากับเซตย่อย	subset equal|equal|subset
+⊇	เท่ากับซุปเปอร์เซต|คณิตศาสตร์|เท่ากัน	superset equal|equal|equality|mathematics|superset
+⊕	เครื่องหมายบวกในวงกลม|บวก	circled plus|circled|plus
+⊖	เครื่องหมายลบในวงกลม|ความต่างแบบสมมาตร	circled minus|circled|difference|erosion|minus|symmetric
+⊗	เครื่องหมายคูณในวงกลม|เทนเซอร์|ผลคูณ	circled times|circled|product|tensor|times
+⊘	สแลชหารในวงกลม|การหาร|คณิตศาสตร์	circled division slash|circled|division|division-like|mathematics|slash
+⊙	ตัวดำเนินการจุดในวงกลม|XNOR|ตัวดำเนินการ	circled dot operator|circled|dot|operator|XNOR
+⊚	ตัวดำเนินการวงแหวนในวงกลม	circled ring operator|circled|operator|ring
+⊛	ตัวดำเนินการดอกจันในวงกลม|ดอกจัน|ตัวดำเนินการ	circled asterisk operator|asterisk|circled|operator
+⊞	เครื่องหมายบวกในสี่เหลี่ยมจัตุรัส|การบวก|คณิตศาสตร์|เครื่องหมาย|สี่เหลี่ยมจัตุรัส	squared plus|addition-like|mathematics|plus|squared
+⊟	เครื่องหมายลบในสี่เหลี่ยมจัตุรัส|การลบ|คณิตศาสตร์|เครื่องหมาย|สี่เหลี่ยมจัตุรัส	squared minus|mathematics|minus|squared|subtraction-like
+⊥	แทคขึ้น	up tack|eet|falsum|tack|up
+⊮	ไม่บังคับ	does not force|does|force|not
+⊰	นำหน้าภายใต้ความสัมพันธ์|คณิตศาสตร์|ตัวดำเนินการของเซต	precedes under relation|mathematics|operator|precedes|relation|set|under
+⊱	ตามหลังภายใต้ความสัมพันธ์|คณิตศาสตร์|ตัวดำเนินการของเซต	succeeds under relation|mathematics|operator|relation|set|succeeds|under
+⊶	ต้นกำเนิด	original
+⊹	เมทริกซ์สังยุคเอร์มีเชียน|คณิตศาสตร์|เมทริกซ์จัตุรัส|เมทริกซ์ผูกพันในตัว	hermitian conjugate matrix|conjugate|hermitian|mathematics|matrix|self-adjoint|square
+⊿	สามเหลี่ยมมุมฉาก|คณิตศาสตร์|มุมฉาก	right triangle|mathematics|right|right-angled|triangle
+⋁	หรือเชิงตรรกะจำนวนมาก|ตรรกศาสตร์|ประพจน์เลือก	n-ary logical or|disjunction|logic|logical|n-ary|or
+⋂	อินเตอร์เซกชันจำนวนมาก|คณิตศาสตร์|ตัวดำเนินการของเซต|อินเตอร์เซกชัน	n-ary intersection|intersection|mathematics|n-ary|operator|set
+⋃	ยูเนียนจำนวนมาก|คณิตศาสตร์|ตัวดำเนินการของเซต|ยูเนียน	n-ary union|mathematics|n-ary|operator|set|union
+⋅	ตัวดำเนินการจุด	dot operator|dot|operator
+⋆	ตัวดำเนินการดาว|ตัวดำเนินการ	star operator|operator|star
+⋈	การเชื่อมตามธรรมชาติ|ตัวดำเนินการไบนารี|หูกระต่าย	natural join|binary|bowtie|join|natural|operator
+⋒	อินเตอร์เซกชันคู่|คณิตศาสตร์|ตัวดำเนินการเซต|อินเตอร์เซกชัน	double intersection|double|intersection|mathematics|operator|set
+⋘	น้อยกว่ามากมาก|คณิตศาสตร์|ไม่เท่ากัน	very much less-than|inequality|less-than|mathematics|much|very
+⋙	มากกว่ามากมาก|คณิตศาสตร์|ไม่เท่ากัน	very much greater-than|greater-than|inequality|mathematics|much|very
+⋭	ไม่มีในฐานะเท่ากับกลุ่มย่อยปกติ|คณิตศาสตร์|ทฤษฎีกลุ่ม	does not contain as normal subgroup equal|as|contain|does|equal|group|mathematics|normal|not|subgroup|theory
+⋮	จุดไข่ปลาแนวตั้ง|คณิตศาสตร์|จุดไข่ปลา	vertical ellipsis|ellipsis|mathematics|vertical
+⋯	จุดไข่ปลาแนวนอนเส้นกลาง|จุดไข่ปลา	midline horizontal ellipsis|ellipsis|horizontal|midline
+⋰	จุดไข่ปลาทแยงขวาขึ้น|คณิตศาสตร์|จุดไข่ปลา	up right diagonal ellipsis|diagonal|ellipsis|mathematics|right|up
+⋱	จุดไข่ปลาทแยงขวาลง|คณิตศาสตร์|จุดไข่ปลา	down right diagonal ellipsis|diagonal|down|ellipsis|mathematics|right
+⌚	นาฬิกาข้อมือ|นาฬิกา	watch|clock|time
+⌛	นาฬิกาทราย|ทราย	hourglass done|done|hourglass|sand|time|timer
+⌨	แป้นพิมพ์|คอมพิวเตอร์	keyboard|computer
+⏏	ปุ่มดีดออก|ดีดออก|ปฏิเสธ|ปุ่ม|อีเจ็กต์	eject button|button|eject
+⏩	เร่งไปข้างหน้า|2 เท่า|เร็ว|ลูกศร	fast-forward button|arrow|button|double|fast|fast-forward|forward
+⏪	ถอยกลับ|กรอกลับ|ขวา|ลูกศร|สามเหลี่ยม	fast reverse button|arrow|button|double|fast|reverse|rewind
+⏫	ลูกศรขึ้น|ชั้น|ชี้ขึ้น|ปุ่ม|เร็ว|ลูกศร|สองเท่า|สัญลักษณ์	fast up button|arrow|button|double|fast|up
+⏬	ลูกศรลง|ปุ่ม|ลง|ลูกศร	fast down button|arrow|button|double|down|fast
+⏭	เล่นแทร็กถัดไป|ฉาก|ถัดไป|แทร็ก|ลูกศร|สามเหลี่ยม	next track button|arrow|button|next|scene|track|triangle
+⏮	ปุ่มแทร็กก่อนหน้า|ก่อนหน้า|ฉาก|แทร็ก|ลูกศร|สามเหลี่ยม	last track button|arrow|button|last|previous|scene|track|triangle
+⏯	เล่นหรือหยุดชั่วคราว|ขวา|ลูกศร|เล่น|สามเหลี่ยม|หยุดชั่วคราว	play or pause button|arrow|button|pause|play|right|triangle
+⏰	นาฬิกาปลุก|ปลุก	alarm clock|alarm|clock|hours|hrs|late|time|waiting
+⏱	นาฬิกาจับเวลา|นาฬิกา	stopwatch|clock|time
+⏲	นาฬิกานับถอยหลัง|จับเวลา|นับถอยหลัง|นาฬิกา	timer clock|clock|timer
+⏳	นาฬิกาทรายจับเวลา|นาฬิกาทราย	hourglass not done|done|flowing|hourglass|hours|not|sand|timer|waiting|yolo
+⏸	ปุ่มหยุุดชั่วคราว|แนวตั้ง|ปุ่ม|หยุดชั่วคราว	pause button|bar|button|double|pause|vertical
+⏹	ปุ่มหยุด|สี่เหลี่ยม|หยุด	stop button|button|square|stop
+⏺	ปุ่มอัด|บันทึก|ปุ่ม|วงกลม|อัด	record button|button|circle|record
+Ⓜ	ตัวเอ็มในวงกลม|ตัวเอ็ม|โรมัน|ละติน|วงกลม|อักษร|อังกฤษ	circled M|circle|circled|M
+■	สี่เหลี่ยมจัตุรัสทึบ	filled square|filled|square
+□	สี่เหลี่ยมจัตุรัสกลวง	hollow square|hollow|square
+▢	สี่เหลี่ยมจัตุรัสกลวงมุมมน	hollow square with rounded corners|corners|hollow|rounded|square|with
+▣	สี่เหลี่ยมจัตุรัสกลวงที่มีสี่เหลี่ยมจัตุรัสทึบ	hollow square containing filled square|containing|filled|hollow|square
+▤	สี่เหลี่ยมจัตุรัสเติมเส้นแนวนอน	square with horizontal fill|fill|horizontal|square|with
+▥	สี่เหลี่ยมจัตุรัสเติมเส้นแนวตั้ง	square with vertical fill|fill|square|vertical|with
+▦	สี่เหลี่ยมจัตุรัสเติมขีดไขว้ตั้งฉาก	square orthogonal crosshatch fill|crosshatch|fill|orthogonal|square
+▧	สี่เหลี่ยมจัตุรัสเติมเส้นจากซ้ายบนไปขวาล่าง	square upper left lower right fill|fill|left|lower|right|square|upper
+▨	สี่เหลี่ยมจัตุรัสเติมเส้นจากขวาบนไปซ้ายล่าง	square upper right lower left fill|fill|left|lower|right|square|upper
+▩	สี่เหลี่ยมจัตุรัสเติมขีดไขว้ทแยง	square diagonal crosshatch fill|crosshatch|diagonal|fill|square
+▪	สี่เหลี่ยมเล็กสีดำ|เรขาคณิต|สี่เหลี่ยม	black small square|black|geometric|small|square
+▫	สี่เหลี่ยมเล็กสีขาว|เรขาคณิต|สี่เหลี่ยม	white small square|geometric|small|square|white
+▬	สี่เหลี่ยมผืนผ้าทึบ	filled rectangle|filled|rectangle
+▭	สี่เหลี่ยมผืนผ้ากลวง	hollow rectangle|hollow|rectangle
+▮	สี่เหลี่ยมผืนผ้าแนวตั้งทึบ	filled vertical rectangle|filled|rectangle|vertical
+▰	สี่เหลี่ยมด้านขนานทึบ	filled parallelogram|filled|parallelogram
+▲	สามเหลี่ยมทึบหัวชี้ขึ้น|ขึ้น|ทึบ|ลูกศร|สามเหลี่ยม	filled up-pointing triangle|arrow|filled|triangle|up|up-pointing
+△	สามเหลี่ยมชี้ขึ้นกลวง	hollow up-pointing triangle|hollow|triangle|up-pointing
+▴	สามเหลี่ยมเล็กชี้ขึ้นทึบ	filled up-pointing small triangle|filled|small|triangle|up-pointing
+▵	สามเหลี่ยมเล็กชี้ขึ้นกลวง	hollow up-pointing small triangle|hollow|small|triangle|up-pointing
+▶	เล่น|ขวา|ลูกศร|สามเหลี่ยม	play button|arrow|button|play|right|triangle
+▷	สามเหลี่ยมชี้ขวากลวง	hollow right-pointing triangle|hollow|right-pointing|triangle
+▸	สามเหลี่ยมเล็กชี้ขวาทึบ	filled right-pointing small triangle|filled|right-pointing|small|triangle
+▹	สามเหลี่ยมเล็กชี้ขวากลวง	hollow right-pointing small triangle|hollow|right-pointing|small|triangle
+►	ตัวชี้ขวาทึบ	filled right-pointing pointer|filled|pointer|right-pointing
+▻	ตัวชี้ขวากลวง	hollow right-pointing pointer|hollow|pointer|right-pointing
+▼	สามเหลี่ยมทึบหัวชี้ลง|ทึบ|ลง|ลูกศร|สามเหลี่ยม	filled down-pointing triangle|arrow|down|down-pointing|filled|triangle
+▽	สามเหลี่ยมชี้ลงกลวง	hollow down-pointing triangle|down-pointing|hollow|triangle
+▾	สามเหลี่ยมเล็กชี้ลงทึบ	filled down-pointing small triangle|down-pointing|filled|small|triangle
+▿	สามเหลี่ยมเล็กชี้ลงกลวง	hollow down-pointing small triangle|down-pointing|hollow|small|triangle
+◀	ย้อนกลับ|ซ้าย|ลูกศร|สามเหลี่ยม	reverse button|arrow|button|left|reverse|triangle
+◁	สามเหลี่ยมชี้ซ้ายกลวง	hollow left-pointing triangle|hollow|left-pointing|triangle
+◂	สามเหลี่ยมเล็กชี้ซ้ายทึบ	filled left-pointing small triangle|filled|left-pointing|small|triangle
+◃	สามเหลี่ยมเล็กชี้ซ้ายกลวง	hollow left-pointing small triangle|hollow|left-pointing|small|triangle
+◄	ตัวชี้ซ้ายทึบ	filled left-pointing pointer|filled|left-pointing|pointer
+◅	ตัวชี้ซ้ายกลวง	hollow left-pointing pointer|hollow|left-pointing|pointer
+◆	สี่เหลี่ยมขนมเปียกปูนทึบ	filled diamond|diamond|filled
+◇	สี่เหลี่ยมขนมเปียกปูนกลวง	hollow diamond|diamond|hollow
+◈	สี่เหลี่ยมขนมเปียกปูนกลวงที่มีสี่เหลี่ยมขนมเปียกปูนทึบ	hollow diamond containing filled diamond|containing|diamond|filled|hollow
+◉	วงกลมกลวงที่มีวงกลมทึบ|จุดที่มีวงกลมรอบ|ตาปลา|วงกลมที่มีวงกลมทึบร่วมศูนย์กลาง	hollow circle containing filled circle|cicles|circle|circled|concentric|containing|dot|filled|fisheye|hollow|ward
+◊	สี่เหลี่ยมขนมเปียกปูน|สี่เหลี่ยมข้าวหลามตัด|สี่เหลี่ยมด้านเท่า	lozenge|diamond|rhombus
+○	จุดกลมกลวง|จุดกลม|วงแหวน	hollow circle|circle|hollow|ring
+◌	วงกลมจุด	dotted circle|circle|dotted
+◍	วงกลมเติมเส้นแนวตั้ง	circle with vertical fill|circle|fill|vertical|with
+◎	วงกลมร่วมศูนย์กลาง|จุดกลางเป้า|เป้าหมาย|วงกลมซ้อน	concentric circles|circle|circles|concentric|double|target
+●	จุดกลมทึบ|จุดกลม	filled circle|circle|filled
+◐	วงกลมทึบครึ่งซ้าย	circle left half filled|circle|filled|half|left
+◑	วงกลมทึบครึ่งขวา	circle right half filled|circle|filled|half|right
+◒	วงกลมทึบครึ่งล่าง	circle lower half filled|circle|filled|half|lower
+◓	วงกลมทึบครึ่งบน	circle upper half filled|circle|filled|half|upper
+◔	วงกลมทึบเสี้ยวขวาบน	circle upper right quadrant filled|circle|filled|quadrant|right|upper
+◕	วงกลมทึบทั้งหมดเว้นเสี้ยวซ้ายบน	circle all but upper left quadrant filled|all|but|circle|filled|left|quadrant|upper
+◖	ครึ่งวงกลมทึบซ้าย	left half filled circle|circle|filled|half|left
+◗	ครึ่งวงกลมทึบขวา	right half filled circle|circle|filled|half|right
+◘	บุลเลตกลับด้าน	inverse bullet|bullet|inverse
+◙	สี่เหลี่ยมจัตุรัสทึบที่มีวงกลมกลวง|วงกลมกลวงกลับด้าน	filled square containing hollow circle|circle|containing|filled|hollow|inverse|square
+◜	ส่วนโค้งวงกลมเสี้ยวซ้ายบน	upper left quadrant circular arc|arc|circular|left|quadrant|upper
+◝	ส่วนโค้งวงกลมเสี้ยวขวาบน	upper right quadrant circular arc|arc|circular|quadrant|right|upper
+◞	ส่วนโค้งวงกลมเสี้ยวขวาล่าง	lower right quadrant circular arc|arc|circular|lower|quadrant|right
+◟	ส่วนโค้งวงกลมเสี้ยวซ้ายล่าง	lower left quadrant circular arc|arc|circular|left|lower|quadrant
+◠	ครึ่งวงกลมบน	upper half circle|circle|half|upper
+◡	ครึ่งวงกลมล่าง	lower half circle|circle|half|lower
+◢	สามเหลี่ยมขวาล่างทึบ	filled lower right triangle|filled|lower|right|triangle
+◣	สามเหลี่ยมซ้ายล่างทึบ	filled lower left triangle|filled|left|lower|triangle
+◤	สามเหลี่ยมซ้ายบนทึบ	filled upper left triangle|filled|left|triangle|upper
+◥	สามเหลี่ยมขวาบนทึบ	filled upper right triangle|filled|right|triangle|upper
+◦	บุลเลตกลวง	hollow bullet|bullet|hollow
+◯	จุดกลมกลวงใหญ่|จุดกลม|วงแหวน	large hollow circle|circle|hollow|large|ring
+◳	สี่เหลี่ยมจัตุรัสกลวงเสี้ยวขวาบน	hollow square upper right quadrant|hollow|quadrant|right|square|upper
+◷	วงกลมกลวงมีเสี้ยวขวาบน	hollow circle with upper right quadrant|circle|hollow|quadrant|right|upper|with
+◻	สี่เหลี่ยมขนาดกลางสีขาว|เรขาคณิต|สี่เหลี่ยม	white medium square|geometric|medium|square|white
+◼	สี่เหลี่ยมขนาดกลางสีดำ|จัตุรัส|เรขาคณิต|สีดำ|สี่เหลี่ยม	black medium square|black|geometric|medium|square
+◽	สี่เหลี่ยมเล็กปานกลางสีขาว|เรขาคณิต|สี่เหลี่ยม	white medium-small square|geometric|medium-small|square|white
+◾	สี่เหลี่ยมเล็กปานกลางสีดำ|เรขาคณิต|สี่เหลี่ยม	black medium-small square|black|geometric|medium-small|square
+◿	สามเหลี่ยมขวาล่าง	lower right triangle|lower|right|triangle
+☀	พระอาทิตย์|สว่าง|แสงแดด|อากาศ	sun|bright|rays|space|sunny|weather
+☁	เมฆ|เมฆดำ|สภาพอากาศ	cloud|weather
+☂	ร่ม|ฝน|สภาพอากาศ	umbrella|clothing|rain
+☃	สโนว์แมนและหิมะ|คน|ตุ๊กตา|เย็น|สโนว์แมน|สภาพอากาศ|หนาว|หิมะ	snowman|cold|man|snow
+☄	ดาวหาง|อวกาศ	comet|space
+☎	โทรศัพท์	telephone|phone
+☑	กล่องกาเครื่องหมายมีเครื่องหมายถูก|✓|กล่อง|กา|เครื่องหมาย|เช็ค|ถูก|ถูกต้อง|เรียบร้อย|เลือก|เสร็จแล้ว	check box with check|✓|ballot|box|check|checked|done|off|tick
+☔	ร่มและหยดน้ำฝน|ฝน|ร่ม|สภาพอากาศ	umbrella with rain drops|clothing|drop|drops|rain|umbrella|weather
+☕	เครื่องดื่มร้อน|กาแฟ|เครื่องดื่ม|ชา|ร้อน	hot beverage|beverage|cafe|caffeine|chai|coffee|drink|hot|morning|steaming|tea
+☘	ใบโคลเวอร์|พืช	shamrock|irish|plant
+☝	นิ้วชี้ขึ้น|ขึ้น|ชี้|นิ้ว|บน|มือ|เหนือ	index pointing up|finger|hand|index|point|pointing|this|up
+☠	กะโหลกไขว้|กระดูก|กะโหลก|ความตาย|ปิศาจ|อันตราย	skull and crossbones|bone|crossbones|dead|death|face|monster|skull
+☢	กัมมันตรังสี|กัมมันตภาพรังสี|พิษ|สารเคมี	radioactive|sign
+☣	เชื้อโรคอันตราย|เชื้อโรค|อันตราย	biohazard|sign
+☦	ไม้กางเขนออร์โธดอกซ์|คริสต์|ไม้กางเขน|ศาสนา	orthodox cross|Christian|cross|orthodox|religion
+☪	พระจันทร์เสี้ยวและดาว|มุสลิม|ศาสนา|อิสลาม	star and crescent|crescent|islam|Muslim|ramadan|religion|star
+☮	เครื่องหมายสันติภาพ|สันติ|สันติภาพ|สันติสุข	peace symbol|healing|peace|peaceful|symbol
+☯	หยินหยาง|เต๋า|ลัทธิ	yin yang|difficult|lives|religion|tao|taoist|total|yang|yin|yinyang
+☸	ธรรมจักร|จักร|ธรรมะ|พุทธ|ศาสนา	wheel of dharma|Buddhist|dharma|religion|wheel
+☹	หน้าบึ้ง|บึ้ง|หน้า	frowning face|face|frown|frowning|sad
+☺	หน้ายิ้ม|ยิ้ม|หน้า|หุหุ	smiling face|face|happy|outlined|relaxed|smile|smiling
+♀	สัญลักษณ์เพศหญิง|ผู้หญิง	female sign|female|sign|woman
+♂	สัญลักษณ์เพศชาย|ผู้ชาย	male sign|male|man|sign
+♈	ราศีเมษ|จักรราศี	Aries|horoscope|ram|zodiac
+♉	ราศีพฤษภ|จักรราศี	Taurus|bull|horoscope|ox|zodiac
+♊	ราศีเมถุน|จักรราศี	Gemini|horoscope|twins|zodiac
+♋	ราศีกรกฎ|จักรราศี	Cancer|crab|horoscope|zodiac
+♌	ราศีสิงห์|จักรราศี	Leo|horoscope|lion|zodiac
+♍	ราศีกันย์|จักรราศี	Virgo|horoscope|zodiac
+♎	ราศีตุลย์|จักรราศี	Libra|balance|horoscope|justice|scales|zodiac
+♏	ราศีพิจิก|จักรราศี	Scorpio|horoscope|scorpion|Scorpius|zodiac
+♐	ราศีธนู|จักรราศี	Sagittarius|archer|horoscope|zodiac
+♑	ราศีมังกร|จักรราศี	Capricorn|goat|horoscope|zodiac
+♒	ราศีกุมภ์|จักรราศี	Aquarius|bearer|horoscope|water|zodiac
+♓	ราศีมีน|จักรราศี	Pisces|fish|horoscope|zodiac
+♟	หมากรุก|เกม|เบี้ย	chess pawn|chess|dupe|expendable|pawn
+♠	โพดำ|เกม|ไพ่	spade suit|card|game|spade|suit
+♣	ดอกจิก|เกม|ไพ่	club suit|card|club|clubs|game|suit
+♥	โพแดง|เกม|พนัน|ไพ่|หัวใจ|อารมณ์	heart suit|card|emotion|game|heart|hearts|suit
+♦	ข้าวหลามตัด|เกม|ไพ่	diamond suit|card|diamond|game|suit
+♨	น้ำพุร้อน|น้ำพุ|ไอน้ำ	hot springs|hot|hotsprings|springs|steaming
+♪	โน้ตเขบ็ต 1 ชั้น|เขบ็ต 1 ชั้น|ดนตรี|โน้ต	eighth note|eighth|music|note
+♭	แฟลต|ดนตรี|โน้ต	flat|bemolle|music|note
+♯	ชาร์ป|ดนตรี|โน้ต|สูงขึ้นครึ่งเสียง	sharp|dièse|diesis|music|note
+♻	สัญลักษณ์รีไซเคิล|ป้าย|รีไซเคิล|สัญลักษณ์	recycling symbol|recycle|recycling|symbol
+♾	ไม่มีที่สิ้นสุด|ตลอดกาล|ตลอดไป|ไม่มีขอบเขต	infinity|forever|unbounded|universal
+♿	รถเข็นผู้ป่วย|คนพิการ	wheelchair symbol|access|handicap|symbol|wheelchair
+⚒	ค้อนและจอบ|ค้อน|เครื่องมือ|จอบ	hammer and pick|hammer|pick|tool
+⚓	สมอเรือ|เครื่องมือ|เรือ|สมอ	anchor|ship|tool
+⚔	ดาบไขว้|ไขว้|ดาว|อาวุธ	crossed swords|crossed|swords|weapon
+⚕	เครื่องหมายการแพทย์|การแพทย์|คทางูไขว้|ไม้เท้า|แอสคูลาปิอุส	medical symbol|aesculapius|medical|medicine|staff|symbol
+⚖	ตราชั่ง|เครื่องมือ|ตุลย์|น้ำหนัก|ยุติธรรม|ราศี|สมดุล	balance scale|balance|justice|Libra|scale|scales|tool|weight|zodiac
+⚗	อุปกรณ์กลั่น|เครื่องมือ|วิทยาศาสตร์|สารเคมี	alembic|chemistry|tool
+⚙	เฟือง|เครื่องมือ	gear|cog|cogwheel|tool
+⚛	อะตอม|อเทวนิยม	atom symbol|atheist|atom|symbol
+⚜	สัญลักษณ์ดอกลิลลี่|ดอกไม้|ลิลลี่|สัญลักษณ์|อัศวิน|ไอริส	fleur-de-lis|knights
+⚠	ป้ายระวัง|ป้าย|ระวัง	warning|caution
+⚡	ไฟฟ้าแรงสูง|สัญลักษณ์ไฟฟ้าแรงสูง	high voltage|danger|electric|electricity|high|lightning|nature|thunder|thunderbolt|voltage|zap
+⚧	สัญลักษณ์คนข้ามเพศ|คนข้ามเพศ	transgender symbol|symbol|transgender
+⚪	วงกลมสีขาว|วงกลม|สีขาว	white circle|circle|geometric|white
+⚫	วงกลมสีดำ|วงกลม|สีดำ	black circle|black|circle|geometric
+⚰	โลงศพ|ความตาย	coffin|dead|death|vampire
+⚱	โกศกระดูก|กระดูก|โกศ|ความตาย|งานศพ	funeral urn|ashes|death|funeral|urn
+⚽	ลูกฟุตบอล|ฟุตบอล	soccer ball|ball|football|futbol|soccer|sport
+⚾	เบสบอล|บอล	baseball|ball|sport
+⛄	สโนว์แมน|สภาพอากาศ|หนาว|หิมะ	snowman without snow|cold|man|snow|snowman
+⛅	ดวงอาทิตย์หลังเมฆ|ดวงอาทิตย์	sun behind cloud|behind|cloud|cloudy|sun|weather
+⛈	ฝนฟ้าคะนอง|ฝน|ฟ้าร้อง|เมฆ|สภาพอากาศ	cloud with lightning and rain|cloud|lightning|rain|thunder|thunderstorm
+⛎	กลุ่มดาวคนแบกงู|จักรราศี	Ophiuchus|bearer|serpent|snake|zodiac
+⛏	จอบ|เครื่องมือ|เหมือง	pick|hammer|mining|tool
+⛑	หมวกนิรภัยมีกากบาทขาว|กากบาท|ปลอดภัย|หมวกนิรภัย	rescue worker’s helmet|aid|cross|face|hat|helmet|rescue|worker’s
+⛓	โซ่	chains|chain
+⛓‍💥	โซ่ขาด|กุญแจมือ|ตรวน|แตก|หัก|อิสรภาพ	broken chain|break|breaking|broken|chain|cuffs|freedom
+⛔	ป้ายห้ามเข้า|การจราจร|ป้าย|หยุด|หวงห้าม|ห้ามเข้า	no entry|do|entry|fail|forbidden|no|not|pass|prohibited|traffic
+⛩	ศาลเจ้าชินโต|ชินโต|ลัทธิ|ศาลเจ้า	shinto shrine|religion|shinto|shrine
+⛪	โบสถ์|คริสต์|ไม้กางเขน|ศาสนสถาน|ศาสนา	church|bless|chapel|Christian|cross|religion
+⛰	ภูเขา	mountain
+⛱	ร่มปักดิน|ฝน|พระอาทิตย์|ร่ม|สภาพอากาศ	umbrella on ground|ground|rain|sun|umbrella
+⛲	น้ำพุ	fountain
+⛳	ธงในหลุม|กอล์ฟ	flag in hole|flag|golf|hole|sport
+⛴	เรือเฟอร์รี|เรือ	ferry|boat|passenger
+⛵	เรือใบ|ทะเล|เรือ	sailboat|boat|resort|sailing|sea|yacht
+⛷	นักสกี|สกี|หิมะ	skier|ski|snow
+⛸	สเก็ตน้ำแข็ง|น้ำแข็ง|สเก็ต	ice skate|ice|skate|skating
+⛹	คนเล่นบอล|กีฬา|คน|ชิงแชมป์|นักกีฬา|นักบาส|บาส|บาสเก็ตบอล|ลูก	person bouncing ball|athletic|ball|basketball|bouncing|championship|dribble|net|person|player|throw
+⛹‍♀	ผู้หญิงเล่นบอล|กีฬา|คน|ชิงแชมป์|นักกีฬา|นักบาส|บาส|บาสเก็ตบอล|ผู้หญิง|ลูก	woman bouncing ball|athletic|ball|basketball|bouncing|championship|dribble|net|player|throw|woman
+⛹‍♂	ผู้ชายเล่นบอล|กีฬา|คน|ชิงแชมป์|นักกีฬา|นักบาส|บาส|บาสเก็ตบอล|ผู้ชาย|ลูก	man bouncing ball|athletic|ball|basketball|bouncing|championship|dribble|man|net|player|throw
+⛺	เต็นท์|ตั้งแคมป์	tent|camping
+⛽	ปั๊มน้ำมัน|น้ำมัน	fuel pump|diesel|fuel|fuelpump|gas|gasoline|pump|station
+✂	กรรไกร|เครื่องมือ	scissors|cut|cutting|paper|tool
+✅	ปุ่มเครื่องหมายถูก|✓|กา|เครื่องหมาย|เช็ค|ติ๊ก|ถูก|ถูกต้อง|ปุ่ม|เรียบร้อย|เสร็จแล้ว	check mark button|✓|button|check|checked|checkmark|complete|completed|done|fixed|mark|tick
+✈	เครื่องบิน|ยานพาหนะ	airplane|aeroplane|fly|flying|jet|plane|travel
+✉	ซองจดหมาย|จดหมาย|อีเมล	envelope|e-mail|email|letter
+✊	กำมือ|ค้อน|หมัด|อวัยวะ	raised fist|clenched|fist|hand|punch|raised|solidarity
+✋	ตั้งฝ่ามือ|มือ|อวัยวะ	raised hand|5|five|hand|high|raised|stop
+✌	ชู 2 นิ้ว|ชูสองนิ้ว	victory hand|hand|peace|v|victory
+✍	เขียนหนังสือ|เขียน|มือ|อวัยวะ	writing hand|hand|write|writing
+✏	ดินสอ	pencil
+✒	ปลายปากกาสีดำ|ปลายปากกา|ปากกา|สีดำ	black nib|black|nib|pen
+✔	เครื่องหมายถูก|✓|เครื่องหมาย|เช็ค|ติ๊ก|ถูก|เลือก|เสร็จแล้ว|หนา	check mark|✓|check|checked|checkmark|done|heavy|mark|tick
+✖	คูณ|×|x|การคูณ|เครื่องหมาย|เครื่องหมายคูณ|ยกเลิก	multiply|×|cancel|multiplication|sign|x
+✝	ไม้กางเขนละติน|คริสต์|ไม้กางเขน|ศาสนา	latin cross|christ|Christian|cross|latin|religion
+✡	สตาร์ออฟเดวิด|ดาว|ดาวิด|ยิว|ยูดาย|ศาสนา	star of David|David|Jew|Jewish|judaism|religion|star
+✨	ประกายวิบวับ|*|ดาว|ดาววิบวับ	sparkles|*|magic|sparkle|star
+✳	ดอกจัน 8 ซี่|*|เครื่องหมาย|ดอกจัน|แปดแฉก|แปดซี่	eight-spoked asterisk|*|asterisk|eight-spoked
+✴	ดาว 8 แฉก|*|ดาว	eight-pointed star|*|eight-pointed|star
+❄	เกล็ดหิมะ|สภาพอากาศ|หนาว|หิมะ	snowflake|cold|snow|weather
+❇	เปล่งประกาย|*|ประกาย	sparkle|*
+❌	เครื่องหมายกากบาท|กากบาท|คูณ|เครื่องหมาย|ยกเลิก	cross mark|×|cancel|cross|mark|multiplication|multiply|x
+❎	ปุ่มเครื่องหมายกากบาท|×|x|กากบาท|เครื่องหมาย|สี่เหลี่ยม	cross mark button|×|button|cross|mark|multiplication|multiply|square|x
+❓	เครื่องหมายคำถาม|?|คำถาม|เครื่องหมาย|เครื่องหมายวรรคตอน	red question mark|?|mark|punctuation|question|red
+❔	เครื่องหมายคำถามสีขาว|?|คำถาม|เครื่องหมาย|เครื่องหมายวรรคตอน	white question mark|?|mark|outlined|punctuation|question|white
+❕	เครื่องหมายอัศเจรีย์สีขาว|!|เครื่องหมาย|ตกใจ|วรรคตอน|สีขาว|อัศเจรีย์	white exclamation mark|!|bang|exclamation|mark|outlined|punctuation|white
+❗	เครื่องหมายอัศเจรีย์สีแดง|!|เครื่องหมาย|ตกใจ|วรรคตอน|สีแดง|อัศเจรีย์	red exclamation mark|!|bang|exclamation|mark|punctuation|red
+❣	เครื่องหมายอัศเจรีย์รูปหัวใจ|เครื่องหมายอัศเจรีย์|ตกใจ|เลือด|วรรคตอน|หัวใจ	heart exclamation|bang|exclamation|heart|heavy|mark|punctuation
+❤	หัวใจสีแดง|หัวใจ|หัวใจแดง	red heart|emotion|heart|love|red
+❤‍🔥	ไฟไหม้หัวใจ|เผ็ด|ไฟไหม้|ร้อนรุ่ม|รัก|หลง|หัวใจ	heart on fire|burn|fire|heart|love|lust|sacred
+❤‍🩹	หัวใจที่มีการซ่อมแซม|ซ่อมแซม|ดีขึ้น|พักฟื้น|เยียวยา|รักษา|สุขภาพดี|หัวใจ	mending heart|healthier|heart|improving|mending|recovering|recuperating|well
+➕	บวก|+|คณิต|เครื่องหมาย|เครื่องหมายบวก	plus|+
+➖	ลบ|-|−|คณิต|เครื่องหมาย|เครื่องหมายลบ	minus|-|−|heavy|math|sign
+➗	หาร|÷|คณิต|เครื่องหมาย|เครื่องหมายหาร	divide|÷|division|heavy|math|sign
+➡	ลูกศรชี้ไปทางขวา|ตะวันออก|ทิศทาง|ลูกศร	right arrow|arrow|cardinal|direction|east|right
+➰	ห่วง|วง	curly loop|curl|curly|loop
+➿	ห่วง 2 รู|เส้นโค้ง|ห่วง	double curly loop|curl|curly|double|loop
+⤴	ลูกศรโค้งขึ้น|ขี้น|ลูกศร	right arrow curving up|arrow|curving|right|up
+⤵	ลูกศรโค้งลง|ลง|ลูกศร	right arrow curving down|arrow|curving|down|right
+⨧	เครื่องหมายบวกตัวห้อยเลขสอง	plus subscript two|plus|subscript|two
+⨯	ผลคูณไขว้ของเวกเตอร์	vector cross product|cross|product|vector
+⨼	ผลคูณภายใน	interior product|interior|product
+⩣	เส้นใต้คู่หรือเชิงตรรกะ	logical or double underbar|double|logical|or|underbar
+⩽	เท่ากันเอียงน้อยกว่า	less-than slanted equal|equal|less-than|slanted
+⪍	น้อยกว่าเหนือเท่ากันคล้าย	less-than above similar equal|above|equal|less-than|similar
+⪚	มากกว่าเท่ากันเส้นคู่|คณิตศาสตร์|ไม่เท่ากัน	double-line equal greater-than|double-line|equal|greater-than|inequality|mathematics
+⪺	ตามหลังเหนือไม่เกือบเท่ากัน	succeeds above not almost equal|above|almost|equal|not|succeeds
+⬅	ลูกศรชี้ไปทางซ้าย|ตะวันตก|ทิศทาง|ลูกศร	left arrow|arrow|cardinal|direction|left|west
+⬆	ลูกศรชี้ขึ้น|ทิศทาง|ลูกศร|เหนือ	up arrow|arrow|cardinal|direction|north|up
+⬇	ลูกศรชี้ลง|ใต้|ทิศทาง|ลง|ลูกศร	down arrow|arrow|cardinal|direction|down|south
+⬛	สี่เหลี่ยมใหญ่สีดำ|เรขาคณิต|สี่เหลี่ยม	black large square|black|geometric|large|square
+⬜	สี่เหลี่ยมใหญ่สีขาว|เรขาคณิต|สี่เหลี่ยม	white large square|geometric|large|square|white
+⭐	ดาวสีขาวขนาดกลาง|ดวงดาว	star|astronomy|medium|stars|white
+⭕	วงกลมกลวงสีแดง|กลวง|วงกลม|สีแดง|ใหญ่	hollow red circle|circle|heavy|hollow|large|o|red
+、	อักษรภาพจุลภาค|จุลภาค|อักษรภาพ	ideographic comma|comma|ideographic
+。	อักษรภาพมหัพภาค|จุด|มหัพภาค|อักษรภาพ	ideographic period|full|ideographic|period|stop
+〈	วงเล็บมุมเปิด|ทูเพิล|บั้ง|วงเล็บ|วงเล็บมุม|วงเล็บสามเหลี่ยม|วงเล็บแหลม	open angle bracket|angle|bracket|brackets|chevron|diamond|open|pointy|tuple
+〉	วงเล็บมุมปิด|ทูเพิล|บั้ง|วงเล็บ|วงเล็บมุม|วงเล็บสามเหลี่ยม|วงเล็บแหลม	close angle bracket|angle|bracket|brackets|chevron|close|diamond|pointy|tuple
+《	วงเล็บมุมเปิดสองชั้น|วงเล็บ|วงเล็บมุมสองชั้น	open double angle bracket|angle|bracket|double|open
+》	วงเล็บมุมปิดสองชั้น|วงเล็บ|วงเล็บมุมสองชั้น	close double angle bracket|angle|bracket|close|double
+「	วงเล็บตะขอเปิด|วงเล็บ|วงเล็บตะขอ	open corner bracket|bracket|corner|open
+」	วงเล็บตะขอปิด|วงเล็บ|วงเล็บตะขอ	close corner bracket|bracket|close|corner
+『	วงเล็บตะขอโปร่งเปิด|วงเล็บ|วงเล็บตะขอโปร่ง	open hollow corner bracket|bracket|corner|hollow|open
+』	วงเล็บตะขอโปร่งปิด|วงเล็บ|วงเล็บตะขอโปร่ง	close hollow corner bracket|bracket|close|corner|hollow
+【	วงเล็บมุมทึบเปิด|วงเล็บ|วงเล็บมุมทึบ|วงเล็บรูปเลนส์	open black lens bracket|black|bracket|lens|lenticular|open
+】	วงเล็บมุมทึบปิด|วงเล็บ|วงเล็บมุมทึบ|วงเล็บรูปเลนส์	close black lens bracket|black|bracket|close|lens|lenticular
+〔	วงเล็บกระดองเต่าเปิด|วงเล็บ|วงเล็บกระดอง|วงเล็บกระดองเต่า	open tortoise shell bracket|bracket|open|shell|tortoise
+〕	วงเล็บกระดองเต่าปิด|วงเล็บ|วงเล็บกระดอง|วงเล็บกระดองเต่า	close tortoise shell bracket|bracket|close|shell|tortoise
+〖	วงเล็บมุมโปร่งเปิด|วงเล็บ|วงเล็บมุมโปร่ง|วงเล็บรูปเลนส์โปร่ง	open hollow lens bracket|bracket|hollow|lens|lenticular|open
+〗	วงเล็บมุมโปร่งปิด|วงเล็บ|วงเล็บมุมโปร่ง|วงเล็บรูปเลนส์โปร่ง	close hollow lens bracket|bracket|close|hollow|lens|lenticular
+〰	เส้นคลื่น|คลื่น|เครื่องหมาย|เส้น	wavy dash|dash|punctuation|wavy
+〽	เครื่องหมายเปลี่ยนท่อน|เครื่องหมาย|ท่อน	part alternation mark|alternation|mark|part
+・	จุดกลางของคาตะคานะ|คาตะคานะ|จุด|จุดกลาง|จุดตรงกลาง	katakana middle dot|dot|dots|interpunct|katakana|middle|middot
+㊗	ภาษาญี่ปุ่นคำว่า “แสดงความยินดี”|ตัวอักษรจีน|ปุ่ม|ภาษาญี่ปุ่น|แสดงความยินดี	Japanese “congratulations” button|button|congratulations|ideograph|Japanese
+㊙	ภาษาญี่ปุ่นคำว่า “ความลับ”|ความลับ|ตัวอักษรจีน|ปุ่ม|ภาษาญี่ปุ่น	Japanese “secret” button|button|ideograph|Japanese|secret
+﷼	เรียล|สกุลเงิน	rial|currency
+🀄	ไพ่นกกระจอกมังกรแดง|เกม|แดง|นกกระจอก|ไพ่|ไพ่นกกระจอก|มังกร	mahjong red dragon|dragon|game|mahjong|red
+🃏	ไพ่โจ๊กเกอร์|โจ๊กเกอร์|เล่นไพ่	joker|card|game|wildcard
+🅰	เลือดกรุ๊ปเอ|กรุ๊ปเลือด|กรุ๊ปเอ	A button (blood type)|blood|button|type
+🅱	เลือดกรุ๊ปบี|กรุ๊ปบี|ชนิด|ปุ่ม|เลือด	B button (blood type)|B|blood|button|type
+🅾	เลือดกรุ๊ปโอ|กรุ๊ปเลือด|กรุ๊ปโอ	O button (blood type)|blood|button|O|type
+🅿	ที่จอดรถ|จอดรถ	P button|button|P|parking
+🆎	เลือดกรุ๊ปเอบี|กรุ๊ปเลือด|กรุ๊ปเลือดเอบี|กรุ๊ปเอบี	AB button (blood type)|AB|blood|button|type
+🆑	ลบข้อมูล|สัญลักษณ์ลบ	CL button|button|CL
+🆒	เย็น|สัญลักษณ์ความเย็น	COOL button|button|COOL
+🆓	ฟรี|ไม่มีค่าใช้จ่าย|สัญลักษณ์ฟรี	FREE button|button|FREE
+🆔	หมายเลขประจำตัว|รหัสประจำตัว|สัญลักษณ์หมายเลขประจำตัว	ID button|button|ID|identity
+🆕	ใหม่|สัญลักษณ์ใหม่	NEW button|button|NEW
+🆖	ปุ่มเอ็นจี|ปุ่ม|โรมัน|ละติน|สัญลักษณ์|อักษร|อังกฤษ|เอ็นจี	NG button|button|NG
+🆗	โอเค|ตกลง|สัญลักษณ์โอเค	OK button|button|OK|okay
+🆘	ช่วยด้วย|ขอความช่วยเหลือ|สัญลักษณ์ขอความช่วยเหลือ	SOS button|button|help|SOS
+🆙	ขึ้น|สัญลักษณ์ขึ้น	UP! button|button|mark|UP|UP!
+🆚	ต่อสู้กับ|สัญลักษณ์ต่อสู้กับ	VS button|button|versus|VS
+🈁	ภาษาญี่ปุ่นคำว่า “ที่นี่”|คะตะกะนะ|ที่นี่|ปุ่ม|ภาษาญี่ปุ่น	Japanese “here” button|button|here|Japanese|katakana
+🈂	ภาษาญี่ปุ่นคำว่า “ค่าบริการ”|คะตะกะนะ|ค่าบริการ|ภาษาญี่ปุ่นคำว่าซะ	Japanese “service charge” button|button|charge|Japanese|katakana|service
+🈚	ภาษาญี่ปุ่นคำว่า “ไม่มี”|ตัวอักษรจีน|ปุ่ม|ภาษาญี่ปุ่นไม่มี|ไม่คิดเงิน	Japanese “free of charge” button|button|charge|free|ideograph|Japanese
+🈯	ภาษาญี่ปุ่นคำว่า “จองแล้ว”|จองแล้ว|ตัวอักษรจีน|ปุ่ม|ภาษาญี่ปุ่นชี้นิ้ว	Japanese “reserved” button|button|ideograph|Japanese|reserved
+🈲	ภาษาญี่ปุ่นคำว่า “ห้าม”|ต้องห้าม|ตัวอักษรจีน|ปุ่ม|ภาษาญี่ปุ่น	Japanese “prohibited” button|button|ideograph|Japanese|prohibited
+🈳	ภาษาจีนว่างเปล่า|ตัวอักษรจีน|ปุ่ม|ภาษาญี่ปุ่น|ว่างเปล่า	Japanese “vacancy” button|button|ideograph|Japanese|vacancy
+🈴	ภาษาญี่ปุ่นคำว่า “ผ่าน”|เกรด|ตัวอักษรจีน|ปุ่ม|ผ่าน|ภาษาญี่ปุ่น	Japanese “passing grade” button|button|grade|ideograph|Japanese|passing
+🈵	ภาษาญี่ปุ่นคำว่า “เต็ม”|ตัวอักษรจีน|เต็ม|ปุ่ม|ภาษาญี่ปุ่น|ไม่ว่าง|สมบูรณ์	Japanese “no vacancy” button|button|ideograph|Japanese|no|vacancy
+🈶	ภาษาญี่ปุ่นคำว่า “คิดค่าใช้จ่าย”|ค่าใช้จ่าย|ตัวอักษรจีน|ปุ่ม|ภาษาญี่ปุ่นมี	Japanese “not free of charge” button|button|charge|free|ideograph|Japanese|not
+🈷	ภาษาญี่ปุ่นคำว่า “จำนวนต่อเดือน”|จำนวน|ตัวอักษรจีน|ปุ่ม|พระจันทร์|ภาษาญี่ปุ่น|รายเดือน	Japanese “monthly amount” button|amount|button|ideograph|Japanese|monthly
+🈸	ภาษาญี่ปุ่นคำว่า “ใบสมัคร”|ใช้|ตัวอักษรจีน|ใบสมัคร|ปุ่ม|ภาษาญี่ปุ่น	Japanese “application” button|application|button|ideograph|Japanese
+🈹	ภาษาญี่ปุ่นคำว่า “ส่วนลด”|ตัวอักษรจีน|ปุ่ม|ภาษาญี่ปุ่นหาร|ส่วนลด	Japanese “discount” button|button|discount|ideograph|Japanese
+🈺	ภาษาญี่ปุ่นคำว่า “เปิดทำการ”|ตัวอักษรจีน|ปุ่ม|เปิดทำการ|ภาษาญี่ปุ่น	Japanese “open for business” button|business|button|ideograph|Japanese|open
+🉐	ภาษาญี่ปุ่นคำว่า “ราคาถูก”|ต่อรอง|ตัวอักษรจีน|ปุ่ม|ภาษาญี่ปุ่นประโยชน์|ราคาถูก	Japanese “bargain” button|bargain|button|ideograph|Japanese
+🉑	ภาษาญี่ปุ่นคำว่า “ยอมรับได้”|ตัวอักษรจีน|ปุ่ม|ภาษาญี่ปุ่น|ยอมรับได้	Japanese “acceptable” button|acceptable|button|ideograph|Japanese
+🌀	ไซโคลน|ไต้ฝุ่น|พายุหมุน	cyclone|dizzy|hurricane|twister|typhoon|weather
+🌁	หมอกลง|สะพาน|หมอก	foggy|fog
+🌂	ร่มหุบ|ฝน|ร่ม|เสื้อผ้า	closed umbrella|closed|clothing|rain|umbrella
+🌃	ดาว|กลางคืน|ดาวยามค่ำคืน|ตึก|อาคาร	night with stars|night|star|stars
+🌄	ดวงอาทิตย์โผล่พ้นเขา|ดวงอาทิตย์ตอนเช้า	sunrise over mountains|morning|mountains|over|sun|sunrise
+🌅	ดวงอาทิตย์ขึ้น|ดวงอาทิตย์|ดวงอาทิตย์ตอนเช้า	sunrise|morning|nature|sun
+🌆	เมืองยามโพล้เพล้|ตอนเย็น|โพล้เพล้	cityscape at dusk|at|building|city|cityscape|dusk|evening|landscape|sun|sunset
+🌇	ดวงอาทิตย์ตก|ดวงอาทิตย์ตกเหนือตึก|ตึก|โพล้เพล้	sunset|building|dusk|sun
+🌈	รุ้ง|เกย์ไพรด์|คนข้ามเพศ|ธรรมชาติ|ฝน|สภาพอากาศ|สายรุ้ง|สีสัน|แอลจีบีที	rainbow|gay|genderqueer|glbt|glbtq|lesbian|lgbt|lgbtq|lgbtqia|nature|pride|queer|rain|trans|transgender|weather
+🌉	สะพานกลางคืน|กลางคืน|สะพาน	bridge at night|at|bridge|night
+🌊	คลื่น|คลื่นทะเล	water wave|nature|ocean|surf|surfer|surfing|water|wave
+🌋	ภูเขาไฟ|ภูเขาไฟระเบิด	volcano|eruption|mountain|nature
+🌌	ทางช้างเผือก|ดาราจักร|อวกาศ	milky way|milky|space|way
+🌍	ลูกโลกแสดงทวีปยุโรปและแอฟริกา|ยุโรป|ลูกโลก|แอฟริกา	globe showing Europe-Africa|Africa|earth|Europe|Europe-Africa|globe|showing|world
+🌎	ลูกโลกแสดงทวีปอเมริกา|ลูกโลก|อเมริกา	globe showing Americas|Americas|earth|globe|showing|world
+🌏	ลูกโลกแสดงทวีปเอเชียและออสเตรเลีย|ลูกโลก|ออสเตรเลีย|เอเชีย	globe showing Asia-Australia|Asia|Asia-Australia|Australia|earth|globe|showing|world
+🌐	ลูกโลกแสดงเส้นเมริเดียน|ลูกโลก|เส้นเมริเดียน	globe with meridians|earth|globe|internet|meridians|web|world|worldwide
+🌑	จันทร์ดับ|จันทร์มืด|มืด	new moon|dark|moon|new|space
+🌒	พระจันทร์เสี้ยวข้างขึ้น|ข้างขึ้น	waxing crescent moon|crescent|dreams|moon|space|waxing
+🌓	พระจันทร์ครึ่งซีกขวา|ครึ่งซีก|ดวงดาว|พระจันทร์|อวกาศ	first quarter moon|first|moon|quarter|space
+🌔	ข้างขึ้น|พระจันทร์เกือบเต็มดวง	waxing gibbous moon|gibbous|moon|space|waxing
+🌕	พระจันทร์เต็มดวง|เต็มดวง|พระจันทร์	full moon|full|moon|space
+🌖	ข้างแรม|ดวงจันทร์|ดาว|อวกาศ	waning gibbous moon|gibbous|moon|space|waning
+🌗	พระจันทร์ครึ่งซีกซ้าย|ครึ่งซีก|ดวงดาว|พระจันทร์|อวกาศ	last quarter moon|last|moon|quarter|space
+🌘	พระจันทร์เสี้ยวข้างแรม|ข้างแรม|พระจันทร์|เสี้ยว	waning crescent moon|crescent|moon|space|waning
+🌙	พระจันทร์เสี้ยว|พระจันทร์|เสี้ยว	crescent moon|crescent|moon|ramadan|space
+🌚	หน้าพระจันทร์ดับ|ดวงจันทร์|พระจันทร์ดับ|หน้าดำ|อวกาศ	new moon face|face|moon|new|space
+🌛	หน้าพระจันทร์เสี้ยวขวา|ซีก|พระจันทร์|เสี้ยว|หน้า|อวกาศ	first quarter moon face|face|first|moon|quarter|space
+🌜	หน้าพระจันทร์เสี้ยวซ้าย|หน้าพระจันทร์	last quarter moon face|dreams|face|last|moon|quarter
+🌝	หน้าพระจันทร์เต็มดวง|เต็มดวง|พระจันทร์|สว่าง|หน้า|อวกาศ	full moon face|bright|face|full|moon
+🌞	หน้าพระอาทิตย์|ใบหน้า|พระอาทิตย์|สว่าง|อากาศ	sun with face|beach|bright|day|face|heat|shine|sun|sunny|sunshine|weather
+🌟	ดาวส่องแสง|ดาว|ประกาย|ระยิบระยับ|แสง	glowing star|glittery|glow|glowing|night|shining|sparkle|star|win
+🌠	ดาวตก|ดาว	shooting star|falling|night|shooting|space|star
+🌡	เครื่องวัดอุณหภูมิ|เครื่องวัด|อุณหภูมิ	thermometer|weather
+🌤	เมฆน้อยบดบังพระอาทิตย์|พระอาทิตย์|เมฆ|สภาพอากาศ	sun behind small cloud|behind|cloud|sun|weather
+🌥	เมฆก้อนใหญ่บังพระอาทิตย์|พระอาทิตย์|เมฆ|สภาพอากาศ	sun behind large cloud|behind|cloud|sun|weather
+🌦	เมฆฝนบดบังพระอาทิตย์|ฝน|พระอาทิตย์|เมฆ|สภาพอากาศ	sun behind rain cloud|behind|cloud|rain|sun|weather
+🌧	เมฆฝน|ฝน|เมฆ|สภาพอากาศ	cloud with rain|cloud|rain|weather
+🌨	เมฆและหิมะ|เมฆ|สภาพอากาศ|หิมะ	cloud with snow|cloud|cold|snow|weather
+🌩	เมฆและฟ้าแลบ|ฟ้าแลบ|เมฆ|สภาพอากาศ	cloud with lightning|cloud|lightning|weather
+🌪	พายุทอร์นาโด|พายุหมุน|เมฆ|อากาศ	tornado|cloud|weather|whirlwind
+🌫	หมอก|เมฆ|สภาพอากาศ	fog|cloud|weather
+🌬	พ่นลม|เมฆ|ลมพัด|สภาพอากาศ	wind face|blow|cloud|face|wind
+🌭	ฮอทด็อก|ไส้กรอก	hot dog|dog|frankfurter|hot|hotdog|sausage
+🌮	ทาโก้|เม็กซิกัน|เม็กซิโก	taco|mexican
+🌯	เบอร์ริโต|เม็กซิกัน|เม็กซิโก	burrito|mexican|wrap
+🌰	เกาลัด|พืช	chestnut|almond|plant
+🌱	ต้นอ่อน|พืช	seedling|plant|sapling|sprout|young
+🌲	ต้นสน|ต้นไม้	evergreen tree|christmas|evergreen|forest|pine|tree
+🌳	ต้นไม้ร่มรื่น|ต้นไม้|ร่มเงา	deciduous tree|deciduous|forest|green|habitat|shedding|tree
+🌴	ต้นมะพร้าว|ต้นปาล์ม	palm tree|beach|palm|plant|tree|tropical
+🌵	ตะบองเพชร|พืช	cactus|desert|drought|nature|plant
+🌶	พริก|เผ็ด|พืช	hot pepper|hot|pepper
+🌷	ทิวลิป|ดอกไม้	tulip|blossom|flower|growth|plant
+🌸	ดอกซากุระ|ดอกไม้	cherry blossom|blossom|cherry|flower|plant|spring|springtime
+🌹	ดอกกุหลาบ|กุหลาบแดง|ดอกไม้	rose|beauty|elegant|flower|love|plant|red|valentine
+🌺	ดอกชบา|ชบา|ดอกไม้	hibiscus|flower|plant
+🌻	ดอกทานตะวัน|ดอกไม้|ทานตะวัน	sunflower|flower|outdoors|plant|sun
+🌼	ดอกไม้บาน|ดอกไม้	blossom|buttercup|dandelion|flower|plant
+🌽	ข้าวโพด|ธัญพืช|พืช	ear of corn|corn|crops|ear|farm|maize|maze
+🌾	รวงข้าว|ต้นข้าว	sheaf of rice|ear|grain|grains|plant|rice|sheaf
+🌿	สมุนไพร|ใบไม้	herb|leaf|plant
+🍀	ใบโคลเวอร์ 4 แฉก|โคลเวอร์|โชคดี|ใบไม้|สี่แฉก|ไอริช	four leaf clover|4|clover|four|four-leaf|irish|leaf|lucky|plant
+🍁	ใบเมเปิ้ล|ใบไม้ร่วง	maple leaf|falling|leaf|maple
+🍂	ใบไม้ร่วง|ใบไม้|พืช|ร่วง	fallen leaf|autumn|fall|fallen|falling|leaf
+🍃	ใบไม้ปลิว|ใบไม้|ปลิว|พืช|ลมพัด	leaf fluttering in wind|blow|flutter|fluttering|leaf|wind
+🍄	เห็ด|พืช	mushroom|fungus|toadstool
+🍄‍🟫	เห็ดสีน้ำตาล|กินเจ|เชื้อรา|ทรัฟเฟิล|ธรรมชาติ|ผัก|มังสวิรัติ|เห็ด|เห็ดหอม|อาหาร	brown mushroom|food|fungi|fungus|mushroom|nature|pizza|portobello|shiitake|shroom|spore|sprout|toppings|truffle|vegetable|vegetarian|veggie
+🍅	มะเขือเทศ|ผัก	tomato|food|fruit|vegetable
+🍆	มะเขือยาว|ผัก	eggplant|aubergine|vegetable
+🍇	องุ่น|ผลไม้	grapes|Dionysus|fruit|grape
+🍈	เมลอน|ผลไม้	melon|cantaloupe|fruit
+🍉	แตงโม|ผลไม้	watermelon|fruit
+🍊	ส้ม|ผลไม้	tangerine|c|citrus|fruit|nectarine|orange|vitamin
+🍋	เลมอน|ผลไม้	lemon|citrus|fruit|sour
+🍋‍🟩	มะนาว|เขตร้อน|ค็อกเทล|เครื่องปรุง|เตกีล่า|เปรี้ยว|ผลไม้|โมฮิโต้|สดชื่น|ส้ม	lime|acidity|citrus|cocktail|fruit|garnish|key|margarita|mojito|refreshing|salsa|sour|tangy|tequila|tropical|zest
+🍌	กล้วย|ผลไม้	banana|fruit|potassium
+🍍	สับปะรด|ผลไม้	pineapple|colada|fruit|pina|tropical
+🍎	แอปเปิ้ลแดง|ผลไม้|แอปเปิ้ล	red apple|apple|diet|food|fruit|health|red|ripe
+🍏	แอปเปิ้ลเขียว|ผลไม้|แอปเปิ้ล	green apple|apple|fruit|green
+🍐	ลูกแพร์|ผลไม้	pear|fruit
+🍑	ลูกพีช|ผลไม้	peach|fruit
+🍒	เชอร์รี่|ผลไม้	cherries|berries|cherry|fruit|red
+🍓	สตรอว์เบอร์รี่|ผลไม้	strawberry|berry|fruit
+🍔	แฮมเบอร์เกอร์|กิน|ด่วน|ฟาสต์ฟู้ด|หิว|อาหาร	hamburger|burger|eat|fast|food|hungry
+🍕	พิซซ่า 1 ชิ้น|ชิ้น|ชีส|เปปเปอโรนี|พิซซ่า|หิว|อาหาร	pizza|cheese|food|hungry|pepperoni|slice
+🍖	เนื้อ|เนื้อติดกระดูก	meat on bone|bone|meat
+🍗	น่องไก่|ไก่	poultry leg|bone|chicken|drumstick|hungry|leg|poultry|turkey
+🍘	ข้าวอบกรอบ|แครกเกอร์	rice cracker|cracker|food|rice
+🍙	ข้าวปั้น|ก้อนข้าวปั้น	rice ball|ball|food|Japanese|rice
+🍚	ข้าวสวย|ข้าว|ชามข้าว	cooked rice|cooked|food|rice
+🍛	ข้าวแกงกะหรี่|แกงกะหรี่|ข้าวราดแกง	curry rice|curry|food|rice
+🍜	ราเมน|ก๋วยเตี๋ยว|ชามก๋วยเตี๋ยว|บะหมี่	steaming bowl|bowl|chopsticks|food|noodle|pho|ramen|soup|steaming
+🍝	สปาเก็ตตี้|พาสต้า	spaghetti|food|meatballs|pasta|restaurant
+🍞	ขนมปัง|ก้อน|ข้าวสาลี|คาร์โบไฮเดรต|ธัญพืช|อาหาร	bread|carbs|food|grain|loaf|restaurant|toast|wheat
+🍟	เฟรนช์ฟราย|มันฝรั่งทอด	french fries|fast|food|french|fries
+🍠	มันเผา|มันเทศเผา	roasted sweet potato|food|potato|roasted|sweet
+🍡	ดังโงะ|ดังโงะเสียบไม้|โมจิ	dango|dessert|Japanese|skewer|stick|sweet
+🍢	โอเด้ง|โอเด้งเสียบไม้	oden|food|kebab|restaurant|seafood|skewer|stick
+🍣	ซูชิ	sushi|food
+🍤	กุ้งทอด|กุ้ง|อาหาร	fried shrimp|fried|prawn|shrimp|tempura
+🍥	ลูกชิ้นปลา|ปลา|ลูกชิ้น	fish cake with swirl|cake|fish|food|pastry|restaurant|swirl
+🍦	ซอฟต์ครีม|ไอศกรีม	soft ice cream|cream|dessert|food|ice|icecream|restaurant|serve|soft|sweet
+🍧	น้ำแข็งไส|ของหวาน|น้ำแข็ง|น้ำหวาน	shaved ice|dessert|ice|restaurant|shaved|sweet
+🍨	ไอศกรีม|ของหวาน|ครีม|น้ำแข็ง	ice cream|cream|dessert|food|ice|restaurant|sweet
+🍩	โดนัท|ขนม|ของหวาน	doughnut|breakfast|dessert|donut|food|sweet
+🍪	คุกกี้|ขนม|ของหวาน	cookie|chip|chocolate|dessert|sweet
+🍫	ช็อกโกแลต|ช็อกโกแลตแท่ง	chocolate bar|bar|candy|chocolate|dessert|halloween|sweet|tooth
+🍬	ลูกอม|ขนม|ของหวาน	candy|cavities|dessert|halloween|restaurant|sweet|tooth|wrapper
+🍭	อมยิ้ม|ขนม|ของหวาน|ลูกอม	lollipop|candy|dessert|food|restaurant|sweet
+🍮	คัสตาร์ด|พุดดิ้ง	custard|dessert|pudding|sweet
+🍯	โถน้ำผึ้ง|น้ำผึ้ง|หวาน	honey pot|barrel|bear|food|honey|honeypot|jar|pot|sweet
+🍰	เค้ก|ชิ้นเค้ก	shortcake|cake|dessert|pastry|slice|sweet
+🍱	กล่องเบนโตะ|กล่องข้าว|เบนโตะ|สำรับ|อาหาร	bento box|bento|box|food
+🍲	สตูว์|หม้ออาหาร	pot of food|food|pot|soup|stew
+🍳	ทำอาหาร|กระทะ|ไข่ดาว	cooking|breakfast|easy|egg|fry|frying|over|pan|restaurant|side|sunny|up
+🍴	ส้อมและมีด|กินข้าว|ข้าวเช้า|ข้าวเที่ยง|ข้าวเย็น|ช้อนส้อม|มีด|มื้ออาหาร|ร้านอาหาร|ส้อม|อาหาร	fork and knife|breakfast|breaky|cooking|cutlery|delicious|dinner|eat|feed|food|fork|hungry|knife|lunch|restaurant|yum|yummy
+🍵	ถ้วยชา|ชา|ชาเขียว	teacup without handle|beverage|cup|drink|handle|oolong|tea|teacup
+🍶	สาเก|ขวดสาเก|เหล้าสาเก	sake|bar|beverage|bottle|cup|drink|restaurant
+🍷	ไวน์|แก้วไวน์|ไวน์แดง	wine glass|alcohol|bar|beverage|booze|club|drink|drinking|drinks|glass|restaurant|wine
+🍸	ค็อกเทล|แก้วค็อกเทล	cocktail glass|alcohol|bar|booze|club|cocktail|drink|drinking|drinks|glass|mad|martini|men
+🍹	เครื่องดื่มผสมน้ำผลไม้|เครื่องดื่ม|บาร์|ผลไม้	tropical drink|alcohol|bar|booze|club|cocktail|drink|drinking|drinks|drunk|mai|party|tai|tropical|tropics
+🍺	เบียร์|ฉลอง|ดื่ม|เหยือกเบียร์	beer mug|alcohol|ale|bar|beer|booze|drink|drinking|drinks|mug|octoberfest|oktoberfest|pint|stein|summer
+🍻	เหยือกเบียร์ชนกัน|แก้ว|เครื่องดื่ม|ฉลอง|ชน|ดื่ม|เบียร์|เหยือก	clinking beer mugs|alcohol|bar|beer|booze|bottoms|cheers|clink|clinking|drinking|drinks|mugs
+🍼	ขวดนม|นม	baby bottle|babies|baby|birth|born|bottle|drink|infant|milk|newborn
+🍽	จานพร้อมส้อมและมีด|จาน|ทำอาหาร|มีด|ส้อม	fork and knife with plate|cooking|dinner|eat|fork|knife|plate
+🍾	แชมเปญ|ขวด|เครื่องดื่ม|จุกไม้ก๊อก|บาร์	bottle with popping cork|bar|bottle|cork|drink|popping
+🍿	ป๊อปคอร์น|ข้าวโพดคั่ว	popcorn|corn|movie|pop
+🎀	ริบบิ้น|การเฉลิมฉลอง|โบ|โบว์	ribbon|celebration
+🎁	ของขวัญ|กล่อง|คริสต์มาส|ฉลอง|เซอร์ไพรส์|วันเกิด	wrapped gift|birthday|bow|box|celebration|christmas|gift|present|surprise|wrapped
+🎂	เค้กวันเกิด|ขนม|ของหวาน|เค้ก|ฉลอง|เบิร์ดเดย์|วันเกิด|สุขสันต์วันเกิด|แฮปปี้เบิร์ดเดย์	birthday cake|bday|birthday|cake|celebration|dessert|happy|pastry|sweet
+🎃	ฟักทองฮาโลวีน|ฟักทอง|ฮาโลวีน	jack-o-lantern|celebration|halloween|jack|lantern|pumpkin
+🎄	ต้นคริสต์มาส|คริสต์มาส	Christmas tree|celebration|Christmas|tree
+🎅	ซานต้า|คริสต์มาส|ซานตาคลอส	Santa Claus|celebration|Christmas|claus|fairy|fantasy|father|holiday|merry|santa|tale|xmas
+🎆	พลุ|เฉลิมฉลอง	fireworks|boom|celebration|entertainment|yolo
+🎇	ดอกไม้ไฟ|พลุ	sparkler|boom|celebration|fireworks|sparkle
+🎈	ลูกโป่ง|เฉลิมฉลอง	balloon|birthday|celebrate|celebration
+🎉	ปาร์ตี้|เฉลิมฉลอง	party popper|awesome|birthday|celebrate|celebration|excited|hooray|party|popper|tada|woohoo
+🎊	ลูกบอลใส่เศษกระดาษงานปาร์ตี้|เฉลิมฉลอง|บอล|ปาร์ตี้|พุ|ลูกปา	confetti ball|ball|celebrate|celebration|confetti|party|woohoo
+🎋	ต้นไม้ประดับคำอวยพร|คำอวยพร|เฉลิมฉลอง|ญี่ปุ่น|ต้นไม้	tanabata tree|banner|celebration|Japanese|tanabata|tree
+🎌	ธงไขว้|การฉลอง|ไขว้|ญี่ปุ่น|ธง	crossed flags|celebration|cross|crossed|flags|Japanese
+🎍	ต้นสนประดับ|ญี่ปุ่น|ต้นไผ่|ปีใหม่	pine decoration|bamboo|celebration|decoration|Japanese|pine|plant
+🎎	ตุ๊กตาญี่ปุ่น|เฉลิมฉลอง|ญี่ปุ่น|ตุ๊กตา|เทศกาล	Japanese dolls|celebration|doll|dolls|festival|Japanese
+🎏	ธงปลาคาร์พ|เฉลิมฉลอง|ธง|ปลาคาร์พ	carp streamer|carp|celebration|streamer
+🎐	โมบายล์กระดิ่ง|โมบายล์	wind chime|bell|celebration|chime|wind
+🎑	ไหว้พระจันทร์|เฉลิมฉลอง|พระจันทร์	moon viewing ceremony|celebration|ceremony|moon|viewing
+🎒	เป้นักเรียน|กระเป๋า|การศึกษา|โรงเรียน|สะพายหลัง|หนังสือ	backpack|backpacking|bag|bookbag|education|rucksack|satchel|school
+🎓	หมวกรับปริญญา|รับปริญญา|หมวก	graduation cap|cap|celebration|clothing|education|graduation|hat|scholar
+🎖	เหรียญกล้าหาญ|กองทัพ|ยกย่อง|เหรียญ	military medal|award|celebration|medal|military
+🎗	ริบบิ้นรำลึก|รณรงค์|รำลึก|ริบบิ้น	reminder ribbon|celebration|reminder|ribbon
+🎙	ไมค์สตูดิโอ|เพลง|ไมค์|ไมโครโฟน|สตูดิโอ	studio microphone|mic|microphone|music|studio
+🎚	ที่ปรับระดับเสียง|ที่ปรับ|เพลง|ระดับ|เสียง	level slider|level|music|slider
+🎛	ปุ่มควบคุมเสียง|ควบคุม|ปรับ|ปุ่ม|เพลง|เสียง	control knobs|control|knobs|music
+🎞	เฟรมภาพยนตร์|เฟรม|ภาพยนตร์|หนัง	film frames|cinema|film|frames|movie
+🎟	ตั๋วเข้าชม|เข้าชม|ตั๋ว|บัตร	admission tickets|admission|ticket|tickets
+🎠	ม้าหมุน|สวนสนุก	carousel horse|carousel|entertainment|horse
+🎡	ชิงช้าสวรรค์|สวนสนุก	ferris wheel|amusement|ferris|park|theme|wheel
+🎢	รถไฟเหาะ|โรลเลอร์โคสเตอร์|สวนสนุก	roller coaster|amusement|coaster|park|roller|theme
+🎣	ตกปลา|เบ็ด|ปลา	fishing pole|entertainment|fish|fishing|pole|sport
+🎤	ไมโครโฟน|คาราโอเกะ|เพลง|ไมค์|สตูดิโอ	microphone|karaoke|mic|music|sing|sound
+🎥	กล้องถ่ายภาพยนตร์|บอลลีวูด|บันทึก|ฟิล์ม|หนัง|ฮอลลีวูด	movie camera|bollywood|camera|cinema|film|hollywood|movie|record
+🎦	โรงภาพยนตร์|โรงหนัง|หนัง	cinema|camera|film|movie
+🎧	หูฟัง|เฮดโฟน	headphone|earbud|sound
+🎨	จานสีวาดรูป|จานสี|พิพิธภัณฑ์|ภาพวาด|ศิลปะ	artist palette|art|artist|artsy|arty|colorful|creative|entertainment|museum|painter|painting|palette
+🎩	หมวกสูง|หมวก	top hat|clothes|clothing|fancy|formal|hat|magic|top|tophat
+🎪	ละครสัตว์|เต๊นท์ละครสัตว์	circus tent|circus|tent
+🎫	ตั๋ว|เข้าชม|บัตร	ticket|admission|stub
+🎬	สเลท|คัท|ถ่ายหนัง|ภาพยนตร์|แอคชั่น	clapper board|action|board|clapper|movie
+🎭	หน้ากาก|ศาสตร์การแสดง	performing arts|actor|actress|art|arts|entertainment|mask|performing|theater|theatre|thespian
+🎮	วิดีโอเกม|เกม|จอยสติ๊ก	video game|controller|entertainment|game|video
+🎯	กลางเป้า|ตรงเป้า|ปาเป้า|ลูกดอก	bullseye|bull|dart|direct|entertainment|game|hit|target
+🎰	สล็อตแมชชีน|เกม|พนัน|สล็อต	slot machine|casino|gamble|gambling|game|machine|slot|slots
+🎱	บิลเลียด|แปด	pool 8 ball|8|8ball|ball|billiard|eight|game|pool
+🎲	ลูกเต๋า|ทอยลูกเต๋า	game die|dice|die|entertainment|game
+🎳	โบว์ลิ่ง|กีฬา	bowling|ball|game|sport|strike
+🎴	ไพ่ดอกไม้|เกม|ญี่ปุ่น|ดอกไม้|พนัน|ไพ่|เล่น	flower playing cards|card|cards|flower|game|Japanese|playing
+🎵	โน้ตดนตรี|ดนตรี|โน้ต	musical note|music|musical|note|sound
+🎶	โน้ตดนตรีหลายตัว|เขบ็ต|ดนตรี|โน้ต|เพลง|เสียง	musical notes|music|musical|note|notes|sound
+🎷	แซ็กโซโฟน|เครื่องดนตรี|แซ็ก	saxophone|instrument|music|sax
+🎸	กีต้าร์|กีตาร์|กีตาร์ไฟฟ้า|เครื่องดนตรี	guitar|instrument|music|strat
+🎹	เปียโน|คีย์บอร์ด|เครื่องดนตรี	musical keyboard|instrument|keyboard|music|musical|piano
+🎺	ทรัมเป็ต|เครื่องดนตรี	trumpet|instrument|music
+🎻	ไวโอลิน|เครื่องดนตรี	violin|instrument|music
+🎼	บรรทัดห้าเส้น|กุญแจซอล|โน้ตเพลง	musical score|music|musical|note|score
+🎽	เสื้อวิ่ง|วิ่ง	running shirt|athletics|running|sash|shirt
+🎾	เทนนิส|กีฬา|ลูกเทนนิส	tennis|ball|racquet|sport
+🎿	สกี|กีฬา|หิมะ	skis|ski|snow|sport
+🏀	บาสเกตบอล|กีฬา|บอล|ยัดห่วง	basketball|ball|hoop|sport
+🏁	ธงตราหมากรุก|กีฬา|แข่งรถ|ชนะ|ตารางหมากรุก|ธง|เส้นชัย	chequered flag|checkered|chequered|finish|flag|flags|game|race|racing|sport|win
+🏂	นักสโนว์บอร์ด|สกี|สโนว์บอร์ด|หิมะ	snowboarder|ski|snow|snowboard|sport
+🏃	คนวิ่ง|กีฬา|แข่งขัน|คน|ความเร็ว|นักวิ่ง|มาราธอน|รีบ|เร่งรีบ|วิ่ง	person running|fast|hurry|marathon|move|person|quick|race|racing|run|rush|speed
+🏃‍♀	ผู้หญิงวิ่ง|กีฬา|แข่งขัน|คน|ความเร็ว|นักวิ่ง|ผู้หญิง|มาราธอน|รีบ|เร่งรีบ|วิ่ง	woman running|fast|hurry|marathon|move|quick|race|racing|run|rush|speed|woman
+🏃‍♂	ผู้ชายวิ่ง|กีฬา|แข่งขัน|คน|ความเร็ว|นักวิ่ง|ผู้ชาย|มาราธอน|รีบ|เร่งรีบ|วิ่ง	man running|fast|hurry|man|marathon|move|quick|race|racing|run|rush|speed
+🏄	นักโต้คลื่น|กีฬา|คน|คลื่น|ชายหาด|เซิร์ฟ|โต้คลื่น|ทะเล|นักเซิร์ฟ|มหาสมุทร	person surfing|beach|ocean|person|sport|surf|surfer|surfing|swell|waves
+🏄‍♀	ผู้หญิงโต้คลื่น|กีฬา|คน|คลื่น|ชายหาด|เซิร์ฟ|โต้คลื่น|ทะเล|นักเซิร์ฟ|ผู้หญิง|มหาสมุทร	woman surfing|beach|ocean|person|sport|surf|surfer|surfing|swell|waves
+🏄‍♂	ผู้ชายโต้คลื่น|กีฬา|คน|คลื่น|ชายหาด|เซิร์ฟ|โต้คลื่น|ทะเล|นักเซิร์ฟ|ผู้ชาย|มหาสมุทร	man surfing|beach|man|ocean|sport|surf|surfer|surfing|swell|waves
+🏅	เหรียญรางวัล|กีฬา|ทอง|ผู้ชนะ|รางวัล|เหรียญ	sports medal|award|gold|medal|sports|winner
+🏆	ถ้วยรางวัล|รางวัล	trophy|champion|champs|prize|slay|sport|victory|win|winning
+🏇	แข่งม้า|แข่ง|จ๊อกกี้|ม้า	horse racing|horse|jockey|racehorse|racing|riding|sport
+🏈	อเมริกันฟุตบอล|กีฬา|ลูกบอล	american football|american|ball|bowl|football|sport|super
+🏉	รักบี้|กีฬา|ลูกรักบี้	rugby football|ball|football|rugby|sport
+🏊	นักว่ายน้ำ|กีฬา|คน|ไตรกีฬา|ฟรีสไตล์|ว่ายน้ำ	person swimming|freestyle|person|sport|swim|swimmer|swimming|triathlon
+🏊‍♀	ผู้หญิงว่ายน้ำ|กีฬา|คน|ไตรกีฬา|นักว่ายน้ำ|ผู้หญิง|ฟรีสไตล์|ว่ายน้ำ	woman swimming|freestyle|man|sport|swim|swimmer|swimming|triathlon
+🏊‍♂	ผู้ชายว่ายน้ำ|กีฬา|คน|ไตรกีฬา|นักว่ายน้ำ|ผู้ชาย|ฟรีสไตล์|ว่ายน้ำ	man swimming|freestyle|man|sport|swim|swimmer|swimming|triathlon
+🏋	นักยกน้ำหนัก|กีฬา|คน|ดัมเบล|บาร์เบล|เพาะกาย|ยกน้ำหนัก|เล่นเวท|ออกกำลังกาย	person lifting weights|barbell|bodybuilder|deadlift|lifter|lifting|person|powerlifting|weight|weightlifter|weights|workout
+🏋‍♀	ผู้หญิงยกน้ำหนัก|กีฬา|คน|ดัมเบล|บาร์เบล|ผู้หญิง|เพาะกาย|ยกน้ำหนัก|เล่นเวท|ออกกำลังกาย	woman lifting weights|barbell|bodybuilder|deadlift|lifter|lifting|powerlifting|weight|weightlifter|weights|woman|workout
+🏋‍♂	ผู้ชายยกน้ำหนัก|กีฬา|คน|ดัมเบล|บาร์เบล|ผู้ชาย|เพาะกาย|ยกน้ำหนัก|เล่นเวท|ออกกำลังกาย	man lifting weights|barbell|bodybuilder|deadlift|lifter|lifting|man|powerlifting|weight|weightlifter|weights|workout
+🏌	นักกอล์ฟ|กอล์ฟ|กีฬา|คน|แคดดี้|ไดร์ฟ|ตี|พัตต์|ออกรอบ	person golfing|ball|birdie|caddy|driving|golf|golfing|green|person|pga|putt|range|tee
+🏌‍♀	ผู้หญิงตีกอล์ฟ|กอล์ฟ|กีฬา|คน|แคดดี้|ไดร์ฟ|ตี|ผู้หญิง|พัตต์|ออกรอบ	woman golfing|ball|birdie|caddy|driving|golf|golfing|green|pga|putt|range|tee|woman
+🏌‍♂	ผู้ชายตีกอล์ฟ|กอล์ฟ|กีฬา|คน|แคดดี้|ไดร์ฟ|ตี|ผู้ชาย|พัตต์|ออกรอบ	man golfing|ball|birdie|caddy|driving|golf|golfing|green|man|pga|putt|range|tee
+🏍	มอเตอร์ไซค์|แข่ง	motorcycle|racing
+🏎	รถแข่ง|แข่ง|รถ	racing car|car|racing|zoom
+🏏	คริกเก็ต|เกม|บอล|ไม้	cricket game|ball|bat|cricket|game
+🏐	วอลเลย์บอล|เกม|บอล	volleyball|ball|game
+🏑	ฮอกกี้|เกม|บอล|ไม้|สนาม	field hockey|ball|field|game|hockey|stick
+🏒	ไม้ฮอกกี้|เกม|น้ำแข็ง|ลูกยาง|ฮอกกี้	ice hockey|game|hockey|ice|puck|stick
+🏓	ปิงปอง|เกม|โต๊ะ|ไม้|ลูก	ping pong|ball|bat|game|paddle|ping|pingpong|pong|table|tennis
+🏔	ภูเขามีหิมะ|ภูเขา|หนาว|หิมะ	snow-capped mountain|cold|mountain|snow|snow-capped
+🏕	ตั้งแคมป์|แคมป์|เต็นท์	camping
+🏖	ร่มชายหาด|ชายหาด|ร่ม	beach with umbrella|beach|umbrella
+🏗	ก่อสร้างอาคาร|ก่อสร้าง|อาคาร	building construction|building|construction|crane
+🏘	บ้านหลายหลัง|บ้าน	houses|house
+🏙	หมู่ตึกสูง|ตึกสูง|เมือง	cityscape|city
+🏚	บ้านร้าง|บ้าน|รกร้าง	derelict house|derelict|home|house
+🏛	อาคารสไตล์คลาสสิก|คลาสสิก|อาคาร	classical building|building|classical
+🏜	ทะเลทราย	desert
+🏝	เกาะ|เกาะร้าง|ทะเล	desert island|desert|island
+🏞	อุทยาน|ต้นไม้|อุทยานแห่งชาติ	national park|national|park
+🏟	สนามกีฬา|อัฒจันทร์	stadium
+🏠	บ้านเดี่ยว|ตึก|บ้าน	house|building|country|heart|home|ranch|settle|simple|suburban|suburbia|where
+🏡	บ้านพร้อมสวน|บ้าน	house with garden|building|country|garden|heart|home|house|ranch|settle|simple|suburban|suburbia|where
+🏢	ตึกสำนักงาน|ตึก|สำนักงาน	office building|building|city|cubical|job|office
+🏣	ไปรษณีย์ญี่ปุ่น|ญี่ปุ่น|ตึก|ไปรษณีย์|ออฟฟิศ	Japanese post office|building|Japanese|office|post
+🏤	ไปรษณีย์ยุโรป|ตึก|ไปรษณีย์|ยุโรป|ออฟฟิศ	post office|building|European|office|post
+🏥	โรงพยาบาล|ตึก	hospital|building|doctor|medicine
+🏦	ธนาคาร|ตึก	bank|building
+🏧	เอทีเอ็ม|เครื่องกดเงิน|เงิน|ธนาคาร|ฝาก-ถอน|อัตโนมัติ	ATM sign|ATM|automated|bank|cash|money|sign|teller
+🏨	โรงแรม|ตึก	hotel|building
+🏩	ม่านรูด|โรงแรม	love hotel|building|hotel|love
+🏪	ร้านสะดวกซื้อ|ของใช้|ร้านค้า|สินค้า	convenience store|24|building|convenience|hours|store
+🏫	โรงเรียน|ตึกเรียน	school|building
+🏬	ห้างสรรพสินค้า|ร้านค้า|สินค้า|ห้าง	department store|building|department|store
+🏭	โรงงาน|สิ่งปลูกสร้าง	factory|building
+🏮	โคมไฟแดง|กระดาษ|โคมไฟ|ญี่ปุ่น|ตะเกียง|บาร์|ร้านอาหาร|สีแดง|แสงไฟ	red paper lantern|bar|lantern|light|paper|red|restaurant
+🏯	ปราสาทญี่ปุ่น|ญี่ปุ่น|ปราสาท	Japanese castle|building|castle|Japanese
+🏰	ปราสาทยุโรป|ปราสาท	castle|building|European
+🏳	ธงขาว|ธง	white flag|flag|waving|white
+🏳‍⚧	ธงคนข้ามเพศ|คนข้ามเพศ|ธง|สีขาว|สีชมพู|สีฟ้า	transgender flag|blue|flag|light|pink|transgender|white
+🏳‍🌈	ธงสีรุ้ง|ธง|สายรุ้ง	rainbow flag|bisexual|flag|gay|genderqueer|glbt|glbtq|lesbian|lgbt|lgbtq|lgbtqia|pride|queer|rainbow|trans|transgender
+🏴	ธงดำ|ธง	black flag|black|flag|waving
+🏴‍☠	ธงโจรสลัด|ขุมทรัพย์|จอลลีโรเจอร์|โจรสลัด|ปล้น	pirate flag|flag|Jolly|pirate|plunder|Roger|treasure
+🏵	ลายดอกกุหลาบ|ดอกไม้	rosette|plant
+🏷	ป้าย	label|tag
+🏸	แบดมินตัน|เกม|ไม้แบด|ลูกขนไก่	badminton|birdie|game|racquet|shuttlecock
+🏹	ธนูและลูกศร|ธนู|ราศี|ลูกศร|อาวุธ	bow and arrow|archer|archery|arrow|bow|Sagittarius|tool|weapon|zodiac
+🏺	โถโบราณ|จักรราศี|โถ|ราศีกุมภ์	amphora|Aquarius|cooking|drink|jug|tool|weapon|zodiac
+🏻	โทนผิวสีขาว|โทนสีผิว|ผิวโทน 1–2	light skin tone|1–2|light|skin|tone|type
+🏼	โทนผิวสีขาวเหลือง|โทนสีผิว|ผิวโทน 3	medium-light skin tone|3|medium-light|skin|tone|type
+🏽	โทนผิวสีเหลือง|โทนสีผิว|ผิวโทน 4	medium skin tone|4|medium|skin|tone|type
+🏾	โทนผิวสีแทน|โทนสีผิว|ผิวโทน 5	medium-dark skin tone|5|medium-dark|skin|tone|type
+🏿	โทนผิวสีเข้ม|โทนสีผิว|ผิวโทน 6	dark skin tone|6|dark|skin|tone|type
+🐀	หนูตัวใหญ่|สัตว์|หนู	rat|animal
+🐁	หนูตัวเล็ก|สัตว์|หนู	mouse|animal|animals
+🐂	วัวตัวผู้|วัว|สัตว์	ox|animal|animals|bull|farm|Taurus|zodiac
+🐃	ควาย|สัตว์	water buffalo|animal|buffalo|water|zoo
+🐄	วัว|สัตว์	cow|animal|animals|farm|milk|moo
+🐅	เสือ|สัตว์	tiger|animal|big|cat|predator|zoo
+🐆	เสือดาว|สัตว์|เสือ	leopard|animal|big|cat|predator|zoo
+🐇	กระต่าย|สัตว์	rabbit|animal|bunny|pet
+🐈	แมว|สัตว์	cat|animal|animals|cats|kitten|pet
+🐈‍⬛	แมวดำ|โชคร้าย|ดำ|แมว|สัตว์|เหมียว|ฮาโลวีน	black cat|animal|black|cat|feline|halloween|meow|unlucky
+🐉	มังกร|สัตว์	dragon|animal|fairy|fairytale|knights|tale
+🐊	จระเข้|สัตว์	crocodile|animal|zoo
+🐋	ปลาวาฬ|สัตว์	whale|animal|beach|ocean
+🐌	หอยทาก|สัตว์	snail|animal|escargot|garden|nature|slug
+🐍	งู|สัตว์|อสรพิษ	snake|animal|bearer|Ophiuchus|serpent|zodiac
+🐎	ม้า|สัตว์	horse|animal|equestrian|farm|racehorse|racing
+🐏	แกะตัวผู้|แกะ|สัตว์	ram|animal|Aries|horns|male|sheep|zodiac|zoo
+🐐	แพะ|สัตว์	goat|animal|Capricorn|farm|milk|zodiac
+🐑	แกะ|สัตว์	ewe|animal|baa|farm|female|fluffy|lamb|sheep|wool
+🐒	ลิง|สัตว์	monkey|animal|banana
+🐓	ไก่ตัวผู้|นก|ปักษี|สัตว์	rooster|animal|bird|ornithology
+🐔	ไก่|นก|ปักษี|สัตว์	chicken|animal|bird|ornithology
+🐕	สุนัข|สัตว์|หมา	dog|animal|animals|dogs|pet
+🐕‍🦺	สุนัขบริการ|การเข้าถึง|การช่วยเหลือพิเศษ|ตาบอด|นำทาง|บริการ|สัตว์|สุนัข|หมา	service dog|accessibility|animal|assistance|dog|service
+🐖	หมู|สัตว์	pig|animal|bacon|farm|pork|sow
+🐗	หมูป่าตัวผู้|สัตว์|หมูป่า	boar|animal|pig
+🐘	ช้าง|สัตว์	elephant|animal
+🐙	ปลาหมึกยักษ์|ปลาหมึก|สัตว์	octopus|animal|creature|ocean
+🐚	หอย|ทะเล|เปลือกหอย|สังข์|สัตว์|หาด	spiral shell|animal|beach|conch|sea|shell|spiral
+🐛	แมลง|สัตว์|หนอน	bug|animal|garden|insect
+🐜	มด|แมลง	ant|animal|garden|insect
+🐝	ผึ้ง|แมลง|สัตว์	honeybee|animal|bee|bumblebee|honey|insect|nature|spring
+🐞	เต่าทอง|แมลง|แมลงเต่าทอง|สัตว์	lady beetle|animal|beetle|garden|insect|lady|ladybird|ladybug|nature
+🐟	ปลา|มื้อเย็น|ราศี|สัตว์	fish|animal|dinner|fishes|fishing|Pisces|zodiac
+🐠	ปลาเขตร้อน|ปลา|สัตว์	tropical fish|animal|fish|fishes|tropical
+🐡	ปลาปักเป้า|ปลา|สัตว์	blowfish|animal|fish
+🐢	เต่า|สัตว์	turtle|animal|terrapin|tortoise
+🐣	ลูกเจี๊ยบออกจากไข่|ลูกเจี๊ยบ|สัตว์	hatching chick|animal|baby|bird|chick|egg|hatching
+🐤	ลูกเจี๊ยบ|ไก่|นก|ปักษี|สัตว์	baby chick|animal|baby|bird|chick|ornithology
+🐥	ลูกเจี๊ยบยืนหันหน้า|เกิดใหม่|ไก่|นก|ปักษี|เผชิญหน้า|ลูกเจี๊ยบ|สัตว์	front-facing baby chick|animal|baby|bird|chick|front-facing|newborn|ornithology
+🐦	นก|สัตว์	bird|animal|ornithology
+🐦‍⬛	นกสีดำ|กา|ดำ|นก|เบิร์ด|แบล็ก|เรเวน|สัตว์|อีกา	black bird|animal|beak|bird|black|caw|corvid|crow|ornithology|raven|rook
+🐦‍🔥	นกฟินิกซ์|กลับชาติ|เกิดใหม่|ชัยชนะ|เทพนิยาย|ฟินิกซ์|ไฟ|อมตะ	phoenix|ascend|ascension|emerge|fantasy|firebird|glory|immortal|rebirth|reincarnation|reinvent|renewal|revival|revive|rise|transform
+🐧	เพนกวิน|สัตว์	penguin|animal|antarctica|bird|ornithology
+🐨	โคอาล่า|สัตว์|หน้า|หมี|ออสเตรเลีย	koala|animal|australia|bear|down|face|marsupial|under
+🐩	พุดเดิ้ล|สัตว์|สุนัข	poodle|animal|dog|fluffy
+🐪	อูฐโหนกเดียว|สัตว์|อูฐ	camel|animal|desert|dromedary|hump|one
+🐫	อูฐสองโหนก|สัตว์|อูฐ	two-hump camel|animal|bactrian|camel|desert|hump|two|two-hump
+🐬	ปลาโลมา|ครีบ|มหาสมุทร|สัตว์|หาด	dolphin|animal|beach|flipper|ocean
+🐭	หน้าหนู|สัตว์|หนู	mouse face|animal|face|mouse
+🐮	หน้าวัว|วัว|สัตว์	cow face|animal|cow|face|farm|milk|moo
+🐯	หน้าเสือ|สัตว์|เสือ	tiger face|animal|big|cat|face|predator|tiger
+🐰	หน้ากระต่าย|กระต่าย|สัตว์|หน้า	rabbit face|animal|bunny|face|pet|rabbit
+🐱	หน้าแมว|แมว|สัตว์	cat face|animal|cat|face|kitten|kitty|pet
+🐲	หน้ามังกร|นิยาย|มังกร|สัตว์|หน้า	dragon face|animal|dragon|face|fairy|fairytale|tale
+🐳	ปลาวาฬพ่นน้ำ|ปลาวาฬ|สัตว์	spouting whale|animal|beach|face|ocean|spouting|whale
+🐴	หน้าม้า|ม้า|สัตว์	horse face|animal|dressage|equine|face|farm|horse|horses
+🐵	หน้าลิง|กล้วย|ใบหน้า|ยิ้ม|ลิง|สัตว์	monkey face|animal|banana|face|monkey
+🐶	หน้าสุนัข|น่ารัก|ใบหน้า|สัตว์|สุนัข|หมา	dog face|adorbs|animal|dog|face|pet|puppies|puppy
+🐷	หน้าหมู|สัตว์|หมู	pig face|animal|bacon|face|farm|pig|pork
+🐸	กบ|ใบหน้า|ยิ้ม|สัตว์	frog|animal|face
+🐹	หนูแฮมสเตอร์|ใบหน้า|สัตว์	hamster|animal|face|pet
+🐺	หมาป่า|สัตว์|หน้า|หน้าหมาป่า	wolf|animal|face
+🐻	หมี|สัตว์|หน้า|หน้าหมี	bear|animal|face|grizzly|growl|honey
+🐻‍❄	หมีขั้วโลก|ขั้วโลกเหนือ|ขาว|หมี	polar bear|animal|arctic|bear|polar|white
+🐼	แพนด้า|สัตว์|หน้า|หน้าแพนด้า|หมี	panda|animal|bamboo|face
+🐽	จมูกหมู|หมู	pig nose|animal|face|farm|nose|pig|smell|snout
+🐾	รอยเท้าสัตว์|รอยเท้า	paw prints|feet|paw|paws|print|prints
+🐿	ชิปมังก์|กระรอก|สัตว์	chipmunk|animal|squirrel
+👀	ตา 2 ข้าง|ตา|อวัยวะ	eyes|body|eye|face|googly|look|looking|omg|peep|see|seeing
+👁	ตาข้างเดียว|ข้างเดียว|ดวงตา|เพ่งมอง|อวัยวะ	eye|1|body|one
+👁‍🗨	ตาในลูกโป่งคำพูด|คำพูด|ตา|พยาน|ลูกโป่ง|เห็น	eye in speech bubble|balloon|bubble|eye|speech|witness
+👂	หู|ฟัง|อวัยวะ	ear|body|ears|hear|hearing|listen|listening|sound
+👃	จมูก|ดม|อวัยวะ	nose|body|noses|nosey|odor|smell|smells
+👄	ปาก|อวัยวะ	mouth|beauty|body|kiss|kissing|lips|lipstick
+👅	ลิ้น|อวัยวะ	tongue|body|lick|slurp
+👆	หลังมือนิ้วชี้ขึ้น|ขึ้น|ชี้|ท่าทาง|ทิศ|นิ้ว|บน|หลังมือ	backhand index pointing up|backhand|finger|hand|index|point|pointing|up
+👇	นิ้วชี้ลง|ชี้|ใต้|นิ้ว|ลง|ล่าง|หลังมือ	backhand index pointing down|backhand|down|finger|hand|index|point|pointing
+👈	นิ้วชี้ทางซ้าย|ชี้|ซ้าย|ท่าทาง|ทิศ|นิ้ว|หลังมือ	backhand index pointing left|backhand|finger|hand|index|left|point|pointing
+👉	นิ้วชี้ทางขวา|ขวา|ชี้|นิ้ว|มือ	backhand index pointing right|backhand|finger|hand|index|point|pointing|right
+👊	กำปั้น|ชก|มือ|อวัยวะ	oncoming fist|absolutely|agree|boom|bro|bruh|bump|clenched|correct|fist|hand|knuckle|oncoming|pound|punch|rock|ttyl
+👋	โบกมือ|ทักทาย|บ๊ายบาย|ไปก่อนนะ|ร่ำลา|สวัสดี|หวัดดี|อวัยวะ|ฮัลโหล	waving hand|bye|cya|g2g|greetings|gtg|hand|hello|hey|hi|later|outtie|ttfn|ttyl|wave|yo|you
+👌	ทำมือโอเค|ใช่|ได้เลย|ตกลง|นิ้ว|มือ|เยี่ยม|หยิก|โอเค	OK hand|awesome|bet|dope|fleek|fosho|got|gotcha|hand|legit|OK|okay|pinch|rad|sure|sweet|three
+👍	ชูนิ้วโป้งขึ้น|เก่ง|เจ๋ง|ชอบ|ชูนิ้วโป้ง|มือ|ยกขึ้น|เยี่ยม|สุดยอด|โอเค	thumbs up|+1|good|hand|like|thumb|up|yes
+👎	คว่ำนิ้วโป้งลง|คว่ำลง|ดิสไลค์|นิ้วโป้ง|มือ|ไม่ชอบ|แย่	thumbs down|-1|bad|dislike|down|good|hand|no|nope|thumb|thumbs
+👏	ตบมือ|มือ|อวัยวะ	clapping hands|applause|approval|awesome|clap|congrats|congratulations|excited|good|great|hand|homie|job|nice|prayed|well|yay
+👐	แบมือ|มือ|อวัยวะ	open hands|hand|hands|hug|jazz|open|swerve
+👑	มงกุฎ|พระราชา|พระราชินี	crown|clothing|family|king|medieval|queen|royal|royalty|win
+👒	หมวกผู้หญิง|ผู้หญิง|หมวก	woman’s hat|clothes|clothing|garden|hat|hats|party|woman|woman’s
+👓	แว่นตา|ตา|แว่นสายตา	glasses|clothing|eye|eyeglasses|eyewear
+👔	เนคไท|เสื้อผ้า	necktie|clothing|employed|serious|shirt|tie
+👕	เสื้อยืด|เสื้อผ้า	t-shirt|blue|casual|clothes|clothing|collar|dressed|shirt|shopping|tshirt|weekend
+👖	ยีนส์|กางเกง|กางเกงขายาว|เสื้อผ้า	jeans|blue|casual|clothes|clothing|denim|dressed|pants|shopping|trousers|weekend
+👗	ชุดกระโปรง|ช้อปปิ้ง|เดรส|แฟนซี|เสื้อผ้า	dress|clothes|clothing|dressed|fancy|shopping
+👘	กิโมโน|เสื้อผ้า	kimono|clothing|comfortable
+👙	บิกินี|ชุดชั้นใน|ว่ายน้ำ|เสื้อผ้า	bikini|bathing|beach|clothing|pool|suit|swim
+👚	เสื้อผู้หญิง|ช้อปปิ้ง|เชิ้ต|แต่งตัว|ผู้หญิง|เสื้อผ้า	woman’s clothes|blouse|clothes|clothing|collar|dress|dressed|lady|shirt|shopping|woman|woman’s
+👛	กระเป๋าใส่เงิน|กระเป๋า|เงิน|ช้อปปิ้ง|สตางค์|เสื้อผ้า|เหรียญ	purse|clothes|clothing|coin|dress|fancy|handbag|shopping
+👜	กระเป๋าถือ|กระเป๋า	handbag|bag|clothes|clothing|dress|lady|purse|shopping
+👝	กระเป๋าใบเล็ก|กระเป๋า	clutch bag|bag|clothes|clothing|clutch|dress|handbag|pouch|purse
+👞	รองเท้าชาย|ผู้ชาย|รองเท้า|รองเท้าผู้ชาย	man’s shoe|brown|clothes|clothing|feet|foot|kick|man|man’s|shoe|shoes|shopping
+👟	รองเท้ากีฬา|รองเท้า|รองเท้าผ้าใบ	running shoe|athletic|clothes|clothing|fast|kick|running|shoe|shoes|shopping|sneaker|tennis
+👠	รองเท้าส้นสูง|รองเท้า|รองเท้าผู้หญิง|ส้นสูง	high-heeled shoe|clothes|clothing|dress|fashion|heel|heels|high-heeled|shoe|shoes|shopping|stiletto|woman
+👡	รองเท้าแตะผู้หญิง|ผู้หญิง|รองเท้า|รองเท้าแตะ|เสื้อผ้า	woman’s sandal|clothing|sandal|shoe|woman|woman’s
+👢	รองเท้าบู๊ตผู้หญิง|ช็อปปิ้ง|แต่งตัว|ผู้หญิง|รองเท้าบู๊ต|ส้นสูง|เสื้อผ้า	woman’s boot|boot|clothes|clothing|dress|shoe|shoes|shopping|woman|woman’s
+👣	รอยเท้า|เท้า|อวัยวะ	footprints|barefoot|clothing|footprint|omw|print|walk
+👤	เงาครึ่งตัวคนเดียว|คน|เงา|รูปปั้นครึ่งตัว|ลึกลับ	bust in silhouette|bust|mysterious|shadow|silhouette
+👥	เงาครึ่งตัว 2 คน|ผู้คน	busts in silhouette|bff|bust|busts|everyone|friend|friends|people|silhouette
+👦	เด็กชาย|คน|เด็ก|ผู้ชาย|ลูก|หนุ่ม|หลาน	boy|bright-eyed|child|grandson|kid|son|young|younger
+👧	เด็กหญิง|คน|เด็ก|ผู้หญิง|ลูก|สาว|หลาน	girl|bright-eyed|child|daughter|granddaughter|kid|Virgo|young|younger|zodiac
+👨	ผู้ชาย|คน	man|adult|bro
+👨‍⚕	หมอชาย|การดูแลสุขภาพ|นักบำบัด|นายแพทย์|ผู้ชาย|พยาบาล|หมอ	man health worker|doctor|health|healthcare|man|nurse|therapist|worker
+👨‍⚖	ผู้พิพากษาชาย|กฎหมาย|ชาย|ตราชั่ง|ผู้พิพากษา|ยุติธรรม|ศาล	man judge|judge|justice|law|man|scales
+👨‍✈	นักบินชาย|เครื่องบิน|นักบิน|ผู้ชาย	man pilot|man|pilot|plane
+👨‍🌾	ชาวนาชาย|งาน|เจ้าของฟาร์ม|ชาวนา|ชาวสวน|ผู้ชาย	man farmer|farmer|gardener|man|rancher
+👨‍🍳	พ่อครัว|งาน|เชฟ|ผู้ชาย	man cook|chef|cook|man
+👨‍🍼	ผู้ชายให้นมลูก|ขวดนม|คน|ความรัก|เด็กทารก|บิดา|ผู้ชาย|พ่อ|แรกเกิด|เลี้ยงลูก	man feeding baby|baby|dad|father|feed|feeding|man|nanny|newborn|nursing
+👨‍🎓	นักเรียนชาย|จบการศึกษา|นักเรียน|บัณฑิต|ผู้ชาย	man student|graduate|man|student
+👨‍🎤	นักร้องชาย|งาน|ดารา|นักร้อง|นักแสดง|ผู้ชาย|ผู้ให้ความบันเทิง|ร็อค	man singer|actor|entertainer|man|rock|rockstar|singer|star
+👨‍🎨	ศิลปินชาย|งาน|จานสี|ผู้ชาย|วาดภาพ|ศิลปิน	man artist|artist|man|palette
+👨‍🏫	ครูชาย|ครู|บรรยาย|ผู้ชาย|ศาสตราจารย์|สอน|อาจารย์	man teacher|instructor|lecturer|man|professor|teacher
+👨‍🏭	พนักงานโรงงานชาย|คน|ประกอบ|ผู้ชาย|พนักงาน|โรงงาน|อุตสาหกรรม	man factory worker|assembly|factory|industrial|man|worker
+👨‍💻	ผู้เชี่ยวชาญด้านเทคโนโลยีชาย|คอมพิวเตอร์|ซอฟต์แวร์|นักประดิษฐ์|นักพัฒนา|โปรแกรมเมอร์|ผู้ชาย|ผู้เชี่ยวชาญด้านเทคโนโลยี	man technologist|coder|computer|developer|inventor|man|software|technologist
+👨‍💼	พนักงานบริษัทชาย|ธุรกิจ|บริษัท|ผู้จัดการ|ผู้ชาย|พนักงาน|สถาปนิก|ออฟฟิศ	man office worker|architect|business|man|manager|office|white-collar|worker
+👨‍🔧	ช่างซ่อมชาย|งาน|ช่างกล|ช่างประปา|ช่างไฟฟ้า|ซ่อมแซม|ผู้ชาย	man mechanic|electrician|man|mechanic|plumber|tradesperson
+👨‍🔬	นักวิทยาศาสตร์ชาย|คณิต|เคมี|งาน|ชีววิทยา|นักวิทยาศาสตร์|ผู้ชาย|ฟิสิกส์|วิศวกร	man scientist|biologist|chemist|engineer|man|mathematician|physicist|scientist
+👨‍🚀	นักบินอวกาศชาย|งาน|จรวด|นักบินอวกาศ|ผู้ชาย	man astronaut|astronaut|man|rocket|space
+👨‍🚒	พนักงานดับเพลิงชาย|งาน|ผู้ชาย|พนักงานดับเพลิง|ไฟไหม้|รถดับเพลิง	man firefighter|fire|firefighter|firetruck|man
+👨‍🦯	ผู้ชายเดินถือไม้เท้านำทาง|การเข้าถึง|การช่วยเหลือพิเศษ|คนตาบอด|เดิน|ผู้ชาย|ไม้เท้า|สำรวจ	man with white cane|accessibility|blind|cane|man|probing|white
+👨‍🦼	ผู้ชายนั่งวีลแชร์ไฟฟ้า|การเข้าถึง|การช่วยเหลือพิเศษ|คน|ผู้ชาย|รถเข็น|วีลแชร์ไฟฟ้า	man in motorized wheelchair|accessibility|man|motorized|wheelchair
+👨‍🦽	ผู้ชายนั่งวีลแชร์ธรรมดา|เข้าถึง|คน|ผู้ชาย|แมนวล|รถเข็น|วีลแชร์	man in manual wheelchair|accessibility|man|manual|wheelchair
+👩	ผู้หญิง|คน	woman|adult|lady
+👩‍⚕	หมอหญิง|การดูแลสุขภาพ|คน|นักบำบัด|พยาบาล|แพทย์หญิง|หมอ	woman health worker|doctor|health|healthcare|nurse|therapist|woman|worker
+👩‍⚖	ผู้พิพากษาหญิง|การตัดสิน|ตราชั่ง|ผู้หญิง	woman judge|judge|justice|law|scales|woman
+👩‍✈	นักบินหญิง|เครื่องบิน|นักบิน|ผู้หญิง	woman pilot|pilot|plane|woman
+👩‍🌾	ชาวนาหญิง|งาน|เจ้าของฟาร์ม|ชาวนา|ชาวสวน|ผู้หญิง	woman farmer|farmer|gardener|rancher|woman
+👩‍🍳	แม่ครัว|งาน|เชฟ|ผู้หญิง	woman cook|chef|cook|woman
+👩‍🍼	ผู้หญิงให้นมลูก|ขวดนม|คน|ความรัก|เด็กทารก|ผู้หญิง|มารดา|แม่|แรกเกิด|เลี้ยงลูก	woman feeding baby|baby|feed|feeding|mom|mother|nanny|newborn|nursing|woman
+👩‍🎓	นักเรียนหญิง|นักเรียน|ผู้หญิง|เรียนจบ	woman student|graduate|student|woman
+👩‍🎤	นักร้องหญิง|งาน|ดารา|นักร้อง|นักแสดง|ผู้หญิง|ผู้ให้ความบันเทิง|ร็อค	woman singer|actor|entertainer|rock|rockstar|singer|star|woman
+👩‍🎨	ศิลปินหญิง|งาน|จานสี|ผู้หญิง|วาดภาพ|ศิลปิน	woman artist|artist|palette|woman
+👩‍🏫	ครูหญิง|ครู|บรรยาย|ผู้หญิง|ศาสตราจารย์|สอน|อาจารย์	woman teacher|instructor|lecturer|professor|teacher|woman
+👩‍🏭	พนักงานโรงงานหญิง|คน|ประกอบ|ผู้หญิง|พนักงาน|โรงงาน|อุตสาหกรรม	woman factory worker|assembly|factory|industrial|woman|worker
+👩‍💻	ผู้เชี่ยวชาญด้านเทคโนโลยีหญิง|คอมพิวเตอร์|ซอฟต์แวร์|นักประดิษฐ์|นักพัฒนา|โปรแกรมเมอร์|ผู้เชี่ยวชาญด้านเทคโนโลยี|ผู้หญิง	woman technologist|coder|computer|developer|inventor|software|technologist|woman
+👩‍💼	พนักงานบริษัทหญิง|ธุรกิจ|บริษัท|ผู้จัดการ|ผู้หญิง|พนักงาน|สถาปนิก|ออฟฟิศ	woman office worker|architect|business|manager|office|white-collar|woman|worker
+👩‍🔧	ช่างซ่อมหญิง|งาน|ช่างกล|ช่างประปา|ช่างไฟฟ้า|ซ่อมแซม|ผู้หญิง	woman mechanic|electrician|mechanic|plumber|tradesperson|woman
+👩‍🔬	นักวิทยาศาสตร์หญิง|คณิต|เคมี|งาน|ชีววิทยา|นักวิทยาศาสตร์|ผู้หญิง|ฟิสิกส์|วิศวกร	woman scientist|biologist|chemist|engineer|mathematician|physicist|scientist|woman
+👩‍🚀	นักบินอวกาศหญิง|งาน|จรวด|นักบินอวกาศ|ผู้หญิง	woman astronaut|astronaut|rocket|space|woman
+👩‍🚒	พนักงานดับเพลิงหญิง|งาน|ผู้หญิง|พนักงานดับเพลิง|ไฟไหม้|รถดับเพลิง	woman firefighter|fire|firefighter|firetruck|woman
+👩‍🦯	ผู้หญิงเดินถือไม้เท้านำทาง|เข้าถึง|คนตาบอด|เดิน|ผู้หญิง|ไม้เท้า|สำรวจ	woman with white cane|accessibility|blind|cane|probing|white|woman
+👩‍🦼	ผู้หญิงนั่งวีลแชร์ไฟฟ้า|เข้าถึง|คน|ผู้หญิง|รถเข็น|วีลแชร์ไฟฟ้า	woman in motorized wheelchair|accessibility|motorized|wheelchair|woman
+👩‍🦽	ผู้หญิงนั่งวีลแชร์ธรรมดา|เข้าถึง|คน|ผู้หญิง|แมนวล|รถเข็น|วีลแชร์	woman in manual wheelchair|accessibility|manual|wheelchair|woman
+👪	ครอบครัว|คน|เด็ก|พ่อ|พ่อแม่ลูก|แม่	family|child
+👫	ชาย-หญิงจับมือ|คู่รัก|จับมือ|จีบ|เดท|ผู้ชาย|ผู้หญิง|แฝด|เพื่อน	woman and man holding hands|bae|bestie|bff|couple|dating|flirt|friends|hand|hold|man|twins|woman
+👬	ชาย-ชายจับมือ|คู่|จับมือ|จีบ|เดท|ผู้ชาย|แฝด|พี่น้อง|เพื่อน	men holding hands|bae|bestie|bff|boys|brothers|couple|dating|flirt|friends|hand|hold|men|twins
+👭	หญิง-หญิงจับมือ|คู่|จับมือ|จีบ|เดท|ผู้หญิง|แฝด|พี่น้อง|เพื่อน	women holding hands|bae|bestie|bff|couple|dating|flirt|friends|girls|hand|hold|sisters|twins|women
+👮	เจ้าหน้าที่ตำรวจ|กฎหมาย|งาน|จับกุม|เจ้าหน้าที่|ตั้งด่าน|ตำรวจ|นอกเครื่องแบบ|ผู้ชาย	police officer|apprehend|arrest|citation|cop|law|officer|over|police|pulled|undercover
+👮‍♀	ตำรวจหญิง|กฎหมาย|งาน|จับกุม|เจ้าหน้าที่|ตั้งด่าน|ตำรวจ|นอกเครื่องแบบ|ผู้หญิง	woman police officer|apprehend|arrest|citation|cop|law|officer|over|police|pulled|undercover|woman
+👮‍♂	ตำรวจชาย|เจ้าหน้าที่|ตำรวจ|ผู้ชาย	man police officer|apprehend|arrest|citation|cop|law|man|officer|over|police|pulled|undercover
+👯	คนในชุดหูกระต่าย|กระต่าย|คน|ชุด|แดนเซอร์|เต้น|ปาร์ตี้|ฝาแฝด|เพื่อน|หู	people with bunny ears|bestie|bff|bunny|counterpart|dancer|double|ear|identical|pair|party|partying|people|soulmate|twin|twinsies
+👯‍♀	ผู้หญิงในชุดหูกระต่าย|กระต่าย|คน|ชุด|แดนเซอร์|เต้น|ปาร์ตี้|ผู้หญิง|ฝาแฝด|เพื่อน|หู	women with bunny ears|bestie|bff|bunny|counterpart|dancer|double|ear|identical|pair|party|partying|people|soulmate|twin|twinsies|women
+👯‍♂	ผู้ชายในชุดหูกระต่าย|กระต่าย|คน|ชุด|แดนเซอร์|เต้น|ปาร์ตี้|ผู้ชาย|ฝาแฝด|เพื่อน|หู	men with bunny ears|bestie|bff|bunny|counterpart|dancer|double|ear|identical|men|pair|party|partying|people|soulmate|twin|twinsies
+👰	เจ้าสาว|แต่งงาน	person with veil|person|veil|wedding
+👰‍♀	ผู้หญิงที่มีผ้าคลุมหน้า|ผ้าคลุมหน้า|ผู้หญิง	woman with veil|bride|veil|wedding|woman
+👰‍♂	ผู้ชายที่มีผ้าคลุมหน้า|ผ้าคลุมหน้า|ผู้ชาย	man with veil|man|veil|wedding
+👱	คนผมทอง|คน|ต่างชาติ|บลอนด์|ผมทอง|หัวทอง	person: blond hair|blond|blond-haired|human|person
+👱‍♀	ผู้หญิงผมทอง|ผม|ผมทอง|ผู้หญิง	woman: blond hair|blond|blond-haired|blonde|hair|woman
+👱‍♂	ผู้ชายผมทอง|ผม|ผมทอง|ผู้ชาย	man: blond hair|blond|blond-haired|hair|man
+👲	ชายจีน|คน|ชาวจีน|ผู้ชาย|หมวก	person with skullcap|cap|Chinese|gua|guapi|hat|mao|person|pi|skullcap
+👳	ชายโพกหัว|คน|ชาวมุสลิม|ผ้า|ผู้ชาย|โพกหัว	person wearing turban|person|turban|wearing
+👳‍♀	ผู้หญิงโพกหัว|คน|ชาวมุสลิม|ผ้า|ผู้หญิง|โพกหัว	woman wearing turban|turban|wearing|woman
+👳‍♂	ผู้ชายโพกหัว|ผ้าโพกหัว|ผู้ชาย	man wearing turban|man|turban|wearing
+👴	ชายแก่|คนแก่|ชาย	old man|adult|bald|elderly|gramps|grandfather|grandpa|man|old|wise
+👵	หญิงแก่|คนแก่|หญิง	old woman|adult|elderly|grandma|grandmother|granny|lady|old|wise|woman
+👶	ทารก|เกิดใหม่|คน|เด็ก|ท้อง|ลูก|หัวจุก	baby|babies|children|goo|infant|newborn|pregnant|young
+👷	คนงานก่อสร้าง|ก่อสร้าง|คนงาน|ช่าง|ซ่อมแซม|ปลอดภัยไว้ก่อน|ผู้ชาย|หมวกนิรภัย	construction worker|build|construction|fix|hardhat|hat|man|person|rebuild|remodel|repair|work|worker
+👷‍♀	พนักงานก่อสร้างหญิง|ก่อสร้าง|คนงาน|ช่าง|ซ่อมแซม|ปลอดภัยไว้ก่อน|ผู้หญิง|หมวกนิรภัย	woman construction worker|build|construction|fix|hardhat|hat|man|rebuild|remodel|repair|woman|work|worker
+👷‍♂	พนักงานก่อสร้างชาย|ก่อสร้าง|คนงาน|ผู้ชาย	man construction worker|build|construction|fix|hardhat|hat|man|rebuild|remodel|repair|work|worker
+👸	เจ้าหญิง|เทพนิยาย	princess|crown|fairy|fairytale|fantasy|queen|royal|royalty|tale
+👹	ยักษ์ญี่ปุ่น|ญี่ปุ่น|ปิศาจ|ยักษ์|หน้า	ogre|creature|devil|face|fairy|fairytale|fantasy|mask|monster|scary|tale
+👺	ปีศาจญี่ปุ่น|ญี่ปุ่น|ปิศาจ|หน้า	goblin|angry|creature|face|fairy|fairytale|fantasy|mask|mean|monster|tale
+👻	ผี|น่ากลัว|นิทาน|หลอก|หลอน|ฮาโลวีน	ghost|boo|creature|excited|face|fairy|fairytale|fantasy|halloween|haunting|monster|scary|silly|tale
+👼	นางฟ้าเด็ก|เด็ก|ทารก|เทพนิยาย|เทวดา|นางฟ้า	baby angel|angel|baby|church|face|fairy|fairytale|fantasy|tale
+👽	เอเลี่ยน|นอกโลก|แฟนตาซี|มนุษย์ต่างดาว|ยูเอฟโอ|หน้า|อวกาศ	alien|creature|extraterrestrial|face|fairy|fairytale|fantasy|monster|space|tale|ufo
+👾	สัตว์ประหลาดเอเลี่ยน|เกมส์|นอกโลก|พิกเซล|มนุษย์ต่างดาว|ยูเอฟโอ|สัตว์ประหลาด|หน้า|อวกาศ|เอเลี่ยน	alien monster|alien|creature|extraterrestrial|face|fairy|fairytale|fantasy|game|gamer|games|monster|pixelated|space|tale|ufo
+👿	หน้าบึ้งมีเขา|ปิศาจ|ภูต|หน้า	angry face with horns|angry|demon|devil|evil|face|fairy|fairytale|fantasy|horns|imp|mischievous|purple|shade|tale
+💀	หัวกระโหลก|กะโหลก	skull|body|dead|death|face|fairy|fairytale|i’m|lmao|monster|tale|yolo
+💁	โต๊ะสอบถาม|คน|ช่วยเหลือ|ซุบซิบ|ถากถาง|ทิ้ง|มือ|สะบัดผม|อะไรก็ได้	person tipping hand|fetch|flick|flip|gossip|hand|person|sarcasm|sarcastic|sassy|seriously|tipping|whatever
+💁‍♀	ผู้หญิงแบมือ|แบมือ|ผู้หญิง	woman tipping hand|fetch|flick|flip|gossip|hand|sarcasm|sarcastic|sassy|seriously|tipping|whatever|woman
+💁‍♂	ผู้ชายแบมือ|แบมือ|ผู้ชาย	man tipping hand|fetch|flick|flip|gossip|hand|man|sarcasm|sarcastic|sassy|seriously|tipping|whatever
+💂	การ์ดคุ้มกัน|การ์ด|คุ้มกัน|งาน|ทหาร|บัคกิงแฮม|พระราชวัง|ยาม|ลอนดอน|หมวก	guard|buckingham|helmet|london|palace
+💂‍♀	องครักษ์หญิง|คุ้มกัน|งาน|ทหาร|บัคกิงแฮม|ผู้หญิง|พระราชวัง|ลอนดอน|หมวก|องครักษ์	woman guard|buckingham|guard|helmet|london|palace|woman
+💂‍♂	องครักษ์ชาย|ผู้ชาย|องครักษ์	man guard|buckingham|guard|helmet|london|man|palace
+💃	นักเต้น|ซัลซ่า|แดนเซอร์|เต้น|เต้นรำ|แทงโก้|ผู้หญิง|ฟลาเมงโก	woman dancing|dance|dancer|dancing|elegant|festive|flair|flamenco|groove|let’s|salsa|tango|woman
+💄	ลิปสติก|เครื่องสำอาง	lipstick|cosmetics|date|makeup
+💅	สีทาเล็บ|ตกแต่ง|ทาเล็บ|นิ้ว|มือ|สำอาง|เสริมสวย	nail polish|bored|care|cosmetics|done|makeup|manicure|nail|polish|whatever
+💆	นวดหน้า|คน|ซาลอน|ทรีทเมนท์|นวด|บำบัด|ผ่อนคลาย|สปา|เสริมสวย|หน้า	person getting massage|face|getting|headache|massage|person|relax|relaxing|salon|soothe|spa|tension|therapy|treatment
+💆‍♀	ผู้หญิงกำลังนวดหน้า|คน|ซาลอน|ทรีทเมนท์|นวด|บำบัด|ผ่อนคลาย|ผู้หญิง|สปา|เสริมสวย|หน้า	woman getting massage|face|getting|headache|massage|relax|relaxing|salon|soothe|spa|tension|therapy|treatment|woman
+💆‍♂	ผู้ชายกำลังนวดหน้า|คน|ซาลอน|ทรีทเมนท์|นวด|บำบัด|ผ่อนคลาย|ผู้ชาย|สปา|เสริมสวย|หน้า	man getting massage|face|getting|headache|man|massage|relax|relaxing|salon|soothe|spa|tension|therapy|treatment
+💇	ตัดผม|คน|ความงาม|เซ็ตผม|ตัด|ทำผม|ผม|เสริมสวย	person getting haircut|barber|beauty|chop|cosmetology|cut|groom|hair|haircut|parlor|person|shears|style
+💇‍♀	ผู้หญิงกำลังตัดผม|คน|ความงาม|เซ็ตผม|ตัด|ตัดผม|ทำผม|ผม|ผู้หญิง|เสริมสวย	woman getting haircut|barber|beauty|chop|cosmetology|cut|groom|hair|haircut|parlor|person|shears|style|woman
+💇‍♂	ผู้ชายกำลังตัดผม|คน|ความงาม|เซ็ตผม|ตัด|ตัดผม|ทำผม|ผม|ผู้ชาย|เสริมสวย	man getting haircut|barber|beauty|chop|cosmetology|cut|groom|hair|haircut|man|parlor|person|shears|style
+💈	ร้านตัดผม|บาร์เบอร์	barber pole|barber|cut|fresh|haircut|pole|shave
+💉	กระบอกฉีดยา|เข็มฉีดยา|ฉีดยา	syringe|doctor|flu|medicine|needle|shot|sick|tool|vaccination
+💊	ยาเม็ด|แคปซูล|ป่วย|เม็ด|ยา|ไวตามิน|หมอ	pill|doctor|drugs|medicated|medicine|pills|sick|vitamin
+💋	รอยจูบ|จูบ|ปาก|อวัยวะ	kiss mark|dating|emotion|heart|kiss|kissing|lips|mark|romance|sexy
+💌	จดหมายรัก|ความรัก|จดหมาย|หัวใจ|อีเมล	love letter|heart|letter|love|mail|romance|valentine
+💍	แหวน|ความรัก	ring|diamond|engaged|engagement|married|romance|shiny|sparkling|wedding
+💎	อัญมณี|เพชร	gem stone|diamond|engagement|gem|jewel|money|romance|stone|wedding
+💏	จูบ|คน|คู่รัก|เดท|ร่วมกัน|โรแมนติก|วันครบรอบ|หัวใจ	kiss|anniversary|babe|bae|couple|date|dating|heart|love|mwah|person|romance|together|xoxo
+💐	ช่อดอกไม้|ดอกไม้	bouquet|anniversary|birthday|date|flower|love|plant|romance
+💑	คู่รัก|รักกัน|โรแมนติก	couple with heart|anniversary|babe|bae|couple|dating|heart|kiss|love|person|relationship|romance|together|you
+💒	งานแต่งงาน|แต่งงาน|โบสถ์	wedding|chapel|hitched|nuptials|romance
+💓	หัวใจเต้น|หัวใจ	beating heart|143|beating|cardio|emotion|heart|heartbeat|ily|love|pulsating|pulse
+💔	อกหัก|หัวใจ	broken heart|break|broken|crushed|emotion|heart|heartbroken|lonely|sad
+💕	ใจ 2 ดวง|ครบรอบ|คู่รัก|จูบ|ซึ้ง|เดท|มดขึ้น|หวาน|หัวใจ	two hearts|143|anniversary|date|dating|emotion|heart|hearts|ily|kisses|love|loving|two|xoxo
+💖	หัวใจวิบวับ|จูบ|เช้า|ตื่นเต้น|ประกาย|เยี่ยม|รัก|วิบวับ|หัวใจ	sparkling heart|143|emotion|excited|good|heart|ily|kisses|morning|night|sparkle|sparkling|xoxo
+💗	ใจพองโต|จูบ|ตื่นเต้น|ประหม่า|พองโต|สีชมพู|หัวใจ	growing heart|143|emotion|excited|growing|heart|heartpulse|ily|kisses|muah|nervous|pulse|xoxo
+💘	ศรปักใจ|ความรัก|ลูกศร|หัวใจ	heart with arrow|143|adorbs|arrow|cupid|date|emotion|heart|ily|love|romance|valentine
+💙	หัวใจสีน้ำเงิน|รัก|โรแมนติก|สีน้ำเงิน|หัวใจ|อารมณ์	blue heart|143|blue|emotion|heart|ily|love|romance
+💚	หัวใจสีเขียว|ขจี|ชุ่มฉ่ำ|เย็นสบาย|รักธรรมชาติ|โรแมนติก|สีขียว|หัวใจ	green heart|143|emotion|green|heart|ily|love|romantic
+💛	หัวใจสีเหลือง|ฉ่ำ|สดใส|สว่างจ้า|สีเหลือง|หัวใจ	yellow heart|143|cardiac|emotion|heart|ily|love|yellow
+💜	หัวใจสีม่วง|ยอดเยี่ยม|รัก|สีม่วง|หัวใจ|อารมณ์	purple heart|143|bestest|emotion|heart|ily|love|purple
+💝	หัวใจผูกริบบิ้น|ครบรอบ|จูบ|ซึ้ง|ผูกโบว์|ริบบิ้น|วาเลนไทน์|หัวใจ	heart with ribbon|143|anniversary|emotion|heart|ily|kisses|ribbon|valentine|xoxo
+💞	หัวใจโคจร|หัวใจ	revolving hearts|143|adorbs|anniversary|emotion|heart|hearts|revolving
+💟	หัวใจประดับ|หัวใจ	heart decoration|143|decoration|emotion|heart|hearth|purple|white
+💠	ข้าวหลามตัดมีจุดตรงกลาง|ข้าวหลามตัด|เพชร|เรขาคณิต	diamond with a dot|comic|diamond|dot|geometric
+💡	หลอดไฟ|ปิ๊งไอเดีย	light bulb|bulb|comic|electric|idea|light
+💢	สัญลักษณ์ความโกรธ|โกรธ|ตลก|บ้า|โมโห|เศร้า|สัญลักษณ์	anger symbol|anger|angry|comic|mad|symbol|upset
+💣	ระเบิด|การ์ตูน|ตูม|บูม|ร้อน|อันตราย	bomb|boom|comic|dangerous|explosion|hot
+💤	หลับปุ๋ย|กรน|การ์ตูน|ง่วง|นอน|ราตรีสวัสดิ์|หลับ|เหนื่อย	ZZZ|comic|good|goodnight|night|sleep|sleeping|sleepy|tired|zzz
+💥	การปะทะ|การ์ตูน|โกรธมาก|ชน|ตูม|บูม|ปะทะ|ระเบิด	collision|bomb|boom|collide|comic|explode
+💦	เหงื่อหยด|เหงื่อ	sweat droplets|comic|drip|droplet|droplets|drops|splashing|squirt|sweat|water|wet|work|workout
+💧	หยดน้ำ|เหงื่อ	droplet|cold|comic|drop|nature|sad|sweat|tear|water|weather
+💨	วิ่งฉิว|การ์ตูน|ควัน|ผายลม|พุ่งชน|เมฆ|หนี|หายไป	dashing away|away|cloud|comic|dash|dashing|fart|fast|go|gone|gotta|running|smoke
+💩	อุนจิ|อึ	pile of poo|bs|comic|doo|dung|face|fml|monster|pile|poo|poop|smelly|smh|stink|stinks|stinky|turd
+💪	เบ่งกล้าม|กล้าม|แข็งแรง|แขน|เบ่ง|ไบเซป|ยกน้ำหนัก|ยิม|อวัยวะ	flexed biceps|arm|beast|bench|biceps|bodybuilder|bro|curls|flex|gains|gym|jacked|muscle|press|ripped|strong|weightlift
+💫	มึนหัว|เห็นดาว	dizzy|comic|shining|shooting|star|stars
+💬	พูดไม่ออก|การ์ตูน|ข้อความ|คำพูด|คิด|บทสนทนา|พิมพ์|ฟอง	speech balloon|balloon|bubble|comic|dialog|message|sms|speech|talk|text|typing
+💭	ลูกโป่งความคิด|ความคิด|ลูกโป่ง	thought balloon|balloon|bubble|cartoon|cloud|comic|daydream|decisions|dream|idea|invent|invention|realize|think|thoughts|wonder
+💮	ตราดอกไม้|ดอกไม้	white flower|flower|white
+💯	คะแนนเต็ม|100|คะแนน|จริง|ชัดเจน|เต็ม|เยี่ยม|เลิศ|เห็นด้วย	hundred points|100|a+|agree|clearly|definitely|faithful|fleek|full|hundred|keep|perfect|point|score|TRUE|truth|yup
+💰	ถุงเงิน|เงิน	money bag|bag|bank|bet|billion|cash|cost|dollar|gold|million|money|moneybag|paid|paying|pot|rich|win
+💱	การแลกเปลี่ยนเงิน|เงิน|ธนาคาร|แลกเปลี่ยน|สกุลเงิน	currency exchange|bank|currency|exchange|money
+💲	สัญลักษณ์ดอลลาร์|เงิน|เงินสด|จ่าย|ดอลลาร์|ล้าน|สกุลเงิน|สัญลักษณ์	heavy dollar sign|billion|cash|charge|currency|dollar|heavy|million|money|pay|sign
+💳	บัตรเครดิต|บัตร	credit card|bank|card|cash|charge|credit|money|pay
+💴	ธนบัตรเยน|เงิน|ธนบัตร|แบงค์|เยน|แลกเปลี่ยน	yen banknote|bank|banknote|bill|currency|money|note|yen
+💵	ธนบัตรดอลลาร์|เงิน|ดอลลาร์	dollar banknote|bank|banknote|bill|currency|dollar|money|note
+💶	ธนบัตรยูโร|เงิน|ธนบัตร|แบงค์|ยูโร|รวย|แลกเปลี่ยน	euro banknote|100|bank|banknote|bill|currency|euro|money|note|rich
+💷	ธนบัตรปอนด์|เงิน|ธนบัตร|แบงค์|ปอนด์|รวย|ล้าน|แลกเปลี่ยน	pound banknote|bank|banknote|bill|billion|cash|currency|money|note|pound|pounds
+💸	เงินบิน|เงินมีปีก	money with wings|bank|banknote|bill|billion|cash|dollar|fly|million|money|note|pay|wings
+💹	ตลาดขึ้น|กราฟ|ธนาคาร|แนวโน้ม|เยน|สกุลเงิน|หุ้น|อัตราแลกเปลี่ยน	chart increasing with yen|bank|chart|currency|graph|growth|increasing|market|money|rise|trend|upward|yen
+💺	ที่นั่ง|เก้าอี้	seat|chair
+💻	แล็ปท็อป|คอมพิวเตอร์|พีซี	laptop|computer|office|pc|personal
+💼	กระเป๋าเอกสาร|กระเป๋า|เอกสาร	briefcase|office
+💽	แผ่นดิสก์|คอมพิวเตอร์|ซีดี|แสง|ออปติคอล	computer disk|computer|disk|minidisk|optical
+💾	ฟลอปปี้ดิสก์|คอมพิวเตอร์|แผ่นบันทึก	floppy disk|computer|disk|floppy
+💿	บลูเรย์|ซีดี|ดีวีดี	optical disk|blu-ray|CD|computer|disk|dvd|optical
+📀	ดีวีดี|คอมพิวเตอร์|ซีดี|ดิสก์|บลูเรย์|แสง|ออปติคอล	dvd|Blu-ray|cd|computer|disk|DVD|optical
+📁	แฟ้มเอกสาร|แฟ้ม|โฟลเดอร์|ไฟล์|เอกสาร	file folder|file|folder
+📂	เปิดเอกสาร|เปิด|แฟ้ม|โฟลเดอร์|ไฟล์|เอกสาร	open file folder|file|folder|open
+📃	เอกสารม้วนปลาย|กระดาษ|จด|บันทึก|เพจ|ม้วน|หน้า|เอกสาร	page with curl|curl|document|page|paper
+📄	เอกสาร|กระดาษ|หน้า	page facing up|document|facing|page|paper|up
+📅	ปฏิทิน|17|วันที่	calendar|date
+📆	ปฏิทินแบบฉีกออก|17|ฉีก|ปฏิทิน|วันที่	tear-off calendar|calendar|tear-off
+📇	ที่ใส่บัตร|ดัชนี|บัตร	card index|card|index|old|rolodex|school
+📈	แนวโน้มขึ้น|กราฟ|ข้อมูล|ขาขึ้น|เติบโต|แนวโน้ม|แผนภูมิ|เพิ่ม|หุ้น	chart increasing|chart|data|graph|growth|increasing|right|trend|up|upward
+📉	แนวโน้มลง|ขาลง	chart decreasing|chart|data|decreasing|down|downward|graph|negative|trend
+📊	กราฟแท่ง|ชาร์ต	bar chart|bar|chart|data|graph
+📋	คลิปบอร์ด	clipboard|do|list|notes
+📌	หมุดปัก|หมุด	pushpin|collage|pin
+📍	หมุดหัวกลม|หมุด	round pushpin|location|map|pin|pushpin|round
+📎	คลิปหนีบกระดาษ|คลิป	paperclip
+📏	ไม้บรรทัดตรง|ไม้บรรทัด	straight ruler|angle|edge|math|ruler|straight|straightedge
+📐	ไม้บรรทัดสามเหลี่ยม|ไม้บรรทัด	triangular ruler|angle|math|rule|ruler|set|slide|triangle|triangular
+📑	แถบคั่นหน้า|คั่นหน้า|เครื่องหมาย|แท็บ	bookmark tabs|bookmark|mark|marker|tabs
+📒	สมุดโน้ตเจาะรูข้าง|โน้ต|บัญชี|สมุด|หนังสือ	ledger|notebook
+📓	สมุดโน้ต|จด|บันทึก	notebook
+📔	สมุดโน้ตมีลาย|สมุดโน้ต	notebook with decorative cover|book|cover|decorated|decorative|education|notebook|school|writing
+📕	หนังสือปิด|หนังสือ	closed book|book|closed|education
+📖	หนังสือเปิด|หนังสือ	open book|book|education|fantasy|knowledge|library|novels|open|reading
+📗	หนังสือสีเขียว|หนังสือ	green book|book|education|fantasy|green|library|reading
+📘	หนังสือสีน้ำเงิน|หนังสือ	blue book|blue|book|education|fantasy|library|reading
+📙	หนังสือสีส้ม|หนังสือ	orange book|book|education|fantasy|library|orange|reading
+📚	หนังสือ|จด	books|book|education|fantasy|knowledge|library|novels|reading|school|study
+📛	ป้ายชื่อ|ชื่อ|ป้าย	name badge|badge|name
+📜	ม้วนกระดาษ|กระดาษ	scroll|paper
+📝	จดบันทึก|ดินสอ|บันทึก	memo|communication|media|notes|pencil
+📞	หูโทรศัพท์|เครื่องรับ|โทรศัพท์	telephone receiver|communication|phone|receiver|telephone|voip
+📟	เพจเจอร์|วิทยุติดตามตัว|สื่อสาร	pager|communication
+📠	แฟกซ์|เครื่องแฟกซ์	fax machine|communication|fax|machine
+📡	จานดาวเทียม|จาน|ดาวเทียม|เสาอากาศ	satellite antenna|aliens|antenna|contact|dish|satellite|science
+📢	เครื่องขยายเสียง|ประกาศ|เสียงดัง	loudspeaker|address|communication|loud|public|sound
+📣	โทรโข่ง|เชียร์|ประกาศ	megaphone|cheering|sound
+📤	กล่องขาออก|จดหมายออก	outbox tray|box|email|letter|mail|outbox|sent|tray
+📥	กล่องขาเข้า|จดหมายเข้า	inbox tray|box|email|inbox|letter|mail|receive|tray|zero
+📦	พัสดุ|กล่อง	package|box|communication|delivery|parcel|shipping
+📧	อีเมล|การสื่อสาร|จดหมาย	e-mail|email|letter|mail
+📨	จดหมายเข้า|การสื่อสาร|จดหมาย	incoming envelope|delivering|e-mail|email|envelope|incoming|letter|mail|receive|sent
+📩	จดหมายออก|การสื่อสาร|จดหมาย	envelope with arrow|arrow|communication|down|e-mail|email|envelope|letter|mail|outgoing|send|sent
+📪	กล่องจดหมายปิดคว่ำธง|กล่องจดหมาย	closed mailbox with lowered flag|closed|flag|lowered|mail|mailbox|postbox
+📫	กล่องจดหมายปิดยกธง|กล่องจดหมาย	closed mailbox with raised flag|closed|communication|flag|mail|mailbox|postbox|raised
+📬	กล่องจดหมายมีจดหมาย|กล่องจดหมาย|จดหมาย|เปิด	open mailbox with raised flag|flag|mail|mailbox|open|postbox|raised
+📭	กล่องจดหมายว่าง|กล่องจดหมาย	open mailbox with lowered flag|flag|lowered|mail|mailbox|open|postbox
+📮	ตู้ไปรษณีย์|กล่องจดหมาย	postbox|mail|mailbox
+📯	แตรส่งสาร|แตร|สาร	postal horn|horn|post|postal
+📰	หนังสือพิมพ์|ข่าวสาร	newspaper|communication|news|paper
+📱	โทรศัพท์มือถือ|โทรศัพท์|มือถือ|ไร้สาย|สื่อสาร	mobile phone|cell|communication|mobile|phone|telephone
+📲	โทรศัพท์มือถือพร้อมลูกศรชี้|โทร|โทรศัพท์|มือถือ|ลูกศร	mobile phone with arrow|arrow|build|call|cell|communication|mobile|phone|receive|telephone
+📳	โหมดสั่น|โทรศัพท์มือถือ	vibration mode|cell|communication|mobile|mode|phone|telephone|vibration
+📴	ปิดมือถือ|โทรศัพท์|ปิด|ปิดเครื่อง|มือถือ	mobile phone off|cell|mobile|off|phone|telephone
+📵	ห้ามใช้โทรศัพท์|โทรศัพท์|มือถือ|ห้าม|ห้ามโทรศัพท์|ห้ามมือถือ	no mobile phones|cell|forbidden|mobile|no|not|phone|phones|prohibited|telephone
+📶	สัญญาณมือถือ|โทรศัพท์|มือถือ|สัญญาณ	antenna bars|antenna|bar|bars|cell|communication|mobile|phone|signal|telephone
+📷	กล้อง|วิดีโอ	camera|photo|selfie|snap|tbt|trip|video
+📸	กล้องเปิดแฟลช|กล้อง|แฟลช|วิดีโอ	camera with flash|camera|flash|video
+📹	กล้องวิดีโอ|กล้อง|วิดีโอ	video camera|camcorder|camera|tbt|video
+📺	ทีวี|โทรทัศน์	television|tv|video
+📻	วิทยุ|เพลง	radio|entertainment|tbt|video
+📼	วิดีโอเทป|เทป|เพลง|วิทยุ	videocassette|old|school|tape|vcr|vhs|video
+📽	เครื่องฉายหนัง|เครื่องฉาย|ภาพยนตร์|วิดีโอ|หนัง	film projector|cinema|film|movie|projector|video
+📿	ลูกประคำ|ลูกปัด|ศาสนา|สร้อย|สวดมนต์	prayer beads|beads|clothing|necklace|prayer|religion
+🔀	ลูกศรไขว้|ไขว้|ลูกศร	shuffle tracks button|arrow|button|crossed|shuffle|tracks
+🔁	เล่นซ้ำ|ซ้ำ|ตามเข็มนาฬิกา|ลูกศร|ลูกศรตามเข็มนาฬิกา	repeat button|arrow|button|clockwise|repeat
+🔂	เล่นซ้ำเพลงเดียว|ครั้งเดียว|ตามเข็มนาฬิกา|ปุ่ม|ลูกศร|เล่นซ้ำ|หนึ่ง	repeat single button|arrow|button|clockwise|once|repeat|single
+🔃	สัญลักษณ์โหลดซ้ำ|ซ้ำ|ตามเข็มนาฬิกา|ลูกศร|โหลด	clockwise vertical arrows|arrow|arrows|clockwise|refresh|reload|vertical
+🔄	ลูกศรทวนเข็มนาฬิกา|ทวนเข็มนาฬิกา|ลูกศร	counterclockwise arrows button|again|anticlockwise|arrow|arrows|button|counterclockwise|deja|refresh|rewindershins|vu
+🔅	แสงสว่างน้อย|ความสว่าง	dim button|brightness|button|dim|low
+🔆	แสงสว่างมาก|ความสว่าง	bright button|bright|brightness|button|light
+🔇	ไม่ใช้เสียง|เงียบ|ปิดเสียง|ลำโพง|ห้าม	muted speaker|mute|muted|quiet|silent|sound|speaker
+🔈	ลำโพงเสียงเบา|นุ่ม|เบา|ลำโพง|วอลลุ่ม|เสียง	speaker low volume|low|soft|sound|speaker|volume
+🔉	ลำโพงเสียงปานกลาง|ปานกลาง|ลำโพง|วอลลุ่ม|เสียง	speaker medium volume|medium|sound|speaker|volume
+🔊	ลำโพงเสียงดัง|ลำโพง|ลำโพงดัง	speaker high volume|high|loud|music|sound|speaker|volume
+🔋	แบตเตอรี่|ถ่าน	battery
+🔌	ปลั๊กไฟ|ปลั๊ก|ไฟฟ้า	electric plug|electric|electricity|plug
+🔍	แว่นขยายเอียงซ้าย|ขยาย|ค้นหา|เครื่องมือ|แว่น	magnifying glass tilted left|glass|lab|left|left-pointing|magnifying|science|search|tilted|tool
+🔎	แว่นขยายเอียงขวา|ค้นหา|เครื่องมือ|ติดต่อ|แล็บ|วิทยาศาสตร์|แว่นขยาย|เอียง	magnifying glass tilted right|contact|glass|lab|magnifying|right|right-pointing|science|search|tilted|tool
+🔏	ล็อคด้วยปากกา|จะงอย|ปากกา|ล็อก|ล็อค|ส่วนตัว|หมึก	locked with pen|ink|lock|locked|nib|pen|privacy
+🔐	ล็อคด้วยกุญแจ|กุญแจ|จักรยาน|ปลอดภัย|ปิด|ล็อก|ล็อค	locked with key|bike|closed|key|lock|locked|secure
+🔑	กุญแจ|คีย์|รหัสผ่าน|ล็อก|ล็อค	key|keys|lock|major|password|unlock
+🔒	ล็อคปิด|กุญแจ|ปิด|ล็อก|ล็อค|ส่วนตัว	locked|closed|lock|private
+🔓	ล็อคเปิด|กุญแจ|ปลดล็อค|เปิด	unlocked|cracked|lock|open|unlock
+🔔	กระดิ่ง|โบสถ์|ระฆัง|วัด|เสียง	bell|break|church|sound
+🔕	ไม่มีกระดิ่ง|กระดิ่ง|เงียบ|ไม่|เสียง|ห้าม	bell with slash|bell|forbidden|mute|no|not|prohibited|quiet|silent|slash|sound
+🔖	ที่คั่นหนังสือ|คั่น|เครื่องหมาย|หนังสือ	bookmark|mark
+🔗	สัญลักษณ์การลิงก์|ลิงก์	link|links
+🔘	ปุ่มวิทยุ|ปุ่ม|เรขาคณิต|วิทยุ	radio button|button|geometric|radio
+🔙	กลับ|ลูกศร|ลูกศรกลับ	BACK arrow|arrow|BACK
+🔚	สิ้นสุด|ลูกศร|ลูกศรสิ้นสุด	END arrow|arrow|END
+🔛	เปิด|ลูกศร	ON! arrow|arrow|mark|ON!
+🔜	สัญลักษณ์เร็วๆ นี้|ขวา|เร็วๆ นี้|ลูกศร|สัญลักษณ์	SOON arrow|arrow|brb|omw|SOON
+🔝	สัญลักษณ์บน|ชี้ขึ้น|บนสุด|ลูกศร|สัญลักษณ์	TOP arrow|arrow|homie|TOP|up
+🔞	ห้ามอายุต่ำกว่า 18 ปี|18|สิบแปด|ห้าม|อายุ|อายุไม่ถึง	no one under eighteen|18|age|eighteen|forbidden|no|not|one|prohibited|restriction|underage
+🔠	อักษรตัวพิมพ์ใหญ่|ภาษาอังกฤษ|อักษรตัวใหญ่	input latin uppercase|ABCD|input|latin|letters|uppercase
+🔡	อักษรตัวพิมพ์เล็ก|ภาษาอังกฤษ|อักษรตัวเล็ก	input latin lowercase|abcd|input|latin|letters|lowercase
+🔢	หมายเลข|1234|ตัวเลข	input numbers|1234|input|numbers
+🔣	สัญลักษณ์|เครื่องหมาย	input symbols|&|%|♪|〒|input|symbols
+🔤	ตัวอักษรภาษาอังกฤษ|ตัวอักษร|อักษรละติน|เอบีซี	input latin letters|abc|alphabet|input|latin|letters
+🔥	ไฟ|เปลวไฟ	fire|af|burn|flame|hot|lit|litaf|tool
+🔦	ไฟฉาย|เครื่องมือ|ไฟฟ้า|แสง	flashlight|electric|light|tool|torch
+🔧	ประแจ|เครื่องมือ	wrench|home|improvement|spanner|tool
+🔨	ค้อน|เครื่องมือ	hammer|home|improvement|repairs|tool
+🔩	สลักและน็อต|เครื่องมือ|น็อต|สลักเกลียว	nut and bolt|bolt|home|improvement|nut|tool
+🔪	มีดทำครัว|มีด|มืดทำครัว	kitchen knife|chef|cooking|hocho|kitchen|knife|tool|weapon
+🔫	ปืนฉีดน้ำ|ปืน|ปืนพก|ลูกโม่|อาวุธ	water pistol|gun|handgun|pistol|revolver|tool|water|weapon
+🔬	กล้องจุลทรรศน์|เครื่องมือ|ทดลอง|แล็บ|วิทยาศาสตร์	microscope|experiment|lab|science|tool
+🔭	กล้องโทรทรรศน์|เครื่องมือ	telescope|contact|extraterrestrial|science|tool
+🔮	ลูกแก้ววิเศษ|ดูดวง	crystal ball|ball|crystal|fairy|fairytale|fantasy|fortune|future|magic|tale|tool
+🔯	ดาว 6 แฉก|จุด|แฉก|โชคชะตา|ดาว|ศาสนายิว	dotted six-pointed star|dotted|fortune|jewish|judaism|six-pointed|star
+🔰	สัญลักษณ์มือใหม่หัดขับ|เขียว|เครื่องมือ|ญี่ปุ่น|บั้ง|ใบไม้|มือใหม่|สัญลักษณ์|หัดขับ|เหลือง	Japanese symbol for beginner|beginner|chevron|green|Japanese|leaf|symbol|tool|yellow
+🔱	ฉมวก|เครื่องมือ|ตรา|เรือ|สมอ|สามง่าม	trident emblem|anchor|emblem|poseidon|ship|tool|trident
+🔲	ปุ่มสี่เหลี่ยมขอบดำ|ปุ่ม|ปุ่มสี่เหลี่ยมสีดำ|สี่เหลี่ยม	black square button|black|button|geometric|square
+🔳	ปุ่มสี่เหลี่ยมขอบขาว|ปุ่ม|ปุ่มสี่เหลี่ยมสีขาว|สี่เหลี่ยม	white square button|button|geometric|outlined|square|white
+🔴	วงกลมสีแดง|แดง|วงกลม	red circle|circle|geometric|red
+🔵	วงกลมสีน้ำเงิน|น้ำเงิน|วงกลม	blue circle|blue|circle|geometric
+🔶	เพชรใหญ่สีส้ม|เรขาคณิต|สี่เหลี่ยม	large orange diamond|diamond|geometric|large|orange
+🔷	เพชรใหญ่สีน้ำเงิน|เรขาคณิต|สี่เหลี่ยม	large blue diamond|blue|diamond|geometric|large
+🔸	เพชรเล็กสีส้ม|เพชร|เรขาคณิต|สีส้ม	small orange diamond|diamond|geometric|orange|small
+🔹	เพชรเล็กสีน้ำเงิน|เพชร|เรขาคณิต|สีน้ำเงิน	small blue diamond|blue|diamond|geometric|small
+🔺	สามเหลี่ยมหงายสีแดง|ชี้ขึ้น|เรขาคณิต|สามเหลี่ยม|สีแดง|หงาย	red triangle pointed up|geometric|pointed|red|triangle|up
+🔻	สามเหลี่ยมคว่ำสีแดง|คว่ำ|ชี้ลง|เรขาคณิต|สามเหลี่ยม|สีแดง	red triangle pointed down|down|geometric|pointed|red|triangle
+🔼	ปุ่มสามเหลี่ยมขึ้น|ปุ่ม|ลูกศร|สีแดง	upwards button|arrow|button|red|up|upwards
+🔽	ปุ่มสามเหลี่ยมลง|ปุ่ม|ลง|ลูกศร|สามเหลี่ยมลง|สีแดง	downwards button|arrow|button|down|downwards|red
+🕉	เครื่องหมายโอม|ศาสนา|ฮินดู	om|Hindu|religion
+🕊	นกพิราบขาว|นก|นางนวล|บิน|ปักษี|พิราบขาว|สันติภาพ	dove|bird|fly|ornithology|peace
+🕋	วิหารกะอ์บะฮ์|มุสลิม|ศาสนา|อิสลาม	kaaba|hajj|islam|Muslim|religion|umrah
+🕌	มัสยิด|มุสลิม|ศาสนา|อิสลาม	mosque|islam|masjid|Muslim|religion
+🕍	โบสถ์ยิว|โบสถ์|ยิว|ยูดาย|ศาสนา	synagogue|Jew|Jewish|judaism|religion|temple
+🕎	เชิงเทียน 7 กิ่ง|เชิงเทียน|เทียน|ศาสนา	menorah|candelabrum|candlestick|hanukkah|jewish|judaism|religion
+🕐	หนึ่งนาฬิกา|ตีหนึ่ง|นาฬิกา|บ่ายโมง|เวลา	one o’clock|1|1:00|clock|o’clock|one|time
+🕑	สองนาฬิกา|ตีสอง|นาฬิกา|บ่ายสอง|สอง	two o’clock|2|2:00|clock|o’clock|time|two
+🕒	สามนาฬิกา|ตีสาม|นาฬิกา|บ่ายสาม|เวลา	three o’clock|3|3:00|clock|o’clock|three|time
+🕓	สี่นาฬิกา|ตีสี่|นาฬิกา|บ่ายสี่โมง|เวลา|สี่	four o’clock|4|4:00|clock|four|o’clock|time
+🕔	ห้านาฬิกา|5:00|ตีห้า|นาฬิกา|เวลา|ห้า|ห้าโมงเย็น	five o’clock|5|5:00|clock|five|o’clock|time
+🕕	หกนาฬิกา|6:00|นาฬิกา|เวลา|หกโมง	six o’clock|6|6:00|clock|o’clock|six|time
+🕖	เจ็ดนาฬิกา|7:00|เจ็ดโมง|นาฬิกา|เวลา|หนึ่งทุ่ม	seven o’clock|0|7|7:00|clock|o’clock|seven
+🕗	แปดนาฬิกา|8:00|นาฬิกา|แปดโมง|เวลา|สองทุ่ม	eight o’clock|8|8:00|clock|eight|o’clock|time
+🕘	เก้านาฬิกา|9|9:00|เก้าโมง|นาฬิกา|เวลา|สามทุ่ม	nine o’clock|9|9:00|clock|nine|o’clock|time
+🕙	สิบนาฬิกา|นาฬิกา	ten o’clock|0|10|10:00|clock|o’clock|ten
+🕚	สิบเอ็ดนาฬิกา|11:00|นาฬิกา|เวลา|สิบเอ็ดโมง|ห้าทุ่ม	eleven o’clock|11|11:00|clock|eleven|o’clock|time
+🕛	สิบสองนาฬิกา|เที่ยง|นาฬิกา|เวลา|สิบสอง	twelve o’clock|12|12:00|clock|o’clock|time|twelve
+🕜	หนึ่งนาฬิกาครึ่ง|นาฬิกา|บ่ายโมงครึ่ง|โมงครึ่ง|เวลา|สามสิบ|หนึ่ง	one-thirty|1|1:30|30|clock|one|thirty|time
+🕝	สองนาฬิกาครึ่ง|นาฬิกา|บ่ายสองโมงครึ่ง|เวลา|สอง|สองโมงครึ่ง|สามสิบ	two-thirty|2|2:30|30|clock|thirty|time|two
+🕞	สามนาฬิกาครึ่ง|นาฬิกา|บ่ายสามโมงครึ่ง|เวลา|สามนาฬิกาสามสิบนาที|สามสิบ	three-thirty|3|3:30|30|clock|thirty|three|time
+🕟	สี่นาฬิกาครึ่ง|4:30|ตีสี่ครึ่ง|นาฬิกา|เวลา|สามสิบ|สี่|สี่โมงครึ่ง	four-thirty|30|4|4:30|clock|four|thirty|time
+🕠	ห้านาฬิกาครึ่ง|5:30|ตีห้าครึ่ง|นาฬิกา|เวลา|ห้าโมงครึ่ง	five-thirty|30|5|5:30|clock|five|thirty|time
+🕡	หกนาฬิกาครึ่ง|6:30|นาฬิกา|เวลา|หกโมงครึ่ง	six-thirty|30|6|6:30|clock|six|thirty
+🕢	เจ็ดนาฬิกาครึ่ง|7:30|เจ็ดโมงครึ่ง|ทุ่มครึ่ง|นาฬิกา|เวลา	seven-thirty|30|7|7:30|clock|seven|thirty
+🕣	แปดนาฬิกาครึ่ง|8:30|นาฬิกา|แปดโมงครึ่ง|เวลา|สองทุ่มครึ่ง	eight-thirty|30|8|8:30|clock|eight|thirty|time
+🕤	เก้านาฬิกาครึ่ง|9:30|เก้าโมงครึ่ง|นาฬิกา|เวลา|สามทุ่มครึ่ง	nine-thirty|30|9|9:30|clock|nine|thirty|time
+🕥	สิบนาฬิกาครึ่ง|10:30|นาฬิกา|เวลา|สิบโมงครึ่ง|สี่ทุ่มครึ่ง	ten-thirty|10|10:30|30|clock|ten|thirty|time
+🕦	สิบเอ็ดนาฬิกาครึ่ง|11:30|นาฬิกา|เวลา|สิบเอ็ดโมงครึ่ง|ห้าทุ่มครึ่ง	eleven-thirty|11|11:30|30|clock|eleven|thirty|time
+🕧	สิบสองนาฬิกาครึ่ง|นาฬิกา	twelve-thirty|12|12:30|30|clock|thirty|time|twelve
+🕯	เทียน|แสง	candle|light
+🕰	นาฬิกาบนหิ้ง|นาฬิกา|เวลา	mantelpiece clock|clock|mantelpiece|time
+🕳	หลุม|หลุมดำ	hole
+🕴	คนใส่สูทลอยได้|คน|ผู้ชาย|ลอย|สูท	person in suit levitating|business|levitating|person|suit
+🕵	นักสืบ|แกะรอย|งาน	detective|sleuth|spy
+🕵‍♀	นักสืบหญิง|นักสืบ|ผู้หญิง|สายลับ	woman detective|detective|sleuth|spy|woman
+🕵‍♂	นักสืบชาย|นักสืบ|ผู้ชาย|สายลับ	man detective|detective|man|sleuth|spy
+🕶	แว่นกันแดด|แดด|ตา|แว่นตา	sunglasses|dark|eye|eyewear|glasses
+🕷	แมงมุม|แมลง	spider|animal|insect
+🕸	ใยแมงมุม|แมงมุม|ใย	spider web|spider|web
+🕹	จอยสติ๊ก|เกม|วิดีโอ	joystick|game|video|videogame
+🕺	คนเต้น|ซัลซ่า|แดนเซอร์|เต้น|เต้นรำ|แทงโก้|นักเต้น|ผู้ชาย|ฟลาเมงโก	man dancing|dance|dancer|dancing|elegant|festive|flair|flamenco|groove|let’s|man|salsa|tango
+🖇	คลิปหนีบกระดาษคู่|กระดาษ|คลิป|เชื่อมโยง|ลิงก์|หนีบ	linked paperclips|link|linked|paperclip|paperclips
+🖊	ปากกา|ลูกลื่น|หมึก	pen|ballpoint
+🖋	ปากกาหมึกซึม|ปากกา|หมึกซึม	fountain pen|fountain|pen
+🖌	แปรงทาสี|ภาพวาด|สี	paintbrush|painting
+🖍	ดินสอสี|วาดเขียน|สี	crayon
+🖐	ชูมือกางนิ้ว|กางนิ้ว|ชูมือ|ผาย|ยกขึ้น|หยุด|อวัยวะ	hand with fingers splayed|finger|fingers|hand|raised|splayed|stop
+🖕	ชูนิ้วกลาง|ขึ้น|ชี้|ท่าทาง|มือ	middle finger|finger|hand|middle
+🖖	ชูนิ้วแบบวัลแคน|นิ้ว|มือ|วัลแคน|อวัยวะ	vulcan salute|finger|hand|hands|salute|Vulcan
+🖤	ใจดำ|ชั่ว|ปีศาจ|เลว|สีดำ|หัวใจ|โหดร้าย	black heart|black|evil|heart|wicked
+🖥	คอมพิวเตอร์เดสก์ท็อป|คอมพิวเตอร์|เดสก์ท็อป|ตั้งโต๊ะ	desktop computer|computer|desktop|monitor
+🖨	เครื่องพิมพ์|คอมพิวเตอร์	printer|computer
+🖱	เมาส์|คอมพิวเตอร์	computer mouse|computer|mouse
+🖲	แทร็กบอล|คอมพิวเตอร์	trackball|computer
+🖼	รูปใส่กรอบ|กรอบรูป|พิพิธภัณฑ์|ภาพวาด|รูปภาพ|ศิลปะ	framed picture|art|frame|framed|museum|painting|picture
+🗂	ที่คั่นบัตรรายการ|ดัชนี|ที่คั่น|บรรณารักษ์|บัตร|แฟ้ม|รายการ	card index dividers|card|dividers|index
+🗃	กล่องใส่แฟ้ม|กระดาษ|กล่อง|แฟ้ม|เอกสาร	card file box|box|card|file
+🗄	ตู้เอกสาร|ตู้|แฟ้ม|เอกสาร	file cabinet|cabinet|file|filing|paper
+🗑	ตะกร้าขยะ|ขยะ|ตะกร้า	wastebasket|can|garbage|trash|waste
+🗒	สมุดโน้ตสันห่วง|จด|ฉีก|โน้ต|สมุด|สันห่วง	spiral notepad|note|notepad|pad|spiral
+🗓	ปฏิทินสันห่วง|ปฏิทิน|ห่วง	spiral calendar|calendar|pad|spiral
+🗜	เครื่องบีบอัด|เครื่องมือ|บีบอัด|หนีบ	clamp|compress|tool|vice
+🗝	กุญแจเก่า|กุญแจ|เก่า|ล็อค	old key|clue|key|lock|old
+🗞	ม้วนหนังสือพิมพ์|กระดาษ|ข่าว|ม้วน|หนังสือพิมพ์	rolled-up newspaper|news|newspaper|paper|rolled|rolled-up
+🗡	ดาบสั้น|ดาบ|อาวุธ	dagger|knife|weapon
+🗣	เงาคนกำลังพูด|คน|เงา|พูด	speaking head|face|head|silhouette|speak|speaking
+🗨	ฟองคำพูด|คำพูด|บทสนทนา|ฟอง|ลูกโป่ง	left speech bubble|balloon|bubble|dialog|left|speech
+🗯	ฟองคำพูดรุนแรง|โกรธ|ฟองคำพูด|ลูกโป่ง	right anger bubble|anger|angry|balloon|bubble|mad|right
+🗳	หีบบัตรลงคะแนน|บัตร|ลงคะแนน|หีบ	ballot box with ballot|ballot|box
+🗺	แผนที่โลก|แผนที่|โลก	world map|map|world
+🗻	ภูเขาไฟฟูจิ|ภูเขา	mount fuji|fuji|mount|mountain|nature
+🗼	โตเกียวทาวเวอร์|โตเกียว	Tokyo tower|Tokyo|tower
+🗽	เทพีเสรีภาพ|รูปปั้น	Statue of Liberty|liberty|Liberty|new|ny|nyc|statue|Statue|york
+🗾	แผนที่ญี่ปุ่น|ญี่ปุ่น	map of Japan|Japan|map
+🗿	รูปปั้นโมไอ|โมไอ|รูปปั้น|หน้า	moai|face|moyai|statue|stoneface|travel
+😀	หน้ายิ้มยิงฟัน|55|ใบหน้า|ยิ้ม|ยิ้มกว้าง|ยิ้มยิงฟัน|หน้า|หัวเราะ|ฮ่าๆ|ฮ่าฮ่า	grinning face|cheerful|cheery|face|grin|grinning|happy|laugh|nice|smile|smiling|teeth
+😁	ยิ้มยิงฟันตายิ้ม|ยิงฟัน|ยิ้ม|หน้า|ฮี่ๆ|ฮี่ฮี่	beaming face with smiling eyes|beaming|eye|eyes|face|grin|grinning|happy|nice|smile|smiling|teeth
+😂	ร้องไห้ดีใจ|555|ขำ|ดีใจ|ตลก|น้ำตา|ปลื้ม|ร้องไห้|หน้า|หัวเราะ|ฮา	face with tears of joy|crying|face|feels|funny|haha|happy|hehe|hilarious|joy|laugh|lmao|lol|rofl|roflmao|tear
+😃	หน้ายิ้มอ้าปาก|55|ตลก|ยิ้ม|ยิ้มยิงฟันปากอ้า|หน้า|หัวเราะ|ฮ่าๆ|ฮ่าฮ่า	grinning face with big eyes|awesome|big|eyes|face|grin|grinning|happy|mouth|open|smile|smiling|teeth|yay
+😄	หน้ายิ้มตายิ้ม และอ้าปาก|55|ตลก|ยิ้ม|หน้า|หัวเราะ|ฮ่าๆ|ฮ่าฮ่า	grinning face with smiling eyes|eye|eyes|face|grin|grinning|happy|laugh|lol|mouth|open|smile|smiling
+😅	ยิ้มเหงื่อตก|ยิ้ม|หน้า|เหงื่อออก	grinning face with sweat|cold|dejected|excited|face|grinning|mouth|nervous|open|smile|smiling|stress|stressed|sweat
+😆	ยิ้มตาหยี|555|ขำ|ตลก|ตาหยี|มีความสุข|ยิ้ม|หน้า|หัวเราะ|ฮา	grinning squinting face|closed|eyes|face|grinning|haha|hahaha|happy|laugh|lol|mouth|open|rofl|smile|smiling|squinting
+😇	ยิ้มเทวดา|เทวดา|นางฟ้า|บริสุทธิ์|ยิ้ม|หน้า	smiling face with halo|angel|angelic|angels|blessed|face|fairy|fairytale|fantasy|halo|happy|innocent|peaceful|smile|smiling|spirit|tale
+😈	ยิ้มมีเขา|เขา|นิยาย|ปิศาจ|แฟนตาซี|ภูต|ม่วง|ยิ้ม|หน้าปีศาจ	smiling face with horns|demon|devil|evil|face|fairy|fairytale|fantasy|horns|purple|shade|smile|smiling|tale
+😉	ขยิบตา|จีบ|ยิ้ม|หน้า|อิอิ	winking face|face|flirt|heartbreaker|sexy|slide|tease|wink|winking|winks
+😊	หน้ายิ้มตายิ้ม|555|ตา|หน้า|หน้าแดง|อมยิ้ม|อิอิ	smiling face with smiling eyes|blush|eye|eyes|face|glad|satisfied|smile|smiling
+😋	แลบลิ้นมุมปาก|น้ำลายไหล|หน้า|อร่อย	face savoring food|delicious|eat|face|food|full|hungry|savor|smile|smiling|tasty|um|yum|yummy
+😌	โล่งใจ|สงบ|หน้า	relieved face|calm|face|peace|relief|relieved|zen
+😍	ตาหัวใจ|ความรัก|ตา|ยิ้ม|หน้า|หัวใจ	smiling face with heart-eyes|143|bae|eye|face|feels|heart-eyes|hearts|ily|kisses|love|romance|romantic|smile|xoxo
+😎	หน้ายิ้มใส่แว่น|ยิ้ม|แว่นกันแดด|หน้า	smiling face with sunglasses|awesome|beach|bright|bro|chilling|cool|face|rad|relaxed|shades|slay|smile|style|sunglasses|swag|win
+😏	แสยะยิ้ม|เจ้าเล่ห์|หน้า	smirking face|boss|dapper|face|flirt|homie|kidding|leer|shade|slick|sly|smirk|smug|snicker|suave|suspicious|swag
+😐	หน้าเฉยๆ|เฉยๆ|หน้า	neutral face|awkward|blank|deadpan|expressionless|face|fine|jealous|meh|neutral|oh|shade|straight|unamused|unhappy|unimpressed|whatever
+😑	หน้าเย็นชา|เฉยๆ|หน้า	expressionless face|awkward|dead|expressionless|face|fine|inexpressive|jealous|meh|not|oh|omg|straight|uh|unhappy|unimpressed|whatever
+😒	หน้าหน่าย|เบื่อหน่าย|ไม่มีความสุข|หน้า	unamused face|...|bored|face|fine|jealous|jel|jelly|pissed|smh|ugh|uhh|unamused|unhappy|weird|whatever
+😓	เหงื่อตก|หน้า|เหงื่อ	downcast face with sweat|close|cold|downcast|face|feels|headache|nervous|sad|scared|sweat|yikes
+😔	คิดไม่ตก|คิดมาก|ผิดหวัง|หน้า	pensive face|awful|bored|dejected|died|disappointed|face|losing|lost|pensive|sad|sucks
+😕	หน้าสับสน|สับสน|หน้า	confused face|befuddled|confused|confusing|dunno|face|frown|hm|meh|not|sad|sorry|sure
+😖	หน้ารำคาญ|คุ้มคลั่ง|ผิดหวัง|รำคาญ|เศร้า|สับสน|หงุดหงิด|หน้า	confounded face|annoyed|confounded|confused|cringe|distraught|face|feels|frustrated|mad|sad
+😗	หน้าจุ๊บ|จุ๊บ|ส่งจูบ|หน้า	kissing face|143|date|dating|face|flirt|ily|kiss|love|smooch|smooches|xoxo|you
+😘	หน้าส่งจุ๊บ|จุ๊บ|ส่งจูบ|หน้า|หัวใจ	face blowing a kiss|adorbs|bae|blowing|face|flirt|heart|ily|kiss|love|lover|miss|muah|romantic|smooch|xoxo|you
+😙	หน้ายิ้มส่งจุ๊บ|จุ๊บ|ส่งจูบ|หน้า	kissing face with smiling eyes|143|closed|date|dating|eye|eyes|face|flirt|ily|kiss|kisses|kissing|love|night|smile|smiling
+😚	หยีตาส่งจุ๊บ|จุ๊บ|ส่งจูบ|หน้า	kissing face with closed eyes|143|bae|blush|closed|date|dating|eye|eyes|face|flirt|ily|kisses|kissing|smooches|xoxo
+😛	แลบลิ้น|หน้า	face with tongue|awesome|cool|face|nice|party|stuck-out|sweet|tongue
+😜	แลบลิ้นหน้าทะเล้น|ขยิบตา|แลบลิ้น|หน้า	winking face with tongue|crazy|epic|eye|face|funny|joke|loopy|nutty|party|stuck-out|tongue|wacky|weirdo|wink|winking|yolo
+😝	แลบลิ้นตาหยี|แลบลิ้น|หน้า	squinting face with tongue|closed|eye|eyes|face|gross|horrible|omg|squinting|stuck-out|taste|tongue|whatever|yolo
+😞	หน้าผิดหวัง|ผิดหวัง|หน้า	disappointed face|awful|blame|dejected|disappointed|face|fail|losing|sad|unhappy
+😟	หน้ากังวล|กังวล|หน้า	worried face|anxious|butterflies|face|nerves|nervous|sad|stress|stressed|surprised|worried|worry
+😠	หน้าโกรธ|โมโห|หน้า	angry face|anger|angry|blame|face|feels|frustrated|mad|maddening|rage|shade|unhappy|upset
+😡	โกรธมาก|โกรธ|หน้า	enraged face|anger|angry|enraged|face|feels|mad|maddening|pouting|rage|red|shade|unhappy|upset
+😢	ร้องไห้|น้ำตา|หน้า	crying face|awful|cry|crying|face|feels|miss|sad|tear|triste|unhappy
+😣	อดทน|หน้า	persevering face|concentrate|concentration|face|focus|headache|persevere|persevering
+😤	หน้าข่มอารมณ์|เก็บกด|โกรธ|ข่มอารมณ์|จมูก|ชนะแล้ว|พ่นไอ|โมโห|หน้า	face with steam from nose|anger|angry|face|feels|fume|fuming|furious|fury|mad|nose|steam|triumph|unhappy|won
+😥	โล่งอก|ผิดหวัง|หน้า|เหงื่อตก	sad but relieved face|anxious|call|close|complicated|disappointed|face|not|relieved|sad|sweat|time|whew
+😦	หน้าบึ้งอ้าปาก|ตะลึง|บึ้ง|หน้า|อ้าปากค้าง	frowning face with open mouth|caught|face|frown|frowning|guard|mouth|open|scared|scary|surprise|what|wow
+😧	หน้าเจ็บปวด|เครียด|เจ็บปวด|ทุกข์ใจ|แปลกใจ|หน้า|หวาดกลัว	anguished face|anguished|face|forgot|scared|scary|stressed|surprise|unhappy|what|wow
+😨	หวาดกลัว|กลัว|หน้า	fearful face|afraid|anxious|blame|face|fear|fearful|scared|worried
+😩	หน้าอิดโรย|ง่วง|ผิดพลาด|ร้องไห้|เศร้า|หน้า|หิว|เหนื่อย|อิดโรย	weary face|crying|face|fail|feels|hungry|mad|nooo|sad|sleepy|tired|unhappy|weary
+😪	ง่วง|หน้า|หลับ	sleepy face|crying|face|good|night|sad|sleep|sleeping|sleepy|tired
+😫	เหนื่อย|หน้า	tired face|cost|face|feels|nap|sad|sneeze|tired
+😬	เบะปาก|ยิงฟัน|หน้า	grimacing face|awk|awkward|dentist|face|grimace|grimacing|grinning|smile|smiling
+😭	ร้องไห้โฮ|น้ำตา|เสียงดัง|เสียใจ|หน้า	loudly crying face|bawling|cry|crying|face|loudly|sad|sob|tear|tears|unhappy
+😮	อ้าปาก|ตกใจ|หน้า	face with open mouth|believe|face|forgot|mouth|omg|open|shocked|surprised|sympathy|unbelievable|unreal|whoa|wow|you
+😮‍💨	หน้าหายใจออก|ถอนหายใจ|เป่าควัน|เป่าลม|พ่นลมหายใจ|โล่งใจ|โล่งอก|หอบ|เหนื่อยล้า|เฮ้อ	face exhaling|blow|blowing|exhale|exhaling|exhausted|face|gasp|groan|relief|sigh|smiley|smoke|whisper|whistle
+😯	หน้าจุ๊ๆ|หน้า|ห่อปาก|โอว	hushed face|epic|face|hushed|omg|stunned|surprised|whoa|woah
+😰	กังวลเหงื่อตก|กลัว|กังวล|ประสาท|ประหม่า|เร่งรีบ|หน้า|เหงื่อตก	anxious face with sweat|anxious|blue|cold|eek|face|mouth|nervous|open|rushed|scared|sweat|yikes
+😱	กลัวกรีดร้อง|กรีดร้อง|กลัว|ช็อค|ว้าว|หน้า|หวีด	face screaming in fear|epic|face|fear|fearful|munch|scared|scream|screamer|screaming|shocked|surprised|woah
+😲	หน้าประหลาดใจ|ประหลาดใจ|หน้า	astonished face|astonished|cost|face|no|omg|shocked|totally|way
+😳	อายหน้าแดง|ตาโต|หน้า|อาย	flushed face|amazed|awkward|crazy|dazed|dead|disbelief|embarrassed|face|flushed|geez|heat|hot|impressed|jeez|what|wow
+😴	หลับ|กรน|กู๊ดไนท์|ง่วง|งีบ|นอน|ไปนอน|ราตรีสวัสดิ์|หน้า|เหนื่อย	sleeping face|bed|bedtime|face|good|goodnight|nap|night|sleep|sleeping|tired|whatever|yawn|zzz
+😵	หน้ามึน|มึน|หน้า	face with crossed-out eyes|crossed-out|dead|dizzy|eyes|face|feels|knocked|out|sick|tired
+😵‍💫	หน้าตาลาย|ตาลาย|เป็นลม|พระเจ้าช่วย|มึน|ยิ้ม|วิงเวียน|โว๊ะ|สะกดจิต|สับสน|หน้ามืด	face with spiral eyes|confused|dizzy|eyes|face|hypnotized|omg|smiley|spiral|trouble|whoa|woah|woozy
+😶	หน้าไม่มีปาก|ไม่มีปาก|หน้า	face without mouth|awkward|blank|expressionless|face|mouth|mouthless|mute|quiet|secret|silence|silent|speechless
+😶‍🌫	หน้าในหมู่เมฆ|ใบหน้า​|เมฆ|หมอก|เหม่อลอย|แอบมอง	face in clouds|absentminded|clouds|face|fog|head
+😷	ผ้าคาดปาก|ป่วย|เป็นหวัด|หน้า	face with medical mask|cold|dentist|dermatologist|doctor|dr|face|germs|mask|medical|medicine|sick
+😸	แมวยิ้มอ้าปากและยิ้มออกตา|ตา|แมว|ยิงฟัน|ยิ้ม|สัตว์|หน้า|อ้าปาก	grinning cat with smiling eyes|animal|cat|eye|eyes|face|grin|grinning|smile|smiling
+😹	แมวร้องไห้ดีใจ|ดีใจ|น้ำตา|แมว|ยิ้ม|ร้องไห้|สัตว์|หน้า|หัวเราะ	cat with tears of joy|animal|cat|face|joy|laugh|laughing|lol|tear|tears
+😺	แมวยิ้มอ้าปาก|ปาก|แมว|ยิ้ม|ยิ้มอ้าปาก|หน้า|อ้าปาก	grinning cat|animal|cat|face|grinning|mouth|open|smile|smiling
+😻	แมวยิ้มมีตารูปหัวใจ|ตา|แมว|ยิ้ม|สัตว์|หน้า|หลงรัก|หัวใจ	smiling cat with heart-eyes|animal|cat|eye|face|heart|heart-eyes|love|smile|smiling
+😼	แมวยิ้มเจ้าเล่ห์|เจ้าเล่ห์|แมว|ยิ้ม|ยิ้มเยาะ|หน้า	cat with wry smile|animal|cat|face|ironic|smile|wry
+😽	แมวส่งจุ๊บ|จูบ|ตา|แมว|ส่งจุ๊บ|สัตว์|หน้า	kissing cat|animal|cat|closed|eye|eyes|face|kiss|kissing
+😾	แมวโกรธ|โกรธ|แมว|หน้า	pouting cat|animal|cat|face|pouting
+😿	แมวร้องไห้|น้ำตา|แมว|ร้องไห้|เศร้า|หน้า	crying cat|animal|cat|cry|crying|face|sad|tear
+🙀	แมวตกใจ|ตกใจ|ประหลาดใจ|แมว|สัตว์|หน้า|โอ๊ะ	weary cat|animal|cat|face|oh|surprised|weary
+🙁	หน้าบึ้งเล็กน้อย|บึ้ง|หน้า	slightly frowning face|face|frown|frowning|sad|slightly
+🙂	หน้ายิ้มบางๆ|ยิ้ม|หน้า	slightly smiling face|face|happy|slightly|smile|smiling
+🙂‍↔	ส่ายหน้า|ไม่|สั่น|ส่ายหัว	head shaking horizontally|head|horizontally|no|shake|shaking
+🙂‍↕	พยักหน้า|ใช่|ผงกหัว|เห็นด้วย	head shaking vertically|head|nod|shaking|vertically|yes
+🙃	หน้ากลับหัว|กลับหัว|ยิ้ม|หน้า	upside-down face|face|hehe|smile|upside-down
+🙄	กลอกตา|เบื่อ|เบื่อหน่าย|มองบน|หน้า|เหลือทน	face with rolling eyes|eyeroll|eyes|face|rolling|shade|ugh|whatever
+🙅	มือทำท่าไม่โอเค|คน|ท่าทาง|มือ|ไม่เห็นด้วย|ไม่โอเค|หยุด|ห้าม|อย่า	person gesturing NO|forbidden|gesture|hand|NO|not|person|prohibit
+🙅‍♀	ผู้หญิงทำท่าไม่โอเค|ต้องห้าม|ท่าทาง|ผู้หญิง|ห้าม	woman gesturing NO|forbidden|gesture|hand|NO|not|prohibit|woman
+🙅‍♂	ผู้ชายทำท่าไม่โอเค|คน|ท่าทาง|ผู้ชาย|มือ|ไม่|ห้าม|อย่า	man gesturing NO|forbidden|gesture|hand|man|NO|not|prohibit
+🙆	ทำท่าโอเค|คน|ตกลง|ท่าทาง|มือ|ไม่น่าเชื่อ|ออกกำลังกาย|โอเค	person gesturing OK|exercise|gesture|gesturing|hand|OK|omg|person
+🙆‍♀	ผู้หญิงทำท่าโอเค|ท่าทาง|ผู้หญิง|มือ|โอเค	woman gesturing OK|exercise|gesture|gesturing|hand|OK|omg|woman
+🙆‍♂	ผู้ชายทำท่าโอเค|ตกลง|ท่าทาง|ผู้ชาย|มือ|ไม่น่าเชื่อ|ออกกำลังกาย|โอเค	man gesturing OK|exercise|gesture|gesturing|hand|man|OK|omg
+🙇	ท่าขอโทษ|ขอโทษ|ขอร้อง|ขออภัย|คน|โค้งคำนับ|ท่าทาง|สมาธิ|สำนึกผิด|เสียใจ	person bowing|apology|ask|beg|bow|bowing|favor|forgive|gesture|meditate|meditation|person|pity|regret|sorry
+🙇‍♀	ผู้หญิงหมอบคำนับ|ขอโทษ|ขอร้อง|ขออภัย|โค้งคำนับ|ท่าทาง|ผู้หญิง|สมาธิ|สำนึกผิด|เสียใจ	woman bowing|apology|ask|beg|bow|bowing|favor|forgive|gesture|meditate|meditation|pity|regret|sorry|woman
+🙇‍♂	ผู้ชายหมอบคำนับ|กราบ|ขอโทษ|ท่าทาง|ผู้ชาย	man bowing|apology|ask|beg|bow|bowing|favor|forgive|gesture|man|meditate|meditation|pity|regret|sorry
+🙈	ลิงปิดตา|ปิดตา|ลิง	see-no-evil monkey|embarrassed|evil|face|forbidden|forgot|gesture|hide|monkey|no|omg|prohibited|scared|secret|smh|watch
+🙉	ลิงปิดหู|ปิดหู|ลิง	hear-no-evil monkey|animal|ears|evil|face|forbidden|gesture|hear|listen|monkey|no|not|prohibited|secret|shh|tmi
+🙊	ลิงปิดปาก|ปิดปาก|ลิง	speak-no-evil monkey|animal|evil|face|forbidden|gesture|monkey|no|not|oops|prohibited|quiet|secret|speak|stealth
+🙋	ยกมือขึ้น|คน|คำถาม|ท่าทาง|ยกมือ|รับทราบ|รู้แล้ว|เลือกฉัน|อยู่นี่	person raising hand|gesture|hand|here|know|me|person|pick|question|raise|raising
+🙋‍♀	ผู้หญิงยกมือ|ท่าทาง|ผู้หญิง|ยกมือ	woman raising hand|gesture|hand|here|know|me|pick|question|raise|raising|woman
+🙋‍♂	ผู้ชายยกมือ|ท่าทาง|ผู้ชาย|ยกมือ	man raising hand|gesture|hand|here|know|man|me|pick|question|raise|raising
+🙌	ชู 2 มือ|ดีใจ|มือ|อวัยวะ	raising hands|celebration|gesture|hand|hands|hooray|praise|raised|raising
+🙍	ขมวดคิ้ว|คน|คิ้ว|แซด|บึ้งตึง|ผิดหวัง|ไม่พอใจ|ไม่มีความสุข|เศร้า|หงุดหงิด|อารมณ์เสีย	person frowning|annoyed|disappointed|disgruntled|disturbed|frown|frowning|frustrated|gesture|irritated|person|upset
+🙍‍♀	ผู้หญิงหน้าบึ้ง|ท่าทาง|ผู้หญิง|หน้าบึ้ง	woman frowning|annoyed|disappointed|disgruntled|disturbed|frown|frowning|frustrated|gesture|irritated|upset|woman
+🙍‍♂	ผู้ชายหน้าบึ้ง|ท่าทาง|ผู้ชาย|หน้าบึ้ง	man frowning|annoyed|disappointed|disgruntled|disturbed|frown|frowning|frustrated|gesture|irritated|man|upset
+🙎	ปากยื่น|โกรธ|ขมวดคิ้ว|คน|งอน|ผิดหวัง|มุ่ย|หน้าบึ้ง|อารมณ์เสีย	person pouting|disappointed|downtrodden|frown|grimace|person|pouting|scowl|sulk|upset|whine
+🙎‍♀	ผู้หญิงโกรธ|โกรธ|ท่าทาง|ผู้หญิง	woman pouting|disappointed|downtrodden|frown|grimace|pouting|scowl|sulk|upset|whine|woman
+🙎‍♂	ผู้ชายโกรธ|โกรธ|ท่าทาง|ผู้ชาย	man pouting|disappointed|downtrodden|frown|grimace|man|pouting|scowl|sulk|upset|whine
+🙏	พนมมือ|ขอบคุณ|เคารพ|มือ|ไหว้|อวัยวะ	folded hands|appreciate|ask|beg|blessed|bow|cmon|five|folded|gesture|hand|high|please|pray|thanks|thx
+🚀	จรวด|ยานพาหนะ|อวกาศ	rocket|launch|rockets|space|travel
+🚁	เฮลิคอปเตอร์|การเดินทาง|คอปเตอร์|ยานพาหนะ|ฮอ	helicopter|copter|roflcopter|travel|vehicle
+🚂	หัวรถจักรไอน้ำ|เครื่องจักร|ยานพาหนะ|รถไฟ|ไอน้ำ	locomotive|caboose|engine|railway|steam|train|trains|travel
+🚃	ตู้รถไฟ|รถไฟฟ้า|รถราง	railway car|car|electric|railway|train|tram|travel|trolleybus
+🚄	ชินคันเซ็น|รถไฟความเร็วสูง	high-speed train|high-speed|railway|shinkansen|speed|train
+🚅	รถไฟความเร็วสูง|ชินคันเซน|ยานพาหนะ|รถไฟ|เร็ว|หัวกระสุน	bullet train|bullet|high-speed|nose|railway|shinkansen|speed|train|travel
+🚆	รถไฟ|ยานพาหนะ	train|arrived|choo|railway
+🚇	รถไฟใต้ดิน|ยานพาหนะ|รถไฟ	metro|subway|travel
+🚈	รถไฟรางเบา|ยานพาหนะ|รถไฟ	light rail|arrived|light|monorail|rail|railway
+🚉	สถานีรถไฟ|ยานพาหนะ|รถไฟ	station|railway|train
+🚊	รถรางบนราง|ยานพาหนะ|รถไฟ|ราง	tram|trolleybus
+🚋	ตู้รถราง|ยานพาหนะ|รถ|รถราง	tram car|bus|car|tram|trolley|trolleybus
+🚌	รถบัส|ยานพาหนะ	bus|school|vehicle
+🚍	รถบัสกำลังมา|กำลังมา|ยานพาหนะ|รถบัส	oncoming bus|bus|cars|oncoming
+🚎	รถราง|ยานพาหนะ	trolleybus|bus|tram|trolley
+🚏	ป้ายรถบัส|ป้ายรถ|ยานพาหนะ|รถบัส	bus stop|bus|busstop|stop
+🚐	มินิบัส|ยานพาหนะ|รถบัส	minibus|bus|drive|van|vehicle
+🚑	รถพยาบาล|ยานพาหนะ	ambulance|emergency|vehicle
+🚒	รถดับเพลิง|ไฟ|ยานพาหนะ|รถ|สายดับเพลิง	fire engine|engine|fire|truck
+🚓	รถตำรวจ|ตรวจการณ์|ตำรวจ|ยานพาหนะ|รถยนต์	police car|5–0|car|cops|patrol|police
+🚔	รถตำรวจกำลังมา|กำลังมา|ตำรวจ|ยานพาหนะ|รถยนต์	oncoming police car|car|oncoming|police
+🚕	แท็กซี่|เครื่องยนต์	taxi|cab|cabbie|car|drive|vehicle|yellow
+🚖	แท็กซี่กำลังมา|กำลังมา|แท็กซี่|ยานพาหนะ	oncoming taxi|cab|cabbie|cars|drove|hail|oncoming|taxi|yellow
+🚗	รถ|ยานพาหนะ|รถยนต์	automobile|car|driving|vehicle
+🚘	รถกำลังมา|รถ	oncoming automobile|automobile|car|cars|drove|oncoming|vehicle
+🚙	รถบ้าน|รถ|รถพักผ่อน	sport utility vehicle|car|drive|recreational|sport|sportutility|utility|vehicle
+🚚	รถขนส่ง|ขับ|จัดส่ง|บรรทุก|ยานพาหนะ|รถ|สิบล้อ	delivery truck|car|delivery|drive|truck|vehicle
+🚛	รถบรรทุก|ขนส่ง|ยานพาหนะ|สิบล้อ	articulated lorry|articulated|car|drive|lorry|move|semi|truck|vehicle
+🚜	แทร็กเตอร์|ยานพาหนะ	tractor|vehicle
+🚝	รถไฟรางเดี่ยว|เดี่ยว|โมโนเรล|ยานพาหนะ|รถไฟ|ราง	monorail|vehicle
+🚞	รางรถไฟภูเขา|ภูเขา|ยานพาหนะ|รถไฟ|ราง	mountain railway|car|mountain|railway|trip
+🚟	รถไฟสะพานแขวน|ยานพาหนะ|รถไฟ|สะพานแขวน	suspension railway|railway|suspension
+🚠	เคเบิลคาร์|ภูเขา|ยานพาหนะ	mountain cableway|cable|cableway|gondola|lift|mountain|ski
+🚡	รถกระเช้าลอยฟ้า|ยานพาหนะ|รถกระเช้า|ลอยฟ้า|สายเคเบิล	aerial tramway|aerial|cable|car|gondola|ropeway|tramway
+🚢	เรือ|ยานพาหนะ	ship|boat|passenger|travel
+🚣	นักพายเรือ|กีฬา|คน|แจว|ตกปลา|ทะเลสาบ|พาย|แม่น้ำ|ไม้พาย|เรือ	person rowing boat|boat|canoe|cruise|fishing|lake|oar|paddle|person|raft|river|row|rowboat|rowing
+🚣‍♀	ผู้หญิงพายเรือ|กีฬา|คน|แจว|ตกปลา|ทะเลสาบ|ผู้หญิง|พาย|แม่น้ำ|ไม้พาย|เรือ	woman rowing boat|boat|canoe|cruise|fishing|lake|oar|paddle|raft|river|row|rowboat|rowing|woman
+🚣‍♂	ผู้ชายพายเรือ|กีฬา|คน|แจว|ตกปลา|ทะเลสาบ|ผู้ชาย|พาย|แม่น้ำ|ไม้พาย|เรือ	man rowing boat|boat|canoe|cruise|fishing|lake|man|oar|paddle|raft|river|row|rowboat|rowing
+🚤	เรือด่วน|ยานพาหนะ|เรือ	speedboat|billionaire|boat|lake|luxury|millionaire|summer|travel
+🚥	ไฟจราจรแนวนอน|จราจร|ทางแยก|แนวนอน|ไฟ|สัญญาณ|หยุด	horizontal traffic light|horizontal|intersection|light|signal|stop|stoplight|traffic
+🚦	ไฟจราจรแนวตั้ง|จราจร|ทางแยก|แนวตั้ง|ไฟ|สัญญาณ|หยุด	vertical traffic light|drove|intersection|light|signal|stop|stoplight|traffic|vertical
+🚧	ป้ายไซต์ก่อสร้าง|กำลังก่อสร้าง	construction|barrier
+🚨	สัญญาณไฟตำรวจ|ฉุกเฉิน|ตำรวจ|ไฟสัญญาณ|ยานพาหนะ|รถยนต์	police car light|alarm|alert|beacon|car|emergency|light|police|revolving|siren
+🚩	ธงปักตำแหน่ง|ธง|ธงแดง|ธงสามเหลี่ยม	triangular flag|construction|flag|golf|post|triangular
+🚪	ประตู	door|back|closet|front
+🚫	ป้ายหวงห้าม|ห้ามเข้า	prohibited|entry|forbidden|no|not|smoke
+🚬	ป้ายสูบบุหรี่|ควัน|บุหรี่|ปอด|มะเร็ง|สูบ	cigarette|smoking
+🚭	ป้ายห้ามสูบบุหรี่|ห้ามสูบบุหรี่	no smoking|forbidden|no|not|prohibited|smoke|smoking
+🚮	ทิ้งขยะให้ลงถัง|ป้ายถังขยะ	litter in bin sign|bin|litter|litterbin|sign
+🚯	ห้ามทิ้งขยะ|ป้ายห้ามทิ้งขยะ	no littering|forbidden|litter|littering|no|not|prohibited
+🚰	น้ำดื่ม|ก๊อก|ก๊อกน้ำ	potable water|drinking|potable|water
+🚱	ห้ามดื่มน้ำ|ดื่ม|น้ำ|ห้าม	non-potable water|dry|non-drinking|non-potable|prohibited|water
+🚲	จักรยาน|ยานพาหนะ	bicycle|bike|class|cycle|cycling|cyclist|gang|ride|spin|spinning
+🚳	ห้ามจักรยาน|จราจร|จักรยาน|ทางเท้า|ห้าม	no bicycles|bicycle|bicycles|bike|forbidden|no|not|prohibited
+🚴	นักปั่นจักรยาน|กีฬา|ขี่|คน|จักรยาน|ปั่น	person biking|bicycle|bicyclist|bike|biking|cycle|cyclist|person|riding|sport
+🚴‍♀	ผู้หญิงปั่นจักรยาน|กีฬา|ขี่|คน|จักรยาน|ปั่น|ผู้หญิง	woman biking|bicycle|bicyclist|bike|biking|cycle|cyclist|riding|sport|woman
+🚴‍♂	ผู้ชายปั่นจักรยาน|กีฬา|ขี่|คน|จักรยาน|ปั่น|ผู้ชาย	man biking|bicycle|bicyclist|bike|biking|cycle|cyclist|man|riding|sport
+🚵	นักปั่นจักรยานเสือภูเขา|กีฬา|ขี่|คน|จักรยาน|ปั่น|เสือภูเขา	person mountain biking|bicycle|bicyclist|bike|biking|cycle|cyclist|mountain|person|riding|sport
+🚵‍♀	ผู้หญิงปั่นจักรยานเสือภูเขา|กีฬา|ขี่|คน|จักรยาน|ปั่น|ผู้หญิง|เสือภูเขา	woman mountain biking|bicycle|bicyclist|bike|biking|cycle|cyclist|mountain|riding|sport|woman
+🚵‍♂	ผู้ชายปั่นจักรยานเสือภูเขา|กีฬา|ขี่|คน|จักรยาน|ปั่น|ผู้ชาย|เสือภูเขา	man mountain biking|bicycle|bicyclist|bike|biking|cycle|cyclist|man|mountain|riding|sport
+🚶	คนเดิน|ก้าว|คน|เดิน	person walking|amble|gait|hike|man|pace|pedestrian|person|stride|stroll|walk|walking
+🚶‍♀	ผู้หญิงเดิน|ก้าว|คน|เดิน|ผู้หญิง	woman walking|amble|gait|hike|man|pace|pedestrian|stride|stroll|walk|walking|woman
+🚶‍♂	ผู้ชายเดิน|ก้าว|คน|เดิน|ผู้ชาย	man walking|amble|gait|hike|man|pace|pedestrian|stride|stroll|walk|walking
+🚷	ห้ามคนเดินเท้า|คนเดินเท้า|ไม่มีคนเดินเท้า|ห้าม|ห้ามเดิน	no pedestrians|forbidden|no|not|pedestrian|pedestrians|prohibited
+🚸	เด็กๆ ข้ามถนน|การจราจร|ข้าม|คน|เด็ก|เดินเท้า|ถนน|ป้าย|โรงเรียน	children crossing|child|children|crossing|pedestrian|traffic
+🚹	ห้องน้ำชาย|ผู้ชาย|สุขภัณฑ์|สุขา|ห้องชาย|ห้องน้ำ	men’s room|bathroom|lavatory|man|men’s|restroom|room|toilet|WC
+🚺	ห้องน้ำหญิง|ผู้หญิง|สัญลักษณ์ผู้หญิง|สุขภัณฑ์|สุขา|ห้องน้ำ|ห้องหญิง	women’s room|bathroom|lavatory|restroom|room|toilet|WC|woman|women’s
+🚻	ห้องน้ำ|สุขภัณฑ์	restroom|bathroom|lavatory|toilet|WC
+🚼	ป้ายทารก|ที่เปลี่ยนผ้าอ้อมเด็ก	baby symbol|baby|changing|symbol
+🚽	โถส้วม|ห้องน้ำ	toilet|bathroom
+🚾	ป้ายห้องน้ำ|ห้องน้ำ	water closet|bathroom|closet|lavatory|restroom|toilet|water|WC
+🚿	ฝักบัว|น้ำ	shower|water
+🛀	คนนอนแช่น้ำในอ่าง|คน|นอนแช่|อ่าง|อาบน้ำ	person taking bath|bath|bathtub|person|taking|tub
+🛁	อ่างอาบน้ำ|อ่าง|อาบน้ำ	bathtub|bath
+🛂	ตรวจพาสปอร์ต|พาสปอร์ต	passport control|control|passport
+🛃	ศุลกากร|ภาษี	customs|packing
+🛄	รับสัมภาระ|กระเป๋า|เดินทาง|ท่องเที่ยว|สัมภาระ|โหลด	baggage claim|arrived|baggage|bags|case|checked|claim|journey|packing|plane|ready|travel|trip
+🛅	บริการฝากกระเป๋า|กระเป๋า|รับฝาก|ล็อกเกอร์	left luggage|baggage|case|left|locker|luggage
+🛋	โซฟากับโคมไฟ|โคมไฟ|โซฟา|โรงแรม	couch and lamp|couch|hotel|lamp
+🛌	คนนอนหลับ|กลางคืน|กู๊ดไนท์|คน|ง่วง|งีบ|นอน|โรงแรม|เวลานอน|หลับ|เหนื่อย	person in bed|bed|bedtime|good|goodnight|hotel|nap|night|person|sleep|tired|zzz
+🛍	ถุงช็อปปิ้ง|ช็อปปิ้ง|ถุง|โรงแรม|ห้าง|หิ้ว	shopping bags|bag|bags|hotel|shopping
+🛎	กระดิ่งโรงแรม|กระดิ่ง|พนักงาน|โรงแรม	bellhop bell|bell|bellhop|hotel
+🛏	เตียง|โรงแรม|หลับ	bed|hotel|sleep
+🛐	ที่บูชา|บูชา|ศาสนา|สักการะ	place of worship|place|pray|religion|worship
+🛑	เครื่องหมายหยุด|เครื่องหมาย|แปดเหลี่ยม|หยุด	stop sign|octagonal|sign|stop
+🛒	รถเข็น|จ่าย|ช็อปปิ้ง|ซื้อ|ตะกร้า	shopping cart|cart|shopping|trolley
+🛕	วัดฮินดู|โบสถ์ฮินดู|วัด|ศาสนสถาน|ศาสนาฮินดู|ฮินดู	hindu temple|hindu|temple
+🛖	กระท่อม|กระโจม|ที่พัก|ที่อยู่|บ้าน|บ้านทรงกลม	hut|home|house|roundhouse|shelter|yurt
+🛗	ลิฟต์|การช่วยการเข้าถึง|รอก	elevator|accessibility|hoist|lift
+🛘	ดินถล่ม|โคลนถล่ม|แผ่นดินไหว|ภัยพิบัติ|ภูเขา|หิน|หิมะถล่ม|อันตราย	landslide|avalanche|danger|disaster|earthquake|mountain|mudslide|rocks
+🛙	ประภาคาร|การเดินเรือ|ความหวัง|ทะเล|นำทาง|ไฟ|สัญญาณ|แสงสว่าง	lighthouse|beacon|enlightenment|guidance|hope|light|maritime|navigation|sea|signal
+🛜	ไร้สาย|การเชื่อมต่อ|คอมพิวเตอร์|เครือข่าย|เน็ต|บรอดแบนด์|เราเตอร์|สมาร์ทโฟน|อินเทอร์เน็ต|ฮอตสปอต	wireless|broadband|computer|connectivity|hotspot|internet|network|router|smartphone|wi-fi|wifi|wlan
+🛝	กระดานลื่นของเล่น|กระดานลื่น|ของเล่น|ไถล|เล่น|สนามเด็กเล่น|สไลด์|สไลด์เดอร์|สไลเดอร์|สวนสนุก|ไหล	playground slide|amusement|park|play|playground|playing|slide|sliding|theme
+🛞	ล้อรถ|ยาง|ยางรถยนต์|รถ|รถยนต์|วงกลม|หมุน	wheel|car|circle|tire|turn|vehicle
+🛟	ห่วงชูชีพ|กู้ภัย|ความปลอดภัย|เครื่องช่วยชีวิต|ช่วยชีวิต|ชีวิต|ชูชีพ|ลอย|ว่ายน้ำ|ห่วงยาง	ring buoy|buoy|float|life|lifesaver|preserver|rescue|ring|safety|save|saver|swim
+🛠	ค้อนและประแจ|ค้อน|เครื่องมือ|ประแจ	hammer and wrench|hammer|spanner|tool|wrench
+🛡	โล่|ป้องกัน|อาวุธ	shield|weapon
+🛢	ถังน้ำมัน|ถัง|น้ำมัน	oil drum|drum|oil
+🛣	ทางด่วน|ถนน	motorway|highway|road
+🛤	รางรถไฟ|รถไฟ	railway track|railway|track|train
+🛥	เรือยนต์|ยานพาหนะ|เรือ	motor boat|boat|motor|motorboat
+🛩	เครื่องบินเล็ก|เครื่องบิน|ยานพาหนะ	small airplane|aeroplane|airplane|plane|small
+🛫	เครื่องบินขึ้น|ขาออก|เครื่องบิน|ยานพาหนะ	airplane departure|aeroplane|airplane|check-in|departure|departures|plane
+🛬	เครื่องบินลง|ขาเข้า|เครื่องบิน|ยานพาหนะ	airplane arrival|aeroplane|airplane|arrival|arrivals|arriving|landing|plane
+🛰	ดาวเทียม|เทคโนโลยี|อวกาศ	satellite|space
+🛳	เรือโดยสาร|เรือ	passenger ship|passenger|ship
+🛴	สกู๊ตเตอร์	kick scooter|kick|scooter
+🛵	รถสกู๊ตเตอร์|รถ|สกู๊ตเตอร์	motor scooter|motor|scooter
+🛶	แคนู|พาย|เรือ	canoe|boat
+🛷	เลื่อนหิมะ|แคร่เลื่อน|เลื่อน	sled|luge|sledge|sleigh|snow|toboggan
+🛸	จานบิน|มนุษย์ต่างดาว|ยานอวกาศ|ยูเอฟโอ|เอเลี่ยน	flying saucer|aliens|extra|flying|saucer|terrestrial|UFO
+🛹	สเก็ตบอร์ด|กีฬา|นักเล่นสเก็ต|ล้อ	skateboard|board|skate|skater|wheels
+🛺	รถสามล้อ|รถตุ๊กตุ๊ก|สามล้อ	auto rickshaw|auto|rickshaw|tuk
+🛻	รถกระบะ|กระบะ|การขนส่ง|ปิ๊กอัพ|รถบรรทุก|รถปิ๊กอัพ|รถปิคอัพ|รถพ่วง|รถยนต์	pickup truck|automobile|car|flatbed|pick-up|pickup|transportation|truck
+🛼	รองเท้าสเก็ต|กีฬา|โรลเลอร์|โรลเลอร์เบลด|โรลเลอร์สเก็ต|สเก็ต	roller skate|blades|roller|skate|skates|sport
+🟠	วงกลมสีส้ม|วงกลม|สีส้ม	orange circle|circle|orange
+🟡	วงกลมสีเหลือง|จันทร์|บอล|ไฟเหลือง|วงกลม|อาทิตย์	yellow circle|circle|yellow
+🟢	วงกลมสีเขียว|ไฟเขียว|วงกลม|สีเขียว	green circle|circle|green
+🟣	วงกลมสีม่วง|วงกลม|สีม่วง	purple circle|circle|purple
+🟤	วงกลมสีน้ำตาล|วงกลม|สีน้ำตาล	brown circle|brown|circle
+🟥	สี่เหลี่ยมสีแดง|จัตุรัส|โทษ|ใบแดง|สีแดง|สี่เหลี่ยม	red square|card|penalty|red|square
+🟦	สี่เหลี่ยมสีน้ำเงิน|จัตุรัส|สีน้ำเงิน|สี่เหลี่ยม	blue square|blue|square
+🟧	สี่เหลี่ยมสีส้ม|จัตุรัส|สีส้ม|สี่เหลี่ยม	orange square|orange|square
+🟨	สี่เหลี่ยมสีเหลือง|จัตุรัส|โทษ|ใบเหลือง|สี่เหลี่ยม|สีเหลือง	yellow square|card|penalty|square|yellow
+🟩	สี่เหลี่ยมสีเขียว|จัตุรัส|สีเขียว|สี่เหลี่ยม	green square|green|square
+🟪	สี่เหลี่ยมสีม่วง|จัตุรัส|สีม่วง|สี่เหลี่ยม	purple square|purple|square
+🟫	สี่เหลี่ยมสีน้ำตาล|จัตุรัส|สีน้ำตาล|สี่เหลี่ยม	brown square|brown|square
+🟰	เครื่องหมายเท่ากับตัวหนา|คณิต|ความเท่าเทียม|คำตอบ|เครื่องหมาย|ตัวหนา|เท่ากับ	heavy equals sign|answer|equal|equality|equals|heavy|math|sign
+🤌	หุบนิ้ว|จีบ|ถาม|ท่าทาง|นิ้ว|ปากจัด|ผ่อนคลาย|มือ|หุบ|อดทน	pinched fingers|fingers|gesture|hand|hold|huh|interrogation|patience|pinched|relax|sarcastic|ugh|what|zip
+🤍	หัวใจสีขาว|บริสุทธิ์|สะอาด|สีขาว|หัวใจ	white heart|143|heart|white
+🤎	หัวใจสีน้ำตาล|สีน้ำตาล|หัวใจ	brown heart|143|brown|heart
+🤏	ทำมือบีบนิ้วเข้าหากัน|จิ๋ว|ท่าทาง|นิดเดียว|บีบนิ้ว|ปริมาณ|มือ|เล็กน้อย	pinching hand|amount|bit|fingers|hand|little|pinching|small|sort
+🤐	รูดซิปปาก|รูดซิป|หน้า	zipper-mouth face|face|keep|mouth|quiet|secret|shut|zip|zipper|zipper-mouth
+🤑	หน้าเห็นแก่เงิน|เงิน|หน้า|เห็นแก่เงิน	money-mouth face|face|money|money-mouth|mouth|paid
+🤒	อมปรอท|ปรอทวัดไข้|ป่วย|หน้า	face with thermometer|face|ill|sick|thermometer
+🤓	เด็กเนิร์ด|จริงจัง|ฉลาด|เชี่ยวชาญ|เด็กเรียน|เนิร์ด|เปิ่น|พรสวรรค์|แว่น|หน้า|หัวดี	nerd face|brainy|clever|expert|face|geek|gifted|glasses|intelligent|nerd|smart
+🤔	หน้าครุ่นคิด|ครุ่นคิด|คิด|หน้า	thinking face|chin|consider|face|hmm|ponder|pondering|thinking|wondering
+🤕	หัวแตก|เจ็บ|ผ้าก็อต|แผล|หน้า	face with head-bandage|bandage|face|head-bandage|hurt|injury|ouch
+🤖	หุ่นยนต์|สัตว์ประหลาด|หน้า	robot|face|monster
+🤗	ยิ้มกอด|กอด|ยิ้ม|หน้า|อบอุ่น	smiling face with open hands|face|hands|hug|hugging|open|smiling
+🤘	ชูนิ้วชาวร็อก|ขาร็อก|เขา|ชูนิ้ว|ท่าทาง|มือ|สัญญาณ	sign of the horns|finger|hand|horns|rock-on|sign
+🤙	มือโทร|โทร|มือ	call me hand|call|hand|hang|loose|me|Shaka
+🤚	ยกมือ|มือ|หลังมือ	raised back of hand|back|backhand|hand|raised
+🤛	กำปั้นขวา|กำปั้น|ขวา	left-facing fist|fist|left-facing|leftwards
+🤜	กำปั้นซ้าย|กำปั้น|ซ้าย	right-facing fist|fist|right-facing|rightwards
+🤝	จับมือ|คืนดี|เชคแฮนด์|ตกลง|ประชุม|ร่วมงาน	handshake|agreement|deal|hand|meeting|shake
+🤞	นิ้วไขว้|ไขว้|โชคดี|ท่าทาง|นิ้ว|ภาวนา|มือ	crossed fingers|cross|crossed|finger|fingers|hand|luck
+🤟	ทำมือ ‘ฉันรักเธอ’|คุณ|ท่าทาง|นิ้ว|มือ|รักเธอ|สาม	love-you gesture|fingers|gesture|hand|ILY|love|love-you|three|you
+🤠	คาวบอยสวมหมวก|คน|คาวบอย|หน้า|หมวก	cowboy hat face|cowboy|cowgirl|face|hat
+🤡	หน้าตลก|โจ๊กเกอร์|ตลก|หน้า	clown face|clown|face
+🤢	หน้าเขียว|เขียว|คลื่นไส้|ซีด|ป่วย|พะอืดพะอม|ไม่สบาย|อ้วก	nauseated face|face|gross|nasty|nauseated|sick|vomit
+🤣	ขำกลิ้ง|555|กลิ้ง|ขำ|ตลก|มีความสุข|แว้ก|หัวเราะ|ฮา	rolling on the floor laughing|crying|face|floor|funny|haha|happy|hehe|hilarious|joy|laugh|lmao|lol|rofl|roflmao|rolling|tear
+🤤	น้ำลายไหล|น้ำลาย|หิว	drooling face|drooling|face
+🤥	ขี้โกหก|โกหก|ขี้จุ๊|จมูกยาว|พิน็อคคิโอ|หน้า	lying face|face|liar|lie|lying|pinocchio
+🤦	หมดกัน|คน|งง|ช็อค|ตกใจ|โธ่|ผิดหวัง|ไม่นะ|เสียใจ|เหลือเชื่อ	person facepalming|again|bewilder|disbelief|exasperation|facepalm|no|not|oh|omg|person|shock|smh
+🤦‍♀	ผู้หญิงเอามือก่ายหน้าผาก|กุมขมับ|งง|ช็อค|ตกใจ|โธ่|ผิดหวัง|ผู้หญิง|ไม่นะ|เสียใจ|เหลือเชื่อ	woman facepalming|again|bewilder|disbelief|exasperation|facepalm|no|not|oh|omg|shock|smh|woman
+🤦‍♂	ผู้ชายเอามือก่ายหน้าผาก|กุมขมับ|งง|ช็อค|ตกใจ|โธ่|ผิดหวัง|ผู้ชาย|ไม่นะ|เสียใจ|เหลือเชื่อ	man facepalming|again|bewilder|disbelief|exasperation|facepalm|man|no|not|oh|omg|shock|smh
+🤧	จาม|ใครบ่นถึง|ป่วย|หวัด|ฮัดเช้ย	sneezing face|face|fever|flu|gesundheit|sick|sneeze|sneezing
+🤨	หน้าประหลาดใจกับยักคิ้ว|คลางแคลงใจ|ประหลาดใจ|แปลกใจ|พิจารณา|ยกคิ้ว|สงสัย|หวาดระแวง|อืม	face with raised eyebrow|disapproval|disbelief|distrust|emoji|eyebrow|face|hmm|mild|raised|skeptic|skeptical|skepticism|surprise|what
+🤩	หน้าตาเป็นประกาย|ดวงตา|ดาว|ตาแวววาว|ตื่นเต้น|ใบหน้า|ใบหน้ายิ้ม|รอยยิ้ม|ว้าว	star-struck|excited|eyes|face|grinning|smile|star|starry-eyed|wow
+🤪	หน้าเพี้ยน|กวน|ตลก|บ้า|เพี้ยน|หน้า	zany face|crazy|eye|eyes|face|goofy|large|small|zany
+🤫	หน้าบอกให้เงียบ|เงียบ|จุ๊|จุ๊จุ๊|บอกให้เงียบ|หน้า	shushing face|face|quiet|shh|shush|shushing
+🤬	หน้ากำลังด่า|โกรธ|คำสาบาน|เซ็นเซอร์|บ้า|สบถ|สาปแช่ง	face with symbols on mouth|censor|cursing|cussing|face|mad|mouth|pissed|swearing|symbols
+🤭	เอามือปิดปาก|ขำขำ|ความลับ|ปิดปาก|แปลกใจ|หัวเราะ|อิอิ|อุ๊บส์	face with hand over mouth|face|giggle|giggling|hand|mouth|oops|realization|secret|shock|sudden|surprise|whoops
+🤮	หน้าอาเจียน|ป่วย|ไม่สบาย|แหวะ|อ้วก|อาเจียน	face vomiting|barf|ew|face|gross|puke|sick|spew|throw|up|vomit|vomiting
+🤯	ช็อค|ตกใจ|ตะลึง|ระเบิด|หัวระเบิด	exploding head|blown|explode|exploding|head|mind|mindblown|no|shocked|way
+🤰	คนท้อง|ท้อง|แม่	pregnant woman|pregnant|woman
+🤱	ให้นม|เด็กทารก|ผู้หญิง|แม่|เลี้ยงลูก|หน้าอก	breast-feeding|baby|breast|feeding|mom|mother|nursing|woman
+🤲	แบสองมือ|ฝ่ามือติดกัน|สวดมนต์|อธิษฐาน	palms up together|cupped|dua|hands|palms|pray|prayer|together|up|wish
+🤳	เซลฟี่|กล้อง|มือถือ	selfie|camera|phone
+🤴	เจ้าชาย|องค์ชาย	prince|crown|fairy|fairytale|fantasy|king|royal|royalty|tale
+🤵	คนหล่อ|เจ้าบ่าว|เต็มยศ|แต่งงาน|ทักซิโด้|ทางการ|ผู้ชาย|เฟี้ยว|หนุ่ม	person in tuxedo|formal|person|tuxedo|wedding
+🤵‍♀	ผู้หญิงใส่ทักซิโด้|ทักซิโด้|ผู้หญิง	woman in tuxedo|formal|tuxedo|wedding|woman
+🤵‍♂	ผู้ชายใส่ทักซิโด้|ทักซิโด้|ผู้ชาย	man in tuxedo|formal|groom|man|tuxedo|wedding
+🤶	นางซานต้า|คริสต์มาส|ฉลอง|ซานตาคลอส|นิทาน|แฟนตาซี|แม่|แมรี่|วันหยุด	Mrs. Claus|celebration|Christmas|claus|fairy|fantasy|holiday|merry|mother|Mrs|santa|tale|xmas
+🤷	ยักไหล่|ช่างเถอะ|ไม่แคร์|ไม่รู้|ไม่สน	person shrugging|doubt|dunno|guess|idk|ignorance|indifference|knows|maybe|person|shrug|shrugging|whatever|who
+🤷‍♀	ผู้หญิงยักไหล่|เฉยเมย|เดา|ผู้หญิง|ไม่ทราบ|ไม่สนใจ|ยักไหล่|รู้|สงสัย|อาจจะ	woman shrugging|doubt|dunno|guess|idk|ignorance|indifference|knows|maybe|shrug|shrugging|whatever|who|woman
+🤷‍♂	ผู้ชายยักไหล่|เฉยเมย|เดา|ผู้ชาย|ไม่ทราบ|ไม่สนใจ|ยักไหล่|รู้|สงสัย|อาจจะ	man shrugging|doubt|dunno|guess|idk|ignorance|indifference|knows|man|maybe|shrug|shrugging|whatever|who
+🤸	คนตีลังกา|คน|คล่องแคล่ว|ตีลังกา|ท่า|มีความสุข|ยิมนาสติก|ล้อเกวียน	person cartwheeling|active|cartwheel|cartwheeling|excited|flip|gymnastics|happy|person|somersault
+🤸‍♀	ผู้หญิงตีลังกา|คน|คล่องแคล่ว|ตีลังกา|ท่า|ผู้หญิง|มีความสุข|ยิมนาสติก|ล้อเกวียน	woman cartwheeling|active|cartwheel|cartwheeling|excited|flip|gymnastics|happy|somersault|woman
+🤸‍♂	ผู้ชายตีลังกา|คน|คล่องแคล่ว|ตีลังกา|ท่า|ผู้ชาย|มีความสุข|ยิมนาสติก|ล้อเกวียน	man cartwheeling|active|cartwheel|cartwheeling|excited|flip|gymnastics|happy|man|somersault
+🤹	คนเล่นจั๊กกลิ้ง|คน|จั๊กกลิ้ง|ทรงตัว|ทักษะ|บาลานซ์|มัลติทาสก์|มายากล|โยนบอล|เล่นกล	person juggling|act|balance|balancing|handle|juggle|juggling|manage|multitask|person|skill
+🤹‍♀	ผู้หญิงเล่นจั๊กกลิ้ง|คน|จั๊กกลิ้ง|ทรงตัว|ทักษะ|บาลานซ์|ผู้หญิง|มัลติทาสก์|มายากล|โยนบอล|เล่นกล	woman juggling|act|balance|balancing|handle|juggle|juggling|manage|multitask|skill|woman
+🤹‍♂	ผู้ชายเล่นจั๊กกลิ้ง|คน|จั๊กกลิ้ง|ทรงตัว|ทักษะ|บาลานซ์|ผู้ชาย|มัลติทาสก์|มายากล|โยนบอล|เล่นกล	man juggling|act|balance|balancing|handle|juggle|juggling|man|manage|multitask|skill
+🤺	นักฟันดาบ|กีฬา|คน|ดวล|ดาบ|ฟัน	person fencing|fencer|fencing|person|sword
+🤼	นักมวยปล้ำ|กีฬา|แข่งขัน|คน|ดวล|ต่อสู้|มวยปล้ำ|สังเวียน	people wrestling|combat|duel|grapple|people|ring|tournament|wrestle|wrestling
+🤼‍♀	ผู้หญิงเล่นมวยปล้ำ|กีฬา|แข่งขัน|คน|ดวล|ต่อสู้|ผู้หญิง|มวยปล้ำ|สังเวียน	women wrestling|combat|duel|grapple|ring|tournament|women|wrestle|wrestling
+🤼‍♂	ผู้ชายเล่นมวยปล้ำ|กีฬา|แข่งขัน|คน|ดวล|ต่อสู้|ผู้ชาย|มวยปล้ำ|สังเวียน	men wrestling|combat|duel|grapple|men|ring|tournament|wrestle|wrestling
+🤽	นักโปโลน้ำ|กีฬา|คน|น้ำ|โปโล	person playing water polo|person|playing|polo|sport|swimming|water|waterpolo
+🤽‍♀	ผู้หญิงเล่นโปโลน้ำ|กีฬา|คน|น้ำ|โปโล|ผู้หญิง	woman playing water polo|playing|polo|sport|swimming|water|waterpolo|woman
+🤽‍♂	ผู้ชายเล่นโปโลน้ำ|กีฬา|คน|น้ำ|โปโล|ผู้ชาย	man playing water polo|man|playing|polo|sport|swimming|water|waterpolo
+🤾	นักแฮนด์บอล|กีฬา|ขว้าง|คน|บอล|โยน|ลูก|แฮนด์บอล	person playing handball|athletics|ball|catch|chuck|handball|hurl|lob|person|pitch|playing|sport|throw|toss
+🤾‍♀	ผู้หญิงเล่นแฮนด์บอล|กีฬา|ขว้าง|คน|บอล|ผู้หญิง|โยน|ลูก|แฮนด์บอล	woman playing handball|athletics|ball|catch|chuck|handball|hurl|lob|pitch|playing|sport|throw|toss|woman
+🤾‍♂	ผู้ชายเล่นแฮนด์บอล|กีฬา|ขว้าง|คน|บอล|ผู้ชาย|โยน|ลูก|แฮนด์บอล	man playing handball|athletics|ball|catch|chuck|handball|hurl|lob|man|pitch|playing|sport|throw|toss
+🤿	หน้ากากดำน้ำ|ดำน้ำ|น้ำลึก|ผิวน้ำ|สนอร์เกิล|หน้ากาก|อุปกรณ์	diving mask|diving|mask|scuba|snorkeling
+🥀	ดอกไม้เหี่ยว|กุหลาบ|เฉา|ดอกไม้|เหี่ยว	wilted flower|dying|flower|wilted
+🥁	กลอง|ดนตรี|ตี|เพลง|ไม้|รัว	drum|drumsticks|music
+🥂	ชนแก้ว|แก้ว|ฉลอง|ชน|เย้	clinking glasses|celebrate|clink|clinking|drink|glass|glasses
+🥃	แก้วเหล้า|แก้ว|ดื่ม|เพียว|เหล้า	tumbler glass|glass|liquor|scotch|shot|tumbler|whiskey|whisky
+🥄	ช้อน|ภาชนะ	spoon|eat|tableware
+🥅	โกล|ตาข่าย|เน็ต|ประตู|ฟุตบอล	goal net|goal|net
+🥇	เหรียญทอง|กีฬา|ชนะ|ทอง|ที่ 1|เหรียญรางวัล	1st place medal|1st|first|gold|medal|place
+🥈	เหรียญเงิน|กีฬา|เงิน|ชนะ|ที่ 2|เหรียญรางวัล	2nd place medal|2nd|medal|place|second|silver
+🥉	เหรียญทองแดง|กีฬา|ชนะ|ทองแดง|ที่ 3|เหรียญรางวัล	3rd place medal|3rd|bronze|medal|place|third
+🥊	นวม|กีฬา|ชก|มวย	boxing glove|boxing|glove
+🥋	ชุดยูโด|กีฬา|คาราเต้|ชุด|เทควันโด|ยูโด|ศิลปะป้องกันตัว	martial arts uniform|arts|judo|karate|martial|taekwondo|uniform
+🥌	ลูกกลิ้งหิน|กีฬา|เกม|เคอร์ลิง|หิน	curling stone|curling|game|rock|stone
+🥍	ลาครอส|โกล|ไม้|ลูกบอล	lacrosse|ball|goal|sports|stick
+🥎	ซอฟต์บอล|กีฬา|ถุงมือ|เบสบอล|ลูกบอล|อันเดอร์อาร์ม	softball|ball|glove|sports|underarm
+🥏	จานร่อน|ไกลสุด|จานบิน|แผ่นดิสก์	flying disc|disc|flying|ultimate
+🥐	ครัวซอง|ขนม|ขนมปัง|อาหาร	croissant|bread|breakfast|crescent|food|french|roll
+🥑	อาโวคาโด|ผลไม้|อาหาร	avocado|food|fruit
+🥒	แตงกวา|แตง|ผัก|อาหาร	cucumber|food|pickle|vegetable
+🥓	เบคอน|เนื้อ|อาหาร	bacon|breakfast|food|meat
+🥔	มันฝรั่ง|โปเตโต้|ผัก|มัน|อาหาร	potato|food|vegetable
+🥕	แครอท|ผัก|อาหาร	carrot|food|vegetable
+🥖	ขนมปังฝรั่งเศส|ขนมปัง|อาหาร	baguette bread|baguette|bread|food|french
+🥗	สลัด|คลีน|ไดเอ็ท|ผัก|อาหาร	green salad|food|green|salad
+🥘	กระทะ|กะทะ|ทำอาหาร|อาหาร	shallow pan of food|casserole|food|paella|pan|shallow
+🥙	เคบับ|อาหาร	stuffed flatbread|falafel|flatbread|food|gyro|kebab|stuffed
+🥚	ไข่|ศูนย์|อาหาร	egg|breakfast|food
+🥛	แก้วนม|แก้ว|เครื่องดื่ม|นม	glass of milk|drink|glass|milk
+🥜	ถั่ว|ธัญพืช|ผัก|อาหาร	peanuts|food|nut|peanut|vegetable
+🥝	กีวี|ผลไม้|อาหาร	kiwi fruit|food|fruit|kiwi
+🥞	แพนเค้ก|ขนมปัง|อาหาร	pancakes|breakfast|crêpe|food|hotcake|pancake
+🥟	เกี๊ยว|เกี๊ยวซ่า|ขนมจีบ	dumpling|empanada|gyōza|jiaozi|pierogi|potsticker
+🥠	คุกกี้เสี่ยงทาย|ขนม|คำพยากรณ์|คุกกี้|ดวง เสี่ยงทาย	fortune cookie|cookie|fortune|prophecy
+🥡	อาหารกล่องซื้อกลับบ้าน|กล่อง|เดลิเวอรี่|ตะเกียบ|สั่งกลับบ้าน|อาหาร	takeout box|box|chopsticks|delivery|food|oyster|pail|takeout
+🥢	ตะเกียบ	chopsticks|hashi|jeotgarak|kuaizi
+🥣	ชามพร้อมช้อน|ข้าวต้ม|โจ๊ก|ซีเรียล|ซุป|อาหารเช้า	bowl with spoon|bowl|breakfast|cereal|congee|oatmeal|porridge|spoon
+🥤	แก้วพร้อมหลอด|แก้ว|ดื่ม|น้ำ|น้ำผลไม้|น้ำอัดลม|หลอด	cup with straw|cup|drink|juice|malt|soda|soft|straw|water
+🥥	มะพร้าว|ปาล์ม|พีน่า โคลาด้า	coconut|colada|palm|piña
+🥦	บรอกโคลี|กะหล่ำปลี|บร็อกโคลี่|ป่า|ผัก	broccoli|cabbage|wild
+🥧	พาย|ขนมอบ|พายฟักทอง|พายแอปเปิ้ล	pie|apple|filling|fruit|meat|pastry|pumpkin|slice
+🥨	เพรตเซล|ขนมปัง|เงื่อน|เพรทเซล|อาหาร	pretzel|convoluted|twisted
+🥩	เนื้อหั่นชิ้น|แดง|เนื้อ|เลือด|สด|สเต็ก|สัตว์|สับ|หมู|หั่นชิ้น	cut of meat|chop|cut|lambchop|meat|porkchop|red|steak
+🥪	แซนด์วิช|ขนมปัง|อาหาร	sandwich|bread
+🥫	อาหารกระป๋อง|กระป๋อง	canned food|can|canned|food
+🥬	ผักใบเขียว|กวางตุ้ง|กะหล่ำปลี|คะน้า|บ๊อกฉ่อย|เบอร์เกอร์|ใบเขียว|ผักกาด|สลัด	leafy green|bok|burgers|cabbage|choy|green|kale|leafy|lettuce|salad
+🥭	มะม่วง|เขตร้อน|ผลไม้|อาหาร	mango|food|fruit|tropical
+🥮	ขนมไหว้พระจันทร์|ขนม|เทศกาล|ฤดูใบไม้ร่วง|ไหว้พระจันทร์	moon cake|autumn|cake|festival|moon|yuèbǐng
+🥯	เบเกิล|ขนมปัง|ทาแยม|เบเกอรี่|อาหารเช้า	bagel|bakery|bread|breakfast|schmear
+🥰	หน้ายิ้มพร้อมกับหัวใจหลายดวง|ความรัก|ชอบ|ชื่นชอบ|ตกหลุมรัก|ใบหน้า|หลงรัก|หลงใหล|หัวใจ|แอบชอบ	smiling face with hearts|3|adore|crush|face|heart|hearts|ily|love|romance|smile|smiling|you
+🥱	หน้ากำลังหาว|คร่อก|ง่วง|ง่วงเหงาหาวนอน|งีบ|เบื่อ|ฝันดี|เวลานอน|หนาว|เหนื่อย	yawning face|bedtime|bored|face|goodnight|nap|night|sleep|sleepy|tired|whatever|yawn|yawning|zzz
+🥲	ใบหน้ายิ้มทั้งน้ำตา|เจ็บปวด|ซึ้ง|ดีใจ|น้ำตา|ภูมิใจ|มีความสุข|ยิ้ม|โล่งใจ|สุขใจ|หน้ายิ้มทั้งน้ำตา	smiling face with tear|face|glad|grateful|happy|joy|pain|proud|relieved|smile|smiley|smiling|tear|touched
+🥳	ไปปาร์ตี้|งานเลี้ยง|ฉลอง|เฉลิมฉลอง|ไชโย|ตื่นเต้น|ปาร์ตี้|วันเกิด|สุขสันต์วันเกิด|หน้า|แฮปปี้เบิร์ดเดย์	partying face|bday|birthday|celebrate|celebration|excited|face|happy|hat|hooray|horn|party|partying
+🥴	หน้างงงวย|คลื่นไส้|งง|งงงวย|มึน|มึนเมา|เมาเหล้า|วิงเวียน|สับสน|หน้ามืด	woozy face|dizzy|drunk|eyes|face|intoxicated|mouth|tipsy|uneven|wavy|woozy
+🥵	ร้อนมาก|ไข้ขึ้น|เป็นไข้|ร้อน|ร้อนตับแลบ|ลมแดด|หน้าแดง|หอบ|เหงื่อแตกพลั่ก|เหงื่อออก	hot face|dying|face|feverish|heat|hot|panting|red-faced|stroke|sweating|tongue
+🥶	หนาวสั่น|ไข้หวัด|เย็นจัด|เย็นยะเยือก|หนาว|หนาวจัด|หวัด	cold face|blue|blue-faced|cold|face|freezing|frostbite|icicles|subzero|teeth
+🥷	นินจา|คน|ความลับ|ซ่อน|ต่อสู้|ทหาร|ทักษะ|พรางตัว|สงคราม|สังหาร	ninja|assassin|fight|fighter|hidden|person|secret|skills|sly|soldier|stealth|war
+🥸	ปลอมตัว|คน|คิ้ว|จมูก|ไม่เปิดเผยตัว|แว่นตา|สปาย|สายลับ|หนวด|หน้า	disguised face|disguise|eyebrow|face|glasses|incognito|moustache|mustache|nose|person|spy|tache|tash
+🥹	หน้ากลั้นน้ำตา|กลั้นน้ำตา|โกรธ|ขอร้อง|ซึ้งใจ|ปลาบปลื้ม|ภูมิใจ|เศร้า|อดกลั้น|อาย|ฮือ	face holding back tears|admiration|aww|back|cry|embarrassed|face|feelings|grateful|gratitude|holding|joy|please|proud|resist|sad|tears
+🥺	หน้าอ้อนวอน|ขอความเห็นใจ|ขอร้อง|เสียใจ|อ้อนวอน	pleading face|begging|big|eyes|face|mercy|not|pleading|please|pretty|puppy|sad|why
+🥻	ชุดส่าหรี|ชุดกระโปรง|เดรส|ส่าหรี|เสื้อผ้า|อินเดีย	sari|clothing|dress
+🥼	เสื้อกาวน์|แจ็กเก็ต|ทดลอง|นักวิทยาศาสตร์|แพทย์|แล็บ|สีขาว|หมอ|ห้องปฏิบัติการ	lab coat|clothes|coat|doctor|dr|experiment|jacket|lab|scientist|white
+🥽	แว่นตากันลม|เชื่อม|ดำน้ำ|นิรภัย|ป้องกัน|ว่ายน้ำ|แว่นตา	goggles|dive|eye|protection|scuba|swimming|welding
+🥾	รองเท้าปีนเขา|กลางแจ้ง|แคมป์|เดิน|บู๊ท|แบ็คแพ็ค|ปีนเขา|รองเท้า|สีน้ำตาล|หนัง	hiking boot|backpacking|boot|brown|camping|hiking|outdoors|shoe
+🥿	รองเท้าส้นเตี้ย|บัลเล่ต์|แบนราบ|ผู้หญิง|รองเท้าคัทชู|ส้นเตี้ย|สลิปเปอร์	flat shoe|ballet|comfy|flat|flats|shoe|slip-on|slipper
+🦀	ปู|กรกฎ|ราศี|สัตว์	crab|Cancer|zodiac
+🦁	สิงโต|ราศี|ราศีสิงห์|หน้า|หน้าสิงโต	lion|alpha|animal|face|Leo|mane|order|rawr|roar|safari|strong|zodiac
+🦂	แมงป่อง|พิจิก|ราศี	scorpion|Scorpio|Scorpius|zodiac
+🦃	ไก่งวง|สัตว์|สัตว์ปีก	turkey|bird|gobble|thanksgiving
+🦄	ยูนิคอร์น|ม้า|หน้า	unicorn|face
+🦅	อินทรี|นก|ปักษี|สัตว์	eagle|animal|bird|ornithology
+🦆	เป็ด|นก|ปักษี|สัตว์	duck|animal|bird|ornithology
+🦇	ค้างคาว|ดูดเลือด|แวมไพร์|สัตว์	bat|animal|vampire
+🦈	ฉลาม|ปลา	shark|animal|fish
+🦉	นกฮูก|เค้าแมว|ฉลาด|ตาโต|ปักษี|สัตว์	owl|animal|bird|ornithology|wise
+🦊	จิ้งจอก|สัตว์|หน้า	fox|animal|face
+🦋	ผีเสื้อ|แมลง|สวย	butterfly|insect|pretty
+🦌	กวาง|เขา|สัตว์|หัว	deer|animal
+🦍	กอริลล่า|ลิง|สัตว์|หน้าขน	gorilla|animal
+🦎	จิ้งจก|ตุ๊กแก|เลื้อยคลาน	lizard|animal|reptile
+🦏	แรด|นอ|สัตว์	rhinoceros|animal
+🦐	กุ้ง|อาหาร	shrimp|food|shellfish|small
+🦑	หมึก|ปลา|อาหาร	squid|animal|food|mollusk
+🦒	ยีราฟ|กีฬา	giraffe|animal|spots
+🦓	ม้าลาย|ลายทาง	zebra|animal|stripe
+🦔	เฮดจ์ฮ็อก|เม่น|สัตว์|หนาม	hedgehog|animal|spiny
+🦕	ไดโนเสาร์|ซอโรพอด|ไดพลอโดคัส|บรอนโตซอรัส	sauropod|brachiosaurus|brontosaurus|dinosaur|diplodocus
+🦖	ทีเร็กซ์|ไดโนเสาร์|ไทแรนโนซอรัส เร็กซ์	T-Rex|dinosaur|Rex|T|Tyrannosaurus
+🦗	จิ้งหรีด|ตั๊กแตน|แมลง	cricket|animal|bug|grasshopper|insect|Orthoptera
+🦘	จิงโจ้|กระโดด|โจอี้|สัตว์|สัตว์ที่มีกระเป๋าหน้าท้อง|ออสเตรเลีย	kangaroo|animal|joey|jump|marsupial
+🦙	ลามะ|กัวนาโค|ขน|บีกูญ่า|วิคุนย่า|สัตว์|อัลปากา	llama|alpaca|animal|guanaco|vicuña|wool
+🦚	นกยูง|ทะนงตัว|ปักษี|ภูมิใจ|รำแพน|สัตว์|สีสัน|โอ้อวด	peacock|animal|bird|colorful|ornithology|ostentatious|peahen|pretty|proud
+🦛	ฮิปโปโปเตมัส|สัตว์|ฮิปโป	hippopotamus|animal|hippo
+🦜	นกแก้ว|โจรสลัด|ปักษี|พูดคุย|สัตว์|สีสัน	parrot|animal|bird|ornithology|pirate|talk
+🦝	แรคคูน|ขี้สงสัย|มีเล่ห์เหลี่ยม|แร็คคูน|สัตว์	raccoon|animal|curious|sly
+🦞	กุ้งมังกร|ก้าม|ซีฟู๊ด|ล็อปสเตอร์|สัตว์|อาหารทะเล	lobster|animal|bisque|claws|seafood
+🦟	ยุง|ไข้|มาลาเรีย|แมลง|ยุงกัด|โรค|ไวรัส	mosquito|bite|disease|fever|insect|malaria|pest|virus
+🦠	จุลินทรีย์|แบคทีเรีย|วิทยาศาสตร์|ไวรัส|อะมีบา	microbe|amoeba|bacteria|science|virus
+🦡	แบดเจอร์|ก่อกวน|สัตว์|ฮันนี่แบดเจอร์	badger|animal|honey|pester
+🦢	หงส์|นก|ปักษี|ลูกเป็ดขี้เหร่|สัตว์	swan|animal|bird|cygnet|duckling|ornithology|ugly
+🦣	ช้างแมมมอธ|ขนสัตว์|งา|ช้าง|แมมมอธ|ยุคน้ำแข็ง|สูญพันธุ์|ใหญ่	mammoth|animal|extinction|large|tusk|wooly
+🦤	นกโดโด|ปักษี|มอริเชียส|สัตว์|สูญพันธุ์|ใหญ่	dodo|animal|bird|extinction|large|ornithology
+🦥	สลอธ|ขี้เกียจ|เชื่องช้า|สโลว์ไลฟ์|อืดอาด	sloth|lazy|slow
+🦦	ตัวนาก|ขี้เล่น|ตกปลา|นาก|สัตว์	otter|animal|fishing|playful
+🦧	อุรังอุตัง|ลิง|สัตว์|เอป	orangutan|animal|ape|monkey
+🦨	สกังก์|ส่งกลิ่น|สัตว์|เหม็น	skunk|animal|stink
+🦩	นกฟลามิงโก|ทรอปิคอล|ปักษี|สัตว์|สีชมพู|หรูหรา	flamingo|animal|bird|flamboyant|ornithology|tropical
+🦪	หอยนางรม|ไข่มุก|ดำน้ำ|มุก|หอยมุก	oyster|diving|pearl
+🦫	บีเวอร์|เขื่อน|ฟัน|สัตว์	beaver|animal|dam|teeth
+🦬	ควายไบซัน|กระทิง|ควาย|ไบซัน|ฝูง|วัวป่า|ไวเซนต์|สัตว์	bison|animal|buffalo|herd|wisent
+🦭	แมวน้ำ|มหาสมุทร|สัตว์|สิงโตทะเล	seal|animal|lion|ocean|sea
+🦮	สุนัขนำทาง|การเข้าถึง|การช่วยเหลือพิเศษ|ตาบอด|นำทาง|สัตว์|สุนัข|หมา	guide dog|accessibility|animal|blind|dog|guide
+🦯	ไม้เท้านำทาง|การเข้าถึง|คนตาบอด|ช่วยเหลือ|นำทาง|ไม้เท้า	white cane|accessibility|blind|cane|probing|white
+🦰	ผมแดง|หัวแดง	red hair|ginger|hair|red|redhead
+🦱	ผมหยิก|ผมลอน|หยิก|แอฟโฟร	curly hair|afro|curly|hair|ringlets
+🦲	หัวล้าน|โกนหัว|คีโม|ไม่มีผม|สกินเฮด	bald|chemotherapy|hair|hairless|no|shaven
+🦳	ผมขาว|แก่|ขาว|ผม|หงอก	white hair|gray|hair|old|white
+🦴	กระดูก|โครงกระดูก|สุนัข	bone|bones|dog|skeleton|wishbone
+🦵	ขา|เข่า|งอ|เตะ|เท้า|อวัยวะ	leg|bent|foot|kick|knee|limb
+🦶	เท้า|กระทืบ|ข้อเท้า|เตะ|เหยียบ	foot|ankle|feet|kick|stomp
+🦷	ฟัน|ขาว|ไข่มุก|ทันตแพทย์|หมอ	tooth|dentist|pearly|teeth|white
+🦸	ซุปเปอร์ฮีโร่|เก่ง|ซุปเปอร์แมน|ดี|พลังวิเศษ|พาวเวอร์|ยอดมนุษย์|วีรบุรุษ|ฮีโร่	superhero|good|hero|superpower
+🦸‍♀	ยอดหญิง|เก่ง|จอมพลัง|ตัวแม่|ผู้หญิง|ฮีโร่	woman superhero|good|hero|heroine|superhero|superpower|woman
+🦸‍♂	พระเอก|เก่ง|จอมพลัง|ตัวพ่อ|ผู้ชาย|ฮีโร่	man superhero|good|hero|man|superhero|superpower
+🦹	ยอดมนุษย์|คนชั่ว|ซูเปอร์พาวเวอร์|ตัวโกง|ปีศาจ|ร้าย|เลว|อาชญากร	supervillain|bad|criminal|evil|superpower|villain
+🦹‍♀	นางร้าย|ตัวร้าย|ปีศาจ|ผู้ร้าย|ผู้หญิง|อาชญากร	woman supervillain|bad|criminal|evil|superpower|supervillain|villain|woman
+🦹‍♂	ตัวโกง|ตัวร้าย|ปีศาจ|ผู้ชาย|ผู้ร้าย|อาชญากร	man supervillain|bad|criminal|evil|man|superpower|supervillain|villain
+🦺	เสื้อนิรภัย|เกราะ|ความปลอดภัย|จราจร|ฉุกเฉิน|นิรภัย|สะท้อนแสง|เสื้อกั๊ก	safety vest|emergency|safety|vest
+🦻	หูใส่อุปกรณ์ช่วยฟัง|การเข้าถึง|การช่วยเหลือพิเศษ|เครื่องช่วยฟัง|ได้ยิน|ยาก|หู|อุปกรณ์	ear with hearing aid|accessibility|aid|ear|hard|hearing
+🦼	วีลแชร์ไฟฟ้า|การเข้าถึง|การช่วยเหลือการเข้าถึง|รถเข็นไฟฟ้า|วีลแชร์	motorized wheelchair|accessibility|motorized|wheelchair
+🦽	วีลแชร์ธรรมดา|การเข้าถึง|การช่วยเหลือการเข้าถึง|รถเข็นแบบมือหมุน|วีลแชร์	manual wheelchair|accessibility|manual|wheelchair
+🦾	แขนกล|กายอุปกรณ์|การเข้าถึง|เทียม|หุ่นยนต์|อวัยวะ	mechanical arm|accessibility|arm|mechanical|prosthetic
+🦿	ขากล|กายอุปกรณ์|การเข้าถึง|เทียม|หุ่นยนต์|อวัยวะ	mechanical leg|accessibility|leg|mechanical|prosthetic
+🧀	เนยแข็ง|ชีส	cheese wedge|cheese|wedge
+🧁	คัพเค้ก|ขนมหวาน|ของหวาน|น้ำตาล|เบเกอรี่|รสหวาน	cupcake|bakery|dessert|sprinkles|sugar|sweet|treat
+🧂	เกลือ|กระปุก|ขวด|เค็ม|เครื่องปรุง|พริกไทย|รสชาติ	salt|condiment|flavor|mad|salty|shaker|taste|upset
+🧃	เครื่องดื่มแบบกล่อง|กล่อง|เครื่องดื่ม|น้ำผลไม้|น้ำหวาน|หลอดดูด	beverage box|beverage|box|juice|straw|sweet
+🧄	กระเทียม|กลิ่น|ปรุงรส|ผัก|อาหาร	garlic|flavoring
+🧅	หอมหัวใหญ่|ปรุงรส|ผัก|หัวหอม|อาหาร	onion|flavoring
+🧆	ฟาลาเฟล|ตะวันออกกลาง|ถั่วชิกพี|ปั้น|ลูกไก่|ลูกชิ้น|อาหาร	falafel|chickpea|meatball
+🧇	วาฟเฟิล|ขนมรังผึ้ง|ไม่แน่ใจ|อาหารเช้า	waffle|breakfast|indecisive|iron
+🧈	เนย|นม|วัว|อาหาร	butter|dairy
+🧉	ชามาเต|แก้ว|เครื่องดื่ม|สมุนไพร	mate|drink
+🧊	ก้อนน้ำแข็ง|ก้อน|น้ำแข็ง|ภูเขาน้ำแข็ง|เย็น|หนาว	ice|cold|cube|iceberg
+🧋	ชาไข่มุก|ไข่มุก|เครื่องดื่ม|ชา|ชานม|ไต้หวัน|นม	bubble tea|boba|bubble|food|milk|pearl|tea
+🧌	โทรลล์|เทพนิยาย|แฟนตาซี|มอนสเตอร์|ยักษ์|สัตว์ประหลาด	troll|fairy|fantasy|monster|tale|trolling
+🧍	คนกำลังยืน|คน|ตัวตรง|ยืน	person standing|person|stand|standing
+🧍‍♀	ผู้หญิงกำลังยืน|คน|ตัวตรง|ผู้หญิง|ยืน	woman standing|stand|standing|woman
+🧍‍♂	ผู้ชายกำลังยืน|คน|ตัวตรง|ผู้ชาย|ยืน	man standing|man|stand|standing
+🧎	คนกำลังคุกเข่า|คน|คุกเข่า|นั่ง	person kneeling|kneel|kneeling|knees|person
+🧎‍♀	ผู้หญิงกำลังคุกเข่า|คน|คุกเข่า|นั่ง|ผู้หญิง	woman kneeling|kneel|kneeling|knees|woman
+🧎‍♂	ผู้ชายกำลังคุกเข่า|คน|คุกเข่า|นั่ง|ผู้ชาย	man kneeling|kneel|kneeling|knees|man
+🧏	คนหูหนวก|การเข้าถึง|คน|ท่าทาง|พิการ|ฟัง|ไม่ได้ยิน|หูหนวก	deaf person|accessibility|deaf|ear|gesture|hear|person
+🧏‍♀	ผู้หญิงหูหนวก|ผู้หญิง|หูหนวก	deaf woman|accessibility|deaf|ear|gesture|hear|woman
+🧏‍♂	ผู้ชายหูหนวก|ผู้ชาย|หูหนวก	deaf man|accessibility|deaf|ear|gesture|hear|man
+🧐	หน้ากับแว่นเลนส์เดียว|แฟนซี|ร่ำรวย|เลนส์เดียว|แว่นตา|หน้า	face with monocle|classy|face|fancy|monocle|rich|stuffy|wealthy
+🧑	คน|เป็นกลางทางเพศ|ผู้ใหญ่|ไม่ระบุเพศ	person|adult
+🧑‍⚕	หมอ|เจ้าหน้าที่อนามัย|นักบำบัด|พยาบาล	health worker|doctor|health|healthcare|nurse|therapist|worker
+🧑‍⚖	ผู้พิพากษา|ตราชั่ง	judge|justice|law|scales
+🧑‍✈	นักบิน|เครื่องบิน	pilot|plane
+🧑‍🌾	ชาวนา|เจ้าของฟาร์ม|ชาวสวน	farmer|gardener|rancher
+🧑‍🍳	กุ๊ก|เชฟ	cook|chef
+🧑‍🍼	คนให้นมลูก|ขวดนม|คน|เด็กทารก|พ่อแม่|รัก|แรกเกิด|เลี้ยงลูก	person feeding baby|baby|feed|feeding|nanny|newborn|nursing|parent
+🧑‍🎄	ซานตาคลอส|คริสต์มาส|ฉลอง|นิทาน|แฟนตาซี|วันหยุด|สุขสันต์	Mx Claus|celebration|Christmas|claus|fairy|fantasy|holiday|merry|Mx|santa|tale|xmas
+🧑‍🎓	บัณฑิต|รับปริญญา	student|graduate
+🧑‍🎤	นักร้อง|ดารา|นักแสดง|ผู้ให้ความบันเทิง|ร็อค	singer|actor|entertainer|rock|rockstar|star
+🧑‍🎨	ศิลปิน|จานสี	artist|palette
+🧑‍🏫	ครู|ผู้สอน|ศาสตราจารย์|อาจารย์	teacher|instructor|lecturer|professor
+🧑‍🏭	พนักงานโรงงาน|คนงาน|พนักงาน|โรงงาน|อุตสาหกรรม	factory worker|assembly|factory|industrial|worker
+🧑‍💻	ผู้เชี่ยวชาญด้านเทคโนโลยี|คอมพิวเตอร์|ซอฟต์แวร์|นักประดิษฐ์|นักพัฒนา|โปรแกรมเมอร์	technologist|coder|computer|developer|inventor|software
+🧑‍💼	พนักงานออฟฟิศ|ธุรกิจ|ผู้จัดการ|พนักงานบริษัท|สถาปนิก|ออฟฟิศ	office worker|architect|business|manager|office|white-collar|worker
+🧑‍🔧	ช่างกล|ช่าง|ช่างประปา|ช่างไฟฟ้า	mechanic|electrician|plumber|tradesperson
+🧑‍🔬	นักวิทยาศาสตร์|นักเคมี|นักชีววิทยา|นักฟิสิกส์|วิศวกร	scientist|biologist|chemist|engineer|mathematician|physicist
+🧑‍🚀	นักบินอวกาศ|จรวด	astronaut|rocket|space
+🧑‍🚒	พนักงานดับเพลิง|ไฟไหม้|รถดับเพลิง	firefighter|fire|firetruck
+🧑‍🤝‍🧑	คนจับมือกัน|คน|คู่|จับมือ|จีบ|จูง|เดท|แฝด|เพื่อน|รัก	people holding hands|bae|bestie|bff|couple|dating|flirt|friends|hand|hold|people|twins
+🧑‍🦯	คนเดินถือไม้เท้านำทาง|การเข้าถึง|การช่วยเหลือพิเศษ|ตาบอด	person with white cane|accessibility|blind|cane|person|probing|white
+🧑‍🦼	คนนั่งวีลแชร์ไฟฟ้า|การเข้าถึง|การช่วยเหลือพิเศษ|วีลแชร์	person in motorized wheelchair|accessibility|motorized|person|wheelchair
+🧑‍🦽	คนนั่งวีลแชร์ธรรมดา|การเข้าถึง|การช่วยเหลือพิเศษ|วีลแชร์	person in manual wheelchair|accessibility|manual|person|wheelchair
+🧑‍🧑‍🧒	ครอบครัว: ผู้ใหญ่, ผู้ใหญ่, เด็ก|ครอบครัว|เด็ก|ผู้ใหญ่	family: adult, adult, child|adult|child|family
+🧑‍🧑‍🧒‍🧒	ครอบครัว: ผู้ใหญ่, ผู้ใหญ่, เด็ก, เด็ก|ครอบครัว|เด็ก|ผู้ใหญ่|ลูก	family: adult, adult, child, child|adult|child|family
+🧑‍🧒	ครอบครัว: ผู้ใหญ่, เด็ก|ครอบครัว|เด็ก|ผู้ใหญ่	family: adult, child|adult|child|family
+🧑‍🧒‍🧒	ครอบครัว: ผู้ใหญ่, เด็ก, เด็ก|ครอบครัว|เด็ก|ผู้ใหญ่|ลูก	family: adult, child, child|adult|child|family
+🧑‍🩰	นักบัลเล่ต์|นักเต้น|บัลเล่ต์	ballet dancer|ballet|dancer
+🧒	เด็ก	child|bright-eyed|grandchild|kid|young|younger
+🧓	คนชรา|แก่|คน|ฉลาด|ชรา|ตายาย|ปู่ย่า|ผู้ใหญ่	older person|adult|elderly|grandparent|old|person|wise
+🧔	ผู้ชายมีเครา|คน|เครา|จอน|ผู้ชาย|หนวด	person: beard|beard|bearded|person|whiskers
+🧔‍♀	ผู้หญิงมีเครา|ผู้หญิง|มีเครา	woman: beard|beard|bearded|whiskers|woman
+🧔‍♂	ชายมีเครา|คน|เครา|จอน|ผู้ชาย|หนวด	man: beard|beard|bearded|man|whiskers
+🧕	ผู้หญิงโพกศีรษะ|คน|คลุม|ชาวมุสลิม|ผ้าพันคอ|ผู้หญิง|โพก|ศีรษะ|หัว|ฮิญาบ	woman with headscarf|bandana|head|headscarf|hijab|kerchief|mantilla|tichel|woman
+🧖	คนในห้องอบไอน้ำ|คน|ซาวน่า|ผ่อนคลาย|ร้อน|สปา|ห้อง|อบไอน้ำ	person in steamy room|day|luxurious|pamper|person|relax|room|sauna|spa|steam|steambath|unwind
+🧖‍♀	ผู้หญิงในห้องอบไอน้ำ|คน|ซาวน่า|ผ่อนคลาย|ผู้หญิง|ร้อน|สปา|ห้อง|อบไอน้ำ	woman in steamy room|day|luxurious|pamper|relax|room|sauna|spa|steam|steambath|unwind|woman
+🧖‍♂	ผู้ชายในห้องอบไอน้ำ|คน|ซาวน่า|ผ่อนคลาย|ผู้ชาย|ร้อน|สปา|ห้อง|อบไอน้ำ	man in steamy room|day|luxurious|man|pamper|relax|room|sauna|spa|steam|steambath|unwind
+🧗	นักไต่เขา|กีฬา|คน|ไต่เขา|ปีนเขา|ปีนผา|ภูเขา	person climbing|climb|climber|climbing|mountain|person|rock|scale|up
+🧗‍♀	ผู้หญิงไต่เขา|กีฬา|คน|ไต่เขา|ปีนเขา|ปีนผา|ผู้หญิง|ภูเขา	woman climbing|climb|climber|climbing|mountain|rock|scale|up|woman
+🧗‍♂	ผู้ชายไต่เขา|กีฬา|คน|ไต่เขา|ปีนเขา|ปีนผา|ผู้ชาย|ภูเขา	man climbing|climb|climber|climbing|man|mountain|rock|scale|up
+🧘	คนนั่งสมาธิ|ขัดสมาธิ|คน|นั่ง|ผ่อนคลาย|โยคะ|สงบ|สติ|สมาธิ	person in lotus position|cross|legged|legs|lotus|meditation|peace|person|position|relax|serenity|yoga|yogi|zen
+🧘‍♀	ผู้หญิงนั่งสมาธิ|ขัดสมาธิ|คน|นั่ง|ผ่อนคลาย|ผู้หญิง|โยคะ|สงบ|สติ|สมาธิ	woman in lotus position|cross|legged|legs|lotus|meditation|peace|position|relax|serenity|woman|yoga|yogi|zen
+🧘‍♂	ผู้ชายนั่งสมาธิ|ขัดสมาธิ|คน|นั่ง|ผ่อนคลาย|ผู้ชาย|โยคะ|สงบ|สติ|สมาธิ	man in lotus position|cross|legged|legs|lotus|man|meditation|peace|position|relax|serenity|yoga|yogi|zen
+🧙	นักเวทย์|คาถา|จอมขมังเวทย์|ผู้วิเศษ|พ่อมด|แฟนตาซี|มายากล|แม่มด|ร่ายมนต์|สะกด	mage|fantasy|magic|play|sorcerer|sorceress|sorcery|spell|summon|witch|wizard
+🧙‍♀	แม่มด|ผู้วิเศษ	woman mage|fantasy|mage|magic|play|sorcerer|sorceress|sorcery|spell|summon|witch|wizard|woman
+🧙‍♂	พ่อมด|ผู้วิเศษ	man mage|fantasy|mage|magic|man|play|sorcerer|sorceress|sorcery|spell|summon|witch|wizard
+🧚	นางฟ้า|คน|นิทาน|ปีก|แฟรี่	fairy|fairytale|fantasy|myth|person|pixie|tale|wings
+🧚‍♀	เทพธิดา|แฟรี่ผู้หญิง	woman fairy|fairy|fairytale|fantasy|myth|person|pixie|tale|Titania|wings|woman
+🧚‍♂	เทพบุตร|แฟรี่ผู้ชาย	man fairy|fairy|fairytale|fantasy|man|myth|Oberon|person|pixie|Puck|tale|wings
+🧛	แวมไพร์|เขี้ยว|แดร็กคูลา|แดร็กคูล่า|ผีดูดเลือด|ฟัน|ไม่ตาย|เลือด|อมตะ|ฮาโลวีน	vampire|blood|Dracula|fangs|halloween|scary|supernatural|teeth|undead
+🧛‍♀	แวมไพร์ผู้หญิง|อมตะ	woman vampire|blood|fangs|halloween|scary|supernatural|teeth|undead|vampire|woman
+🧛‍♂	แวมไพร์ผู้ชาย|แดร็กคูล่า|อมตะ	man vampire|blood|fangs|halloween|man|scary|supernatural|teeth|undead|vampire
+🧜	ครึ่งคนครึ่งปลา|ทะเล|เทพนิยาย|นางเงือก|ประหลาด|มหาสมุทร|เมอร์เมด	merperson|creature|fairytale|folklore|ocean|sea|siren|trident
+🧜‍♀	เงือก	mermaid|creature|fairytale|folklore|merwoman|ocean|sea|siren|trident
+🧜‍♂	เงือกชาย	merman|creature|fairytale|folklore|Neptune|ocean|Poseidon|sea|siren|trident|Triton
+🧝	เอลฟ์|ขลัง|จอมเวทย์|พลังเวทย์|แฟนตาซี|เวทมนตร์	elf|elves|enchantment|fantasy|folklore|magic|magical|myth
+🧝‍♀	เอลฟ์ผู้หญิง|จอมเวทย์	woman elf|elf|elves|enchantment|fantasy|folklore|magic|magical|myth|woman
+🧝‍♂	เอลฟ์ผู้ชาย|จอมเวทย์	man elf|elf|elves|enchantment|fantasy|folklore|magic|magical|man|myth
+🧞	ยักษ์จีนี่|ขอพร|จินนี่|จีนี่|ตะเกียง|ถู|แฟนตาซี|ยักษ์	genie|djinn|fantasy|jinn|lamp|myth|rub|wishes
+🧞‍♀	ยักษ์จีนี่หญิง|ขอพร|จินนี่|จีนี่|ตะเกียง|ถู|ผู้หญิง|แฟนตาซี|ยักษ์	woman genie|djinn|fantasy|genie|jinn|lamp|myth|rub|wishes|woman
+🧞‍♂	ยักษ์จีนี่ชาย|ขอพร|จินนี่|จีนี่|ตะเกียง|ถู|ผู้ชาย|แฟนตาซี|ยักษ์	man genie|djinn|fantasy|genie|jinn|lamp|man|myth|rub|wishes
+🧟	ซอมบี้|เดิน|ตาย|น่ากลัว|ผีดิบ|สยองขวัญ|ฮาโลวีน	zombie|apocalypse|dead|halloween|horror|scary|undead|walking
+🧟‍♀	ซอมบี้ผู้หญิง|ผีดิบ	woman zombie|apocalypse|dead|halloween|horror|scary|undead|walking|woman|zombie
+🧟‍♂	ซอมบี้ผู้ชาย|ผีดิบ	man zombie|apocalypse|dead|halloween|horror|man|scary|undead|walking|zombie
+🧠	สมอง|ฉลาด	brain|intelligent|smart
+🧡	หัวใจสีส้ม|เปรี้ยว|สีส้ม|หัวใจ	orange heart|143|heart|orange
+🧢	หมวกแก๊ป|เบสบอล	billed cap|baseball|bent|billed|cap|dad|hat
+🧣	ผ้าพันคอ|มัด|หนาว|หวัด	scarf|bundle|cold|neck|up
+🧤	ถุงมือ|มือ	gloves|hand
+🧥	เสื้อโค้ต|คลุม|แจ๊คเก็ต|เสื้อกันหนาว|เสื้อโค้ท|หวัด	coat|brr|bundle|cold|jacket|up
+🧦	ถุงเท้า|ถุงน่อง	socks|stocking
+🧧	อั่งเปา|ของขวัญ|เงิน|โชคลาภ|ซองแดง|ตรุษจีน|แต๊ะเอีย	red envelope|envelope|gift|good|hóngbāo|lai|luck|money|red|see
+🧨	ประทัด|ดอกไม้ไฟ|ไดนาไมต์|ประกาย|ไฟ|ระเบิด	firecracker|dynamite|explosive|fire|fireworks|light|pop|popping|spark
+🧩	จิ๊กซอว์|ไขปัญหา|คำใบ้|ชิ้นส่วน|ตัวต่อ|ทับซ้อน|ปริศนา	puzzle piece|clue|interlocking|jigsaw|piece|puzzle
+🧪	หลอดทดลอง|เคมี|ทดลอง|แล็บ|วิทยาศาสตร์|หลอด|ห้องปฏิบัติการ	test tube|chemist|chemistry|experiment|lab|science|test|tube
+🧫	จานเพาะเชื้อ|จาน|นักชีววิทยา|แบคทีเรีย|เพาะเชื้อ|แล็บ|ห้องปฏิบัติการ	petri dish|bacteria|biologist|biology|culture|dish|lab|petri
+🧬	ดีเอ็นเอ|ชีวิต|นักชีววิทยา|พันธุศาสตร์|ยีน|วิวัฒนาการ	dna|biologist|evolution|gene|genetics|life
+🧭	เข็มทิศ|การนำทาง|การผจญภัย|ขั้วแม่เหล็ก|ทิศทาง|โอเรนเทียริ่ง	compass|direction|magnetic|navigation|orienteering
+🧮	ลูกคิด|คำนวณ|เครื่องคิดเลข	abacus|calculation|calculator
+🧯	ที่ดับเพลิง|เคมี|ดับไฟ|ถังดับเพลิง|แรงดัน|ไหม้	fire extinguisher|extinguish|extinguisher|fire|quench
+🧰	กล่องเครื่องมือ|กล่อง|เครื่องมือ|ช่าง|แดง|ประแจ|หีบ	toolbox|box|chest|mechanic|red|tool
+🧱	ก้อนอิฐ|กำแพง|ดิน|ปูน	brick|bricks|clay|mortar|wall
+🧲	แม่เหล็ก|กีบ|เกือกม้า|โค้ง|ดึงดูด|ตัวยู	magnet|attraction|horseshoe|magnetic|negative|positive|shape|u
+🧳	กระเป๋าเดินทาง|กระเป๋า|เก็บเสื้อผ้า|เดินทาง|ท่องเที่ยว|บรรจุ|ล้อลาก|สัมภาระ	luggage|bag|packing|roller|suitcase|travel
+🧴	ขวดโลชั่น|ขวด|ครีมกันแดด|แชมพู|บำรุงผิว|มอยเจอร์ไรเซอร์|โลชั่น	lotion bottle|bottle|lotion|moisturizer|shampoo|sunscreen
+🧵	ด้าย|เข็ม|ตัดเย็บ|เย็บผ้า|เส้นด้าย|หลอดด้าย	thread|needle|sewing|spool|string
+🧶	ไหมพรม|ก้อนไหมพรม|โครเชต์|ด้าย|ถัก|ไหม	yarn|ball|crochet|knit
+🧷	เข็มกลัดซ่อนปลาย|เข็มกลัด|ความปลอดภัย|ผ้าอ้อม|พั้งค์|ร็อค	safety pin|diaper|pin|punk|rock|safety
+🧸	ตุ๊กตาหมี|ของเล่น|ตุ๊กตา|เท็ดดี้แบร์|ผ้ากำมะหยี่|ยัดนุ่น|หมี	teddy bear|bear|plaything|plush|stuffed|teddy|toy
+🧹	ไม้กวาด|กวาดบ้าน|ทำความสะอาด|แม่มด	broom|cleaning|sweeping|witch
+🧺	ตะกร้า|ซักผ้า|ทำฟาร์ม|ปิคนิก	basket|farming|laundry|picnic
+🧻	กระดาษชำระ|ทิชชู่|ม้วน|ห้องน้ำ	roll of paper|paper|roll|toilet|towels
+🧼	สบู่|ก้อน|ทำความสะอาด|ฟอง|ล้าง|อาบน้ำ	soap|bar|bathing|clean|cleaning|lather|soapdish
+🧽	ฟองน้ำ|ดูดซึม|ทำความสะอาด|รูพรุน|ล้างจาน|อาบน้ำ	sponge|absorbing|cleaning|porous|soak
+🧾	ใบเสร็จ|แจ้งหนี้|บัญชี|บิล|รับเงิน|หลักฐาน	receipt|accounting|bookkeeping|evidence|invoice|proof
+🧿	เครื่องราง|ของขลัง|นัยน์ตาปีศาจ|ยันต์|ลูกปัด|สีน้ำเงิน|สีฟ้า	nazar amulet|amulet|bead|blue|charm|evil-eye|nazar|talisman
+🩰	รองเท้าบัลเล่ต์|ชมพู|เต้น|บัลเล่ต์|รองเท้า	ballet shoes|ballet|dance|shoes
+🩱	ชุดว่ายน้ำวันพีซ|ชุดเล่นน้ำ|ชุดว่ายน้ำ	one-piece swimsuit|bathing|one-piece|suit|swimsuit
+🩲	กางเกงชั้นในชาย|กกน.|กางเกงใน|ชุดชั้นใน|วันพีซ|ว่ายน้ำ	briefs|bathing|one-piece|suit|swimsuit|underwear
+🩳	กางเกงขาสั้น|กางเกง|ชุดชั้นใน|บอกเซอร์|ว่ายน้ำ|เสื้อผ้า	shorts|bathing|pants|suit|swimsuit|underwear
+🩴	รองเท้าลำลอง|คีบ|ชายหาด|โซริ|รองเท้าแตะ|ลำลอง|หนีบ	thong sandal|beach|flip|flop|sandal|sandals|shoe|thong|thongs|zōri
+🩵	หัวใจสีฟ้า|เขียว|ชอบ|ซึ้ง|น่ารัก|ฟ้าอ่อน|สีน้ำเงิน|หัวใจ	light blue heart|143|blue|cute|cyan|emotion|heart|ily|light|like|love|sky|special|teal
+🩶	หัวใจสีเทา|เงิน|พิเศษ|รัก|สีเทา|หัวใจ|หินชนวน|อารมณ์	grey heart|143|emotion|gray|grey|heart|ily|love|silver|slate|special
+🩷	หัวใจสีชมพู|ชอบ|ซึ้ง|น่ารัก|พิเศษ|สวีท|สีชมพู|หลงรัก|หัวใจ	pink heart|143|adorable|cute|emotion|heart|ily|like|love|pink|special|sweet
+🩸	หยดเลือด|บริจาคเลือด|บาดเจ็บ|ประจำเดือน|แผล|เมนส์|ยา|หยด	drop of blood|bleed|blood|donation|drop|injury|medicine|menstruation
+🩹	พลาสเตอร์ปิดแผล|ติด|แปะ|แผล|พลาสเตอร์	adhesive bandage|adhesive|bandage
+🩺	เครื่องฟังตรวจ|แพทย์|ยา|หมอ|หัวใจ|หูฟัง	stethoscope|doctor|heart|medicine
+🩻	เอ็กซ์เรย์|กระดูก|ซี่โครง|ปอด|แพทย์|หมอ	x-ray|bones|doctor|medical|skeleton|skull|xray
+🩼	ไม้เท้าค้ำยัน|ขา|ช่วยเหลือ|บาดเจ็บ|ป่วย|พิการ|ไม้เท้า|อุบัติเหตุ	crutch|aid|cane|disability|help|hurt|injured|mobility|stick
+🪀	โยโย่|ของเล่น|ขึ้นๆ ลงๆ|เด้งดึ๋ง|ม้วนกลับ|ลูกดิ่ง	yo-yo|fluctuate|toy
+🪁	ว่าว|บิน|ลอยละล่อง|เล่นลม	kite|fly|soar
+🪂	ร่มชูชีพ|กระโดดร่ม|ดิ่งเวหา|โดดร่ม|พาราเซล|แฮงไกลเดอร์	parachute|hang-glide|parasail|skydive
+🪃	บูมเมอแรง|การเด้งกลับ|สะท้อนกลับ|ออสเตรเลีย|อะบอริจิน|อาวุธ	boomerang|rebound|repercussion|weapon
+🪄	ไม้กายสิทธิ์|คาถา|นักมายากล|ผู้วิเศษ|พ่อมด|แม่มด|เวทมนตร์|เสกคาถา	magic wand|magic|magician|wand|witch|wizard
+🪅	ปิญญาตา|การเฉลิมฉลอง|ขนมหวาน|ฉลอง|เทศกาล|ปาร์ตี้|เม็กซิกัน|ลูกกวาด	piñata|candy|celebrate|celebration|cinco|de|festive|mayo|party|pinada|pinata
+🪆	ตุ๊กตาแม่ลูกดก|ซ้อนกัน|ตุ๊กตา|บาบุชก้า|มาโตรชกา|แม่ลูกดก|รัสเซีย	nesting dolls|babooshka|baboushka|babushka|doll|dolls|matryoshka|nesting|russia
+🪇	มาราคัส|เขย่า|เครื่องดนตรี|เคาะ|แซก|ปาร์ตี้|เพลง|ลูกแซค	maracas|cha|dance|instrument|music|party|percussion|rattle|shake|shaker
+🪈	ขลุ่ย|ขลุ่ยไม้|เครื่องดนตรี|ปี่|เป่า|พิคโคโล|เพลง|ไพพ์|รีคอร์เดอร์|ออเคสตร้า	flute|band|fife|flautist|instrument|marching|music|orchestra|piccolo|pipe|recorder|woodwind
+🪉	ฮาร์ป|เครื่องดนตรี|เครื่องสาย|ดนตรี|พิณฝรั่ง|ออร์เคสตรา	harp|cupid|instrument|love|music|orchestra
+🪊	ทรอมโบน|เครื่องดนตรี|แจ๊ส|ชัก|แตรยาว|ทองเหลือง|เพลง|เศร้า	trombone|brass|instrument|jazz|music|sad|slide
+🪋	อุกกาบาต|ดาว|วันสิ้นโลก|สะเก็ดดาว|อวกาศ	meteor|apocalypse|falling|fireball|gravity|rock|space|star
+🪌	ยางลบ|แก้|แก้ไข|เขียน|ถู|ผิดพลาด|ลบ|วาด	eraser|correction|delete|drawing|erase|error|mistake|remove|rub|undo|writing
+🪍	กระชอนถุงตาข่าย|กรอง|จับ|ดัก|ตัก|ตาข่าย	net with handle|catch|collect|mesh|trap
+🪎	หีบสมบัติ|ของมีค่า|ความมั่งคั่ง|เงิน|ทอง|เพชรพลอย|รางวัล|สมบัติ|อัญมณี	treasure chest|gem|gold|jewels|loot|money|prize|silver|valuables|wealth
+🪏	พลั่ว|ขุด|ตัก|เสียม|หลุม	shovel|bury|dig|garden|hole|plant|scoop|snow|spade
+🪐	ดาวเคราะห์ที่มีวงแหวน|แซตเทิร์นนายน์|ดาวเสาร์	ringed planet|planet|ringed|saturn|saturnine
+🪑	เก้าอี้|ที่นั่ง|ไม้	chair|seat|sit
+🪒	ใบมีดโกน|โกนหนวด|คม|ใบมีด	razor|sharp|shave
+🪓	ขวาน|ผ่าฟืน|ฟัน|ไม้|สับ	axe|ax|chop|hatchet|split|wood
+🪔	ตะเกียงดิยา|ดิยา|ตะเกียง|น้ำมัน|แสงไฟ|อินเดีย	diya lamp|diya|lamp|light|oil
+🪕	แบนโจ|เครื่องสาย|ดนตรี|เพลง|สตริง	banjo|music|stringed
+🪖	หมวกทหาร|กองทัพ|ทหาร|นักรบ|นิรภัย|สงคราม|หมวกกันน็อค	military helmet|army|helmet|military|soldier|war|warrior
+🪗	แอคคอร์เดียน|เครื่องดนตรี|สควีซบ็อกซ์|หีบเพลง	accordion|box|concertina|instrument|music|squeeze|squeezebox
+🪘	กลองยาว|คองกา|เครื่องดนตรี|จังหวะ|ตี	long drum|beat|conga|drum|instrument|long|rhythm
+🪙	เหรียญ|เงิน|ดอลลาร์|ทอง|บาท|ยูโร|รวย|โลหะ|สมบัติ	coin|dollar|euro|gold|metal|money|rich|silver|treasure
+🪚	เลื่อย|เครื่องมือ|ช่างไม้|ตัด|เล็ม	carpentry saw|carpenter|carpentry|cut|lumber|saw|tool|trim
+🪛	ไขควง|เครื่องมือ|ซ่อม|ปากแบน|สกรู	screwdriver|flathead|handy|screw|tool
+🪜	บันไดปีน|ก้าว|ขั้น|ไต่|บันได|ปีน	ladder|climb|rung|step
+🪝	ตะขอ|โค้ง|งอ|จับ|ตกปลา|เบ็ด	hook|catch|crook|curve|ensnare|point|selling
+🪞	กระจก|เครื่องถ่างตรวจ|เงา|แต่งหน้า|สะท้อน	mirror|makeup|reflection|reflector|speculum
+🪟	หน้าต่าง|กรอบ|การเปิด|โปร่งใส|ภาพทิวทัศน์|อากาศบริสุทธิ์	window|air|frame|fresh|opening|transparent|view
+🪠	ที่ปั๊มชักโครก|ชักโครก|ช่างประปา|ดูดส้วม|ท่อน้ำทิ้ง|ปั๊ม|แรง|ส้วม|ห้องน้ำ	plunger|cup|force|plumber|poop|suction|toilet
+🪡	เข็มเย็บผ้า|เข็ม|ด้าย|ตัดเย็บ|เย็บ|เย็บปักถักร้อย|เย็บผ้า|เย็บแผล	sewing needle|embroidery|needle|sew|sewing|stitches|sutures|tailoring|thread
+🪢	เงื่อน|เกลียว|เชือก|บิด|ปม|ผูก|พัน	knot|cord|rope|tangled|tie|twine|twist
+🪣	ถัง|ถังขนาดใหญ่|ถังน้ำ|ภาชนะใส่น้ำขนาดใหญ่	bucket|cask|pail|vat
+🪤	กับดักหนู|กับดัก|ชีส|ล่อ|หนู|เหยื่อ	mouse trap|bait|cheese|lure|mouse|mousetrap|snare|trap
+🪥	แปรงสีฟัน|แปรง|ฟัน|สะอาด|สุขอนามัย|ห้องน้ำ|อาบ	toothbrush|bathroom|brush|clean|dental|hygiene|teeth|toiletry
+🪦	แผ่นหินจารึก|ตาย|ป่าช้า|ป้ายสุสาน|สู่สุคติ|เสียชีวิต|หลุมศพ	headstone|cemetery|dead|grave|graveyard|memorial|rip|tomb|tombstone
+🪧	ป้ายประกาศ|การ์ด|เครื่องหมาย|ถือป้าย|ประกาศ|ประท้วง|รั้ว|สาธิต	placard|card|demonstration|notice|picket|plaque|protest|sign
+🪨	หิน|ก้อนหิน|ของแข็ง|หนัก|หินก้อนใหญ่	rock|boulder|heavy|solid|stone|tough
+🪩	ลูกบอลกระจก|ดิสโก้|เต้น|ปาร์ตี้|แสงแวววาว	mirror ball|ball|dance|disco|glitter|mirror|party
+🪪	บัตรประชาชน|ข้อมูล|ความปลอดภัย|บัตรประจำตัว|ใบขับขี่|ใบอนุญาต|เอกสาร|ไอดี	identification card|card|credentials|document|ID|identification|license|security
+🪫	แบตเตอรี่ต่ำ|ชาร์จไฟ|ถ่าน|แบตหมด|พลังงาน|อิเล็กทรอนิกส์	low battery|battery|drained|electronic|energy|low|power
+🪬	มือฮัมซา|การปกป้อง|เครื่องราง|โชคชะตา|โชคลาภ|พระแม่มารีย์|ฟาติมา|มิเรียม|มือ|หมอดู	hamsa|amulet|Fatima|fortune|guide|hand|Mary|Miriam|palm|protect|protection
+🪭	พัดแบบพับได้|กระพือ|ขี้อาย|จีบ|เต้นรำ|พัด|พับ|มือ|เย็น|ร้อน|ระบำ	folding hand fan|clack|clap|cool|cooling|dance|fan|flirt|flutter|folding|hand|hot|shy
+🪮	หวีส้อม|ผม|ผิวดำ|ส้อม|หวี	hair pick|Afro|comb|groom|hair|pick
+🪯	ขัณฑา|เกศ|ขาลสา|ซิกข์|เตฆห|ฟาเตห|ศาสนา|อินเดีย	khanda|Deg|Fateh|Khalsa|Khanda|religion|Sikh|Sikhism|Tegh
+🪰	แมลงวัน|เน่า|เน่าเสีย|แมลง|โรค|ศัตรูพืช|สัตว์|หนอนแมลงวัน|หัวเขียว|เหม็น	fly|animal|disease|insect|maggot|pest|rotting
+🪱	หนอน|กระดึบ|กระดึ๊บ|ปรสิต|สัตว์|ไส้เดือน|หนอนปล้อง	worm|animal|annelid|earthworm|parasite
+🪲	ด้วง|แมลง|สัตว์	beetle|animal|bug|insect
+🪳	แมลงสาบ|กะจั๊ว|น่าขยะแขยง|น่ารังเกียจ|แมลง|ศัตรูพืช|สัตว์	cockroach|animal|insect|pest|roach
+🪴	ไม้กระถาง|กระถาง|ของตกแต่ง|ต้นไม้|บ้าน|ปลูก|พืช|เพาะปลูก|ไม้ประดับ|เลี้ยงต้นไม้	potted plant|decor|grow|house|nurturing|plant|pot|potted
+🪵	ไม้|ซุง|ท่อนซุง|ท่อนไม้|ไม้ซุง	wood|log|lumber|timber
+🪶	ขนนก|การบิน|ขนสัตว์|นก|เบา|ปีก	feather|bird|flight|light|plumage
+🪷	ดอกบัว|ความงาม|ความบริสุทธิ์|ความสงบ|ดอกไม้|วันพระ|ศาสนาพุทธ|ศาสนาฮินดู|ไหว้พระ|อินเดีย	lotus|beauty|Buddhism|calm|flower|Hinduism|peace|purity|serenity
+🪸	ปะการัง|ทะเล|เปลี่ยนแปลง|ภูมิอากาศ|มหาสมุทร	coral|change|climate|ocean|reef|sea
+🪹	รังนกเปล่า|ทำรัง|รังนก|รังเปล่า	empty nest|branch|empty|home|nest|nesting
+🪺	รังนกที่มีไข่|ไข่|ไข่นก|ทำรังวางไข่|นก|รังนก	nest with eggs|bird|branch|egg|eggs|nest|nesting
+🪻	ไฮยาซินธ์|ดอกไม้|ดอกไม้บาน|บลูบอนเนต|ลาเวนเดอร์|ลิ้นมังกร|ลูพิน|สีม่วง	hyacinth|bloom|bluebonnet|flower|indigo|lavender|lilac|lupine|plant|purple|shrub|snapdragon|spring|violet
+🪼	แมงกะพรุน|ต่อย|เยลลี่|สัตว์ทะเล|สัตว์ไม่มีกระดูกสันหลัง|แสบร้อน|โอ๊ย	jellyfish|animal|aquarium|burn|invertebrate|jelly|life|marine|ocean|ouch|plankton|sea|sting|stinger|tentacles
+🪽	ปีก|ตำนาน|นก|นางฟ้า|บิน|พุ่งขึ้น|สวรรค์	wing|angelic|ascend|aviation|bird|fly|flying|heavenly|mythology|soar
+🪾	ต้นไม้ไร้ใบ|แล้ง|หน้าแล้ง|แห้งแล้ง	leafless tree|bare|barren|branches|dead|drought|leafless|tree|trunk|winter|wood
+🪿	ห่าน|ก้าบ|เด๋อ|ทึ่ม|นก|เป็ด|สัตว์ปีก	goose|animal|bird|duck|flock|fowl|gaggle|gander|geese|honk|ornithology|silly
+🫀	หัวใจ|กายวิภาค|ชีพจร|เต้น|สีแดง|หทัยวิทยา|อวัยวะ	anatomical heart|anatomical|beat|cardiology|heart|heartbeat|organ|pulse|real|red
+🫁	ปอด|กายวิภาค|ภายใน|ลมหายใจ|อวัยวะ	lungs|breath|breathe|exhalation|inhalation|lung|organ|respiration
+🫂	คนกอดกัน|กอด|ขอบคุณ|คน|ปลอบ|เพื่อน|มิตรภาพ|รัก|ลาก่อน|สวัสดี|อุ่นใจ	people hugging|comfort|embrace|farewell|friendship|goodbye|hello|hug|hugging|love|people|thanks
+🫃	ผู้ชายตั้งครรภ์|กินเยอะ|ครรภ์|ตั้งท้อง|ป่อง|ผู้ชาย|พุง|มีลูก|อิ่ม	pregnant man|belly|bloated|full|man|overeat|pregnant
+🫄	คนตั้งครรภ์|กินเยอะ|คน|ครรภ์|ตั้งท้อง|ป่อง|พุง|มีลูก|อิ่ม	pregnant person|belly|bloated|full|overeat|person|pregnant|stuffed
+🫅	คนสวมมงกุฎ|กษัตริย์|ขุนนาง|คนชั้นสูง|ควีน|คิง|พระราชา|มงกุฎ|ราชนิกูล|ราชวงศ์|ราชินี	person with crown|crown|monarch|noble|person|regal|royal|royalty
+🫆	ลายนิ้วมือ|รอยนิ้วมือ|ลายพิมพ์นิ้วมือ	fingerprint|clue|crime|detective|forensics|identity|mystery|print|safety|trace
+🫈	สิ่งมีชีวิตขนยาว|ขนยาว|คนป่า|ซัสควอตช์|บิ๊กฟุต|ป่า|ยักษ์|เยติ|สัตว์ประหลาด	hairy creature|bigfoot|cryptid|forest|giant|hairy|sasquatch|woodwose|yeti
+🫌	ผีเสื้อจักรพรรดิ|ผีเสื้อ|แมลง|หนอนผีเสื้อ|อพยพ	monarch butterfly|caterpillar|change|fragile|hope|insect|metamorphosis|migration|transformation
+🫍	วาฬออร์กา|เพชรฆาต|วาฬ|สัตว์ทะเล|ออร์กา	orca|marine|ocean|whale
+🫎	มูส|เขา|สัตว์|สัตว์เลี้ยงลูกด้วยนม|เอลก์	moose|alces|animal|antlers|elk|mammal
+🫏	ลา|ดื้อ|ล่อ|ลาตัวเล็ก|สัตว์|สัตว์เลี้ยงลูกด้วยนม	donkey|animal|ass|burro|hinny|mammal|mule|stubborn
+🫐	บลูเบอร์รี่|บิลเบอร์รี่|ผลไม้|สีน้ำเงิน|อาหาร	blueberries|berries|berry|bilberry|blue|blueberry|food|fruit
+🫑	พริกหยวก|ผัก|เผ็ด|พริก|ระฆัง|สีเขียว|อาหาร	bell pepper|bell|capsicum|food|pepper|vegetable
+🫒	มะกอก|อาหาร	olive|food
+🫓	แฟลตเบรด|กรอบ|กอร์ดิต้า|ขนมปัง|นาน|พิต้า|ลาวาช|อาเรปา|อาหาร	flatbread|arepa|bread|food|gordita|lavash|naan|pita
+🫔	ทามาเล่|ปาโมญา|เม็กซิโก|ห่อหุ้ม|อาหาร	tamale|food|mexican|pamonha|wrapped
+🫕	ฟองดูว์|ช็อกโกแลต|ชีส|ละลาย|สวิส|หม้อ|อาหาร	fondue|cheese|chocolate|food|melted|pot|ski
+🫖	กาน้ำชา|กา|เครื่องดื่ม|ชง|ชา|ดื่ม|น้ำชา	teapot|brew|drink|food|pot|tea
+🫗	เทน้ำ|แก้วน้ำ|ดื่ม|น้ำหก|ว่างเปล่า	pouring liquid|accident|drink|empty|glass|liquid|oops|pour|pouring|spill|water
+🫘	เมล็ดถั่ว|ถั่ว|ถั่วแดง|อาหาร	beans|food|kidney|legume|small
+🫙	ขวดโหล|เก็บ|ขวดเปล่า|เครื่องปรุงรส|ซอส|ภาชนะ|ว่างเปล่า	jar|condiment|container|empty|nothing|sauce|store
+🫚	ขิง|ข่า|เครื่องเทศ|แง่ง|ธรรมชาติ|เบียร์|ราก|สมุนไพร|สุขภาพ|อาหาร	ginger root|beer|ginger|health|herb|natural|root|spice
+🫛	ฝักถั่ว|เขียว|ถั่วแระ|ผัก|ฝัก|พืช|เมล็ด|อาหาร	pea pod|beans|beanstalk|edamame|legume|pea|pod|soybean|vegetable|veggie
+🫜	พืชหัว|บีทรูท|ผัก|มังสวิรัติ|ราก|สลัด|สวน|หัวไชเท้า|อาหาร	root vegetable|beet|food|garden|radish|root|salad|turnip|vegetable|vegetarian
+🫝	แตงกวาดอง|เครื่องปรุง|ดอง|แตง|แตงกวา	pickle|brine|condiment|cucumber|ferment|gherkin|relish|trouble
+🫟	กระเด็น|กระเซ็น|ของเหลว|รอย|เลอะ|สี|หก|หมึก|หยด	splatter|drip|holi|ink|liquid|mess|paint|spill|stain
+🫠	ใบหน้าละลาย|ของเหลว|เขิน|ร้อน|ละลาย|สูญสลาย|หน้า|หายไป|อาย	melting face|disappear|dissolve|embarrassed|face|haha|heat|hot|liquid|lol|melt|melting|sarcasm|sarcastic
+🫡	หน้าทำท่าวันทยาหัตถ์|ครับผม|เคารพ|โชคดี|ดี|ได้เลย|ตะเบ๊ะ|ทำท่าวันทยาหัตถ์|รับทราบ|หน้า|โอเค	saluting face|face|good|luck|ma’am|OK|respect|salute|saluting|sir|troops|yes
+🫢	หน้าเบิกตากว้างและเอามือปิดปาก|เขิน|เซอร์ไพรส์|ตกใจ|ประหลาดใจ|ปิดปาก|ไม่เชื่อ|ไม่พูด|หวั่นใจ|หวาดกลัว|อับอาย	face with open eyes and hand over mouth|amazement|awe|disbelief|embarrass|eyes|face|gasp|hand|mouth|omg|open|over|quiet|scared|shock|surprise
+🫣	หน้าแอบมอง|กลัว|เขิน|จ้อง|จับใจ|หน้า|อาย|แอบดู|แอบมอง	face with peeking eye|captivated|embarrass|eye|face|hide|hiding|peek|peeking|peep|scared|shy|stare
+🫤	หน้าสงสัย|ขุ่นเคือง|เซ็ง|เบื่อ|ผิดหวัง|ไม่แน่ใจ|สงสัย|สับสน|หงุดหงิด|เอาเถอะ	face with diagonal mouth|confused|confusion|diagonal|disappointed|doubt|doubtful|face|frustrated|frustration|meh|mouth|skeptical|unsure|whatever|wtv
+🫥	หน้าเป็นเส้นประ|เก็บตัว|ซ่อน|เซ็ง|เบื่อ|ล่องหน|เศร้า|เสียใจ|หดหู่|หน้าเส้นประ|หาย	dotted line face|depressed|disappear|dotted|face|hidden|hide|introvert|invisible|line|meh|whatever|wtv
+🫦	ขบริมฝีปาก|กลัว|จีบ|เจ้าชู้|เซ็กซี่|ประหม่า|ยั่ว|ริมฝีปาก|วิตกกังวล|อ่อย|อึดอัด	biting lip|anxious|bite|biting|fear|flirt|flirting|kiss|lip|lipstick|nervous|sexy|uncomfortable|worried|worry
+🫧	ฟอง|ไข่มุก|ใต้น้ำ|เรอ|ลอย|สบู่|สะอาด|อากาศ	bubbles|bubble|burp|clean|floating|pearl|soap|underwater
+🫨	ใบหน้าสั่น|ช็อค|ตกใจ|บ้า|ประหลาดใจ|แปลกใจ|แผ่นดินไหว|มึนงง|ว้าว|โอ้โห	shaking face|crazy|daze|earthquake|face|omg|panic|shaking|shock|surprise|vibrate|whoa|wow
+🫩	ถุงใต้ตาบวม|กังวล|ง่วง|ดึก|เบื่อ|หน้า|หมดแรง|เหนื่อย	face with bags under eyes|bags|bored|exhausted|eyes|face|fatigued|late|sleepy|tired|weary
+🫪	หน้าบิดเบี้ยว|ตกใจ|ตื่นตระหนก|ประหลาดใจ|เปราะบาง|วิตกกังวล|อึดอัด	distorted face|anxiety|bloated|panic|shocked|surprised|vulnerable
+🫫	หน้าแตก|แตก|แตกสลาย|หน้า	cracking face|breaking|crumbling|masking|resilience|reveal|tension|transformation
+🫯	ก้อนเมฆต่อสู้|ชกต่อย|ต่อสู้|ตะลุมบอน|ตีรันฟันแทง|ทะเลาะ|ไม่ลงรอย|แลกหมัด	fight cloud|argument|brawl|debate|disagreement|fight|ruckus|wrestle
+🫰	นิ้วชี้ไขว้นิ้วโป้ง|เงิน|ดีด|แพง|มินิฮาร์ท|มือ|รัก|หัวใจ	hand with index finger and thumb crossed|<3|crossed|expensive|finger|hand|heart|index|love|money|snap|thumb
+🫱	มือหันไปทางขวา|ขวา|จับมือ|เชคแฮนด์|ถือ|ยื่น|หันไปทาง	rightwards hand|hand|handshake|hold|reach|right|rightward|rightwards|shake
+🫲	มือหันไปทางซ้าย|จับมือ|เชคแฮนด์|ซ้าย|ถือ|ยื่น|หันไปทาง	leftwards hand|hand|handshake|hold|left|leftward|leftwards|reach|shake
+🫳	มือคว่ำฝ่ามือ|คว่ำ|ทำตก|ปล่อย|ฝ่ามือ|เลิก|เลือก|วาง|ส่งเสียงไล่|หยิบ	palm down hand|dismiss|down|drop|dropped|hand|palm|pick|shoo|up
+🫴	มือหงายฝ่ามือ|กวัก|จับ|ถือ|แบ|ฝ่ามือ|มาเลย|ยก|เรียก|เสนอ|หงาย	palm up hand|beckon|catch|come|hand|hold|know|lift|me|offer|palm|tell
+🫵	นิ้วชี้ไปที่ผู้ดู|คุณ|จิ้ม|ชี้หน้า|นิ้ว|ไปที่|ผู้ดู|มือ|สั่ง	index pointing at the viewer|at|finger|hand|index|pointing|poke|viewer|you
+🫶	มือรูปหัวใจ|คุณ|นิ้ว|มือ|รัก|หัวใจ	heart hands|<3|hands|heart|love|you
+🫷	มือผลักไปทางซ้าย|ตบ|ทางซ้าย|บล็อค|ปฏิเสธ|แปะ|ผลัก|ฝ่ามือ|พักก่อน|รอ|หยุด	leftwards pushing hand|block|five|halt|hand|high|hold|leftward|leftwards|pause|push|pushing|refuse|slap|stop|wait
+🫸	มือผลักไปทางขวา|ตบ|ทางขวา|บล็อค|ปฏิเสธ|แปะ|ผลัก|ฝ่ามือ|พักก่อน|รอ|หยุด	rightwards pushing hand|block|five|halt|hand|high|hold|pause|push|pushing|refuse|rightward|rightwards|slap|stop|wait
+🫹	ชี้นิ้วโป้งไปด้านซ้าย|ชี้|ซ้าย|ทางนั้น|ทางนี้|ทางโน้น	leftwards thumb sign|grip|left|neutral|point|that|this
+🫺	ชี้นิ้วโป้งไปด้านขวา|ขวา|ชี้|ทางนั้น|ทางนี้|ทางโน้น	rightwards thumb sign|grip|neutral|point|right|that|this

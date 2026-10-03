@@ -75,12 +75,28 @@ impl Query {
         if self.variants.is_empty() {
             return None;
         }
-        let hay = text.to_lowercase();
+        self.score_lower(&text.to_lowercase())
+    }
+
+    /// As [`Self::score`], for a text already in lower case (saves a copy
+    /// per text when scoring many).
+    pub fn score_lower(&self, hay: &str) -> Option<u32> {
+        self.score_with(hay, true)
+    }
+
+    /// As [`Self::score_lower`]; `typos: false` leaves out one-letter-off
+    /// matches (a quick first pass over a long list).
+    pub fn score_with(&self, hay: &str, typos: bool) -> Option<u32> {
+        let ascii_hay = hay.is_ascii();
         self.variants
             .iter()
             .enumerate()
             .filter_map(|(i, q)| {
-                let s = score_one(q, &hay)?;
+                // A Thai reading never matches an English-only text.
+                if ascii_hay && !q.is_ascii() {
+                    return None;
+                }
+                let s = score_one(q, hay, typos)?;
                 Some(if i == 0 {
                     s
                 } else {
@@ -107,7 +123,13 @@ fn words(hay: &str) -> impl Iterator<Item = &str> {
         .filter(|w| !w.is_empty())
 }
 
-fn score_one(q: &str, hay: &str) -> Option<u32> {
+fn score_one(q: &str, hay: &str, typos: bool) -> Option<u32> {
+    // Every match but a typo has the query inside: one quick look throws
+    // out nearly every text of a long list.
+    if !hay.contains(q) {
+        return (typos && q.chars().count() >= 4 && words(hay).any(|w| one_off(q, w)))
+            .then_some(ONE_OFF);
+    }
     if hay == q {
         return Some(EXACT);
     }
@@ -122,7 +144,7 @@ fn score_one(q: &str, hay: &str) -> Option<u32> {
     if hay.contains(q) {
         return Some(INSIDE);
     }
-    if q.chars().count() >= 4 && words(hay).any(|w| one_off(q, w)) {
+    if typos && q.chars().count() >= 4 && words(hay).any(|w| one_off(q, w)) {
         return Some(ONE_OFF);
     }
     None
@@ -131,17 +153,24 @@ fn score_one(q: &str, hay: &str) -> Option<u32> {
 /// `a` and `b` differ by one letter: one changed, added, dropped, or two
 /// side by side swapped (`replcae`).
 fn one_off(a: &str, b: &str) -> bool {
+    if a.is_ascii() && b.is_ascii() {
+        return one_off_in(a.as_bytes(), b.as_bytes());
+    }
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
+    one_off_in(&a, &b)
+}
+
+fn one_off_in<T: PartialEq>(a: &[T], b: &[T]) -> bool {
     let (la, lb) = (a.len(), b.len());
     if la.abs_diff(lb) > 1 {
         return false;
     }
-    let head = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let head = a.iter().zip(b).take_while(|(x, y)| x == y).count();
     if head == la && head == lb {
         return false; // the same
     }
-    let tail = |x: &[char], y: &[char]| {
+    let tail = |x: &[T], y: &[T]| {
         x.iter()
             .rev()
             .zip(y.iter().rev())
@@ -154,7 +183,7 @@ fn one_off(a: &str, b: &str) -> bool {
         head + t + 1 == la
             || (head + 2 + t == la && a[head] == b[head + 1] && a[head + 1] == b[head])
     } else {
-        let (long, short) = if la > lb { (&a, &b) } else { (&b, &a) };
+        let (long, short) = if la > lb { (a, b) } else { (b, a) };
         head + tail(&long[head..], &short[head..]) + 1 >= long.len()
     }
 }
