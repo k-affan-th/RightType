@@ -630,8 +630,8 @@ fn open_on(page: u8) {
             t,
         )
     };
-    let tools_clean = tool(0, T::CleanTitle);
-    let tools_test = tool(1, T::KeyTestTitle);
+    let tools_clean = tool(0, T::ToolClean);
+    let tools_test = tool(1, T::ToolTest);
     let tools_map = tool(2, T::KeyMapTitle);
     let tools_practice = tool(3, T::PracticeTitle);
     s.label(

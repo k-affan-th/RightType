@@ -271,6 +271,8 @@ texts! {
     GuardWarn => "Warn", "เตือน";
     GuardFix => "Fix", "แก้ให้";
     GuardBlock => "Block", "กันไว้";
+    ToolClean => "Clean", "ทำความสะอาด";
+    ToolTest => "Test keys", "ทดสอบปุ่ม";
     CleanTitle => "Clean the keyboard", "ทำความสะอาดคีย์บอร์ด";
     CleanIntro => "The keyboard is locked while you wipe it: no key reaches any app. It unlocks by itself when the time is up.", "ล็อกคีย์บอร์ดระหว่างเช็ด ไม่มีปุ่มไหนส่งไปถึงแอปเลย และปลดล็อกเองเมื่อหมดเวลา";
     CleanFor => "Lock for", "ล็อกนาน";

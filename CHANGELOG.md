@@ -2,6 +2,77 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.3.0]
+
+### Added
+
+- **Settings → Keyboard**, a new page (second in the sidebar) with every
+  typing switch that was only in the command palette, the Thai keyboard
+  picker, and the new switches below. Pages taller than the window scroll.
+- **Settings → Tools**: clean the keyboard, test it, the keyboard map and
+  typing practice, one click each, and a **keyboard health check**: keys
+  Windows counts as held down, Sticky Keys / Filter Keys and the shortcuts
+  that turn them on by accident, Thai keyboards installed twice or not at
+  all, Ctrl+Shift as the language switch, Windows' own autocorrect,
+  CapsLock, keys that type twice. Each problem has a fix button.
+- **Clean the keyboard**: every key is held for 30 s to 2 minutes (the
+  Windows key, Alt+Tab, media keys too; the mouse when asked); the keys
+  wiped light up on a keyboard drawing. Unlocks by itself or with the
+  button; Ctrl+Alt+Del always works. The window names the keys no program
+  can hold (Fn, brightness, Wi-Fi).
+- **Key tester**: each key pressed lights up and goes nowhere else; Esc
+  held for 2 seconds closes it.
+- **Keys that type twice by themselves** (a worn switch: `hhello`) are
+  found, and filtered for the keys you choose.
+- **Barcode scanners** with the Thai keyboard on: a scan comes back as its
+  digits and letters. **Fake keyboards** (a device typing a command into
+  the Run box faster than any hand) are held back. Both on by default.
+- **Ctrl and Alt shortcuts in English** (opt-in): web apps that read the
+  letter saw Ctrl+แ for Ctrl+C; with this on, Ctrl or Alt switches to
+  English until let go.
+- **This app's shortcuts**: the shortcuts of the app in front (from its
+  menu, a built-in table for browsers, VS Code, Office, Discord, Teams,
+  Slack…, and Windows' own), searchable in Thai or English; Enter presses
+  the one picked. From the palette, or by holding Ctrl for a second
+  (opt-in).
+- **Hold a key for more characters** (opt-in): `.` → … · •, `-` → – —,
+  vowels → accents, digits → Thai digits, `$` → ฿ € £, ๆ → ฯ ฯลฯ.
+- Settings warns when a new hotkey takes keys apps already use.
+- **Typing practice** (palette, Tools): Kedmanee, Pattachote, Manoonchai
+  or English, a row of keys at a time, with Thai tone marks and digits;
+  practice text from real words that use only the keys learnt so far,
+  leaning on the keys missed most; 60-second rounds and a falling-words
+  game. Works without the keyboard installed, and nothing typed there
+  reaches any app. Day scores and per-key counts are kept only if you
+  turn that on (never the text); turning it off deletes them.
+- **Keep the keyboard on screen while you work**: from practice, the
+  keyboard map of the keyboard you are learning stays on top, and the keys
+  you know fade.
+- **Show shortcuts on screen** (opt-in), for teaching or recording:
+  Ctrl+C, Alt+Tab, Enter… at the bottom of the screen, left in recordings.
+  Never letters, nothing in password fields or apps on the safety list.
+- **Rest reminder** (opt-in): after 50 minutes of typing without a
+  5-minute break. Counts only, in memory.
+- **How each app is doing** (Statistics → By app): per program, the words
+  fixed, read back as sent or shown differently, and undone, with a hint
+  (Suggest mode where fixes are often undone). Memory only.
+
+### Changed
+
+- **Every wait in the keyboard hook shares one budget of 200 ms per key**,
+  so Windows never lets a key through on its own (the `lสวัสดี` bug). The
+  problem report says how long the hook took per key (numbers only).
+- **Half the memory for the dictionaries** (10.2 MB → 5.6 MB) and a
+  quicker first word: the bundled words are no longer copied one by one.
+- A text box a few keys behind (Windows 11 Notepad) is asked again before
+  RightType falls back to typing keys.
+- An app's own keyboard is set as soon as it comes to the front.
+- Windows draw off screen and appear whole: no flicker in the practice
+  window, and nothing missing at 144 DPI.
+- **A keyboard per device** (planned) is not possible safely: Windows says
+  which device a key came from only after RightType must decide. Scanners
+  and fake keyboards are told apart by speed instead.
+
 ## [2.2.0]
 
 ### Added
