@@ -893,6 +893,47 @@ impl TextBox {
         (ok.0 != 0).then_some(result)
     }
 
+    /// The box's whole text. Outside the keyboard hook.
+    pub fn text(&self) -> Option<zeroize::Zeroizing<String>> {
+        use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
+        use zeroize::Zeroize;
+        let len = self.ask(WM_GETTEXTLENGTH, 0, 0)?.min(0xFFFF);
+        let mut units = vec![0u16; len + 1];
+        let got = self
+            .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?
+            .min(len);
+        let text = zeroize::Zeroizing::new(String::from_utf16_lossy(&units[..got]));
+        units.zeroize();
+        Some(text)
+    }
+
+    /// Replace the UTF-16 units `from..to` of the box's text with `text`, as
+    /// one edit it can undo — only if they still hold `expect`. Outside the
+    /// keyboard hook. A RichEdit box counts a line break as one position and
+    /// its text as two: a range after a line break there is refused.
+    pub fn replace_range(&self, from: usize, to: usize, expect: &str, text: &str) -> bool {
+        const EM_SETSEL: u32 = 0x00B1;
+        const EM_REPLACESEL: u32 = 0x00C2;
+        let Some(now) = self.text() else {
+            return false;
+        };
+        let units: Vec<u16> = now.encode_utf16().collect();
+        let holds = units
+            .get(from..to)
+            .is_some_and(|u| u.iter().copied().eq(expect.encode_utf16()));
+        if !holds || (self.rich && units[..from].contains(&(b'\n' as u16))) {
+            return false;
+        }
+        if self.ask(EM_SETSEL, from, to as isize).is_none() || self.selection() != Some((from, to))
+        {
+            return false;
+        }
+        let mut wide: zeroize::Zeroizing<Vec<u16>> =
+            zeroize::Zeroizing::new(text.encode_utf16().chain(std::iter::once(0)).collect());
+        self.ask(EM_REPLACESEL, 1, wide.as_mut_ptr() as isize)
+            .is_some()
+    }
+
     /// The selection, in UTF-16 positions (16 bits each: EM_GETSEL's limit).
     fn selection(&self) -> Option<(usize, usize)> {
         self.selection_within(300)

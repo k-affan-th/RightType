@@ -305,7 +305,13 @@ unsafe fn apply_review(keep: Vec<bool>) {
         return;
     }
     let generation = focus::generation();
-    let Some(text) = focus::field_text(MAX_FIELD_CHARS) else {
+    // A standard text box is read itself: its positions are what it is told.
+    let text_box = focus::TextBox::focused().ok();
+    let text = match &text_box {
+        Some(tb) => tb.text(),
+        None => focus::field_text(MAX_FIELD_CHARS),
+    };
+    let Some(text) = text else {
         overlay::show(tr(T::ErrSelectionNotShared));
         return;
     };
@@ -321,6 +327,7 @@ unsafe fn apply_review(keep: Vec<bool>) {
         // put. Never the whole field: retyping it all loses an editor's
         // formatting and lets its AutoFormat rewrite every quote (Word).
         let places = repaired.places_in(&text);
+        let starts = repaired.starts_in(&text);
         let mut fixed = 0usize;
         for (i, change) in repaired.changes.iter().enumerate().rev() {
             if !keep.get(i).copied().unwrap_or(false) {
@@ -329,12 +336,26 @@ unsafe fn apply_review(keep: Vec<bool>) {
             if !same_context(hwnd, generation) {
                 break;
             }
-            if !focus::select_in_field(&change.original, places[i]) {
+            let done = match &text_box {
+                // A standard text box is told to replace the word itself,
+                // where it is (UTF-16 positions), once it still holds it.
+                Some(tb) => {
+                    let from: usize = text.chars().take(starts[i]).map(char::len_utf16).sum();
+                    let to = from + change.original.encode_utf16().count();
+                    tb.replace_range(from, to, &change.original, &change.fixed)
+                }
+                // Elsewhere, found by its text and selected; typed over only
+                // once the app says the selection is that word (a browser
+                // moves it a moment later: CI typed one word at the end).
+                None => {
+                    focus::select_in_field(&change.original, places[i])
+                        && selection_is(&change.original)
+                        && same_context(hwnd, generation)
+                        && crate::inject::apply(0, &change.fixed, None)
+                }
+            };
+            if !done {
                 crate::hook::trace_note("fix field: a word could not be found to fix");
-                continue;
-            }
-            thread::sleep(Duration::from_millis(30));
-            if !same_context(hwnd, generation) || !crate::inject::apply(0, &change.fixed, None) {
                 break;
             }
             fixed += 1;
@@ -361,6 +382,21 @@ unsafe fn apply_review(keep: Vec<bool>) {
     for c in &mut repaired.changes {
         c.original.zeroize();
         c.fixed.zeroize();
+    }
+}
+
+/// Whether the app's selection is `word`, asked for a short while (an app
+/// may move it a moment after being told to).
+fn selection_is(word: &str) -> bool {
+    let until = Instant::now() + Duration::from_millis(400);
+    loop {
+        if focus::selected_text().is_some_and(|s| s.as_str() == word) {
+            return true;
+        }
+        if Instant::now() >= until {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(25));
     }
 }
 

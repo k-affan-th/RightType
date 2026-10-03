@@ -139,6 +139,20 @@ pub fn looks_mistyped(words: &[&str], en: &Dictionary, th: &Dictionary) -> bool 
 }
 
 impl Repaired {
+    /// For each change (made from `text`), where its word starts in `text`
+    /// (characters).
+    pub fn starts_in(&self, _text: &str) -> Vec<usize> {
+        let mut shift: isize = 0;
+        self.changes
+            .iter()
+            .map(|c| {
+                let at = (c.start as isize - shift).max(0) as usize;
+                shift += c.fixed.chars().count() as isize - c.original.chars().count() as isize;
+                at
+            })
+            .collect()
+    }
+
     /// For each change (made from `text`), how many times its word appears
     /// in `text` before it: which match of it to look for in the app.
     pub fn places_in(&self, text: &str) -> Vec<usize> {
@@ -267,6 +281,7 @@ mod tests {
         let r = fix(text);
         assert_eq!(r.changes.len(), 4);
         assert_eq!(r.places_in(text), vec![0, 1, 0, 2]);
+        assert_eq!(r.starts_in(text), vec![0, 13, 20, 25]);
     }
 
     #[test]
