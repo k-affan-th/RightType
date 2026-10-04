@@ -23,6 +23,9 @@ pub enum Kind {
     /// LaTeX written as Unicode. With no `text`, `label` says why it cannot
     /// be: nothing to pick.
     Equation,
+    /// Math put into the app by steps ([`crate::macros`] written in
+    /// `text`): its own equation editor, or its superscript formatting.
+    EquationIn,
 }
 
 /// One row of the list.
@@ -181,6 +184,23 @@ pub fn search(typed: &str, snippets: &[Snippet], commands: &[Command], thai: boo
 /// The LaTeX row: what `typed` writes, or why it cannot, when it is LaTeX
 /// at all. A lone command being typed (`\al`) is left to the command rows.
 fn equation(typed: &str, thai: bool) -> Vec<Row> {
+    // Written short (`x^(3/2) + (2x)/8 + pi`), as Word's equation editor
+    // reads it: no backslash or brace (those are LaTeX).
+    if !typed.contains(['\\', '{']) {
+        if let Some(m) = crate::mathsimple::Math::read(typed) {
+            let text = m.unicode();
+            if text != typed.trim() {
+                return vec![Row {
+                    kind: Kind::Equation,
+                    glyph: String::new(),
+                    label: text.clone(),
+                    detail: if thai { "คณิต" } else { "Math" }.into(),
+                    text,
+                    score: u32::MAX,
+                }];
+            }
+        }
+    }
     if !crate::latex::looks_like_latex(typed) {
         // Said in words: "x squared plus 1", "รากที่สองของ x".
         return crate::naturalmath::to_unicode(typed)
@@ -214,6 +234,67 @@ fn equation(typed: &str, thai: bool) -> Vec<Row> {
     }]
 }
 
+/// For an app with an equation editor and superscript formatting (Word,
+/// PowerPoint, OneNote): math written short put in as a real equation
+/// (Alt+=, then the short form, which the app builds up), or as text with
+/// superscripts and subscripts — after the Unicode row, or first when
+/// Unicode cannot write all of it.
+pub fn add_app_math(rows: &mut Vec<Row>, typed: &str, thai: bool) {
+    if typed.contains(['\\', '{']) {
+        return;
+    }
+    let Some(m) = crate::mathsimple::Math::read(typed) else {
+        return;
+    };
+    let preview = m.unicode();
+    let equation = Row {
+        kind: Kind::EquationIn,
+        glyph: String::new(),
+        label: preview.clone(),
+        detail: if thai {
+            "สมการ (Alt+=)"
+        } else {
+            "Equation (Alt+=)"
+        }
+        .into(),
+        // A space after builds up the last part too.
+        text: format!("{{press Alt+=}}{{wait 400}}{} ", m.unicode_math()),
+        score: u32::MAX,
+    };
+    let mut steps = String::new();
+    for piece in m.formatted() {
+        use crate::mathsimple::Piece;
+        match piece {
+            Piece::Text(t) => steps.push_str(&t),
+            Piece::Sup(t) => {
+                steps.push_str(&format!("{{press Ctrl+Shift+=}}{t}{{press Ctrl+Shift+=}}"))
+            }
+            Piece::Sub(t) => steps.push_str(&format!("{{press Ctrl+=}}{t}{{press Ctrl+=}}")),
+        }
+    }
+    let formatted = Row {
+        kind: Kind::EquationIn,
+        glyph: String::new(),
+        label: preview,
+        detail: if thai {
+            "ตัวยก/ตัวห้อย"
+        } else {
+            "Super/subscript"
+        }
+        .into(),
+        text: steps,
+        score: u32::MAX,
+    };
+    let at = if m.fully_unicode() && rows.first().is_some_and(|r| r.kind == Kind::Equation) {
+        1
+    } else {
+        0
+    };
+    rows.insert(at, formatted);
+    rows.insert(at, equation);
+    rows.truncate(MAX_ROWS);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,6 +306,30 @@ mod tests {
             text: "Best regards,\nAffan".into(),
             scope: Scope::Either,
         }]
+    }
+
+    #[test]
+    fn math_written_short() {
+        let typed = "x^2 + (2x)/8 + x/2 +x^(3/2) +pi + sigma + Sigma_(i=1)^(n) X_i";
+        let mut rows = search(typed, &[], &[], false);
+        assert_eq!(rows[0].kind, Kind::Equation);
+        assert!(rows[0].text.starts_with("x² + 2x/8"));
+        add_app_math(&mut rows, typed, true);
+        // Unicode cannot write x^(3/2): the app's equation comes first.
+        assert_eq!(rows[0].kind, Kind::EquationIn);
+        assert!(rows[0]
+            .text
+            .starts_with("{press Alt+=}{wait 400}x^2 + (2x)/8"));
+        let steps = crate::macros::steps(&rows[0].text).unwrap().unwrap();
+        assert_eq!(steps[0], crate::macros::Step::Keys("Alt+=".into()));
+        let f = crate::macros::steps(&rows[1].text).unwrap().unwrap();
+        assert!(f.contains(&crate::macros::Step::Text("3/2".into())));
+        assert_eq!(rows[2].kind, Kind::Equation);
+        // All in Unicode: that row stays first.
+        let mut rows = search("x^2+1", &[], &[], false);
+        add_app_math(&mut rows, "x^2+1", false);
+        assert_eq!(rows[0].kind, Kind::Equation);
+        assert_eq!(rows[1].kind, Kind::EquationIn);
     }
 
     #[test]

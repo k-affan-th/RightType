@@ -41,7 +41,7 @@ pub enum Problem {
 pub const MAX_WAIT: u32 = 5000;
 pub const MAX_WAIT_TOTAL: u32 = 15_000;
 /// The most steps one macro has.
-pub const MAX_STEPS: usize = 60;
+pub const MAX_STEPS: usize = 120;
 
 /// The step names, in English and Thai.
 const NAMES: &[(&str, Kind)] = &[

@@ -518,6 +518,12 @@ pub fn run() {
             "caret-commands" => crate::caretlist::open_demo("window"),
             "caret-commands-armed" => crate::caretlist::open_demo_armed("close"),
             "caret-latex-cmd" => crate::caretlist::open_demo(r"\al"),
+            "caret-math-short" => crate::caretlist::open_demo(
+                "x^2 + (2x)/8 + x/2 +x^(3/2) +pi + sigma + Sigma_(i=1)^(n) X_i",
+            ),
+            "caret-math-word" => crate::caretlist::open_demo_math_app(
+                "x^2 + (2x)/8 + x/2 +x^(3/2) +pi + sigma + Sigma_(i=1)^(n) X_i",
+            ),
             "caret-macro" => crate::caretlist::open_demo(";rep"),
             "caret-math-words" => crate::caretlist::open_demo("x squared plus y squared"),
             "caret-math-thai" => crate::caretlist::open_demo("รากที่สองของ x บวก 1 ส่วน 2"),

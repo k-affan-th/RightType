@@ -85,6 +85,9 @@ struct State {
     selected: usize,
     /// The app's commands, read when the list opened (names and keys only).
     commands: Vec<Command>,
+    /// The app has an equation editor and superscript keys (Word,
+    /// PowerPoint, OneNote): math is offered into it too.
+    math_app: bool,
     /// A command that could lose work, picked once: Enter again runs it.
     armed: Option<usize>,
     /// Counts changes to `query`; `shown` is the count the rows are for.
@@ -267,9 +270,12 @@ fn open() {
         return;
     };
     let commands = crate::sheet::app_commands(target);
+    let exe = unsafe { crate::safety::foreground_exe(target) }.unwrap_or_default();
+    let math_app = MATH_APPS.contains(&exe.to_ascii_lowercase().as_str());
     STATE.with(|s| {
         *s.borrow_mut() = State {
             commands,
+            math_app,
             ..State::default()
         }
     });
@@ -614,8 +620,12 @@ fn on_key(vk: u16, ch: Option<char>) {
     ui::redraw_all(h);
 }
 
+/// Apps with an equation editor (Alt+=) and superscript keys.
+const MATH_APPS: &[&str] = &["winword.exe", "powerpnt.exe", "onenote.exe"];
+
 /// A search for the worker.
 struct Job {
+    math_app: bool,
     query_gen: u64,
     query: zeroize::Zeroizing<String>,
     snippets: Vec<righttype::snippets::Snippet>,
@@ -644,7 +654,11 @@ fn search_worker() -> &'static std::sync::Mutex<std::sync::mpsc::Sender<Job>> {
                     while let Ok(newer) = rx.try_recv() {
                         job = newer;
                     }
-                    let rows = atcaret::search(&job.query, &job.snippets, &job.commands, job.thai);
+                    let mut rows =
+                        atcaret::search(&job.query, &job.snippets, &job.commands, job.thai);
+                    if job.math_app {
+                        atcaret::add_app_math(&mut rows, &job.query, job.thai);
+                    }
                     if let Ok(mut r) = RESULT.lock() {
                         *r = Some((job.query_gen, rows));
                     }
@@ -684,6 +698,7 @@ fn refilter() {
             query: zeroize::Zeroizing::new(s.query.clone()),
             snippets: crate::hook::snippets(),
             commands: s.commands.clone(),
+            math_app: s.math_app,
             thai: lang() == Lang::Th,
             hwnd,
         }
@@ -792,10 +807,14 @@ fn pick() {
             r.truncate(GRID_COLS);
         });
     }
-    if row.kind == Kind::Snippet {
+    if matches!(row.kind, Kind::Snippet | Kind::EquationIn) {
         if let Some(Ok(steps)) = righttype::macros::steps(&row.text) {
             crate::hook::trace_note("caret list: macro run");
             crate::manual::request_macro(target, steps, true);
+            return;
+        }
+        // Steps that cannot run are never typed as they are written.
+        if row.kind == Kind::EquationIn {
             return;
         }
     }
@@ -1027,7 +1046,7 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
                         DT_RIGHT | one | DT_END_ELLIPSIS,
                     );
                 }
-                Kind::Equation => {
+                Kind::Equation | Kind::EquationIn => {
                     // What the LaTeX writes, large; or, dim, why it cannot.
                     let ok = !row.text.is_empty();
                     if icons.is_some() {
@@ -1099,6 +1118,10 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
 #[cfg(debug_assertions)]
 pub fn open_demo(query: &str) {
     open();
+    #[cfg(debug_assertions)]
+    if DEMO_MATH_APP.load(Ordering::Relaxed) {
+        STATE.with(|s| s.borrow_mut().math_app = true);
+    }
     STATE.with(|s| {
         let mut s = s.borrow_mut();
         s.query = query.to_string();
@@ -1117,3 +1140,13 @@ pub fn open_demo_armed(query: &str) {
 
 #[cfg(debug_assertions)]
 static DEMO_ARMED: AtomicBool = AtomicBool::new(false);
+
+/// The list as in Word: math offered into its equation editor too.
+#[cfg(debug_assertions)]
+pub fn open_demo_math_app(query: &str) {
+    DEMO_MATH_APP.store(true, Ordering::Relaxed);
+    open_demo(query);
+}
+
+#[cfg(debug_assertions)]
+static DEMO_MATH_APP: AtomicBool = AtomicBool::new(false);

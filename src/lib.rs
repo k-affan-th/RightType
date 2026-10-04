@@ -54,6 +54,7 @@ pub mod keycast;
 pub mod latex;
 pub mod layout;
 pub mod macros;
+pub mod mathsimple;
 pub mod motion;
 pub mod naturalmath;
 pub mod per_app;
