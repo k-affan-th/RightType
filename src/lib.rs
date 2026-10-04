@@ -37,6 +37,7 @@ pub mod atcaret;
 pub mod breaks;
 pub mod buffer;
 pub mod chars;
+pub mod charsets;
 pub mod chatter;
 pub mod code;
 pub mod compat;

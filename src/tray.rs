@@ -514,6 +514,7 @@ pub fn run() {
             "caret-list-th" => crate::caretlist::open_demo("ลูกศร"),
             "caret-latex" => crate::caretlist::open_demo(r"\sum_{i=1}^{n} x_i^2 \leq \frac{1}{2}"),
             "caret-latex-bad" => crate::caretlist::open_demo(r"\frac{\frac{1}{2}}{3}"),
+            "caret-grid" => crate::caretlist::open_demo(""),
             "caret-commands" => crate::caretlist::open_demo("window"),
             "caret-commands-armed" => crate::caretlist::open_demo_armed("close"),
             "caret-latex-cmd" => crate::caretlist::open_demo(r"\al"),

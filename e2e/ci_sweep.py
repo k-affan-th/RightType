@@ -601,6 +601,33 @@ def richedit_lcids(t):
     return out
 
 
+def right_alt(t):
+    """2.4: Right Alt tapped after a character steps it through its set:
+    2 → ² → ₂; Esc puts the 2 back; the app's menu is not opened."""
+    RALT = 0xA5
+    def tap_ralt():
+        fs.key(RALT)
+        time.sleep(0.05)
+        fs.key(RALT, True)
+        time.sleep(0.4)
+    t.clear()
+    t.focus()
+    t.layout(fs.HKL_EN)
+    time.sleep(0.3)
+    type_keys("x2")
+    time.sleep(0.3)
+    tap_ralt()
+    fs.check(t.name, "Right Alt makes 2 a superscript", t.read().strip(), "x²")
+    tap_ralt()
+    fs.check(t.name, "Right Alt again makes it a subscript", t.read().strip(), "x₂")
+    tap(0x1B)
+    time.sleep(0.4)
+    fs.check(t.name, "Esc puts the 2 back", t.read().strip(), "x2")
+    type_keys(" ok")
+    time.sleep(0.5)
+    fs.check(t.name, "typing goes on in the text, not a menu", t.read().strip(), "x2 ok")
+
+
 def ghosts(t):
     """2.4 C: `->` offers →, Tab takes it; without Tab the text stays as
     typed."""
@@ -1734,6 +1761,7 @@ def sweep(t):
         caret_list(t)
         caret_commands(t)
         ghosts(t)
+        right_alt(t)
         by_app(t)
         devices(t)
         hold_for_accents(t)

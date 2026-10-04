@@ -379,9 +379,15 @@ texts! {
     CaretListNextTime => "Next time: {keys}", "ครั้งหน้ากด {keys} ได้เลย";
     CaretListAgain => "Enter again: {what}", "กด Enter อีกครั้ง: {what}";
     CaretListKeysRun => "↑↓ choose · Enter run · Esc close", "↑↓ เลือก · Enter สั่งงาน · Esc ปิด";
-    CaretListKeys => "↑↓ choose · Enter type · Esc close", "↑↓ เลือก · Enter พิมพ์ · Esc ปิด";
+    CaretListKeysGrid => "←→↑↓ choose · Enter type · Ctrl+P pin to a key · type to search", "←→↑↓ เลือก · Enter พิมพ์ · Ctrl+P ผูกกับปุ่ม · พิมพ์เพื่อค้น";
+    CaretListPinHint => "Press the key to pin {ch} to · Esc cancels", "กดปุ่มที่จะผูก {ch} ไว้ · Esc ยกเลิก";
+    CaretListPinned => "{ch} on {key}: type {key}, then tap Right Alt", "ผูก {ch} กับปุ่ม {key} แล้ว: พิมพ์ {key} แล้วแตะ Right Alt";
+    CaretListUnpinned => "{ch} taken off {key}", "เอา {ch} ออกจากปุ่ม {key} แล้ว";
+    CaretListKeys => "↑↓ choose · Enter type · Ctrl+P pin · Esc close", "↑↓ เลือก · Enter พิมพ์ · Ctrl+P ผูกกับปุ่ม · Esc ปิด";
     HeadCaret => "At the text cursor", "ที่เคอร์เซอร์";
     RowCaretList => "Tap Shift twice to search", "แตะ Shift สองครั้งเพื่อค้น";
+    RowCycleChars => "Tap Right Alt to change the last character", "แตะ Right Alt เพื่อเปลี่ยนอักขระล่าสุด";
+    SubCycleChars => "2 → ² → ₂ → ⅔, e → é → è. Pin your own from the list (Ctrl+P).", "2 → ² → ₂ → ⅔, e → é → è ผูกเพิ่มเองได้จากรายการ (Ctrl+P)";
     RowGhosts => "Offer symbols for what you type, Tab takes it", "เสนอสัญลักษณ์จากที่พิมพ์ กด Tab เพื่อใช้";
     SubGhosts => "-> becomes →, != becomes ≠, x^2 becomes x². Not in code editors.", "-> เป็น →  != เป็น ≠  x^2 เป็น x² ไม่ทำในโปรแกรมเขียนโค้ด";
     SubCaretList => "Characters and snippets. The search never lands in your text.", "อักขระพิเศษและคำย่อ พิมพ์ลงตรงที่ใช้อยู่ คำที่ค้นไม่ลงไปในข้อความ";

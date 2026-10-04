@@ -127,6 +127,12 @@ pub struct Config {
     pub caret_list: bool,
     /// `->` offers →, `x^2` offers x², for Tab (2.4 C; not in code editors).
     pub ghosts: bool,
+    /// Right Alt tapped after a character steps it through its set (2.4).
+    pub cycle_characters: bool,
+    /// Keys whose set of characters the typist changed: key → characters,
+    /// space-separated (the characters chosen, nothing typed).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub char_sets: BTreeMap<String, String>,
     /// Remind to rest after long typing (2.3 C9; counts in memory only).
     pub rest_reminder: bool,
     /// Keys a device types into the Run box faster than any hand are held
@@ -220,6 +226,8 @@ impl Default for Config {
             show_keys: false,
             caret_list: true,
             ghosts: true,
+            cycle_characters: true,
+            char_sets: BTreeMap::new(),
             rest_reminder: false,
             guard_fake_keyboards: true,
             snippets: Vec::new(),
@@ -293,6 +301,8 @@ pub fn apply(cfg: &Config) {
     crate::onscreen::set_enabled(cfg.show_keys);
     crate::caretlist::set_enabled(cfg.caret_list);
     hook::set_ghosts(cfg.ghosts);
+    hook::set_cycles_characters(cfg.cycle_characters);
+    hook::set_char_sets(righttype::charsets::Sets::from_config(&cfg.char_sets));
     crate::rest::set_enabled(cfg.rest_reminder);
     hook::set_guards_fake_keyboards(cfg.guard_fake_keyboards);
     hook::set_debounce_keys(
@@ -564,6 +574,8 @@ fn snapshot() -> Config {
         show_keys: crate::onscreen::enabled(),
         caret_list: crate::caretlist::enabled(),
         ghosts: hook::ghosts(),
+        cycle_characters: hook::cycles_characters(),
+        char_sets: hook::char_sets().to_config(),
         rest_reminder: crate::rest::enabled(),
         guard_fake_keyboards: hook::guards_fake_keyboards(),
         debounce_keys: hook::debounce_keys()

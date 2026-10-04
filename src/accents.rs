@@ -82,9 +82,9 @@ pub fn shown(choices: &[String]) -> String {
     choices
         .iter()
         .enumerate()
-        .map(|(i, c)| format!("{} {c}", i + 1))
+        .map(|(i, c)| format!("{}{c}", i + 1))
         .collect::<Vec<_>>()
-        .join("   ")
+        .join("  ")
 }
 
 #[cfg(test)]
@@ -115,6 +115,6 @@ mod tests {
                 assert!(list.len() <= 9, "{c}");
             }
         }
-        assert_eq!(shown(&choices('.').unwrap()), "1 …   2 ·   3 •   4 °");
+        assert_eq!(shown(&choices('.').unwrap()), "1…  2·  3•  4°");
     }
 }

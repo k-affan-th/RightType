@@ -343,6 +343,20 @@ unsafe fn send(inputs: &[INPUT]) -> bool {
 /// AutoHotkey uses, vk E8).
 const VK_MENU_MASK: u16 = 0xE8;
 
+/// Let go of Right Alt the typist tapped, with an unassigned key pressed
+/// first, so the app does not take the tap as "open the menu bar" (Word's
+/// key tips, a classic menu): RightType used the tap itself.
+///
+/// # Safety
+/// Calls `SendInput`.
+pub unsafe fn release_right_alt_masked() -> bool {
+    send(&[
+        key(VK_MENU_MASK, false),
+        key(VK_MENU_MASK, true),
+        key(0xA5, true),
+    ])
+}
+
 /// Append key-ups for every modifier still physically held.
 ///
 /// A bare Alt press-and-release with nothing in between is an *Alt tap*, which

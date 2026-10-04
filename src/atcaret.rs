@@ -40,6 +40,20 @@ pub struct Row {
     score: u32,
 }
 
+impl Row {
+    /// A character on its own (the grid of pinned and recent ones).
+    pub fn character(text: &str) -> Row {
+        Row {
+            kind: Kind::Character,
+            glyph: text.to_string(),
+            label: String::new(),
+            detail: String::new(),
+            text: text.to_string(),
+            score: 0,
+        }
+    }
+}
+
 /// A command of the app in front: its name (in the interface language) and
 /// the keys that run it (`Ctrl+H`).
 #[derive(Debug, Clone, PartialEq, Eq)]

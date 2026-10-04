@@ -833,6 +833,169 @@ fn offer_ghost() {
     });
 }
 
+/// Right Alt tapped after a character steps it through its set (2.4).
+static CYCLES: AtomicBool = AtomicBool::new(true);
+
+pub fn cycles_characters() -> bool {
+    CYCLES.load(Ordering::Relaxed)
+}
+
+pub fn set_cycles_characters(on: bool) {
+    CYCLES.store(on, Ordering::Relaxed);
+}
+
+static CHAR_SETS: std::sync::RwLock<Option<righttype::charsets::Sets>> =
+    std::sync::RwLock::new(None);
+
+/// Every key's set of characters (the defaults with the typist's own).
+pub fn char_sets() -> righttype::charsets::Sets {
+    CHAR_SETS
+        .read()
+        .ok()
+        .and_then(|s| s.clone())
+        .unwrap_or_default()
+}
+
+pub fn set_char_sets(sets: righttype::charsets::Sets) {
+    if let Ok(mut s) = CHAR_SETS.write() {
+        *s = Some(sets);
+    }
+}
+
+/// Pin `ch` to `key`, or take it off; saved. True when it is pinned.
+pub fn pin_char(key: char, ch: &str) -> bool {
+    let mut sets = char_sets();
+    let on = sets.toggle(key, ch);
+    set_char_sets(sets);
+    crate::config::persist();
+    on
+}
+
+/// A character being stepped through its set with Right Alt.
+struct Cycle {
+    typed: String,
+    set: Vec<String>,
+    /// 0: as typed; n: the set's n-th.
+    at: usize,
+    shown: String,
+    hwnd: isize,
+    focus_generation: u64,
+    when: Instant,
+}
+
+impl Drop for Cycle {
+    fn drop(&mut self) {
+        self.typed.zeroize();
+        self.shown.zeroize();
+    }
+}
+
+thread_local! {
+    /// When Right Alt went down, while nothing else has been pressed since.
+    static RALT_DOWN: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+    static CYCLE: RefCell<Option<Cycle>> = const { RefCell::new(None) };
+}
+
+/// The longest press of Right Alt that is a tap.
+const RALT_TAP: Duration = Duration::from_millis(350);
+
+/// Right Alt was tapped: step the character before the caret (the last one
+/// typed) to the next in its set, or start with it. False when there is
+/// nothing to step (the tap is then Windows' own).
+unsafe fn cycle_character() -> bool {
+    if !cycles_characters()
+        || STATE.with(|s| s.borrow().sensitive_app)
+        || safety::is_password_field()
+        || crate::focus::is_password_field()
+    {
+        return false;
+    }
+    let hwnd = GetForegroundWindow().0 as isize;
+    let generation = crate::focus::generation();
+    let fresh = CYCLE.with(|c| {
+        c.borrow().as_ref().is_some_and(|c| {
+            c.hwnd == hwnd
+                && c.focus_generation == generation
+                && c.when.elapsed() < Duration::from_millis(crate::overlay::OFFER_MS.into())
+        })
+    });
+    if !fresh {
+        let typed = GHOST_TYPED.with(|t| t.borrow().chars().next_back());
+        let Some(typed) = typed.filter(|c| !c.is_whitespace()) else {
+            return false;
+        };
+        let set = char_sets().of(typed);
+        if set.is_empty() {
+            return false;
+        }
+        CYCLE.with(|c| {
+            *c.borrow_mut() = Some(Cycle {
+                typed: typed.to_string(),
+                set,
+                at: 0,
+                shown: typed.to_string(),
+                hwnd,
+                focus_generation: generation,
+                when: Instant::now(),
+            })
+        });
+    }
+    let step = CYCLE.with(|c| {
+        let mut c = c.borrow_mut();
+        let c = c.as_mut()?;
+        c.at = (c.at + 1) % (c.set.len() + 1);
+        let next = if c.at == 0 {
+            c.typed.clone()
+        } else {
+            c.set[c.at - 1].clone()
+        };
+        let old = std::mem::replace(&mut c.shown, next.clone());
+        c.when = Instant::now();
+        Some((
+            old,
+            next,
+            righttype::charsets::strip(&c.typed, &c.set, c.at),
+        ))
+    });
+    let Some((mut old, next, mut strip)) = step else {
+        return false;
+    };
+    let n = old.chars().count();
+    old.zeroize();
+    if !inject::apply(n, &next, None) {
+        CYCLE.with(|c| c.borrow_mut().take());
+        return false;
+    }
+    // What is before the caret now, for the next tap and ghost offers.
+    GHOST_TYPED.with(|t| {
+        let mut t = t.borrow_mut();
+        for _ in 0..n {
+            t.pop();
+        }
+        t.push_str(&next);
+    });
+    crate::overlay::offer_at(&strip, crate::caret::hint_anchor());
+    strip.zeroize();
+    trace_note("Right Alt: character stepped");
+    true
+}
+
+/// Esc while stepping: the character as typed again. True when it was.
+unsafe fn cycle_back() -> bool {
+    let Some(c) = CYCLE.with(|c| c.borrow_mut().take()) else {
+        return false;
+    };
+    if c.at == 0
+        || c.hwnd != GetForegroundWindow().0 as isize
+        || c.focus_generation != crate::focus::generation()
+        || c.when.elapsed() >= Duration::from_millis(crate::overlay::OFFER_MS.into())
+    {
+        return false;
+    }
+    crate::overlay::dismiss();
+    inject::apply(c.shown.chars().count(), &c.typed, None)
+}
+
 /// Why the last word was fixed or left (a `righttype::why::Why`).
 static LAST_WHY: AtomicU8 = AtomicU8::new(0);
 
@@ -1830,7 +1993,8 @@ unsafe fn hold_to_pick(vk: u16, scan: u16, repeat: bool) -> Option<bool> {
         return None;
     }
     let typed = translate(vk, scan)?;
-    let choices = righttype::accents::choices(typed)?;
+    // The same sets Right Alt steps through (the typist's own included).
+    let choices = Some(char_sets().of(typed)).filter(|c| !c.is_empty())?;
     let anchor = crate::caret::find_caret()
         .map_or(crate::overlay::Anchor::Corner, crate::overlay::Anchor::Near);
     crate::overlay::show_at(&righttype::accents::shown(&choices), anchor);
@@ -2023,6 +2187,30 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     };
     ctrl_hold_input(Some(vk), down, repeat);
     shift_tap_input(Some(vk), down);
+    // Right Alt tapped on its own steps the last character through its set.
+    if vk == 0xA5 {
+        if down && !repeat {
+            RALT_DOWN.with(|r| r.set(Some(Instant::now())));
+        } else if !down {
+            let tap = RALT_DOWN
+                .with(|r| r.take())
+                .is_some_and(|at| at.elapsed() < RALT_TAP);
+            if tap && cycle_character() {
+                // The release goes to the app masked: no menu bar.
+                inject::release_right_alt_masked();
+                return true;
+            }
+        }
+    } else if down {
+        RALT_DOWN.with(|r| r.set(None));
+        if !is_modifier(vk) {
+            // Esc puts the character back; any other key keeps it.
+            if vk == VK_ESCAPE.0 && cycle_back() {
+                return true;
+            }
+            CYCLE.with(|c| c.borrow_mut().take());
+        }
+    }
     if !down {
         if vk == VK_BACK.0 {
             FLIP_DOWN.with(|f| f.set(None));
@@ -2078,6 +2266,15 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         if crate::sheet::key(vk, ch) || crate::caretlist::key(vk, ch) {
             return true;
         }
+    }
+    // Ctrl+P in the list at the cursor: pin the character to a key.
+    if vk == u16::from(b'P')
+        && is_down(VK_CONTROL)
+        && !is_down(VK_MENU)
+        && crate::caretlist::is_open()
+        && crate::caretlist::pin_start()
+    {
+        return true;
     }
 
     // Tab (alone) takes a Thai completion on offer; any other key drops it.

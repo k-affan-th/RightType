@@ -34,6 +34,9 @@ const PAD: i32 = 8;
 const SEARCH_H: i32 = 44;
 const ROW_H: i32 = 36;
 const FOOT_H: i32 = 26;
+/// One character's cell in the grid shown before anything is searched.
+const CELL: i32 = 44;
+const GRID_COLS: usize = ((W - 2 * PAD) / CELL) as usize;
 /// A key handed over by the hook (wParam: the key; lParam: its character).
 const WM_CARET_KEY: u32 = 0x8000 + 0x5A2;
 /// The search worker has rows (see [`RESULT`]).
@@ -90,6 +93,8 @@ struct State {
     /// Enter (or Tab) came before the rows for the search did: pick when
     /// they come.
     pick_pending: bool,
+    /// Ctrl+P: the next key typed is where the selected character goes.
+    pinning: bool,
     /// The highlight slides from this row to `selected`, since `slide_at`.
     slide_from: f32,
     slide_at: Option<std::time::Instant>,
@@ -142,7 +147,7 @@ pub fn key(vk: u16, ch: Option<char>) -> bool {
         }
         // Still opening: kept for it, in order.
         let printable = ch.is_some_and(|c| !c.is_control());
-        if !printable && !matches!(vk, 0x08 | 0x09 | 0x0D | 0x1B | 0x26 | 0x28) {
+        if !printable && !matches!(vk, 0x08 | 0x09 | 0x0D | 0x1B | 0x25 | 0x26 | 0x27 | 0x28) {
             return false;
         }
         if let Ok(mut early) = EARLY.lock() {
@@ -158,7 +163,7 @@ pub fn key(vk: u16, ch: Option<char>) -> bool {
         return false;
     }
     let printable = ch.is_some_and(|c| !c.is_control());
-    if !printable && !matches!(vk, 0x08 | 0x09 | 0x0D | 0x1B | 0x26 | 0x28) {
+    if !printable && !matches!(vk, 0x08 | 0x09 | 0x0D | 0x1B | 0x25 | 0x26 | 0x27 | 0x28) {
         return false;
     }
     unsafe {
@@ -315,6 +320,8 @@ fn open() {
         SetTimer(hwnd, TIMER_WATCH, 300, None);
         SetTimer(hwnd, TIMER_ANIM, FRAME_MS, None);
     }
+    // Nothing typed yet: the grid of pinned and recent characters.
+    refilter();
     ui::redraw_all(hwnd);
     crate::hook::e2e_trace(format!(
         "caret list: opened in {} ms",
@@ -340,6 +347,67 @@ fn round(hwnd: HWND, h: i32) {
 }
 
 /// The window's height for `rows` rows (screen pixels).
+/// The grid (nothing searched yet: the characters pinned and used lately,
+/// glyphs only) or the list.
+fn is_grid(s: &State) -> bool {
+    s.query.is_empty() && !s.rows.is_empty()
+}
+
+/// The window's height for what it shows (screen pixels).
+fn height_now() -> i32 {
+    STATE.with(|s| {
+        let s = s.borrow();
+        if is_grid(&s) {
+            let lines = s.rows.len().div_ceil(GRID_COLS) as i32;
+            ui::px(SEARCH_H + PAD / 2 + lines * CELL + FOOT_H + PAD)
+        } else {
+            height(s.rows.len())
+        }
+    })
+}
+
+thread_local! {
+    /// Characters picked from the list lately (in memory only), newest first.
+    static RECENT: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+/// What the grid shows: the characters used lately, then every one pinned.
+fn grid_rows() -> Vec<Row> {
+    let mut chars: Vec<String> = RECENT.with(|r| r.borrow().clone());
+    for c in crate::hook::char_sets().all_pinned() {
+        if !chars.contains(&c) {
+            chars.push(c);
+        }
+    }
+    chars.truncate(GRID_COLS * 4);
+    chars
+        .into_iter()
+        .map(|c| atcaret::Row::character(&c))
+        .collect()
+}
+
+/// Ctrl+P on a character: the next key typed is the key it is pinned to
+/// (its Right Alt set). True when there is a character to pin.
+pub fn pin_start() -> bool {
+    let hwnd = OPEN.load(Ordering::Acquire);
+    if hwnd == 0 {
+        return false;
+    }
+    let ok = STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let ok = s
+            .rows
+            .get(s.selected)
+            .is_some_and(|r| r.kind == Kind::Character);
+        s.pinning = ok;
+        ok
+    });
+    if ok {
+        ui::redraw_all(HWND(hwnd as *mut _));
+    }
+    ok
+}
+
 fn height(rows: usize) -> i32 {
     let rows = rows.max(1) as i32;
     ui::px(SEARCH_H + rows * ROW_H + FOOT_H + PAD)
@@ -440,6 +508,46 @@ fn on_key(vk: u16, ch: Option<char>) {
         return;
     }
     let h = HWND(hwnd as *mut _);
+    // Pinning: the key typed is where the character goes; Esc leaves it.
+    if STATE.with(|s| s.borrow().pinning) {
+        let row = STATE.with(|s| {
+            let mut s = s.borrow_mut();
+            s.pinning = false;
+            s.rows.get(s.selected).cloned()
+        });
+        if let (Some(key), Some(row)) = (ch.filter(|c| !c.is_whitespace()), row) {
+            let on = crate::hook::pin_char(key, &row.text);
+            let (k, c) = (key.to_string(), row.text.clone());
+            crate::overlay::show(&trf(
+                if on {
+                    T::CaretListPinned
+                } else {
+                    T::CaretListUnpinned
+                },
+                &[("ch", &c), ("key", &k)],
+            ));
+            if STATE.with(|s| s.borrow().query.is_empty()) {
+                refilter();
+            }
+        }
+        ui::redraw_all(h);
+        return;
+    }
+    let grid = STATE.with(|s| is_grid(&s.borrow()));
+    if grid && matches!(vk, 0x25..=0x28) {
+        STATE.with(|s| {
+            let mut s = s.borrow_mut();
+            let n = s.rows.len();
+            s.selected = match vk {
+                0x25 => s.selected.saturating_sub(1),
+                0x27 => (s.selected + 1).min(n - 1),
+                0x26 => s.selected.saturating_sub(GRID_COLS),
+                _ => (s.selected + GRID_COLS).min(n - 1),
+            };
+        });
+        ui::redraw_all(h);
+        return;
+    }
     match (vk, ch) {
         (_, Some(c)) => {
             STATE.with(|s| {
@@ -560,6 +668,15 @@ fn refilter() {
     if hwnd == 0 {
         return;
     }
+    // Nothing typed: the grid, at once (no search to wait for).
+    let empty = STATE.with(|s| s.borrow().query.is_empty().then_some(s.borrow().query_gen));
+    if let Some(generation) = empty {
+        if let Ok(mut r) = RESULT.lock() {
+            *r = Some((generation, grid_rows()));
+        }
+        rows_arrived();
+        return;
+    }
     let job = STATE.with(|s| {
         let s = s.borrow();
         Job {
@@ -587,7 +704,6 @@ fn rows_arrived() {
     if hwnd == 0 || !current {
         return;
     }
-    let n = rows.len();
     let pick_now = STATE.with(|s| {
         let mut s = s.borrow_mut();
         s.rows = rows;
@@ -610,10 +726,10 @@ fn rows_arrived() {
             0,
             0,
             ui::px(W),
-            height(n),
+            height_now(),
             SWP_NOACTIVATE | windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE,
         );
-        round(h, height(n));
+        round(h, height_now());
         ui::redraw_all(h);
     }
     if pick_now {
@@ -667,6 +783,14 @@ fn pick() {
             crate::overlay::show(&trf(T::CaretListNextTime, &[("keys", &row.text)]));
         }
         return;
+    }
+    if row.kind == Kind::Character {
+        RECENT.with(|r| {
+            let mut r = r.borrow_mut();
+            r.retain(|c| *c != row.text);
+            r.insert(0, row.text.clone());
+            r.truncate(GRID_COLS);
+        });
     }
     let text = match row.kind {
         Kind::Snippet => righttype::snippets::fill(&row.text, &crate::hook::snippet_now()),
@@ -758,6 +882,47 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
                 p.text_dim,
                 DT_LEFT | one,
             );
+        }
+        // Nothing searched yet: the pinned and recent characters as a grid
+        // of glyphs, nothing else (names only once something is searched).
+        if is_grid(&s) {
+            let top = SEARCH_H + PAD / 2;
+            for (i, row) in s.rows.iter().enumerate() {
+                let (col, line) = ((i % GRID_COLS) as i32, (i / GRID_COLS) as i32);
+                let cell = ui::rect(PAD + col * CELL, top + line * CELL, CELL - 4, CELL - 4);
+                let selected = i == s.selected;
+                if selected {
+                    g.fill_round(cell, ui::px(6) as f32, p.accent);
+                }
+                ui::text(
+                    hdc,
+                    &row.glyph,
+                    cell,
+                    big,
+                    if selected { p.on_accent } else { p.text },
+                    DT_CENTER | one,
+                );
+            }
+            let lines = s.rows.len().div_ceil(GRID_COLS) as i32;
+            let hint = if s.pinning {
+                let ch = s
+                    .rows
+                    .get(s.selected)
+                    .map(|r| r.text.as_str())
+                    .unwrap_or("");
+                trf(T::CaretListPinHint, &[("ch", ch)])
+            } else {
+                tr(T::CaretListKeysGrid).to_string()
+            };
+            ui::text(
+                hdc,
+                &hint,
+                ui::rect(PAD + 12, top + lines * CELL, W - 2 * PAD - 24, FOOT_H),
+                dim,
+                if s.pinning { p.accent } else { p.text_dim },
+                DT_LEFT | one,
+            );
+            return;
         }
         // The highlight, where its slide has got to.
         if !s.rows.is_empty() {
@@ -892,13 +1057,21 @@ fn paint(g: &Gfx, hdc: HDC, rc: RECT, _page: u8) {
             .rows
             .get(s.selected)
             .is_some_and(|r| r.kind == Kind::Command);
+        let pin_hint = s.pinning.then(|| {
+            let ch = s
+                .rows
+                .get(s.selected)
+                .map(|r| r.text.as_str())
+                .unwrap_or("");
+            trf(T::CaretListPinHint, &[("ch", ch)])
+        });
         ui::text(
             hdc,
-            tr(if on_command {
+            pin_hint.as_deref().unwrap_or(tr(if on_command {
                 T::CaretListKeysRun
             } else {
                 T::CaretListKeys
-            }),
+            })),
             ui::rect(PAD + 12, foot_y, W - 2 * PAD - 24, FOOT_H),
             dim,
             p.text_dim,
