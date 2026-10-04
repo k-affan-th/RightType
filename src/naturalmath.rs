@@ -287,6 +287,22 @@ fn starts_with_phrase(rest: &str, phrase: &str) -> Option<usize> {
     Some(used)
 }
 
+/// The digit a key of the number row types with Kedmanee on.
+fn kedmanee_digit(c: char) -> Option<char> {
+    Some(match c {
+        'ๅ' => '1',
+        '/' => return None,
+        'ภ' => '4',
+        'ถ' => '5',
+        'ุ' => '6',
+        'ึ' => '7',
+        'ค' => '8',
+        'ต' => '9',
+        'จ' => '0',
+        _ => return None,
+    })
+}
+
 /// The tokens, and how many were said in words (not fillers).
 fn tokens(text: &str) -> Option<(Vec<Tok>, usize)> {
     let mut out = Vec::new();
@@ -346,6 +362,26 @@ fn tokens(text: &str) -> Option<(Vec<Tok>, usize)> {
                 } else {
                     return None;
                 }
+                i += run.len();
+                continue;
+            }
+            // Digits typed with the Thai keyboard on (RightType switches
+            // to it after a word it put into Thai): `ๅจ` is 10 until the
+            // word is put right at the space. Only a run made entirely of
+            // the number row's characters.
+            c if kedmanee_digit(c).is_some() => {
+                let run: String = rest
+                    .chars()
+                    .take_while(|c| kedmanee_digit(*c).is_some())
+                    .collect();
+                let thai = |c: char| ('\u{0E00}'..='\u{0E7F}').contains(&c);
+                // A word of its own: not the start of รากค้ำ.
+                let starts_word = !text[..i].chars().next_back().is_some_and(thai);
+                let ends_word = !rest[run.len()..].chars().next().is_some_and(thai);
+                if !starts_word || !ends_word {
+                    return None;
+                }
+                out.push(Tok::Text(run.chars().filter_map(kedmanee_digit).collect()));
                 i += run.len();
                 continue;
             }
@@ -628,6 +664,8 @@ mod tests {
         assert_eq!(offer("x ยกกำลังสองบวก 1"), Some((17, "x² + 1".to_string())));
         assert_eq!(offer("ผลลัพธ์คือ x ยกกำลังสอง"), Some((12, "x²".to_string())));
         assert_eq!(offer("a over b"), Some((8, "a/b".to_string())));
+        // `10` typed after RightType switched to the Thai keyboard.
+        assert_eq!(offer("x กำลัง ๅจ"), Some((10, "x¹⁰".to_string())));
         for no in [
             "x ยกกำลังสองบวก",
             "x ยกกำลังสองบวก 1 ",
@@ -638,6 +676,10 @@ mod tests {
             "ราคา 5 บาท",
             "รากสามสิบ x",
             "times (times) t",
+            "x กำลัง คน",
+            "x บวก คน",
+            "รากค",
+            "x บวกจ",
             "sum (sum) s",
         ] {
             assert_eq!(offer(no), None, "{no}");
