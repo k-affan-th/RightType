@@ -500,6 +500,66 @@ pub fn to_latex(text: &str) -> Option<String> {
     (r.at == r.toks.len() && !out.is_empty()).then_some(out)
 }
 
+/// For a hint while typing (2.4): math said in words that the text before
+/// the caret ends with, from its start or after a space — the longest —
+/// as (characters it replaces, Unicode). Stricter than the list at the
+/// cursor, where asking is explicit: something is done (a power, an
+/// operator, a root), with a variable or number written as such (`x`, `1`,
+/// not `สอง` alone), and nothing left hanging (`x บวก`).
+pub fn offer(before: &str) -> Option<(usize, String)> {
+    if before.ends_with(char::is_whitespace) {
+        return None;
+    }
+    let starts = std::iter::once(0).chain(
+        before
+            .char_indices()
+            .filter(|(_, c)| c.is_whitespace())
+            .map(|(i, c)| i + c.len_utf8()),
+    );
+    for start in starts {
+        let part = &before[start..];
+        let Some((toks, _)) = tokens(part) else {
+            continue;
+        };
+        let does = toks.iter().any(|t| {
+            matches!(
+                t,
+                Tok::Act(Op(_) | Post(_) | PowerOf | Sub | Root(_) | Over | Big(_))
+            )
+        });
+        let written = toks
+            .iter()
+            .any(|t| matches!(t, Tok::Text(s) if s.chars().any(|c| c.is_ascii_alphanumeric())));
+        let hanging = matches!(
+            toks.last(),
+            Some(Tok::Act(
+                Op(_) | PowerOf | Sub | Root(_) | Over | Big(_) | From | To
+            ))
+        );
+        // Begins with what is worked on: `x`, `2`, `รากที่สองของ`, `(` —
+        // not `ประมาณ 6` or `เท่ากับ 2` in a sentence.
+        let begins = matches!(
+            toks.first(),
+            Some(Tok::Text(_) | Tok::Open | Tok::Act(Atom(_) | Root(_) | Big(_)))
+        );
+        // An operator between two things (not `(plus)`, `plus plus`), and a
+        // sum or integral with its limits.
+        let shaped = toks.windows(2).all(|w| match w {
+            [Tok::Open | Tok::Act(Op(_)), Tok::Act(Op(_))] => false,
+            [Tok::Act(Op(_)), Tok::Close] => false,
+            [Tok::Act(Big(_)), next] => *next == Tok::Act(From),
+            _ => true,
+        }) && !matches!(toks.last(), Some(Tok::Act(Big(_))));
+        if !does || !written || hanging || !begins || !shaped {
+            continue;
+        }
+        if let Some(text) = to_unicode(part) {
+            return Some((part.chars().count(), text));
+        }
+    }
+    None
+}
+
 /// `text` said in words, as one line of Unicode: `x squared plus y squared`
 /// → `x² + y²`.
 pub fn to_unicode(text: &str) -> Option<String> {
@@ -555,6 +615,26 @@ mod tests {
         assert_eq!(u("x ไม่เท่ากับ อนันต์"), "x ≠ ∞");
         assert_eq!(u("90 องศา"), "90°");
         assert_eq!(u("รากที่สองของ x บวก 1 ส่วน 2"), "√x + ½");
+    }
+
+    #[test]
+    fn offered_while_typing() {
+        assert_eq!(offer("x ยกกำลังสองบวก 1"), Some((17, "x² + 1".to_string())));
+        assert_eq!(offer("ผลลัพธ์คือ x ยกกำลังสอง"), Some((12, "x²".to_string())));
+        assert_eq!(offer("a over b"), Some((8, "a/b".to_string())));
+        for no in [
+            "x ยกกำลังสองบวก",
+            "x ยกกำลังสองบวก 1 ",
+            "สองบวกสาม",
+            "มีสามคน",
+            "one plus one",
+            "I have a plus side",
+            "ราคา 5 บาท",
+            "times (times) t",
+            "sum (sum) s",
+        ] {
+            assert_eq!(offer(no), None, "{no}");
+        }
     }
 
     #[test]

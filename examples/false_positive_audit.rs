@@ -422,10 +422,7 @@ fn main() {
                 continue;
             }
             tail.push(c);
-            if c == ' ' {
-                tail = " ".into();
-            }
-            while tail.chars().count() > 16 {
+            while tail.chars().count() > 48 {
                 tail.remove(0);
             }
             if let Some(g) = righttype::ghost::offer(&tail) {
@@ -434,11 +431,15 @@ fn main() {
         }
         seen
     };
-    let ghost_words: usize = thai_words
+    let ghost_word_offers: Vec<String> = thai_words
         .iter()
         .chain(english_words.iter())
-        .map(|w| ghost_offers(&format!("{w} ({w}) {w}, {w}. \"{w}\" {w}: {w}?")).len())
-        .sum();
+        .flat_map(|w| ghost_offers(&format!("{w} ({w}) {w}, {w}. \"{w}\" {w}: {w}?")))
+        .collect();
+    for g in ghost_word_offers.iter().take(20) {
+        println!("  {g}");
+    }
+    let ghost_words = ghost_word_offers.len();
     let ghost_prose = ghost_offers(include_str!("data/academic_th_en.txt"));
     println!(
         "Ghost suggestions: dictionary words {ghost_words}, academic sample {}",

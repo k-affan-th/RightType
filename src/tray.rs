@@ -536,6 +536,15 @@ pub fn run() {
                     bottom: 225,
                 }),
             ),
+            "ghost-words" => crate::overlay::offer_at(
+                &hook::ghost_hint("x ยกกำลังสองบวก 1", "x² + 1"),
+                crate::overlay::Anchor::Near(windows::Win32::Foundation::RECT {
+                    left: 330,
+                    top: 205,
+                    right: 331,
+                    bottom: 225,
+                }),
+            ),
             "keys" => {
                 crate::onscreen::set_enabled(true);
                 for k in ["Ctrl+C", "Ctrl+V", "Ctrl+V", "Alt+Tab"] {

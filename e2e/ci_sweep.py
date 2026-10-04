@@ -654,6 +654,14 @@ def ghosts(t):
     type_keys("x != y")
     time.sleep(0.8)
     fs.check(t.name, "without Tab the text stays as typed", t.read().strip(), "x != y")
+    # Math said in words, typed in the document (2.4): Tab writes it.
+    t.clear()
+    t.focus()
+    type_keys("x squared plus 1")
+    time.sleep(0.5)
+    tap(0x09)
+    time.sleep(0.8)
+    fs.check(t.name, "math said in words, Tab writes it", t.read().strip(), "x\u00b2 + 1")
 
 
 def keys_on_screen(t):

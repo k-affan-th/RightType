@@ -754,9 +754,9 @@ pub fn set_ghosts(on: bool) {
 }
 
 /// How many characters before the caret are kept for ghost suggestions:
-/// a bit of math like `x^2+y^2=z^2` or the longest LaTeX command
-/// (`\\Leftrightarrow`), and the character before.
-const GHOST_TAIL: usize = 24;
+/// a bit of math like `x^2+y^2=z^2`, the longest LaTeX command
+/// (`\\Leftrightarrow`), or math said in words (`x ยกกำลังสองบวก 1`).
+const GHOST_TAIL: usize = 48;
 
 struct GhostOffer {
     replace: usize,
@@ -779,9 +779,9 @@ fn ghost_forget() {
     }
 }
 
-/// Follows what a key did to the text before the caret: a character adds to
-/// it, Backspace takes one off, Space starts afresh after a space, anything
-/// else (Enter, Tab, arrows, a chord) forgets it.
+/// Follows what a key did to the text before the caret: a character or a
+/// space adds to it, Backspace takes one off, anything else (Enter, Tab,
+/// arrows, a chord) forgets it.
 fn ghost_track(key: Key, vk: u16) {
     GHOST_TYPED.with(|t| {
         let mut t = t.borrow_mut();
@@ -797,8 +797,11 @@ fn ghost_track(key: Key, vk: u16) {
                 t.pop();
             }
             Key::Boundary if vk == VK_SPACE.0 => {
-                t.zeroize();
                 t.push(' ');
+                while t.chars().count() > GHOST_TAIL {
+                    let first = t.chars().next().map_or(0, char::len_utf8);
+                    t.replace_range(..first, "");
+                }
             }
             _ => t.zeroize(),
         }

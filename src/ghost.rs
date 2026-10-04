@@ -97,7 +97,15 @@ pub fn offer(before: &str) -> Option<Ghost> {
             }
         }
     }
-    // The longest rule the text ends with.
+    // The longest rule the text ends with; else math said in words
+    // (`x ยกกำลังสองบวก 1`).
+    if let Some(g) = rule(before) {
+        return Some(g);
+    }
+    crate::naturalmath::offer(before).map(|(replace, text)| Ghost { replace, text })
+}
+
+fn rule(before: &str) -> Option<Ghost> {
     let (typed, text) = RULES
         .iter()
         .filter(|(t, _)| before.ends_with(t))
