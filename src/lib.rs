@@ -53,6 +53,7 @@ pub mod keyboard;
 pub mod keycast;
 pub mod latex;
 pub mod layout;
+pub mod macros;
 pub mod motion;
 pub mod naturalmath;
 pub mod per_app;

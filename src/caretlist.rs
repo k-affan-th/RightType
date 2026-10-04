@@ -792,6 +792,13 @@ fn pick() {
             r.truncate(GRID_COLS);
         });
     }
+    if row.kind == Kind::Snippet {
+        if let Some(Ok(steps)) = righttype::macros::steps(&row.text) {
+            crate::hook::trace_note("caret list: macro run");
+            crate::manual::request_macro(target, steps, true);
+            return;
+        }
+    }
     let text = match row.kind {
         Kind::Snippet => righttype::snippets::fill(&row.text, &crate::hook::snippet_now()),
         _ => row.text,

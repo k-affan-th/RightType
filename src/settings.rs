@@ -1512,6 +1512,7 @@ fn save_snippet(win: &SettingsWindow) {
                     Problem::TriggerSpace => T::SnipTriggerSpace,
                     Problem::TextEmpty => T::SnipTextEmpty,
                     Problem::TextLong => T::SnipTextLong,
+                    Problem::MacroStep => T::SnipMacroStep,
                 }),
             );
             return;

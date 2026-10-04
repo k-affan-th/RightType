@@ -140,8 +140,13 @@ pub fn search(typed: &str, snippets: &[Snippet], commands: &[Command], thai: boo
             .filter(|s| s.scope != crate::snippets::Scope::Typo)
             .filter_map(|s| {
                 let score = query.score_any([s.trigger.as_str(), s.text.as_str()])?;
-                let mut label: String = s.text.chars().take(40).collect();
-                if s.text.chars().count() > 40 {
+                // A macro says what it does; a snippet shows its text.
+                let shown = match crate::macros::steps(&s.text) {
+                    Some(Ok(steps)) => crate::macros::summary(&steps, thai),
+                    _ => s.text.clone(),
+                };
+                let mut label: String = shown.chars().take(40).collect();
+                if shown.chars().count() > 40 {
                     label.push('…');
                 }
                 Some(Row {

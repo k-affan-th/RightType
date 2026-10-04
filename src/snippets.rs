@@ -69,6 +69,8 @@ pub enum Problem {
     TriggerSpace,
     TextEmpty,
     TextLong,
+    /// A step in braces that cannot run (`{กด Ctrl+Nope}`, `{รอ 9000}`).
+    MacroStep,
 }
 
 /// Check (and tidy) a snippet before it is saved: the trigger trimmed, line
@@ -88,6 +90,9 @@ pub fn check(trigger: &str, text: &str, scope: Scope) -> Result<Snippet, Problem
     }
     if text.chars().count() > MAX_TEXT {
         return Err(Problem::TextLong);
+    }
+    if let Some(Err(_)) = crate::macros::steps(&text) {
+        return Err(Problem::MacroStep);
     }
     Ok(Snippet {
         trigger: trigger.to_string(),

@@ -163,10 +163,11 @@ texts! {
     ScopeEither => "Either", "ทั้งสองแป้น";
     BtnSaveSnippet => "Add / save", "เพิ่ม / บันทึก";
     BtnInsertDate => "Date / time ▾", "วันที่ / เวลา ▾";
-    SnippetsNote => "“Either” matches the keys you press, so ;addr works on the Thai keyboard too. Start triggers with ; so they never clash with a word. “My typo”: the trigger is a word you often misspell and the text its right spelling, fixed like the built-in misspellings. Date / time puts in today's date when the snippet is typed, such as {วันที่} → 2 ตุลาคม 2569. Not in password fields. Snippets are saved with the settings.", "“ทั้งสองแป้น” จับจากปุ่มที่กด ;addr จึงใช้ได้แม้เปิดแป้นไทยอยู่ แนะนำให้ขึ้นต้นด้วย ; จะได้ไม่ชนกับคำปกติ “คำผิดของฉัน”: ใส่คำที่คุณพิมพ์ผิดบ่อยเป็นคำย่อ และคำที่ถูกเป็นข้อความ จะแก้ให้แบบเดียวกับคำผิดที่มีมาให้ ปุ่ม วันที่ / เวลา ใส่วันที่ตอนที่พิมพ์ เช่น {วันที่} → 2 ตุลาคม 2569 ไม่ทำงานในช่องรหัสผ่าน คำย่อถูกบันทึกไว้กับการตั้งค่า";
+    SnippetsNote => "“Either” matches the keys you press, so ;addr works on the Thai keyboard too. Start triggers with ; so they never clash with a word. “My typo”: the trigger is a word you often misspell and the text its right spelling, fixed like the built-in misspellings. Date / time puts in today's date when the snippet is typed, such as {วันที่} → 2 ตุลาคม 2569. A macro: put steps in the text, such as {style Heading 1}Report{press Enter}, {press Ctrl+B}, {wait 300}, {command Bold}, {clipboard}; Esc stops it. Not in password fields. Snippets are saved with the settings.", "“ทั้งสองแป้น” จับจากปุ่มที่กด ;addr จึงใช้ได้แม้เปิดแป้นไทยอยู่ แนะนำให้ขึ้นต้นด้วย ; จะได้ไม่ชนกับคำปกติ “คำผิดของฉัน”: ใส่คำที่คุณพิมพ์ผิดบ่อยเป็นคำย่อ และคำที่ถูกเป็นข้อความ จะแก้ให้แบบเดียวกับคำผิดที่มีมาให้ ปุ่ม วันที่ / เวลา ใส่วันที่ตอนที่พิมพ์ เช่น {วันที่} → 2 ตุลาคม 2569 ทำเป็น Macro ได้ด้วยการใส่ขั้นตอนในข้อความ เช่น {สไตล์ Heading 1}รายงาน{กด Enter}, {กด Ctrl+B}, {รอ 300}, {คำสั่ง ตัวหนา}, {คลิปบอร์ด} กด Esc เพื่อหยุด ไม่ทำงานในช่องรหัสผ่าน คำย่อถูกบันทึกไว้กับการตั้งค่า";
     SnipTriggerLength => "A trigger is 2 to 32 characters.", "คำย่อต้องยาว 2–32 ตัวอักษร";
     SnipTriggerSpace => "A trigger has no spaces.", "คำย่อต้องไม่มีช่องว่าง";
     SnipTextEmpty => "Write the text it becomes.", "ใส่ข้อความที่ต้องการ";
+    SnipMacroStep => "A step in braces can't run. Keys as {press Ctrl+B} or {press Enter}, waits up to {wait 5000}, and {command …} or {style …} with a name.", "คำสั่งในวงเล็บปีกกาใช้ไม่ได้ ปุ่มเขียนแบบ {กด Ctrl+B} หรือ {กด Enter} รอได้ไม่เกิน {รอ 5000} และ {คำสั่ง …} หรือ {สไตล์ …} ต้องมีชื่อ";
     SnipTextLong => "The text is too long (1,000 characters at most).", "ข้อความยาวเกินไป (ไม่เกิน 1,000 ตัวอักษร)";
     SnipTooMany => "200 snippets at most.", "มีคำย่อได้ไม่เกิน 200 รายการ";
     SnipRemoved => "Removed.", "ลบแล้ว";
@@ -541,6 +542,8 @@ texts! {
     ToastNothingToChange => "Nothing to change in the selection", "ไม่มีอะไรต้องเปลี่ยนในข้อความที่เลือก";
     ToastFieldChanged => "The text changed meanwhile; nothing was fixed", "ข้อความเปลี่ยนไประหว่างนั้น จึงยังไม่ได้แก้";
     ToastOpenedFixWindow => "This app does not share its text: Fix text is open instead", "แอปนี้ไม่ให้อ่านข้อความ จึงเปิดหน้าต่างซ่อมข้อความแทน";
+    ToastMacroStopped => "Macro stopped", "หยุด Macro แล้ว";
+    ToastMacroNoCommand => "Macro stopped: this app has no command “{name}”", "หยุด Macro: แอปนี้ไม่มีคำสั่ง “{name}”";
     ToastTyping => "Typing {n} characters · Esc stops", "กำลังพิมพ์ {n} ตัวอักษร · Esc เพื่อหยุด";
     ToastTypingStopped => "Typing stopped", "หยุดพิมพ์แล้ว";
     ErrClipboardTooLong => "The copied text is too long to type (over {n} characters)", "ข้อความที่คัดลอกยาวเกินจะพิมพ์ (เกิน {n} ตัวอักษร)";

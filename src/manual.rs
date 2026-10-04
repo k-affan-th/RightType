@@ -77,6 +77,14 @@ pub enum Command {
     },
     /// Type the copied text key by key (remote desktops, VMs).
     TypeClipboard { hwnd: isize, requested_at: Instant },
+    /// Run a macro's steps in `hwnd` (a snippet with steps; 2.4).
+    RunMacro {
+        hwnd: isize,
+        steps: Vec<righttype::macros::Step>,
+        /// Wait for the list at the cursor to close first.
+        wait: bool,
+        requested_at: Instant,
+    },
 }
 
 /// The review the palette is showing: the field it is for, and each word
@@ -170,6 +178,18 @@ pub fn request_type(hwnd: isize, text: String, wait: bool) {
         let _ = tx.try_send(Command::TypeText {
             hwnd,
             text,
+            wait,
+            requested_at: Instant::now(),
+        });
+    }
+}
+
+/// Ask the worker to run a macro's steps in `hwnd`.
+pub fn request_macro(hwnd: isize, steps: Vec<righttype::macros::Step>, wait: bool) {
+    if let Some(tx) = SENDER.get() {
+        let _ = tx.try_send(Command::RunMacro {
+            hwnd,
+            steps,
             wait,
             requested_at: Instant::now(),
         });
@@ -423,6 +443,98 @@ unsafe fn type_text(hwnd: isize, text: &str, wait: bool) {
     }
 }
 
+/// Run a macro's steps in `hwnd`, one after another. Esc, or another app
+/// coming to the front, stops it; a step that cannot run stops it with a
+/// note saying which. Dates are filled in as it runs; the copied text is
+/// read only for a `{clipboard}` step, and wiped after.
+unsafe fn run_macro(hwnd: isize, steps: Vec<righttype::macros::Step>, wait: bool) {
+    use righttype::macros::Step;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_ESCAPE};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+    if wait {
+        thread::sleep(Duration::from_millis(200));
+    }
+    if GetForegroundWindow().0 as isize != hwnd || !release_modifiers() {
+        return;
+    }
+    let pid = |h: HWND| {
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(h, Some(&mut pid));
+        pid
+    };
+    let app = pid(HWND(hwnd as *mut _));
+    let now = crate::hook::snippet_now();
+    let press = |keys: &str| {
+        righttype::shortcuts::virtual_keys(keys).is_some_and(|vks| crate::inject::press_chord(&vks))
+    };
+    let mut commands: Option<Vec<righttype::atcaret::Command>> = None;
+    crate::hook::trace_note("macro: started");
+    for step in steps {
+        // A dialog the macro opened is still the app; another app is not.
+        if GetAsyncKeyState(VK_ESCAPE.0 as i32) < 0 || pid(GetForegroundWindow()) != app {
+            crate::hook::trace_note("macro: stopped");
+            overlay::show(tr(T::ToastMacroStopped));
+            return;
+        }
+        let done = match &step {
+            Step::Text(text) => {
+                let filled = zeroize::Zeroizing::new(righttype::snippets::fill(text, &now));
+                crate::inject::apply(0, &filled, None)
+            }
+            Step::Keys(keys) => press(keys),
+            Step::Wait(ms) => {
+                thread::sleep(Duration::from_millis(u64::from(*ms)));
+                true
+            }
+            Step::Command(name) => {
+                let list = commands
+                    .get_or_insert_with(|| crate::sheet::app_commands(GetForegroundWindow()));
+                let wanted = name.trim().to_lowercase();
+                let found = list
+                    .iter()
+                    .find(|c| c.name.to_lowercase() == wanted || c.other.to_lowercase() == wanted)
+                    .or_else(|| {
+                        list.iter()
+                            .find(|c| c.name.to_lowercase().starts_with(&wanted))
+                    })
+                    .map(|c| c.keys.clone());
+                match found {
+                    Some(keys) => press(&keys),
+                    None => {
+                        overlay::show(&righttype::i18n::trf(
+                            T::ToastMacroNoCommand,
+                            &[("name", name)],
+                        ));
+                        return;
+                    }
+                }
+            }
+            Step::Style(name) => {
+                // Word's Apply Styles box: its name field has the focus.
+                press("Ctrl+Shift+S") && {
+                    thread::sleep(Duration::from_millis(400));
+                    press("Ctrl+A") && crate::inject::apply(0, name, None) && press("Enter")
+                }
+            }
+            Step::Clipboard => match clipboard::get_text() {
+                Some(mut text) => {
+                    let done = crate::inject::apply(0, &text.replace("\r\n", "\n"), None);
+                    text.zeroize();
+                    done
+                }
+                None => true,
+            },
+        };
+        if !done {
+            overlay::show(tr(T::ErrInjectConversion));
+            return;
+        }
+        // A moment for the app to take each step in.
+        thread::sleep(Duration::from_millis(40));
+    }
+    crate::hook::trace_note("macro: finished");
+}
+
 /// Longest copied text typed key by key (characters).
 const MAX_TYPED_CHARS: usize = 2000;
 
@@ -579,6 +691,14 @@ fn run(rx: Receiver<Command>) {
             Command::TypeClipboard { hwnd, requested_at }
                 if requested_at.elapsed() <= Duration::from_secs(3) =>
             unsafe { type_clipboard(hwnd) },
+            Command::RunMacro {
+                hwnd,
+                steps,
+                wait,
+                requested_at,
+            } if requested_at.elapsed() <= Duration::from_secs(3) => unsafe {
+                run_macro(hwnd, steps, wait)
+            },
             Command::Transform {
                 hwnd,
                 requested_at,

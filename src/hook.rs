@@ -530,6 +530,18 @@ pub(crate) fn snippet_now() -> righttype::snippets::Now {
 }
 
 unsafe fn expand_snippet(word: &str, vk: u16, text: &str) -> bool {
+    // A macro: take the trigger away, then the worker runs its steps (they
+    // wait and press keys, so not here on the hook).
+    if let Some(Ok(steps)) = righttype::macros::steps(text) {
+        let shown = policy::shown_with_caps(word, caps_on());
+        inject::expect_before_caret(&shown);
+        if !inject::apply(word.chars().count(), "", None) {
+            crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+            return false;
+        }
+        crate::manual::request_macro(GetForegroundWindow().0 as isize, steps, false);
+        return true;
+    }
     // Its date and time fields, for now.
     let now = snippet_now();
     let filled = zeroize::Zeroizing::new(righttype::snippets::fill(text, &now));

@@ -93,6 +93,11 @@ text = "{iso}"
 scope = "either"
 
 [[snippets]]
+trigger = ";mac"
+text = "ab{press Left}X{press End}!"
+scope = "either"
+
+[[snippets]]
 trigger = "teh"
 text = "the"
 scope = "typo"
@@ -121,6 +126,8 @@ def snippets_and_spelling(t):
     fs.run(t, "snippet taken back with Shift+Backspace", ";sig ", ";sig", then=[flip])
     import datetime
     fs.run(t, "snippet with today's date", ";today ", datetime.date.today().isoformat())
+    # 2.4: a macro — text, a key, more text, run on the worker.
+    fs.run(t, "macro: text and keys in order", ";mac ", "aXb!", settle=1.5)
     # อนุญาติ (keys vo6Pk9b on the Thai keyboard) → อนุญาต.
     fs.run(t, "common misspelling put right", "vo6Pk9b ", "อนุญาต", layout=HKL_TH)
     fs.run(t, "Backspace right after puts the misspelling back", "vo6Pk9b ", "อนุญาติ",

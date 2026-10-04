@@ -96,6 +96,7 @@ fn key_vk(name: &str) -> Option<u16> {
         "Minus" => 0xBD,
         "Space" => 0x20,
         "Enter" => 0x0D,
+        "Backspace" => 0x08,
         "Tab" => 0x09,
         "Esc" => 0x1B,
         "Delete" => 0x2E,
