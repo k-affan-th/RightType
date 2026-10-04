@@ -446,7 +446,9 @@ impl Parser<'_> {
                     Some(_) => return Err(Error::Nested),
                 };
                 let arg = self.argument()?;
-                Ok(if arg.chars().count() == 1 {
+                // √27, but √(x+1) and √(ab).
+                let bare = arg.chars().count() == 1 || arg.chars().all(|c| c.is_ascii_digit());
+                Ok(if bare {
                     format!("{sign}{arg}")
                 } else {
                     format!("{sign}({arg})")

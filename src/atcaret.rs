@@ -177,7 +177,18 @@ pub fn search(typed: &str, snippets: &[Snippet], commands: &[Command], thai: boo
 /// at all. A lone command being typed (`\al`) is left to the command rows.
 fn equation(typed: &str, thai: bool) -> Vec<Row> {
     if !crate::latex::looks_like_latex(typed) {
-        return Vec::new();
+        // Said in words: "x squared plus 1", "รากที่สองของ x".
+        return crate::naturalmath::to_unicode(typed)
+            .map(|text| Row {
+                kind: Kind::Equation,
+                glyph: String::new(),
+                label: text.clone(),
+                detail: if thai { "คณิต" } else { "Math" }.into(),
+                text,
+                score: u32::MAX,
+            })
+            .into_iter()
+            .collect();
     }
     let lone = typed
         .strip_prefix('\\')
@@ -209,6 +220,16 @@ mod tests {
             text: "Best regards,\nAffan".into(),
             scope: Scope::Either,
         }]
+    }
+
+    #[test]
+    fn math_said_in_words() {
+        let rows = search("x squared plus 1", &[], &[], false);
+        assert_eq!(rows[0].kind, Kind::Equation);
+        assert_eq!(rows[0].text, "x² + 1");
+        let rows = search("รากที่สองของ x", &[], &[], true);
+        assert_eq!(rows[0].text, "√x");
+        assert_eq!(rows[0].detail, "คณิต");
     }
 
     #[test]

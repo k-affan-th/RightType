@@ -518,6 +518,8 @@ pub fn run() {
             "caret-commands" => crate::caretlist::open_demo("window"),
             "caret-commands-armed" => crate::caretlist::open_demo_armed("close"),
             "caret-latex-cmd" => crate::caretlist::open_demo(r"\al"),
+            "caret-math-words" => crate::caretlist::open_demo("x squared plus y squared"),
+            "caret-math-thai" => crate::caretlist::open_demo("รากที่สองของ x บวก 1 ส่วน 2"),
             "ghost" => crate::overlay::offer_at(
                 &hook::ghost_hint("!=", "≠"),
                 crate::overlay::Anchor::Near(windows::Win32::Foundation::RECT {

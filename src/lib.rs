@@ -54,6 +54,7 @@ pub mod keycast;
 pub mod latex;
 pub mod layout;
 pub mod motion;
+pub mod naturalmath;
 pub mod per_app;
 pub mod policy;
 pub mod predict;
