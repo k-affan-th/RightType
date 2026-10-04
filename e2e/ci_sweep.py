@@ -662,6 +662,16 @@ def ghosts(t):
     tap(0x09)
     time.sleep(0.8)
     fs.check(t.name, "math said in words, Tab writes it", t.read().strip(), "x\u00b2 + 1")
+    # A word RightType put into Thai on the way (กำลัง typed as de]y' on
+    # the English keyboard) is still read as part of the math.
+    t.clear()
+    t.focus()
+    type_keys("x de]y' 10")
+    time.sleep(0.5)
+    tap(0x09)
+    time.sleep(0.8)
+    fs.check(t.name, "math after a word put into Thai, Tab writes it", t.read().strip(),
+             "x\u00b9\u2070")
 
 
 def keys_on_screen(t):

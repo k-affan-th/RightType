@@ -21,7 +21,7 @@
 //! injected events (tagged in `dwExtraInfo`, plus `LLKHF_INJECTED`) so a
 //! correction can never feed back into itself.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -766,9 +766,20 @@ struct GhostOffer {
     created: Instant,
 }
 
+/// What the key being handled did to [`GHOST_TYPED`], so that text
+/// RightType writes meanwhile lands before it, and it can be taken back if
+/// the key never reaches the app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GhostPending {
+    None,
+    Pushed(char),
+    Popped(Option<char>),
+}
+
 thread_local! {
     /// The last few characters typed, in memory only, zeroized when let go.
     static GHOST_TYPED: RefCell<String> = const { RefCell::new(String::new()) };
+    static GHOST_PENDING: Cell<GhostPending> = const { Cell::new(GhostPending::None) };
     static GHOST: RefCell<Option<GhostOffer>> = const { RefCell::new(None) };
 }
 
@@ -783,29 +794,93 @@ fn ghost_forget() {
 /// space adds to it, Backspace takes one off, anything else (Enter, Tab,
 /// arrows, a chord) forgets it.
 fn ghost_track(key: Key, vk: u16) {
-    GHOST_TYPED.with(|t| {
+    let pending = GHOST_TYPED.with(|t| {
         let mut t = t.borrow_mut();
         match key {
             Key::Char(c) => {
                 t.push(c);
-                while t.chars().count() > GHOST_TAIL {
-                    let first = t.chars().next().map_or(0, char::len_utf8);
-                    t.replace_range(..first, "");
-                }
+                ghost_trim(&mut t);
+                GhostPending::Pushed(c)
             }
-            Key::Backspace => {
-                t.pop();
-            }
+            Key::Backspace => GhostPending::Popped(t.pop()),
             Key::Boundary if vk == VK_SPACE.0 => {
                 t.push(' ');
-                while t.chars().count() > GHOST_TAIL {
-                    let first = t.chars().next().map_or(0, char::len_utf8);
-                    t.replace_range(..first, "");
-                }
+                ghost_trim(&mut t);
+                GhostPending::Pushed(' ')
             }
-            _ => t.zeroize(),
+            _ => {
+                t.zeroize();
+                GhostPending::None
+            }
         }
     });
+    GHOST_PENDING.with(|p| p.set(pending));
+}
+
+fn ghost_trim(t: &mut String) {
+    while t.chars().count() > GHOST_TAIL {
+        let first = t.chars().next().map_or(0, char::len_utf8);
+        t.replace_range(..first, "");
+    }
+}
+
+fn ghost_undo_pending(t: &mut String, pending: GhostPending) {
+    match pending {
+        GhostPending::Pushed(c) if t.ends_with(c) => {
+            t.pop();
+        }
+        GhostPending::Popped(Some(c)) => t.push(c),
+        _ => {}
+    }
+}
+
+/// RightType wrote `text` over the `backspaces` characters before the caret
+/// (a word put into the other layout, a snippet, Undo): the text kept for
+/// ghost suggestions follows the screen, so `x dko'k 10` corrected to
+/// `x กำลัง 10` is still read as math. The key being handled, if it gets
+/// to the app, comes after what was written.
+pub(crate) fn ghost_applied(backspaces: usize, text: &str, trailing_vk: Option<u16>) {
+    let pending = GHOST_PENDING.with(Cell::get);
+    GHOST_TYPED.with(|t| {
+        let Ok(mut t) = t.try_borrow_mut() else {
+            return;
+        };
+        ghost_undo_pending(&mut t, pending);
+        for _ in 0..backspaces {
+            t.pop();
+        }
+        t.push_str(text);
+        match trailing_vk {
+            Some(vk) if vk == VK_SPACE.0 => t.push(' '),
+            Some(_) => {
+                t.zeroize();
+                GHOST_PENDING.with(|p| p.set(GhostPending::None));
+                return;
+            }
+            None => {}
+        }
+        match pending {
+            GhostPending::Pushed(c) => t.push(c),
+            GhostPending::Popped(_) => {
+                t.pop();
+            }
+            GhostPending::None => {}
+        }
+        ghost_trim(&mut t);
+    });
+}
+
+/// The key has been handled: if it was kept from the app, take back what
+/// it did to the text kept for ghost suggestions.
+fn ghost_settle(swallowed: bool) {
+    let pending = GHOST_PENDING.with(|p| p.replace(GhostPending::None));
+    if swallowed {
+        GHOST_TYPED.with(|t| {
+            if let Ok(mut t) = t.try_borrow_mut() {
+                ghost_undo_pending(&mut t, pending);
+            }
+        });
+    }
 }
 
 /// The hint for an offer: what was typed, what Tab makes of it.
@@ -981,14 +1056,8 @@ unsafe fn cycle_character() -> bool {
         CYCLE.with(|c| c.borrow_mut().take());
         return false;
     }
-    // What is before the caret now, for the next tap and ghost offers.
-    GHOST_TYPED.with(|t| {
-        let mut t = t.borrow_mut();
-        for _ in 0..n {
-            t.pop();
-        }
-        t.push_str(&next);
-    });
+    // What is before the caret now followed what was written
+    // (`ghost_applied`), for the next tap and ghost offers.
     crate::overlay::offer_at(&strip, crate::caret::hint_anchor());
     strip.zeroize();
     trace_note("Right Alt: character stepped");
@@ -1570,7 +1639,13 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
             if !nested {
                 HOOK_DEADLINE.with(|d| d.set(Some(started + HOOK_BUDGET)));
             }
+            if !nested {
+                GHOST_PENDING.with(|p| p.set(GhostPending::None));
+            }
             let swallow = process(wparam.0 as u32, kb);
+            if !nested {
+                ghost_settle(swallow);
+            }
             if !nested {
                 HOOK_DEADLINE.with(|d| d.set(None));
             }
@@ -2864,8 +2939,8 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         {
             if reconcile_run() {
                 take_down_preview();
-                // The screen holds another reading now, not the keys typed.
-                ghost_forget();
+                // The text kept for ghost suggestions followed what was
+                // written (`ghost_applied`).
                 return true;
             }
             show_preview();

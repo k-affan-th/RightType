@@ -52,6 +52,7 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     if backspaces == 0 && text.is_empty() && trailing_vk.is_none() {
         return true;
     }
+    crate::hook::ghost_applied(backspaces, text, trailing_vk);
     // A standard Windows text box is told to replace the word itself, in one
     // message: nothing the typist presses meanwhile can land between our
     // keys, and nothing depends on how fast the app reads them (Windows 11
