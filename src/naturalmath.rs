@@ -353,6 +353,12 @@ fn tokens(text: &str) -> Option<(Vec<Tok>, usize)> {
         }
         i += c.len_utf8();
     }
+    // Number words side by side (`สามสิบ`, `twenty one`) are one number
+    // said in parts, not two numbers: rather nothing than 310.
+    let number = |t: &Tok| matches!(t, Tok::Act(Atom(a)) if a.chars().all(|c| c.is_ascii_digit()));
+    if out.windows(2).any(|w| number(&w[0]) && number(&w[1])) {
+        return None;
+    }
     Some((out, said))
 }
 
@@ -630,6 +636,7 @@ mod tests {
             "one plus one",
             "I have a plus side",
             "ราคา 5 บาท",
+            "รากสามสิบ x",
             "times (times) t",
             "sum (sum) s",
         ] {
@@ -640,6 +647,8 @@ mod tests {
     #[test]
     fn not_math() {
         for s in [
+            "รากที่สองของ สามสิบ",
+            "สามสิบ บวก x",
             "hello world",
             "pi",
             "alpha",

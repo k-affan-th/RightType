@@ -471,7 +471,13 @@ unsafe fn run_macro(hwnd: isize, steps: Vec<righttype::macros::Step>, wait: bool
     crate::hook::trace_note("macro: started");
     for step in steps {
         // A dialog the macro opened is still the app; another app is not.
-        if GetAsyncKeyState(VK_ESCAPE.0 as i32) < 0 || pid(GetForegroundWindow()) != app {
+        // Text is never typed into a password field (the focus may have
+        // moved there).
+        let types = matches!(step, Step::Text(_) | Step::Clipboard);
+        if GetAsyncKeyState(VK_ESCAPE.0 as i32) < 0
+            || pid(GetForegroundWindow()) != app
+            || (types && (crate::safety::is_password_field() || focus::is_password_field()))
+        {
             crate::hook::trace_note("macro: stopped");
             overlay::show(tr(T::ToastMacroStopped));
             return;
@@ -518,8 +524,10 @@ unsafe fn run_macro(hwnd: isize, steps: Vec<righttype::macros::Step>, wait: bool
             }
             Step::Clipboard => match clipboard::get_text() {
                 Some(mut text) => {
-                    let done = crate::inject::apply(0, &text.replace("\r\n", "\n"), None);
+                    let mut lines = text.replace("\r\n", "\n");
                     text.zeroize();
+                    let done = crate::inject::apply(0, &lines, None);
+                    lines.zeroize();
                     done
                 }
                 None => true,

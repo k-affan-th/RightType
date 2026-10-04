@@ -156,6 +156,14 @@ impl Parser {
                 .scripted()
                 .filter(|d| !matches!(d, Node::Text(t) if t == " "))
             {
+                // `and/or`, `TCP/IP`: words with a slash, not a fraction.
+                let word = |n: &Node| {
+                    matches!(n, Node::Text(t)
+                        if t.chars().filter(char::is_ascii_alphabetic).count() >= 3)
+                };
+                if word(&first) || word(&den) {
+                    return None;
+                }
                 self.shaped = true;
                 return Some(Node::Frac(ungroup(first), ungroup(den)));
             }

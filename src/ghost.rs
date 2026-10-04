@@ -189,9 +189,231 @@ fn math(before: &str) -> Option<Ghost> {
     })
 }
 
+/// How many characters before the caret are kept: a bit of math like
+/// `x^2+y^2=z^2`, the longest LaTeX command (`\\Leftrightarrow`), or math
+/// said in words (`x ยกกำลังสองบวก 1`).
+pub const TAIL: usize = 48;
+
+/// What the key being handled did to the [`Tail`], so that text RightType
+/// writes meanwhile lands before it, and it can be taken back if the key
+/// never reaches the app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Pending {
+    None,
+    Pushed(char),
+    Popped(Option<char>),
+}
+
+/// How a write ends (the key RightType types after its text).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Then {
+    Nothing,
+    Space,
+    /// Enter, Tab…: the text before the caret is another line now.
+    Other,
+}
+
+/// The text before the caret, as the keyboard hook follows it: what the
+/// typist types and what RightType writes over it (a word put into the
+/// other layout, a snippet, a ghost taken). In memory only; zeroized when
+/// let go.
+#[derive(Debug)]
+pub struct Tail {
+    text: String,
+    pending: Pending,
+}
+
+impl Default for Tail {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for Tail {
+    fn drop(&mut self) {
+        self.forget();
+    }
+}
+
+impl Tail {
+    pub const fn new() -> Self {
+        Self {
+            text: String::new(),
+            pending: Pending::None,
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+
+    pub fn last(&self) -> Option<char> {
+        self.text.chars().next_back()
+    }
+
+    fn trim(&mut self) {
+        let n = self.text.chars().count();
+        if n > TAIL {
+            let cut = self
+                .text
+                .char_indices()
+                .nth(n - TAIL)
+                .map_or(self.text.len(), |(i, _)| i);
+            // Zeroized as it goes: the bytes are not left behind.
+            let mut gone: String = self.text.drain(..cut).collect();
+            zeroize_string(&mut gone);
+        }
+    }
+
+    /// Forget everything (Enter, an arrow, a click, another field).
+    pub fn forget(&mut self) {
+        zeroize_string(&mut self.text);
+        self.pending = Pending::None;
+    }
+
+    /// A key starts: none of it is pending yet.
+    pub fn begin_key(&mut self) {
+        self.pending = Pending::None;
+    }
+
+    /// A character typed (pending until the key is settled).
+    pub fn typed(&mut self, c: char) {
+        self.text.push(c);
+        self.trim();
+        self.pending = Pending::Pushed(c);
+    }
+
+    /// Backspace typed (pending until the key is settled).
+    pub fn backspace(&mut self) {
+        self.pending = Pending::Popped(self.text.pop());
+    }
+
+    fn undo_pending(&mut self) {
+        match self.pending {
+            Pending::Pushed(c) if self.text.ends_with(c) => {
+                self.text.pop();
+            }
+            Pending::Popped(Some(c)) => self.text.push(c),
+            _ => {}
+        }
+    }
+
+    fn redo_pending(&mut self) {
+        match self.pending {
+            Pending::Pushed(c) => self.text.push(c),
+            // What it takes off now is what to give back if it is kept.
+            Pending::Popped(_) => self.pending = Pending::Popped(self.text.pop()),
+            Pending::None => {}
+        }
+    }
+
+    /// RightType wrote `text` over the `backspaces` characters before the
+    /// caret, then `then`. The key being handled, if it reaches the app,
+    /// comes after.
+    pub fn written(&mut self, backspaces: usize, text: &str, then: Then) {
+        self.undo_pending();
+        for _ in 0..backspaces {
+            self.text.pop();
+        }
+        self.text.push_str(text);
+        match then {
+            Then::Nothing => {}
+            Then::Space => self.text.push(' '),
+            Then::Other => {
+                self.forget();
+                return;
+            }
+        }
+        self.redo_pending();
+        self.trim();
+    }
+
+    /// The key has been handled: if it was kept from the app, take back
+    /// what it did.
+    pub fn settle(&mut self, kept_from_app: bool) {
+        if kept_from_app {
+            self.undo_pending();
+        }
+        self.pending = Pending::None;
+    }
+}
+
+fn zeroize_string(s: &mut String) {
+    zeroize::Zeroize::zeroize(s);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn typed(t: &mut Tail, s: &str) {
+        for c in s.chars() {
+            t.begin_key();
+            if c == ' ' {
+                t.typed(' ');
+            } else {
+                t.typed(c);
+            }
+            t.settle(false);
+        }
+    }
+
+    #[test]
+    fn the_tail_follows_what_is_written() {
+        // `x de]y'` typed; the word put into Thai at the space (the space
+        // typed by RightType after it, the key kept from the app).
+        let mut t = Tail::new();
+        typed(&mut t, "x de]y'");
+        t.begin_key();
+        t.typed(' ');
+        t.written(5, "กำลัง", Then::Space);
+        t.settle(true);
+        assert_eq!(t.as_str(), "x กำลัง ");
+        typed(&mut t, "10");
+        assert_eq!(t.as_str(), "x กำลัง 10");
+        assert_eq!(offer(t.as_str()).map(|g| g.text).as_deref(), Some("x¹⁰"));
+
+        // Put into Thai as it is typed: each key kept, the run redrawn.
+        let mut t = Tail::new();
+        typed(&mut t, "x ");
+        t.begin_key();
+        t.typed('d');
+        t.settle(false);
+        t.begin_key();
+        t.typed('e');
+        t.written(1, "กำ", Then::Nothing);
+        t.settle(true);
+        assert_eq!(t.as_str(), "x กำ");
+
+        // A key that goes on to the app after a write lands after it.
+        let mut t = Tail::new();
+        typed(&mut t, "ab");
+        t.begin_key();
+        t.typed('c');
+        t.written(2, "XY", Then::Nothing);
+        t.settle(false);
+        assert_eq!(t.as_str(), "XYc");
+
+        // Backspace kept from the app (an undo) is taken back.
+        let mut t = Tail::new();
+        typed(&mut t, "ab");
+        t.begin_key();
+        t.backspace();
+        t.written(1, "Z", Then::Nothing);
+        t.settle(true);
+        assert_eq!(t.as_str(), "aZ");
+
+        // Enter after a write: another line.
+        t.begin_key();
+        t.written(0, "x", Then::Other);
+        t.settle(false);
+        assert_eq!(t.as_str(), "");
+
+        // Kept to TAIL characters.
+        let mut t = Tail::new();
+        typed(&mut t, &"ก".repeat(TAIL + 10));
+        assert_eq!(t.as_str().chars().count(), TAIL);
+    }
 
     fn o(s: &str) -> Option<(usize, String)> {
         offer(s).map(|g| (g.replace, g.text))
