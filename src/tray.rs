@@ -479,6 +479,7 @@ pub fn run() {
             "keytest" => crate::clean::request_open(crate::clean::Mode::Test),
             "sheet" => crate::sheet::request_open(),
             "practice" => crate::practice::request_open(),
+            "practice-game" => crate::practice::open_game_demo(),
             "stats" => stats::open(),
             "palette" => crate::palette::request_open(),
             "fixer" => crate::fixer::open_demo(
@@ -509,6 +510,41 @@ pub fn run() {
                 }
                 crate::by_app::open();
             }
+            "caret-list" => crate::caretlist::open_demo("arrow"),
+            "caret-list-th" => crate::caretlist::open_demo("ลูกศร"),
+            "caret-latex" => crate::caretlist::open_demo(r"\sum_{i=1}^{n} x_i^2 \leq \frac{1}{2}"),
+            "caret-latex-bad" => crate::caretlist::open_demo(r"\frac{\frac{1}{2}}{3}"),
+            "caret-grid" => crate::caretlist::open_demo(""),
+            "caret-commands" => crate::caretlist::open_demo("window"),
+            "caret-commands-armed" => crate::caretlist::open_demo_armed("close"),
+            "caret-latex-cmd" => crate::caretlist::open_demo(r"\al"),
+            "caret-math-short" => crate::caretlist::open_demo(
+                "x^2 + (2x)/8 + x/2 +x^(3/2) +pi + sigma + Sigma_(i=1)^(n) X_i",
+            ),
+            "caret-math-word" => crate::caretlist::open_demo_math_app(
+                "x^2 + (2x)/8 + x/2 +x^(3/2) +pi + sigma + Sigma_(i=1)^(n) X_i",
+            ),
+            "caret-macro" => crate::caretlist::open_demo(";rep"),
+            "caret-math-words" => crate::caretlist::open_demo("x squared plus y squared"),
+            "caret-math-thai" => crate::caretlist::open_demo("รากที่สองของ x บวก 1 ส่วน 2"),
+            "ghost" => crate::overlay::offer_at(
+                &hook::ghost_hint("!=", "≠"),
+                crate::overlay::Anchor::Near(windows::Win32::Foundation::RECT {
+                    left: 330,
+                    top: 205,
+                    right: 331,
+                    bottom: 225,
+                }),
+            ),
+            "ghost-words" => crate::overlay::offer_at(
+                &hook::ghost_hint("x ยกกำลังสองบวก 1", "x² + 1"),
+                crate::overlay::Anchor::Near(windows::Win32::Foundation::RECT {
+                    left: 330,
+                    top: 205,
+                    right: 331,
+                    bottom: 225,
+                }),
+            ),
             "keys" => {
                 crate::onscreen::set_enabled(true);
                 for k in ["Ctrl+C", "Ctrl+V", "Ctrl+V", "Alt+Tab"] {

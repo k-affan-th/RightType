@@ -30,10 +30,14 @@
 //! - [`snippets`] — a short trigger becomes a longer text, on either keyboard.
 //! - [`sim`] — the hook's Auto pipeline replayed on a string, for benchmarks and tests.
 
+pub mod abbrev;
 pub mod accents;
 pub mod app_quality;
+pub mod atcaret;
 pub mod breaks;
 pub mod buffer;
+pub mod chars;
+pub mod charsets;
 pub mod chatter;
 pub mod code;
 pub mod compat;
@@ -41,12 +45,18 @@ pub mod detect;
 pub mod diag;
 pub mod dict;
 pub mod english;
+pub mod find;
+pub mod ghost;
 pub mod hotkeys;
 pub mod i18n;
 pub mod keyboard;
 pub mod keycast;
+pub mod latex;
 pub mod layout;
+pub mod macros;
+pub mod mathsimple;
 pub mod motion;
+pub mod naturalmath;
 pub mod per_app;
 pub mod policy;
 pub mod predict;
@@ -59,6 +69,7 @@ pub mod shortcuts;
 pub mod sim;
 pub mod snippets;
 pub mod spelling;
+pub mod summon;
 pub mod thai_text;
 pub mod timing;
 pub mod trainer;

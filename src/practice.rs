@@ -84,7 +84,23 @@ struct Game {
     speed: f32,
     last_ms: u64,
     over: bool,
+    /// Words typed right in a row (a miss or a word reaching the ground
+    /// ends it): each word scores more the longer it runs.
+    combo: u32,
+    best_combo: u32,
+    /// Every 8 words: a level, and faster.
+    words: u32,
+    level: u32,
+    /// Points rising from where a word was finished: (x, y, text, when).
+    pops: Vec<(i32, f32, String, u64)>,
+    /// When the last miss was, for a short shake of the word.
+    missed_at: Option<u64>,
 }
+
+/// How long a word's points rise and fade (ms).
+const POP_MS: u64 = 700;
+/// Red for what is about to land, and for a miss.
+const DANGER: Rgb = 0xE0_4F_4F;
 
 struct State {
     board: Board,
@@ -117,21 +133,24 @@ impl State {
     /// Fresh words for the lesson, and a new text or game.
     fn new_round(&mut self) {
         let lesson = self.lesson_value();
-        self.words = match self.board {
-            Board::English => {
-                trainer::lesson_words(self.board, lesson, righttype::dict::english_words())
-            }
-            _ => trainer::lesson_words(self.board, lesson, righttype::dict::thai_words()),
-        };
+        self.words = trainer::words_for(self.board, lesson);
         let count = if self.mode == Mode::Timed { 160 } else { 24 };
-        self.text = trainer::practice_text(
-            self.board,
-            lesson,
-            &self.words,
-            &self.misses,
-            count,
-            &mut self.rng,
-        );
+        // The whole keyboard, or a minute against the clock: real sentences.
+        let whole_keyboard = lesson == *trainer::lessons(self.board).last().unwrap_or(&lesson)
+            && !matches!(lesson, Lesson::ThaiDigits | Lesson::ThaiMarks);
+        let sentences = (self.mode == Mode::Timed || whole_keyboard)
+            .then(|| trainer::sentence_text(self.board, count.min(60), &mut self.rng))
+            .flatten();
+        self.text = sentences.unwrap_or_else(|| {
+            trainer::practice_text(
+                self.board,
+                lesson,
+                &self.words,
+                &self.misses,
+                count,
+                &mut self.rng,
+            )
+        });
         self.session = Session::new(&self.text);
         self.timed_until = None;
         self.result = None;
@@ -144,6 +163,12 @@ impl State {
             speed: 0.06,
             last_ms: self.now_ms(),
             over: false,
+            combo: 0,
+            best_combo: 0,
+            words: 0,
+            level: 1,
+            pops: Vec::new(),
+            missed_at: None,
         });
     }
 
@@ -233,6 +258,46 @@ pub fn request_open() {
     }
     unsafe {
         SetTimer(None, 0, 1, Some(fire));
+    }
+}
+
+/// Open on the game in full swing (debug renders).
+#[cfg(debug_assertions)]
+pub fn open_game_demo() {
+    open();
+    STATE.with(|st| {
+        let mut st = st.borrow_mut();
+        let Some(s) = st.as_mut() else {
+            return;
+        };
+        s.mode = Mode::Game;
+        s.new_round();
+        let now = s.now_ms();
+        if let Some(g) = s.game.as_mut() {
+            // Far in the future: the demo stays still for the screenshot.
+            g.next_at = u64::MAX;
+            g.speed = 0.0;
+            g.score = 27;
+            g.combo = 7;
+            g.level = 3;
+            g.lives = 2;
+            for (text, x, y, typed) in [
+                ("ขอบคุณ", 120, 0.15, 0),
+                ("สวัสดี", 430, 0.42, 3),
+                ("พรุ่งนี้", 700, 0.86, 0),
+            ] {
+                g.falling.push(Fall {
+                    text: text.chars().collect(),
+                    x,
+                    y,
+                    typed,
+                });
+            }
+            g.pops.push((600, 0.6, "+2".into(), now));
+        }
+    });
+    if let Some(p) = CURRENT.with(|c| c.borrow().clone()) {
+        repaint(&p);
     }
 }
 
@@ -575,17 +640,29 @@ fn key(p: &Rc<Practice>, us: Option<char>, vk: u16) {
                     count_key(s.board, c, true);
                     game.falling[i].typed += 1;
                     if game.falling[i].typed == game.falling[i].text.len() {
-                        game.falling.remove(i);
-                        game.score += 1;
-                        // Faster as it goes.
-                        game.speed = (game.speed * 1.05).min(0.3);
-                        game.gap = (game.gap * 95 / 100).max(700);
+                        let done = game.falling.remove(i);
+                        game.combo += 1;
+                        game.best_combo = game.best_combo.max(game.combo);
+                        // One point a word, one more for every 5 in a row.
+                        let points = 1 + (game.combo / 5).min(4);
+                        game.score += points;
+                        game.pops.push((done.x, done.y, format!("+{points}"), now));
+                        game.words += 1;
+                        if game.words % 8 == 0 {
+                            game.level += 1;
+                            game.speed = (game.speed * 1.12).min(0.3);
+                            game.gap = (game.gap * 88 / 100).max(700);
+                        } else {
+                            game.speed = (game.speed * 1.02).min(0.3);
+                        }
                     }
                 }
                 Some(i) => {
                     let due = game.falling[i].text[game.falling[i].typed];
                     *s.misses.entry(due).or_insert(0) += 1;
                     count_key(s.board, due, false);
+                    game.combo = 0;
+                    game.missed_at = Some(now);
                 }
                 None => {}
             }
@@ -687,6 +764,10 @@ fn tick(p: &Rc<Practice>) {
         let fallen = game.falling.iter().filter(|f| f.y >= 1.0).count() as u8;
         game.falling.retain(|f| f.y < 1.0);
         game.lives = game.lives.saturating_sub(fallen);
+        if fallen > 0 {
+            game.combo = 0;
+        }
+        game.pops.retain(|p| now.saturating_sub(p.3) < POP_MS);
         if game.lives == 0 {
             game.over = true;
             return (true, false);
@@ -1022,15 +1103,27 @@ fn paint_game(
     let Some(game) = s.game.as_ref() else {
         return;
     };
+    let now = s.now_ms();
     let top = TEXT_Y;
     let height = FOOT_Y - 20 - top;
     ui::card(g, ui::rect(PAD, top, W - 2 * PAD, height));
+    let one = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+    // A miss shakes the word being typed for a moment.
+    let shake = game
+        .missed_at
+        .map(|at| now.saturating_sub(at))
+        .filter(|&ms| ms < 240)
+        .map_or(0, |ms| if (ms / 40) % 2 == 0 { 4 } else { -4 });
     for f in &game.falling {
         let y = top + 8 + (f.y * (height - 52) as f32) as i32;
         let done: String = f.text[..f.typed].iter().collect();
         let rest: String = f.text[f.typed..].iter().collect();
-        let mut x = ui::px(f.x);
-        for (part, color) in [(done, p.accent), (rest, p.text)] {
+        let dx = if f.typed > 0 { shake } else { 0 };
+        let mut x = ui::px(f.x + dx);
+        // Redder the closer it is to the ground.
+        let near = ((f.y - 0.6).max(0.0) / 0.4 * 100.0) as u8;
+        let ink = ui::blend(p.text, DANGER, near);
+        for (part, color) in [(done, p.accent), (rest, ink)] {
             if part.is_empty() {
                 continue;
             }
@@ -1046,10 +1139,18 @@ fn paint_game(
                 },
                 big,
                 color,
-                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
+                one,
             );
             x += w;
         }
+    }
+    // Points rising and fading where each word was finished.
+    for (x, fy, text, at) in &game.pops {
+        let age = now.saturating_sub(*at).min(POP_MS);
+        let rise = (age * 30 / POP_MS) as i32;
+        let y = top + 8 + (fy * (height - 52) as f32) as i32 - rise;
+        let color = ui::blend(p.accent, p.surface, (age * 100 / POP_MS) as u8);
+        ui::text(hdc, text, ui::rect(*x, y, 80, 36), big, color, one);
     }
     // The ground.
     g.fill_round(
@@ -1058,13 +1159,26 @@ fn paint_game(
         p.toggle_off,
     );
     let status = if game.over {
-        trf(T::PracticeGameOver, &[("n", &game.score.to_string())])
-    } else {
         format!(
             "{}   ·   {}",
-            trf(T::PracticeGameScore, &[("n", &game.score.to_string())]),
-            trf(T::PracticeLives, &[("n", &game.lives.to_string())])
+            trf(T::PracticeGameOver, &[("n", &game.score.to_string())]),
+            trf(T::PracticeBestCombo, &[("n", &game.best_combo.to_string())])
         )
+    } else {
+        let hearts: String = "♥".repeat(game.lives as usize);
+        let mut line = format!(
+            "{}   ·   {}   ·   {}",
+            trf(T::PracticeGameScore, &[("n", &game.score.to_string())]),
+            trf(T::PracticeLevel, &[("n", &game.level.to_string())]),
+            hearts
+        );
+        if game.combo >= 2 {
+            line = format!(
+                "{}   ·   {line}",
+                trf(T::PracticeCombo, &[("n", &game.combo.to_string())])
+            );
+        }
+        line
     };
     // Top-right of the game area, out of the words' way.
     ui::text(
@@ -1072,7 +1186,11 @@ fn paint_game(
         &status,
         ui::rect(PAD + 16, top + 10, W - 2 * PAD - 32, 28),
         body,
-        p.text_dim,
+        if game.combo >= 5 {
+            p.accent
+        } else {
+            p.text_dim
+        },
         windows::Win32::Graphics::Gdi::DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
     );
 }

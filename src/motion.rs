@@ -61,6 +61,15 @@ fn progress(elapsed_ms: u32, total_ms: u32) -> f32 {
     (elapsed_ms as f32 / total_ms as f32).clamp(0.0, 1.0)
 }
 
+/// How long a selection takes to slide to the next row.
+pub const SLIDE_MS: u32 = 110;
+
+/// How far (0 to 1) a slide that started `elapsed_ms` ago has gone,
+/// easing out: quick at first, settling gently.
+pub fn slide(elapsed_ms: u32) -> f32 {
+    ease_out_cubic(progress(elapsed_ms, SLIDE_MS))
+}
+
 fn ease_out_cubic(t: f32) -> f32 {
     1.0 - (1.0 - t).powi(3)
 }
@@ -90,6 +99,14 @@ mod tests {
         assert!(frame(Phase::Exit, EXIT_MS * 3 / 4).alpha < 130);
         let gone = frame(Phase::Exit, EXIT_MS + 50);
         assert_eq!((gone.alpha, gone.done), (0, true));
+    }
+
+    #[test]
+    fn a_slide_settles() {
+        assert_eq!(slide(0), 0.0);
+        assert!(slide(SLIDE_MS / 3) > 0.5);
+        assert_eq!(slide(SLIDE_MS), 1.0);
+        assert_eq!(slide(SLIDE_MS * 4), 1.0);
     }
 
     #[test]

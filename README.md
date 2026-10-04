@@ -116,6 +116,23 @@ found automatically. Dvorak and other layouts are left alone: RightType stays of
 while one is active. Hotkeys can be changed in Settings → Hotkeys, and each app
 can have its own mode (Settings → Apps).
 
+**At the text cursor** (2.4):
+
+- Press **Shift twice** for a list where you type: any character by name in
+  Thai or English, your snippets, and the app's own commands (Enter runs one
+  and shows its shortcut for next time). Empty, it is a grid of the
+  characters you pinned and used lately.
+- **Ghost suggestions**: `->`, `!=`, `x^2`, `\alpha` and math said in words
+  (`x ยกกำลังสองบวก 1`) show what they can become; **Tab** writes it.
+- **Math**: said in words (Thai or English), written short like Word's
+  equation editor (`x^(3/2) + (2x)/8 + Sigma_(i=1)^(n) X_i`), or LaTeX —
+  as Unicode anywhere, or in Word, PowerPoint and OneNote as a real equation
+  or with superscript formatting.
+- **Tap Right Alt** after a character for its others (`2` → ² ₂ ⅔,
+  `e` → é è ê ë); **Ctrl+P** in the list pins one to a key.
+- **Macros**: snippets with steps — `{กด Ctrl+B}`, `{รอ 300}`,
+  `{คำสั่ง ตัวหนา}`, `{สไตล์ Heading 1}`, `{คลิปบอร์ด}`.
+
 **Keyboard tools** (Settings → Tools, or the command palette `Ctrl`+`Alt`+`Space`):
 
 - **Typing practice** for Kedmanee, Pattachote, Manoonchai or English: a row of
@@ -201,15 +218,15 @@ rather than a blanket ban on every individual BIP39 word.
 (once winget has accepted the release).
 
 **Installer (recommended, per-user, no admin):** download
-`RightType-2.3.0-setup.exe` from the
+`RightType-2.4.0-setup.exe` from the
 [latest release](https://github.com/k-affan-th/RightType/releases/latest) and run it.
 It installs RightType, offers a desktop shortcut and start-at-login, and registers
 a normal Windows uninstaller (Settings -> Apps -> RightType).
 
-**Windows on ARM** (Surface Pro X, Copilot+ PCs): use `RightType-2.3.0-arm64-setup.exe`
-or `RightType-2.3.0-arm64.zip`.
+**Windows on ARM** (Surface Pro X, Copilot+ PCs): use `RightType-2.4.0-arm64-setup.exe`
+or `RightType-2.4.0-arm64.zip`.
 
-**Portable zip:** extract `RightType-2.3.0-x64.zip` and run `righttype.exe` where it
+**Portable zip:** extract `RightType-2.4.0-x64.zip` and run `righttype.exe` where it
 sits. Put an empty file named `portable` next to it and settings and learned
 words stay in a `data` folder beside it (for a USB stick) instead of
 `%APPDATA%\RightType`. Or install it per-user from the extracted folder:
@@ -225,7 +242,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -Autostart
 - Verify what you downloaded against `SHA256.txt` before running it:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\RightType-2.3.0-setup.exe
+Get-FileHash -Algorithm SHA256 .\RightType-2.4.0-setup.exe
 ```
 - Unsigned builds show a SmartScreen prompt — "More info → Run anyway".
   Code signing is planned for a later release.

@@ -183,6 +183,81 @@ pub fn lesson_words<'a>(
         .collect()
 }
 
+/// Everyday words, most useful first: the Thai ones written for practice
+/// (`assets/th_common.txt`), the English ones the most frequent of the
+/// bundled list.
+fn everyday_words(board: Board) -> Vec<&'static str> {
+    match board {
+        Board::English => crate::dict::english_words().take(5000).collect(),
+        Board::Thai(_) => include_str!("../assets/th_common.txt")
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect(),
+    }
+}
+
+/// The words a lesson practises: everyday words first, so the practice is
+/// words people really write (the whole dictionary gave หาดก, ทระนาว,
+/// `coiiier`); the whole dictionary only when too few everyday words use
+/// just the lesson's keys.
+pub fn words_for(board: Board, lesson: Lesson) -> Vec<String> {
+    let everyday = lesson_words(board, lesson, everyday_words(board).into_iter());
+    if everyday.len() >= 12 {
+        return everyday;
+    }
+    match board {
+        Board::English => lesson_words(board, lesson, crate::dict::english_words()),
+        Board::Thai(_) => lesson_words(board, lesson, crate::dict::thai_words()),
+    }
+}
+
+/// Real sentences to type on `board` (chat, work, everyday), those it can
+/// type every character of.
+pub fn sentences(board: Board) -> Vec<&'static str> {
+    let want = match board {
+        Board::English => "[en]",
+        Board::Thai(_) => "[th]",
+    };
+    let mut on = false;
+    include_str!("../assets/practice_sentences.txt")
+        .lines()
+        .map(str::trim)
+        .filter(|l| {
+            if l.starts_with('[') {
+                on = *l == want;
+                return false;
+            }
+            on && !l.is_empty() && !l.starts_with('#')
+        })
+        .filter(|l| l.chars().all(|c| c == ' ' || board.key_of(c).is_some()))
+        .collect()
+}
+
+/// Sentences for a run of about `words` words, none again before all have
+/// come.
+pub fn sentence_text(board: Board, words: usize, rng: &mut Rng) -> Option<String> {
+    let all = sentences(board);
+    if all.len() < 2 {
+        return None;
+    }
+    // Shuffled, each once, before any comes back.
+    let mut order: Vec<usize> = (0..all.len()).collect();
+    for i in (1..order.len()).rev() {
+        order.swap(i, rng.below(i + 1));
+    }
+    let mut out: Vec<&str> = Vec::new();
+    let mut count = 0;
+    for &i in order.iter().cycle() {
+        if count >= words {
+            break;
+        }
+        count += all[i].split(' ').count();
+        out.push(all[i]);
+    }
+    Some(out.join(" "))
+}
+
 /// Practice text: `count` items from `words`, more often those holding the
 /// keys missed most (`misses`, by character); when there are too few words
 /// for the lesson (the first rows), short drills of its characters.
@@ -496,6 +571,28 @@ pub fn key_stats_from_text(text: &str) -> KeyStats {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn practice_is_everyday_words_and_real_sentences() {
+        use crate::layout::ThaiVariant;
+        let th = Board::Thai(ThaiVariant::Kedmanee);
+        let words = super::words_for(
+            th,
+            Lesson::Rows {
+                rows: 5,
+                shift: false,
+            },
+        );
+        assert!(words.iter().any(|w| w == "ไป"), "{:?}", &words[..5]);
+        assert!(!words.iter().any(|w| w == "ทระนาว"));
+        let text = super::sentence_text(th, 30, &mut super::Rng::new(1)).unwrap();
+        let parts: Vec<&str> = super::sentences(th)
+            .into_iter()
+            .filter(|s| text.contains(s))
+            .collect();
+        assert!(parts.len() >= 3);
+        assert!(super::sentences(Board::English).len() >= 10);
+    }
+
     use super::*;
 
     const KED: Board = Board::Thai(ThaiVariant::Kedmanee);

@@ -163,6 +163,57 @@ fn menu_shortcuts(hwnd: HWND) -> Vec<Entry> {
     out
 }
 
+/// The commands of the app in `target` with their keys, in the interface
+/// language: its menus', then the bundled table's (keys the menu already
+/// named skipped), then Windows'. For the list at the cursor (2.4 E).
+pub fn app_commands(target: HWND) -> Vec<righttype::atcaret::Command> {
+    let exe = unsafe { crate::safety::foreground_exe(target) }.unwrap_or_default();
+    let thai = lang() == Lang::Th;
+    let mut all: Vec<righttype::atcaret::Command> = menu_shortcuts(target)
+        .into_iter()
+        .map(|e| righttype::atcaret::Command {
+            name: e.what,
+            keys: e.keys,
+            other: String::new(),
+        })
+        .collect();
+    for s in righttype::shortcuts::for_app(&exe) {
+        if !all.iter().any(|c| c.keys == s.keys) {
+            let (name, other) = if thai { (s.th, s.en) } else { (s.en, s.th) };
+            all.push(righttype::atcaret::Command {
+                name,
+                keys: s.keys,
+                other,
+            });
+        }
+    }
+    all
+}
+
+/// Bring `target` back to the front and press `keys` (`Ctrl+H`) in it, a
+/// moment later. Whether the keys were known.
+pub fn press_in(target: isize, keys: &str) -> bool {
+    let Some(keys) = righttype::shortcuts::virtual_keys(keys) else {
+        return false;
+    };
+    thread_local! {
+        static PENDING: RefCell<Vec<u16>> = const { RefCell::new(Vec::new()) };
+    }
+    PENDING.with(|p| *p.borrow_mut() = keys);
+    unsafe extern "system" fn press(_: HWND, _: u32, id: usize, _: u32) {
+        let _ = KillTimer(None, id);
+        let keys = PENDING.with(|p| std::mem::take(&mut *p.borrow_mut()));
+        crate::hook::trace_note("shortcut list: shortcut pressed");
+        crate::inject::press_chord(&keys);
+    }
+    unsafe {
+        let _ = SetForegroundWindow(HWND(target as *mut _));
+        // A moment for the app to take the focus back first.
+        SetTimer(None, 0, 150, Some(press));
+    }
+    true
+}
+
 fn close(sheet: &Rc<Sheet>) {
     OPEN.store(0, std::sync::atomic::Ordering::Release);
     TARGET.store(0, std::sync::atomic::Ordering::Release);
@@ -187,18 +238,13 @@ fn open() {
     };
     let exe = unsafe { crate::safety::foreground_exe(target) }.unwrap_or_default();
     let app = exe.trim_end_matches(".exe").to_string();
-    // The menu's own, then the table's (skipping keys the menu already
-    // named), then Windows'.
-    let mut all = menu_shortcuts(target);
-    let thai = lang() == Lang::Th;
-    for s in righttype::shortcuts::for_app(&exe) {
-        if !all.iter().any(|e| e.keys == s.keys) {
-            all.push(Entry {
-                keys: s.keys,
-                what: if thai { s.th } else { s.en },
-            });
-        }
-    }
+    let all: Vec<Entry> = app_commands(target)
+        .into_iter()
+        .map(|c| Entry {
+            keys: c.keys,
+            what: c.name,
+        })
+        .collect();
     ui::refresh();
     let mut window = nwg::Window::default();
     let title = trf(T::SheetTitle, &[("app", &app)]);
@@ -409,24 +455,7 @@ fn run(sheet: &Rc<Sheet>, row: usize) {
     let target = sheet.target;
     CURRENT.with(|c| c.borrow_mut().take());
     close(sheet);
-    let Some(keys) = righttype::shortcuts::virtual_keys(&entry.keys) else {
-        return;
-    };
-    thread_local! {
-        static PENDING: RefCell<Vec<u16>> = const { RefCell::new(Vec::new()) };
-    }
-    PENDING.with(|p| *p.borrow_mut() = keys);
-    unsafe extern "system" fn press(_: HWND, _: u32, id: usize, _: u32) {
-        let _ = KillTimer(None, id);
-        let keys = PENDING.with(|p| std::mem::take(&mut *p.borrow_mut()));
-        crate::hook::trace_note("shortcut list: shortcut pressed");
-        crate::inject::press_chord(&keys);
-    }
-    unsafe {
-        let _ = SetForegroundWindow(HWND(target as *mut _));
-        // A moment for the app to take the focus back first.
-        SetTimer(None, 0, 150, Some(press));
-    }
+    press_in(target, &entry.keys);
 }
 
 fn paint(g: &Gfx, _hdc: HDC, _rc: RECT, _page: u8) {

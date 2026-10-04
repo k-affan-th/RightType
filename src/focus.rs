@@ -383,12 +383,10 @@ unsafe extern "system" fn on_focus(
         hwnd.0 as usize
     ));
     wake_worker();
-    // One of RightType's own windows: a settings page follows Tab, and the
-    // focus worker leaves it alone (see `on_focus_inner`).
+    // One of RightType's own windows: a settings page follows Tab.
     let own = !hwnd.0.is_null()
         && windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(hwnd, None)
             == windows::Win32::System::Threading::GetCurrentThreadId();
-    OWN_FOCUS.store(own, Ordering::Release);
     if own {
         crate::ui::focus_moved_to(hwnd);
     }
@@ -398,20 +396,28 @@ unsafe extern "system" fn on_focus(
 /// The field key standing for "one of RightType's own windows".
 const OWN_FIELD: u64 = 1;
 
-/// The latest focus event came from one of RightType's own windows.
-static OWN_FOCUS: AtomicBool = AtomicBool::new(false);
-
-/// Is the focus (or the window in front) one of RightType's own?
+/// Is the keyboard focus in one of RightType's own windows? Asked of
+/// Windows (the focused window of the thread in front), not taken from the
+/// focus event: RightType's hints (the Suggest pill, the TH/EN tag) raise
+/// focus events of their own while the app keeps the focus, and taking those
+/// for the focus left Chrome's fields unchecked (CI: Tab completion and Why?
+/// failed on the test page).
 unsafe fn own_window_in_front() -> bool {
-    if OWN_FOCUS.load(Ordering::Acquire) {
-        return true;
-    }
-    let fg = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
-    if fg.0.is_null() {
+    use windows::Win32::UI::WindowsAndMessaging::{GetGUIThreadInfo, GUITHREADINFO};
+    let mut info = GUITHREADINFO {
+        cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+        ..Default::default()
+    };
+    let focused = if GetGUIThreadInfo(0, &mut info).is_ok() && !info.hwndFocus.0.is_null() {
+        info.hwndFocus
+    } else {
+        windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow()
+    };
+    if focused.0.is_null() {
         return false;
     }
     let mut pid = 0u32;
-    windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(fg, Some(&mut pid));
+    windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(focused, Some(&mut pid));
     pid == windows::Win32::System::Threading::GetCurrentProcessId()
 }
 
@@ -759,6 +765,52 @@ pub fn field_boxes(spans: &[(usize, usize)]) -> Vec<Option<windows::Win32::Found
         .collect()
 }
 
+/// Select the `nth` (from 0) place `word` appears in the focused field,
+/// found by its text through UI Automation, and check the selection holds
+/// just that. Text, not character counts: one UI Automation "character"
+/// can be a whole Thai cluster in some apps (Word), so counted positions
+/// would land on the wrong letters. Any thread but the keyboard hook's.
+pub fn select_in_field(word: &str, nth: usize) -> bool {
+    use windows::core::BSTR;
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationTextPattern, TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
+        UIA_TextPatternId,
+    };
+    let select = || unsafe {
+        let element = uia_here()?.GetFocusedElement().ok()?;
+        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
+            return None;
+        }
+        let pattern = element
+            .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+            .ok()?;
+        let search = pattern.DocumentRange().ok()?;
+        let needle = BSTR::from(word);
+        for i in 0..=nth {
+            let found = search.FindText(&needle, false, false).ok()?;
+            if i == nth {
+                let mut shown = found.GetText(-1).ok()?.to_string();
+                let same = shown == word;
+                zeroize::Zeroize::zeroize(&mut shown);
+                if !same {
+                    return None;
+                }
+                found.Select().ok()?;
+                return Some(());
+            }
+            search
+                .MoveEndpointByRange(
+                    TextPatternRangeEndpoint_Start,
+                    &found,
+                    TextPatternRangeEndpoint_End,
+                )
+                .ok()?;
+        }
+        None
+    };
+    select().is_some()
+}
+
 /// The focused standard Windows text box (Edit, RichEdit: classic and
 /// Windows 11 Notepad, WordPad, many dialogs), which can be asked and told
 /// things directly with its own messages — Windows copies their text
@@ -839,6 +891,47 @@ impl TextBox {
             )
         };
         (ok.0 != 0).then_some(result)
+    }
+
+    /// The box's whole text. Outside the keyboard hook.
+    pub fn text(&self) -> Option<zeroize::Zeroizing<String>> {
+        use windows::Win32::UI::WindowsAndMessaging::{WM_GETTEXT, WM_GETTEXTLENGTH};
+        use zeroize::Zeroize;
+        let len = self.ask(WM_GETTEXTLENGTH, 0, 0)?.min(0xFFFF);
+        let mut units = vec![0u16; len + 1];
+        let got = self
+            .ask(WM_GETTEXT, units.len(), units.as_mut_ptr() as isize)?
+            .min(len);
+        let text = zeroize::Zeroizing::new(String::from_utf16_lossy(&units[..got]));
+        units.zeroize();
+        Some(text)
+    }
+
+    /// Replace the UTF-16 units `from..to` of the box's text with `text`, as
+    /// one edit it can undo — only if they still hold `expect`. Outside the
+    /// keyboard hook. A RichEdit box counts a line break as one position and
+    /// its text as two: a range after a line break there is refused.
+    pub fn replace_range(&self, from: usize, to: usize, expect: &str, text: &str) -> bool {
+        const EM_SETSEL: u32 = 0x00B1;
+        const EM_REPLACESEL: u32 = 0x00C2;
+        let Some(now) = self.text() else {
+            return false;
+        };
+        let units: Vec<u16> = now.encode_utf16().collect();
+        let holds = units
+            .get(from..to)
+            .is_some_and(|u| u.iter().copied().eq(expect.encode_utf16()));
+        if !holds || (self.rich && units[..from].contains(&(b'\n' as u16))) {
+            return false;
+        }
+        if self.ask(EM_SETSEL, from, to as isize).is_none() || self.selection() != Some((from, to))
+        {
+            return false;
+        }
+        let mut wide: zeroize::Zeroizing<Vec<u16>> =
+            zeroize::Zeroizing::new(text.encode_utf16().chain(std::iter::once(0)).collect());
+        self.ask(EM_REPLACESEL, 1, wide.as_mut_ptr() as isize)
+            .is_some()
     }
 
     /// The selection, in UTF-16 positions (16 bits each: EM_GETSEL's limit).
@@ -1081,6 +1174,8 @@ enum ContextAsk {
     ),
     /// Is text selected in the focused field?
     Selected(std::sync::mpsc::SyncSender<bool>),
+    /// Where the text cursor is, by UI Automation.
+    Caret(std::sync::mpsc::SyncSender<Option<windows::Win32::Foundation::RECT>>),
 }
 static CONTEXT_WORKER: std::sync::OnceLock<std::sync::mpsc::SyncSender<ContextAsk>> =
     std::sync::OnceLock::new();
@@ -1103,6 +1198,20 @@ pub fn has_selection_within(max: std::time::Duration) -> bool {
 /// cross-process calls itself: asked of a worker, waiting at most `max`
 /// (`None` past that — the caller treats it as "cannot tell"). Code mode
 /// asks this at a word's end, only for a word it would otherwise fix.
+/// The text cursor by UI Automation, asked of the context worker and waited
+/// for at most `max`. UI Automation waits on the app (seconds for a busy
+/// one), and the UI thread runs the keyboard hook: while it waits there,
+/// Windows gives up on the hook and the keys go straight to the app (CI:
+/// `eg` of a search reached Notepad while the list at the cursor looked for
+/// the caret). `None` past `max`, or when the worker is busy.
+pub fn uia_caret_rect_within(max: std::time::Duration) -> Option<windows::Win32::Foundation::RECT> {
+    let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+    context_worker()
+        .try_send(ContextAsk::Caret(reply_tx))
+        .ok()?;
+    reply_rx.recv_timeout(max).ok().flatten()
+}
+
 pub fn text_before_caret_within(
     n: usize,
     max: std::time::Duration,
@@ -1130,6 +1239,9 @@ fn context_worker() -> &'static std::sync::mpsc::SyncSender<ContextAsk> {
                         }
                         ContextAsk::Selected(reply) => {
                             let _ = reply.try_send(uia_selected_text().is_some());
+                        }
+                        ContextAsk::Caret(reply) => {
+                            let _ = reply.try_send(uia_caret_rect());
                         }
                         ContextAsk::Boxes(spans, reply) => {
                             let _ = reply.try_send(boxes_before_caret(&spans));
@@ -1345,7 +1457,7 @@ fn edit_text_before_caret(n: usize) -> Option<zeroize::Zeroizing<String>> {
 /// pixels — for apps that draw their own cursor and keep no system caret
 /// (many Chromium/Electron editors). Slow (a cross-process call), so never
 /// called from inside the keyboard hook.
-pub fn uia_caret_rect() -> Option<windows::Win32::Foundation::RECT> {
+fn uia_caret_rect() -> Option<windows::Win32::Foundation::RECT> {
     use windows::Win32::UI::Accessibility::{
         IUIAutomationTextPattern, IUIAutomationTextRange, TextUnit_Character, UIA_TextPatternId,
     };

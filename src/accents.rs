@@ -7,36 +7,71 @@
 pub fn choices(typed: char) -> Option<Vec<String>> {
     let lower = typed.to_lowercase().next()?;
     let base: &[&str] = match lower {
-        '.' => &["…", "·", "•"],
-        '-' => &["–", "—", "±"],
-        '"' => &["“", "”", "„"],
-        '\'' => &["‘", "’"],
-        '$' => &["฿", "€", "£", "¥"],
-        '*' => &["×"],
-        '/' => &["÷"],
-        'a' => &["á", "à", "â", "ä", "ã"],
-        'e' => &["é", "è", "ê", "ë"],
-        'i' => &["í", "ì", "î", "ï"],
-        'o' => &["ó", "ò", "ô", "ö", "õ"],
-        'u' => &["ú", "ù", "û", "ü"],
-        'n' => &["ñ"],
-        'c' => &["ç"],
+        // Digits: raised, lowered, fractions, Thai — ¹²³⁴ and x₂ as easily
+        // as on a phone keyboard.
+        '0' => &["⁰", "₀", "๐", "°"],
+        '1' => &["¹", "₁", "½", "¼", "๑"],
+        '2' => &["²", "₂", "⅔", "๒"],
+        '3' => &["³", "₃", "¾", "⅓", "๓"],
+        '4' => &["⁴", "₄", "๔"],
+        '5' => &["⁵", "₅", "๕"],
+        '6' => &["⁶", "₆", "๖"],
+        '7' => &["⁷", "₇", "๗"],
+        '8' => &["⁸", "₈", "๘", "∞"],
+        '9' => &["⁹", "₉", "๙"],
+        // Maths.
+        '+' => &["±", "⁺", "₊"],
+        '-' => &["–", "—", "−", "±", "⁻", "₋"],
+        '=' => &["≠", "≈", "≡", "≤", "≥", "⁼"],
+        '<' => &["≤", "←", "«", "‹"],
+        '>' => &["≥", "→", "»", "›"],
+        '(' => &["⁽", "₍"],
+        ')' => &["⁾", "₎"],
+        '*' => &["×", "•", "★"],
+        '/' => &["÷", "⁄", "½"],
+        '^' => &["°", "ˆ"],
+        '~' => &["≈", "∼"],
+        '%' => &["‰", "°"],
+        '!' => &["¡", "≠"],
+        '?' => &["¿"],
+        '#' => &["№", "♯"],
+        '.' => &["…", "·", "•", "°"],
+        '"' => &["“", "”", "„", "«", "»"],
+        '\'' => &["‘", "’", "‚"],
+        '$' => &["฿", "€", "£", "¥", "¢"],
+        // Letters.
+        'a' => &["á", "à", "â", "ä", "ã", "å", "æ", "ā", "α"],
+        'b' => &["β"],
+        'c' => &["ç", "ć", "č", "©"],
+        'd' => &["ð", "δ"],
+        'e' => &["é", "è", "ê", "ë", "ē", "ę", "€"],
+        'g' => &["ğ", "γ"],
+        'i' => &["í", "ì", "î", "ï", "ī"],
+        'l' => &["ł", "λ"],
+        'm' => &["µ"],
+        'n' => &["ñ", "ń", "ⁿ"],
+        'o' => &["ó", "ò", "ô", "ö", "õ", "ø", "œ", "ō", "°"],
+        'p' => &["π", "¶"],
+        'r' => &["®", "ř"],
+        's' => &["ß", "ś", "š", "§", "σ"],
+        't' => &["™", "θ", "þ"],
+        'u' => &["ú", "ù", "û", "ü", "ū"],
+        'x' => &["×", "ˣ"],
+        'y' => &["ý", "ÿ"],
+        'z' => &["ž", "ź", "ż"],
         'ๆ' => &["ฯ", "ฯลฯ"],
-        '0'..='9' => {
-            let thai = char::from_u32('๐' as u32 + (lower as u32 - '0' as u32))?;
-            return Some(vec![thai.to_string()]);
-        }
         _ => return None,
     };
     let capital = typed != lower;
     Some(
         base.iter()
-            .map(|s| {
-                if capital {
-                    s.to_uppercase()
-                } else {
-                    s.to_string()
+            .filter_map(|s| {
+                if !capital {
+                    return Some(s.to_string());
                 }
+                // A capital where there is one of the same length (not ß → SS).
+                let up = s.to_uppercase();
+                (up.chars().count() == s.chars().count()).then_some(up)
             })
             .collect(),
     )
@@ -47,9 +82,9 @@ pub fn shown(choices: &[String]) -> String {
     choices
         .iter()
         .enumerate()
-        .map(|(i, c)| format!("{} {c}", i + 1))
+        .map(|(i, c)| format!("{}{c}", i + 1))
         .collect::<Vec<_>>()
-        .join("   ")
+        .join("  ")
 }
 
 #[cfg(test)]
@@ -58,10 +93,18 @@ mod tests {
 
     #[test]
     fn held_keys_offer_their_characters() {
-        assert_eq!(choices('.').unwrap(), ["…", "·", "•"]);
+        assert_eq!(choices('.').unwrap(), ["…", "·", "•", "°"]);
         assert_eq!(choices('e').unwrap()[0], "é");
         assert_eq!(choices('E').unwrap()[0], "É");
-        assert_eq!(choices('7').unwrap(), ["๗"]);
+        assert_eq!(choices('7').unwrap(), ["⁷", "₇", "๗"]);
+        assert_eq!(choices('2').unwrap()[0], "²");
+        assert_eq!(choices('=').unwrap()[0], "≠");
+        assert!(choices('S').unwrap().iter().all(|c| c.chars().count() == 1));
+        assert!(choices('x').unwrap().contains(&"×".to_string()));
+        // Never more than the number keys can pick.
+        for c in "0123456789+-=<>()*/^~%!?#.\"'$abcdegilmnoprstuxyzๆ".chars() {
+            assert!(choices(c).unwrap().len() <= 9, "{c}");
+        }
         assert_eq!(choices('$').unwrap()[0], "฿");
         assert_eq!(choices('ๆ').unwrap(), ["ฯ", "ฯลฯ"]);
         assert!(choices('k').is_none());
@@ -72,6 +115,6 @@ mod tests {
                 assert!(list.len() <= 9, "{c}");
             }
         }
-        assert_eq!(shown(&choices('.').unwrap()), "1 …   2 ·   3 •");
+        assert_eq!(shown(&choices('.').unwrap()), "1…  2·  3•  4°");
     }
 }

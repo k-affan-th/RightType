@@ -74,10 +74,15 @@ enum Style {
     /// A short tag (`TH` / `EN`) next to the caret: as narrow as its text and
     /// gone quickly, so it never sits over what is being typed.
     Badge,
+    /// Something Tab takes (a ghost suggestion): looks like [`Style::Pill`]
+    /// and stays exactly as long as Tab can take it ([`OFFER_MS`]).
+    Offer,
 }
 
 const BADGE_MIN_W: i32 = 44;
 const BADGE_MS: u32 = 800;
+/// How long an offer for Tab is shown, and can be taken.
+pub const OFFER_MS: u32 = 2000;
 
 /// Where the pill appears.
 #[derive(Clone, Copy, Debug)]
@@ -228,6 +233,11 @@ pub fn show_at(text: &str, anchor: Anchor) {
     show_styled(text, anchor, Style::Pill, false);
 }
 
+/// Show an offer Tab takes at `anchor`, for [`OFFER_MS`].
+pub fn offer_at(text: &str, anchor: Anchor) {
+    show_styled(text, anchor, Style::Offer, false);
+}
+
 /// Flash a short tag (`TH` / `EN`) just below `caret`. Always shown after the
 /// caller returns — the keyboard hook calls this, and must not wait for the
 /// window to move and repaint.
@@ -254,7 +264,7 @@ fn show_styled(text: &str, anchor: Anchor, style: Style, defer: bool) {
     let raw = TOAST_HWND.load(Ordering::Acquire);
     // Read out what is shown, but not the preview of a word still being
     // typed (a tag next to it, on every key).
-    if style == Style::Pill || !matches!(anchor, Anchor::Near(_)) {
+    if style != Style::Badge || !matches!(anchor, Anchor::Near(_)) {
         crate::announce::say(raw, text);
     }
     let hwnd = HWND(raw as *mut c_void);
@@ -401,6 +411,7 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
     let hold = match style {
         Style::Pill => (SHOW_MS_BASE + units.len() as u32 * 18).min(2400),
         Style::Badge => BADGE_MS,
+        Style::Offer => OFFER_MS,
     };
     STYLE.store(style == Style::Badge, Ordering::Relaxed);
     // Already on screen (and not leaving): move and hold again, without

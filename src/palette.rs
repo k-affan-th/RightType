@@ -305,6 +305,12 @@ struct Palette {
     visible: RefCell<Vec<usize>>,
     /// Which shown item Enter runs.
     selected: std::cell::Cell<usize>,
+    /// Each shown row and heading, and where it sits in the whole list
+    /// (96-DPI units): the list scrolls when it is taller than the screen.
+    places: RefCell<Vec<(HWND, i32, i32)>>,
+    scroll: std::cell::Cell<i32>,
+    /// How tall the window is (96-DPI units).
+    view: std::cell::Cell<i32>,
     /// What has been typed to filter the list.
     filter: RefCell<String>,
     /// The window that had focus, to return to.
@@ -387,19 +393,23 @@ pub fn key(vk: u16, ch: Option<char>) -> bool {
 /// Show the items that match the filter under their headings, numbered,
 /// packed from the top, and select the first.
 fn refilter(p: &Palette) {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        ShowWindow, SWP_NOMOVE, SWP_NOZORDER, SW_HIDE, SW_SHOW,
-    };
+    use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SWP_NOMOVE, SWP_NOZORDER, SW_HIDE};
     let filter = p.filter.borrow().to_lowercase();
     // Typed on the wrong keyboard still finds it (`fxw` and `ซ่อม` alike).
     let other = righttype::layout::auto_convert(&filter).to_lowercase();
     let searching = !filter.is_empty();
+    // A section opened with its row is a page of its own: only its rows,
+    // not appended under everything (the options ran off the screen).
+    let page = !searching && p.expanded.get() != 0;
     let shows = |i: usize| {
         let command = p.items[i].1;
         let section = p.item_sections[i];
         let open = p.expanded.get() & section.bit() != 0;
         if let Command::More(_) = command {
-            return !searching && !open;
+            return !searching && !open && !page;
+        }
+        if page && !open {
+            return false;
         }
         if p.item_folded[i] && !searching && !open {
             return false;
@@ -409,6 +419,7 @@ fn refilter(p: &Palette) {
     };
     let mut visible = Vec::new();
     let mut numbers = Vec::new();
+    let mut places: Vec<(HWND, i32, i32)> = Vec::new();
     let mut y = PAD + 28;
     for section in Section::ALL {
         let rows: Vec<usize> = (0..p.items.len())
@@ -417,27 +428,18 @@ fn refilter(p: &Palette) {
         let heading = p.headings.iter().find(|(s, _)| *s == section).map(|h| h.1);
         if let Some(id) = heading {
             let hwnd = p.surface.hwnd_of(id);
-            unsafe {
-                if rows.is_empty() {
+            if rows.is_empty() {
+                unsafe {
                     let _ = ShowWindow(hwnd, SW_HIDE);
-                } else {
-                    let _ = SetWindowPos(
-                        hwnd,
-                        None,
-                        ui::px(PAD + 8),
-                        ui::px(y + 4),
-                        0,
-                        0,
-                        SWP_NOSIZE | SWP_NOZORDER,
-                    );
-                    let _ = ShowWindow(hwnd, SW_SHOW);
-                    y += HEAD;
                 }
+            } else {
+                places.push((hwnd, PAD + 8, y + 4));
+                y += HEAD;
             }
         }
         for i in rows {
             let k = visible.len();
-            let number = (section.numbered() && numbers.len() < 9).then(|| {
+            let number = ((section.numbered() || page) && numbers.len() < 9).then(|| {
                 numbers.push(k);
                 numbers.len()
             });
@@ -447,18 +449,7 @@ fn refilter(p: &Palette) {
                 None => format!("\t{label}"),
             };
             p.surface.set_text(p.items[i].0, &text);
-            unsafe {
-                let _ = SetWindowPos(
-                    p.surface.hwnd_of(p.items[i].0),
-                    None,
-                    ui::px(PAD),
-                    ui::px(y),
-                    0,
-                    0,
-                    SWP_NOSIZE | SWP_NOZORDER,
-                );
-                let _ = ShowWindow(p.surface.hwnd_of(p.items[i].0), SW_SHOW);
-            }
+            places.push((p.surface.hwnd_of(p.items[i].0), PAD, y));
             y += ROW;
             visible.push(i);
         }
@@ -470,6 +461,20 @@ fn refilter(p: &Palette) {
             }
         }
     }
+    // No taller than the screen it is on: the list scrolls instead.
+    let whole = y.max(PAD + 28 + ROW) + PAD;
+    let screen = unsafe {
+        let wa = ui::work_area(windows::Win32::Graphics::Gdi::MonitorFromWindow(
+            p.surface.hwnd,
+            windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST,
+        ));
+        (wa.bottom - wa.top) * 100 / ui::px(100).max(1)
+    };
+    let view = whole.min(screen - 24).max(PAD + 28 + ROW * 3);
+    p.view.set(view);
+    p.scroll.set(0);
+    *p.places.borrow_mut() = places;
+    place_rows(p);
     unsafe {
         let _ = SetWindowPos(
             p.surface.hwnd,
@@ -477,14 +482,35 @@ fn refilter(p: &Palette) {
             0,
             0,
             ui::px(W),
-            ui::px(y.max(PAD + 28 + ROW) + PAD),
+            ui::px(view),
             SWP_NOMOVE | SWP_NOZORDER,
         );
+        // Kept on its screen as it grows.
+        let mut wr = RECT::default();
+        let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(p.surface.hwnd, &mut wr);
+        let wa = ui::work_area(windows::Win32::Graphics::Gdi::MonitorFromWindow(
+            p.surface.hwnd,
+            windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST,
+        ));
+        if wr.bottom > wa.bottom {
+            let top = (wa.bottom - (wr.bottom - wr.top)).max(wa.top);
+            let _ = SetWindowPos(
+                p.surface.hwnd,
+                None,
+                wr.left,
+                top,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOZORDER,
+            );
+        }
     }
     let typed = p.filter.borrow();
     p.surface.set_text(
         p.header,
-        &if typed.is_empty() {
+        &if page {
+            tr(T::PaletteBackHead).to_string()
+        } else if typed.is_empty() {
             tr(T::PaletteHead).to_string()
         } else {
             trf(T::PaletteFiltering, &[("text", &typed)])
@@ -505,6 +531,35 @@ fn number_of(p: &Palette, k: usize) -> Option<usize> {
         .map(|n| n + 1)
 }
 
+/// Put the shown rows and headings where they go, the list scrolled by
+/// `scroll`; those scrolled out of the window (or under the line at its
+/// top) are hidden.
+fn place_rows(p: &Palette) {
+    use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SWP_NOZORDER, SW_HIDE, SW_SHOW};
+    let (top, bottom) = (PAD + 28, p.view.get() - PAD);
+    let scroll = p.scroll.get();
+    for &(hwnd, x, y) in p.places.borrow().iter() {
+        let y = y - scroll;
+        let inside = y >= top - 4 && y + ROW - 4 <= bottom;
+        unsafe {
+            if inside {
+                let _ = SetWindowPos(
+                    hwnd,
+                    None,
+                    ui::px(x),
+                    ui::px(y),
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOZORDER,
+                );
+                let _ = ShowWindow(hwnd, SW_SHOW);
+            } else {
+                let _ = ShowWindow(hwnd, SW_HIDE);
+            }
+        }
+    }
+}
+
 /// Select the `k`-th shown item (keyboard focus on it).
 fn select(p: &Palette, k: usize) {
     let visible = p.visible.borrow();
@@ -514,6 +569,30 @@ fn select(p: &Palette, k: usize) {
     let k = k.min(visible.len() - 1);
     p.selected.set(k);
     let id = p.items[visible[k]].0;
+    // Scrolled so the selected row is in the window.
+    let row = p.surface.hwnd_of(id);
+    let at = p
+        .places
+        .borrow()
+        .iter()
+        .find(|(h, _, _)| *h == row)
+        .map(|&(_, _, y)| y);
+    if let Some(y) = at {
+        let (top, bottom) = (PAD + 28, p.view.get() - PAD);
+        let s = p.scroll.get();
+        let s = if y - s < top {
+            // A heading just above the first row comes into view with it.
+            (y - top - HEAD).max(0)
+        } else if y - s + ROW > bottom {
+            y + ROW - bottom
+        } else {
+            s
+        };
+        if s != p.scroll.get() {
+            p.scroll.set(s);
+            place_rows(p);
+        }
+    }
     unsafe {
         let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(p.surface.hwnd_of(id));
     }
@@ -523,6 +602,8 @@ fn select(p: &Palette, k: usize) {
             T::PaletteReviewHint
         } else if matches!(selected_command(p), Some(Command::History(_))) {
             T::PaletteHistoryHint
+        } else if p.expanded.get() != 0 {
+            T::PaletteBackHead
         } else {
             T::PaletteHead
         };
@@ -612,8 +693,12 @@ fn on_key(p: &Rc<Palette>, vk: u16, ch: Option<char>) {
         0x23 if n > 0 => select(p, n - 1),            // End
         0x1B => close(p, true),                       // Esc
         0x08 => {
-            // Backspace: un-type, or close when nothing is typed.
+            // Backspace: un-type; with nothing typed, back from a section's
+            // page to the first one.
             if p.filter.borrow_mut().pop().is_some() {
+                refilter(p);
+            } else if p.expanded.get() != 0 {
+                p.expanded.set(0);
                 refilter(p);
             }
         }
@@ -1270,6 +1355,9 @@ fn open_with(review: Option<Review>) {
         header,
         visible: RefCell::new(Vec::new()),
         selected: std::cell::Cell::new(0),
+        places: RefCell::new(Vec::new()),
+        scroll: std::cell::Cell::new(0),
+        view: std::cell::Cell::new(0),
         filter: RefCell::new(String::new()),
         previous: previous.0 as isize,
         app,

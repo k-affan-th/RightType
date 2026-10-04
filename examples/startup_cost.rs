@@ -64,4 +64,14 @@ fn main() {
         );
     }));
     println!("{:<28} {:>8.1} ms {:>8.2} MB", "total", total.0, total.1);
+    // 2.4: the character table, built the first time the list is used.
+    measure("character table (on use)", || {
+        chars::all();
+    });
+    for q in ["arrow", "ลูกศร", "x", "]^dLi"] {
+        let query = find::Query::new(q);
+        measure(&format!("search {q:?}"), || {
+            let _ = chars::search(&query, q, 8);
+        });
+    }
 }

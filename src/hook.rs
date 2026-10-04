@@ -24,7 +24,6 @@
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::Mutex;
-#[cfg(debug_assertions)]
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
@@ -531,6 +530,18 @@ pub(crate) fn snippet_now() -> righttype::snippets::Now {
 }
 
 unsafe fn expand_snippet(word: &str, vk: u16, text: &str) -> bool {
+    // A macro: take the trigger away, then the worker runs its steps (they
+    // wait and press keys, so not here on the hook).
+    if let Some(Ok(steps)) = righttype::macros::steps(text) {
+        let shown = policy::shown_with_caps(word, caps_on());
+        inject::expect_before_caret(&shown);
+        if !inject::apply(word.chars().count(), "", None) {
+            crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+            return false;
+        }
+        crate::manual::request_macro(GetForegroundWindow().0 as isize, steps, false);
+        return true;
+    }
     // Its date and time fields, for now.
     let now = snippet_now();
     let filled = zeroize::Zeroizing::new(righttype::snippets::fill(text, &now));
@@ -726,6 +737,331 @@ fn offer_completion() {
     }
     let mut run = run;
     run.zeroize();
+}
+
+/// Ghost suggestions (2.4 C): `->` offers →, `x^2` offers x², for Tab.
+static GHOSTS: AtomicBool = AtomicBool::new(true);
+
+pub fn ghosts() -> bool {
+    GHOSTS.load(Ordering::Relaxed)
+}
+
+pub fn set_ghosts(on: bool) {
+    GHOSTS.store(on, Ordering::Relaxed);
+    if !on {
+        ghost_forget();
+    }
+}
+
+struct GhostOffer {
+    replace: usize,
+    text: String,
+    hwnd: isize,
+    focus_generation: u64,
+    created: Instant,
+}
+
+thread_local! {
+    /// The text before the caret, for ghost suggestions: in memory only,
+    /// zeroized when let go (`righttype::ghost::Tail`).
+    static GHOST_TYPED: RefCell<righttype::ghost::Tail> =
+        const { RefCell::new(righttype::ghost::Tail::new()) };
+    static GHOST: RefCell<Option<GhostOffer>> = const { RefCell::new(None) };
+}
+
+/// Forget the text kept before the caret (never panics if it is in use).
+fn ghost_tail_forget() {
+    GHOST_TYPED.with(|t| {
+        if let Ok(mut t) = t.try_borrow_mut() {
+            t.forget();
+        }
+    });
+}
+
+fn ghost_forget() {
+    ghost_tail_forget();
+    if GHOST.with(|g| g.borrow_mut().take()).is_some() {
+        crate::overlay::dismiss();
+    }
+}
+
+/// Follows what a key did to the text before the caret: a character or a
+/// space adds to it, Backspace takes one off, anything else (Enter, Tab,
+/// arrows, a chord) forgets it. Taken back in [`ghost_settle`] if the key
+/// is kept from the app.
+fn ghost_track(key: Key, vk: u16) {
+    GHOST_TYPED.with(|t| {
+        let mut t = t.borrow_mut();
+        match key {
+            Key::Char(c) => t.typed(c),
+            Key::Backspace => t.backspace(),
+            Key::Boundary if vk == VK_SPACE.0 => t.typed(' '),
+            _ => t.forget(),
+        }
+    });
+}
+
+/// RightType wrote `text` over the `backspaces` characters before the caret
+/// (a word put into the other layout, a snippet, Undo): the text kept for
+/// ghost suggestions follows the screen, so `x de]y' 10` corrected to
+/// `x กำลัง 10` is still read as math.
+pub(crate) fn ghost_applied(backspaces: usize, text: &str, trailing_vk: Option<u16>) {
+    use righttype::ghost::Then;
+    let then = match trailing_vk {
+        None => Then::Nothing,
+        Some(vk) if vk == VK_SPACE.0 => Then::Space,
+        Some(_) => Then::Other,
+    };
+    GHOST_TYPED.with(|t| {
+        if let Ok(mut t) = t.try_borrow_mut() {
+            t.written(backspaces, text, then);
+        }
+    });
+}
+
+/// A key starts (not nested): nothing of it is pending yet.
+fn ghost_begin_key() {
+    GHOST_TYPED.with(|t| {
+        if let Ok(mut t) = t.try_borrow_mut() {
+            t.begin_key();
+        }
+    });
+}
+
+/// The key has been handled: if it was kept from the app, take back what
+/// it did to the text kept for ghost suggestions.
+fn ghost_settle(swallowed: bool) {
+    GHOST_TYPED.with(|t| {
+        if let Ok(mut t) = t.try_borrow_mut() {
+            t.settle(swallowed);
+        }
+    });
+}
+
+/// RightType wrote over the word in progress itself (a ghost taken, a
+/// character stepped with Right Alt): nothing about that word is the hook's
+/// to decide or redraw any more. A run it owned stays on screen as it is
+/// now — reconciling it would backspace over what was just written.
+fn word_overwritten() {
+    STATE.with(|s| {
+        if let Ok(mut st) = s.try_borrow_mut() {
+            st.buf.clear();
+            st.owned = None;
+            st.mark = TokenMark::Plain;
+            st.recent.clear();
+            st.suggestion = None;
+            st.live_hint = None;
+        }
+    });
+}
+
+/// The hint for an offer: what was typed, what Tab makes of it.
+pub fn ghost_hint(typed: &str, symbol: &str) -> String {
+    format!("{typed}  →  {symbol}   ·   Tab")
+}
+
+/// Whether a character just typed may bring up a ghost suggestion here.
+fn ghost_here(key: Key, mode_now: Mode) -> bool {
+    matches!(key, Key::Char(_))
+        && ghosts()
+        && mode_now != Mode::Code
+        && !current_app().is_some_and(|e| righttype::code::is_code_editor(&e))
+}
+
+/// After a character: show the symbol it can become, for Tab.
+fn offer_ghost() {
+    let offer = GHOST_TYPED.with(|t| righttype::ghost::offer(t.borrow().as_str()));
+    let Some(offer) = offer else {
+        return;
+    };
+    let mut typed: String = GHOST_TYPED.with(|t| {
+        let t = t.borrow();
+        let t = t.as_str();
+        let skip = t.chars().count().saturating_sub(offer.replace);
+        t.chars().skip(skip).collect()
+    });
+    let mut hint = ghost_hint(&typed, &offer.text);
+    typed.zeroize();
+    crate::overlay::offer_at(&hint, crate::caret::hint_anchor());
+    hint.zeroize();
+    e2e_trace(format!(
+        "ghost offered: {}",
+        offer
+            .text
+            .chars()
+            .map(|c| format!("U+{:04X}", c as u32))
+            .collect::<Vec<_>>()
+            .join(" ")
+    ));
+    GHOST.with(|g| {
+        *g.borrow_mut() = Some(GhostOffer {
+            replace: offer.replace,
+            text: offer.text,
+            hwnd: unsafe { GetForegroundWindow() }.0 as isize,
+            focus_generation: crate::focus::generation(),
+            created: Instant::now(),
+        })
+    });
+}
+
+/// Right Alt tapped after a character steps it through its set (2.4).
+static CYCLES: AtomicBool = AtomicBool::new(true);
+
+pub fn cycles_characters() -> bool {
+    CYCLES.load(Ordering::Relaxed)
+}
+
+pub fn set_cycles_characters(on: bool) {
+    CYCLES.store(on, Ordering::Relaxed);
+}
+
+static CHAR_SETS: std::sync::RwLock<Option<righttype::charsets::Sets>> =
+    std::sync::RwLock::new(None);
+
+/// Every key's set of characters (the defaults with the typist's own).
+pub fn char_sets() -> righttype::charsets::Sets {
+    CHAR_SETS
+        .read()
+        .ok()
+        .and_then(|s| s.clone())
+        .unwrap_or_default()
+}
+
+pub fn set_char_sets(sets: righttype::charsets::Sets) {
+    if let Ok(mut s) = CHAR_SETS.write() {
+        *s = Some(sets);
+    }
+}
+
+/// Pin `ch` to `key`, or take it off; saved. True when it is pinned.
+pub fn pin_char(key: char, ch: &str) -> bool {
+    let mut sets = char_sets();
+    let on = sets.toggle(key, ch);
+    set_char_sets(sets);
+    crate::config::persist();
+    on
+}
+
+/// A character being stepped through its set with Right Alt.
+struct Cycle {
+    typed: String,
+    set: Vec<String>,
+    /// 0: as typed; n: the set's n-th.
+    at: usize,
+    shown: String,
+    hwnd: isize,
+    focus_generation: u64,
+    when: Instant,
+}
+
+impl Drop for Cycle {
+    fn drop(&mut self) {
+        self.typed.zeroize();
+        self.shown.zeroize();
+    }
+}
+
+thread_local! {
+    /// When Right Alt went down, while nothing else has been pressed since.
+    static RALT_DOWN: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+    static CYCLE: RefCell<Option<Cycle>> = const { RefCell::new(None) };
+}
+
+/// The longest press of Right Alt that is a tap.
+const RALT_TAP: Duration = Duration::from_millis(350);
+
+/// Right Alt was tapped: step the character before the caret (the last one
+/// typed) to the next in its set, or start with it. False when there is
+/// nothing to step (the tap is then Windows' own).
+unsafe fn cycle_character() -> bool {
+    if !cycles_characters()
+        || STATE.with(|s| s.borrow().sensitive_app)
+        || safety::is_password_field()
+        || crate::focus::is_password_field()
+    {
+        return false;
+    }
+    let hwnd = GetForegroundWindow().0 as isize;
+    let generation = crate::focus::generation();
+    let fresh = CYCLE.with(|c| {
+        c.borrow().as_ref().is_some_and(|c| {
+            c.hwnd == hwnd
+                && c.focus_generation == generation
+                && c.when.elapsed() < Duration::from_millis(crate::overlay::OFFER_MS.into())
+        })
+    });
+    if !fresh {
+        let typed = GHOST_TYPED.with(|t| t.borrow().last());
+        let Some(typed) = typed.filter(|c| !c.is_whitespace()) else {
+            return false;
+        };
+        let set = char_sets().of(typed);
+        if set.is_empty() {
+            return false;
+        }
+        CYCLE.with(|c| {
+            *c.borrow_mut() = Some(Cycle {
+                typed: typed.to_string(),
+                set,
+                at: 0,
+                shown: typed.to_string(),
+                hwnd,
+                focus_generation: generation,
+                when: Instant::now(),
+            })
+        });
+    }
+    let step = CYCLE.with(|c| {
+        let mut c = c.borrow_mut();
+        let c = c.as_mut()?;
+        c.at = (c.at + 1) % (c.set.len() + 1);
+        let next = if c.at == 0 {
+            c.typed.clone()
+        } else {
+            c.set[c.at - 1].clone()
+        };
+        let old = std::mem::replace(&mut c.shown, next.clone());
+        c.when = Instant::now();
+        Some((
+            old,
+            next,
+            righttype::charsets::strip(&c.typed, &c.set, c.at),
+        ))
+    });
+    let Some((mut old, next, mut strip)) = step else {
+        return false;
+    };
+    let n = old.chars().count();
+    old.zeroize();
+    if !inject::apply(n, &next, None) {
+        CYCLE.with(|c| c.borrow_mut().take());
+        return false;
+    }
+    word_overwritten();
+    // What is before the caret now followed what was written
+    // (`ghost_applied`), for the next tap and ghost offers.
+    crate::overlay::offer_at(&strip, crate::caret::hint_anchor());
+    strip.zeroize();
+    trace_note("Right Alt: character stepped");
+    true
+}
+
+/// Esc while stepping: the character as typed again. True when it was.
+unsafe fn cycle_back() -> bool {
+    let Some(c) = CYCLE.with(|c| c.borrow_mut().take()) else {
+        return false;
+    };
+    if c.at == 0
+        || c.hwnd != GetForegroundWindow().0 as isize
+        || c.focus_generation != crate::focus::generation()
+        || c.when.elapsed() >= Duration::from_millis(crate::overlay::OFFER_MS.into())
+    {
+        return false;
+    }
+    crate::overlay::dismiss();
+    let done = inject::apply(c.shown.chars().count(), &c.typed, None);
+    word_overwritten();
+    done
 }
 
 /// Why the last word was fixed or left (a `righttype::why::Why`).
@@ -1121,6 +1457,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     /* WM_MOUSEMOVE */
     {
         ctrl_hold_input(None, false, false);
+        shift_tap_input(None, false);
     }
     if code == HC_ACTION as i32
         && matches!(
@@ -1137,6 +1474,11 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
 /// word in progress, a run we own (left on screen as it is), the Undo record,
 /// the recent words and a pending suggestion.
 fn caret_may_have_moved() {
+    ghost_tail_forget();
+    let offered = GHOST.with(|g| g.try_borrow_mut().ok().and_then(|mut g| g.take()));
+    if offered.is_some() {
+        crate::overlay::dismiss();
+    }
     STATE.with(|s| {
         // Never re-entered from inside the keyboard path, but do not panic if
         // a nested hook call ever finds the state borrowed.
@@ -1277,13 +1619,27 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
             if !nested {
                 HOOK_DEADLINE.with(|d| d.set(Some(started + HOOK_BUDGET)));
             }
+            if !nested {
+                ghost_begin_key();
+            }
             let swallow = process(wparam.0 as u32, kb);
+            if !nested {
+                ghost_settle(swallow);
+            }
             if !nested {
                 HOOK_DEADLINE.with(|d| d.set(None));
             }
             drop(done);
             if !nested {
                 righttype::timing::HOOK.record(started.elapsed().as_micros() as u64);
+                // A slow key is where keys typed meanwhile can slip past.
+                if started.elapsed() > Duration::from_millis(100) {
+                    e2e_trace(format!(
+                        "slow key vk={:#x}: {} ms in the hook",
+                        kb.vkCode,
+                        started.elapsed().as_millis()
+                    ));
+                }
                 let waited = crate::focus::take_wait_us();
                 if waited > 0 {
                     righttype::timing::WAITING.record(waited);
@@ -1592,6 +1948,40 @@ pub fn ctrl_hold_input(vk: Option<u16>, down: bool, repeat: bool) {
     }
 }
 
+thread_local! {
+    /// Shift tapped twice opens the list at the text cursor (2.4 A1).
+    static SHIFT_TAPS: RefCell<righttype::summon::DoubleTap> =
+        RefCell::new(righttype::summon::DoubleTap::new());
+}
+
+/// A key (or, with `None`, a mouse button) for the Shift double tap. Not
+/// in password fields, apps on the safety list, or RightType's own windows.
+pub fn shift_tap_input(vk: Option<u16>, down: bool) {
+    use righttype::summon::Input;
+    if !crate::caretlist::enabled() {
+        return;
+    }
+    let input = match vk {
+        Some(0x10 | 0xA0 | 0xA1) if down => Input::ShiftDown,
+        Some(0x10 | 0xA0 | 0xA1) => Input::ShiftUp,
+        _ => Input::Other,
+    };
+    let now = START.get_or_init(Instant::now).elapsed().as_millis() as u64;
+    if !SHIFT_TAPS.with(|t| t.borrow_mut().input(input, now)) {
+        return;
+    }
+    let private = STATE.with(|s| s.try_borrow().map_or(true, |s| s.sensitive_app))
+        || unsafe { safety::is_password_field() }
+        || crate::focus::is_password_field();
+    if private || crate::caretlist::is_open() || crate::palette::is_open() {
+        return;
+    }
+    trace_note("Shift twice: list at the cursor");
+    crate::caretlist::request_open();
+}
+
+static START: OnceLock<Instant> = OnceLock::new();
+
 static HOLD_FOR_ACCENTS: AtomicBool = AtomicBool::new(false);
 
 pub fn holds_for_accents() -> bool {
@@ -1673,7 +2063,8 @@ unsafe fn hold_to_pick(vk: u16, scan: u16, repeat: bool) -> Option<bool> {
         return None;
     }
     let typed = translate(vk, scan)?;
-    let choices = righttype::accents::choices(typed)?;
+    // The same sets Right Alt steps through (the typist's own included).
+    let choices = Some(char_sets().of(typed)).filter(|c| !c.is_empty())?;
     let anchor = crate::caret::find_caret()
         .map_or(crate::overlay::Anchor::Corner, crate::overlay::Anchor::Near);
     crate::overlay::show_at(&righttype::accents::shown(&choices), anchor);
@@ -1865,6 +2256,31 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         false
     };
     ctrl_hold_input(Some(vk), down, repeat);
+    shift_tap_input(Some(vk), down);
+    // Right Alt tapped on its own steps the last character through its set.
+    if vk == 0xA5 {
+        if down && !repeat {
+            RALT_DOWN.with(|r| r.set(Some(Instant::now())));
+        } else if !down {
+            let tap = RALT_DOWN
+                .with(|r| r.take())
+                .is_some_and(|at| at.elapsed() < RALT_TAP);
+            if tap && cycle_character() {
+                // The release goes to the app masked: no menu bar.
+                inject::release_right_alt_masked();
+                return true;
+            }
+        }
+    } else if down {
+        RALT_DOWN.with(|r| r.set(None));
+        if !is_modifier(vk) {
+            // Esc puts the character back; any other key keeps it.
+            if vk == VK_ESCAPE.0 && cycle_back() {
+                return true;
+            }
+            CYCLE.with(|c| c.borrow_mut().take());
+        }
+    }
     if !down {
         if vk == VK_BACK.0 {
             FLIP_DOWN.with(|f| f.set(None));
@@ -1917,9 +2333,18 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     }
     if !is_down(VK_CONTROL) && !is_down(VK_MENU) {
         let ch = translate(vk, kb.scanCode as u16);
-        if crate::sheet::key(vk, ch) {
+        if crate::sheet::key(vk, ch) || crate::caretlist::key(vk, ch) {
             return true;
         }
+    }
+    // Ctrl+P in the list at the cursor: pin the character to a key.
+    if vk == u16::from(b'P')
+        && is_down(VK_CONTROL)
+        && !is_down(VK_MENU)
+        && crate::caretlist::is_open()
+        && crate::caretlist::pin_start()
+    {
+        return true;
     }
 
     // Tab (alone) takes a Thai completion on offer; any other key drops it.
@@ -1944,6 +2369,33 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                     st.buf.clear();
                     st.mark = TokenMark::Plain;
                 });
+                return true;
+            }
+        } else if !is_modifier(vk) {
+            crate::overlay::dismiss();
+        }
+    }
+
+    // Tab (alone) takes a ghost suggestion on offer; any other key drops it.
+    let ghost = GHOST.with(|g| g.borrow_mut().take());
+    if let Some(offer) = ghost {
+        let fresh = offer.hwnd == GetForegroundWindow().0 as isize
+            && offer.focus_generation == crate::focus::generation()
+            && offer.created.elapsed() < Duration::from_millis(crate::overlay::OFFER_MS.into());
+        if vk == VK_TAB.0
+            && fresh
+            && !is_down(VK_SHIFT)
+            && !is_down(VK_CONTROL)
+            && !is_down(VK_MENU)
+            && !safety::is_password_field()
+            && !crate::focus::is_password_field()
+        {
+            crate::overlay::dismiss();
+            if inject::apply(offer.replace, &offer.text, None) {
+                trace_note("ghost suggestion taken with Tab");
+                ghost_tail_forget();
+                // What was typed is a symbol now: no word to decide on.
+                word_overwritten();
                 return true;
             }
         } else if !is_modifier(vk) {
@@ -2111,6 +2563,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             crate::focus::is_password_field()
         ));
         STATE.with(|s| s.borrow_mut().suggestion = None);
+        ghost_forget();
         return false;
     }
     // Switched off in this app (its per-app mode): touch nothing, like a
@@ -2124,6 +2577,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             st.live_hint = None;
             st.recent.clear();
         });
+        ghost_forget();
         return false;
     };
 
@@ -2380,9 +2834,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // clearing here made it forget the word it was pressed to flip.
         if !is_modifier(vk) {
             STATE.with(|s| s.borrow_mut().recent.clear());
+            ghost_forget();
         }
         return false;
     };
+    ghost_track(key, vk);
 
     // Backspace right after a spelling fix takes the fix back.
     if key == Key::Backspace
@@ -2458,9 +2914,18 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         {
             if reconcile_run() {
                 take_down_preview();
+                // The text kept for ghost suggestions followed what was
+                // written (`ghost_applied`): the key that finished a word
+                // put into Thai can finish math said in words too.
+                if ghost_here(key, mode_now) {
+                    offer_ghost();
+                }
                 return true;
             }
             show_preview();
+        }
+        if ghost_here(key, mode_now) {
+            offer_ghost();
         }
         // Navigation and focus events move the caret away from the run, so the
         // text we rendered is no longer ours to edit. Let go without touching it.
@@ -4075,6 +4540,7 @@ unsafe fn sync_context() {
             st.recent.clear();
             st.suggestion = None;
             st.live_hint = None;
+            ghost_tail_forget();
             st.last_hwnd = hwnd_i;
             st.last_hkl = hkl_i;
             st.last_focus_generation = focus_generation;

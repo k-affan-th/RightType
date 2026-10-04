@@ -52,6 +52,7 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     if backspaces == 0 && text.is_empty() && trailing_vk.is_none() {
         return true;
     }
+    crate::hook::ghost_applied(backspaces, text, trailing_vk);
     // A standard Windows text box is told to replace the word itself, in one
     // message: nothing the typist presses meanwhile can land between our
     // keys, and nothing depends on how fast the app reads them (Windows 11
@@ -60,6 +61,11 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
         Err("turned off for a test")
     } else {
         crate::focus::TextBox::focused()
+    };
+    let backspaces = if text_box.is_err() {
+        on_screen_count(backspaces, context.as_deref().map(|s| s.as_str()))
+    } else {
+        backspaces
     };
     if let Ok(tb) = text_box {
         let mut whole = text.to_string();
@@ -215,6 +221,47 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     sent == inputs.len()
 }
 
+/// How many characters to delete in an app that is not a standard text box
+/// (Word, a browser): what it really holds before the caret, asked through
+/// UI Automation. Word applies Thai input sequence checking to typed keys
+/// and drops a vowel or tone mark with no letter for it — `Unicode` typed
+/// on the Thai layout is ๊ืรแนกำ, and Word keeps รแนกำ — so deleting one
+/// character per key typed ate into the text before the word. Only when
+/// what is deleted has such marks; any doubt keeps the count of keys.
+fn on_screen_count(backspaces: usize, context: Option<&str>) -> usize {
+    let Some(context) = context.filter(|_| backspaces > 0) else {
+        return backspaces;
+    };
+    let n = context.chars().count();
+    let replaced: String = context.chars().skip(n.saturating_sub(backspaces)).collect();
+    let droppable = |c: char| {
+        matches!(c, '\u{0E31}' | '\u{0E33}')
+            || ('\u{0E34}'..='\u{0E3A}').contains(&c)
+            || ('\u{0E47}'..='\u{0E4E}').contains(&c)
+    };
+    if !replaced.chars().any(droppable) {
+        return backspaces;
+    }
+    let wait = crate::hook::budget_left(std::time::Duration::from_millis(60));
+    let Some(before) = crate::focus::text_before_caret_within(n + 2, wait) else {
+        return backspaces;
+    };
+    match righttype::render::chars_on_screen(&replaced, &before) {
+        Some(there) if there < backspaces => {
+            crate::hook::e2e_trace(format!(
+                "inject: the app dropped {} marks: deleting {there}",
+                backspaces - there
+            ));
+            righttype::diag::note(
+                "app dropped Thai marks",
+                &[("typed", backspaces.into()), ("there", there.into())],
+            );
+            there
+        }
+        _ => backspaces,
+    }
+}
+
 thread_local! {
     /// What the next [`apply`] expects just before the caret; see
     /// [`expect_before_caret`].
@@ -296,6 +343,20 @@ unsafe fn send(inputs: &[INPUT]) -> bool {
 /// An unassigned virtual key, pressed to "mask" an Alt release (the same trick
 /// AutoHotkey uses, vk E8).
 const VK_MENU_MASK: u16 = 0xE8;
+
+/// Let go of Right Alt the typist tapped, with an unassigned key pressed
+/// first, so the app does not take the tap as "open the menu bar" (Word's
+/// key tips, a classic menu): RightType used the tap itself.
+///
+/// # Safety
+/// Calls `SendInput`.
+pub unsafe fn release_right_alt_masked() -> bool {
+    send(&[
+        key(VK_MENU_MASK, false),
+        key(VK_MENU_MASK, true),
+        key(0xA5, true),
+    ])
+}
 
 /// Append key-ups for every modifier still physically held.
 ///
