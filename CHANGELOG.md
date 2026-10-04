@@ -2,6 +2,67 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.4.0]
+
+### Added
+
+- **The list at the text cursor**: press **Shift twice** where you type. Find
+  any character Unicode names, in Thai or English (`ลูกศร`, `degree`,
+  `ohm`, look-alikes such as `->`); your snippets; and **the app's own
+  commands** from its menus and a built-in table (Word, PowerPoint, Excel,
+  OneNote, browsers, VS Code, Teams…). Enter types or runs the row picked; a
+  command that could lose work takes Enter twice, and its shortcut is shown
+  for next time. Empty, it is a grid of the characters you pinned and used
+  lately. Keys typed while it opens are never lost to the app.
+- **Ghost suggestions** (on by default): `->` `!=` `<=` `1/2` `...` and
+  `x^2`, `(x^2)^2`, `H_2O`, `\alpha` show what they can become next to the
+  cursor; **Tab** writes it, anything else leaves the text as typed. Plain
+  words and sentences never bring one up (checked on every dictionary word).
+- **Math, three ways**, in the list at the cursor (and as a ghost when it
+  ends what you type):
+  - said in words, Thai or English: `x ยกกำลังสองบวก 1`, `รากที่สองของ x`,
+    `a ส่วน b`, `x squared plus y squared`, `sum from i=1 to n of x sub i`;
+  - written short, as Word's equation editor reads it:
+    `x^2 + (2x)/8 + x^(3/2) + pi + Sigma_(i=1)^(n) X_i`;
+  - LaTeX: `\frac{1}{2}`, `\sqrt[3]{x}`, `\sum_{i=1}^{n}`, `\mathbb{R}`.
+  Written as one line of Unicode anywhere (x² + 1, √x, ∑ᵢ₌₁ⁿ). In **Word,
+  PowerPoint and OneNote** two more choices: a **real equation** (Alt+=,
+  which the app builds up) or text with **superscript and subscript**
+  formatting, for what Unicode has no small letters for (x^(3/2)).
+- **Characters by key**: tap **Right Alt** after a character to step it
+  through its set (`2` → ² ₂ ⅔, `e` → é è ê ë, `=` → ≠ ≈ ≤ ≥); Esc puts it
+  back. Pin any character to a key from the list with **Ctrl+P**; holding a
+  key (opt-in) offers the same set. Settings → Keyboard turns it off.
+- **Macros**: a snippet whose text has steps — `{กด Ctrl+B}`, `{รอ 300}`,
+  `{คำสั่ง ตัวหนา}`, `{สไตล์ Heading 1}`, `{คลิปบอร์ด}` (or `{press …}`,
+  `{wait …}`, `{command …}`, `{style …}`, `{clipboard}`) — run by its trigger
+  or from the list. Esc, or another app in front, stops one; a step that
+  cannot run keeps the snippet from being saved.
+- **Thai abbreviations typed on the English keyboard**: `d"8"` → ก.ค.,
+  `dm,"` → กทม., `fi"l,=kp` → ดร.สมชาย (Kedmanee's period is the `"`
+  key).
+- More of Word's shortcuts in the table (headings, styles, equation,
+  superscript, spacing, comments, track changes…) and OneNote's.
+
+### Changed
+
+- **Word**: deleting a word to fix it counts what Word kept on screen — it
+  drops Thai marks with no letter before them, and RightType used to delete
+  into the word before.
+- **Fix this field** fixes only the words picked, each where it is, instead
+  of retyping the whole field (which lost formatting and set off Word's
+  AutoFormat on every quote).
+- **Fix text** repairs better: short Thai dictionary words next to Thai are
+  read in context.
+- **Command palette**: shorter rows that tell themselves apart, sections
+  that open as a page of their own (Backspace goes back), and a window that
+  scrolls instead of running off the screen.
+- **Typing practice** uses everyday words and real sentences; the game has
+  combos, levels and hearts.
+- The text kept before the cursor for ghost suggestions follows what
+  RightType writes (a word put into Thai, a snippet), in memory only, 48
+  characters at most.
+
 ## [2.3.0]
 
 ### Added
