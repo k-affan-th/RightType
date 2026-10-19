@@ -259,10 +259,20 @@ fn int_words(n: u64) -> String {
 /// `None` if there is anything else, or it is too large to read.
 fn parse_number(input: &str) -> Option<(bool, u64, String)> {
     let s = input.trim();
-    let s = s.strip_suffix("บาท").unwrap_or(s).trim();
+    let s = s
+        .strip_suffix("บาทถ้วน")
+        .or_else(|| s.strip_suffix("ถ้วน"))
+        .or_else(|| s.strip_suffix("บาท"))
+        .unwrap_or(s)
+        .trim();
     let (negative, s) = match s.strip_prefix('-') {
         Some(rest) => (true, rest.trim_start()),
         None => (false, s),
+    };
+    let s = s.strip_prefix(['฿', '$']).unwrap_or(s).trim_start();
+    let (negative, s) = match (!negative).then(|| s.strip_prefix('-')).flatten() {
+        Some(rest) => (true, rest.trim_start()),
+        None => (negative, s),
     };
     let (whole, frac) = s.split_once('.').unwrap_or((s, ""));
     if whole.is_empty() && frac.is_empty() {
@@ -391,11 +401,18 @@ pub fn tidy_spacing(input: &str) -> String {
                 }
             }
             'ฯ' => {
-                // Joins the word before it.
+                // Joins the word before it, with a space after it before Thai
+                // text (except ฯพณฯ and repeated ฯ).
+                let is_phan = next == Some('พ')
+                    && chars.get(i + 2) == Some(&'ณ')
+                    && chars.get(i + 3) == Some(&'ฯ');
                 while out.last() == Some(&' ') {
                     out.pop();
                 }
                 out.push('ฯ');
+                if !is_phan && next.is_some_and(|n| thai(n) && n != 'ฯ') {
+                    out.push(' ');
+                }
             }
             '(' => {
                 if out.last().is_some_and(|&p| thai(p)) {
@@ -538,6 +555,9 @@ mod tests {
         assert_eq!(baht_words("0.25"), "ยี่สิบห้าสตางค์");
         assert_eq!(baht_words("1.01"), "หนึ่งบาทหนึ่งสตางค์");
         assert_eq!(baht_words("21.21 บาท"), "ยี่สิบเอ็ดบาทยี่สิบเอ็ดสตางค์");
+        assert_eq!(baht_words("฿500"), "ห้าร้อยบาทถ้วน");
+        assert_eq!(baht_words("500 บาทถ้วน"), "ห้าร้อยบาทถ้วน");
+        assert_eq!(baht_words("฿1,250.50 บาท"), "หนึ่งพันสองร้อยห้าสิบบาทห้าสิบสตางค์");
         assert_eq!(baht_words("9.999"), "สิบบาทถ้วน");
         assert_eq!(baht_words("0"), "ศูนย์บาทถ้วน");
         assert_eq!(baht_words("abc"), "abc");
@@ -550,6 +570,8 @@ mod tests {
         assert_eq!(tidy_spacing("ผลไม้ฯลฯ"), "ผลไม้ ฯลฯ");
         assert_eq!(tidy_spacing("ผลไม้ฯลฯและ"), "ผลไม้ ฯลฯ และ");
         assert_eq!(tidy_spacing("กรุงเทพ ฯ"), "กรุงเทพฯ");
+        assert_eq!(tidy_spacing("กรุงเทพฯเป็น"), "กรุงเทพฯ เป็น");
+        assert_eq!(tidy_spacing("ฯพณฯนายก"), "ฯพณฯ นายก");
         assert_eq!(tidy_spacing("คำ(อธิบาย)ต่อ"), "คำ (อธิบาย) ต่อ");
         assert_eq!(tidy_spacing("คำ ( อธิบาย ) ต่อ"), "คำ (อธิบาย) ต่อ");
         assert_eq!(tidy_spacing("หนึ่ง   สอง"), "หนึ่ง สอง");

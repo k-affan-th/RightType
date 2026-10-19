@@ -198,7 +198,12 @@ pub fn title_case(input: &str) -> String {
             start = false;
         } else {
             out.push(c);
-            start = c.is_whitespace() || c == '-' || c == '_';
+            if matches!(c, '\'' | '\u{2018}' | '\u{2019}') {
+                // Leading single quote keeps `start`; mid-word apostrophe (`don't`) stays false.
+            } else {
+                start = c.is_whitespace()
+                    || matches!(c, '-' | '_' | '/' | '(' | '[' | '{' | '"' | '\u{201C}');
+            }
         }
     }
     out
@@ -229,6 +234,10 @@ mod case_tests {
         assert_eq!(
             super::title_case("hELLO wORLD-wide สวัสดี"),
             "Hello World-Wide สวัสดี"
+        );
+        assert_eq!(
+            super::title_case("\"hello\" (world) 'test' don't"),
+            "\"Hello\" (World) 'Test' Don't"
         );
         assert_eq!(super::swap_case("hELLO wORLD"), "Hello World");
     }

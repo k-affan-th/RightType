@@ -52,6 +52,12 @@ pub unsafe fn apply(backspaces: usize, text: &str, trailing_vk: Option<u16>) -> 
     if backspaces == 0 && text.is_empty() && trailing_vk.is_none() {
         return true;
     }
+    // Word marks text with the language of the keyboard on when it arrives:
+    // switch first, so Thai is not written as English (red squiggles). The
+    // request is posted ahead of the keys below, so Word handles it first.
+    if !text.is_empty() {
+        crate::hook::prepare_layout_for(text);
+    }
     crate::hook::ghost_applied(backspaces, text, trailing_vk);
     // A standard Windows text box is told to replace the word itself, in one
     // message: nothing the typist presses meanwhile can land between our

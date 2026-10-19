@@ -195,7 +195,12 @@ pub const CODE_EDITORS: &[&str] = &[
     "code - insiders.exe",
     "cursor.exe",
     "windsurf.exe",
+    "antigravity.exe",
+    "trae.exe",
+    "positron.exe",
     "zed.exe",
+    "fleet.exe",
+    "lapce.exe",
     "devenv.exe",
     "idea64.exe",
     "pycharm64.exe",
@@ -213,6 +218,10 @@ pub const CODE_EDITORS: &[&str] = &[
     "eclipse.exe",
     "gvim.exe",
     "nvim-qt.exe",
+    "nvim.exe",
+    "vim.exe",
+    "hx.exe",
+    "emacs.exe",
 ];
 
 /// Is `exe` (lower case) a code editor?

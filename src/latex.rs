@@ -254,6 +254,143 @@ const SYMBOLS: &[(&str, &str)] = &[
     ("ker", "ker"),
     ("arg", "arg"),
     ("Pr", "Pr"),
+    // More relations, negated relations and set symbols.
+    ("nleq", "≰"),
+    ("ngeq", "≱"),
+    ("nless", "≮"),
+    ("ngtr", "≯"),
+    ("doteq", "≐"),
+    ("asymp", "≍"),
+    ("bowtie", "⋈"),
+    ("lesssim", "≲"),
+    ("gtrsim", "≳"),
+    ("lessgtr", "≶"),
+    ("ncong", "≇"),
+    ("nsim", "≁"),
+    ("napprox", "≉"),
+    ("nequiv", "≢"),
+    ("preceq", "⪯"),
+    ("succeq", "⪰"),
+    ("sqsubset", "⊏"),
+    ("sqsupset", "⊐"),
+    ("sqcup", "⊔"),
+    ("sqcap", "⊓"),
+    ("uplus", "⊎"),
+    ("subsetneq", "⊊"),
+    ("supsetneq", "⊋"),
+    ("nsubset", "⊄"),
+    ("nsupset", "⊅"),
+    ("nsubseteq", "⊈"),
+    ("nsupseteq", "⊉"),
+    ("complement", "∁"),
+    ("vDash", "⊨"),
+    ("Vdash", "⊩"),
+    ("nvdash", "⊬"),
+    ("dashv", "⊣"),
+    ("nmid", "∤"),
+    ("nparallel", "∦"),
+    ("smile", "⌣"),
+    ("frown", "⌢"),
+    // More operators.
+    ("odot", "⊙"),
+    ("oslash", "⊘"),
+    ("bigcup", "⋃"),
+    ("bigcap", "⋂"),
+    ("bigvee", "⋁"),
+    ("bigwedge", "⋀"),
+    ("bigoplus", "⨁"),
+    ("bigotimes", "⨂"),
+    ("amalg", "⨿"),
+    ("wr", "≀"),
+    ("oiint", "∯"),
+    ("oiiint", "∰"),
+    ("surd", "√"),
+    ("cuberoot", "∛"),
+    ("fourthroot", "∜"),
+    ("diamond", "⋄"),
+    ("lhd", "⊲"),
+    ("rhd", "⊳"),
+    // More arrows.
+    ("Uparrow", "⇑"),
+    ("Downarrow", "⇓"),
+    ("Updownarrow", "⇕"),
+    ("updownarrow", "↕"),
+    ("nearrow", "↗"),
+    ("searrow", "↘"),
+    ("swarrow", "↙"),
+    ("nwarrow", "↖"),
+    ("hookrightarrow", "↪"),
+    ("hookleftarrow", "↩"),
+    ("rightharpoonup", "⇀"),
+    ("leftharpoonup", "↼"),
+    ("rightleftharpoons", "⇌"),
+    ("leadsto", "⇝"),
+    ("rightsquigarrow", "⇝"),
+    ("longmapsto", "⟼"),
+    ("Longrightarrow", "⟹"),
+    ("Longleftarrow", "⟸"),
+    ("Longleftrightarrow", "⟺"),
+    ("longleftrightarrow", "⟷"),
+    ("twoheadrightarrow", "↠"),
+    ("circlearrowright", "↻"),
+    ("circlearrowleft", "↺"),
+    ("nrightarrow", "↛"),
+    ("nleftarrow", "↚"),
+    ("nleftrightarrow", "↮"),
+    ("nRightarrow", "⇏"),
+    ("nLeftarrow", "⇍"),
+    ("nLeftrightarrow", "⇎"),
+    // More letters, shapes, signs.
+    ("varkappa", "ϰ"),
+    ("digamma", "ϝ"),
+    ("mho", "℧"),
+    ("beth", "ℶ"),
+    ("gimel", "ℷ"),
+    ("daleth", "ℸ"),
+    ("imath", "ı"),
+    ("jmath", "ȷ"),
+    ("Diamond", "◇"),
+    ("lozenge", "◊"),
+    ("blacksquare", "■"),
+    ("blacktriangle", "▲"),
+    ("blacktriangledown", "▼"),
+    ("bigtriangledown", "▽"),
+    ("bigstar", "★"),
+    ("spadesuit", "♠"),
+    ("heartsuit", "♡"),
+    ("diamondsuit", "♢"),
+    ("clubsuit", "♣"),
+    ("flat", "♭"),
+    ("natural", "♮"),
+    ("sharp", "♯"),
+    ("male", "♂"),
+    ("female", "♀"),
+    ("cross", "✗"),
+    ("ulcorner", "⌜"),
+    ("urcorner", "⌝"),
+    ("llcorner", "⌞"),
+    ("lrcorner", "⌟"),
+    ("backslash", "\\"),
+    ("vert", "|"),
+    ("Vert", "‖"),
+    ("lbrack", "["),
+    ("rbrack", "]"),
+    ("ddagger", "‡"),
+    ("dag", "†"),
+    ("ddag", "‡"),
+    // Currency, units, marks.
+    ("baht", "฿"),
+    ("yen", "¥"),
+    ("cent", "¢"),
+    ("registered", "®"),
+    ("trademark", "™"),
+    ("permil", "‰"),
+    ("micro", "µ"),
+    ("ohm", "Ω"),
+    ("celsius", "℃"),
+    ("fahrenheit", "℉"),
+    ("angstrom", "Å"),
+    ("numero", "№"),
 ];
 
 /// The symbol a command stands for, if it stands for one.
@@ -266,7 +403,7 @@ pub fn names() -> impl Iterator<Item = (&'static str, &'static str)> {
     SYMBOLS.iter().copied()
 }
 
-fn superscript(c: char) -> Option<char> {
+pub fn superscript(c: char) -> Option<char> {
     const FROM: &str = "0123456789+-=()abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUVWαβγδεθιφχ";
     const TO: &str = "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂᵅᵝᵞᵟᵋᶿᶥᵠᵡ";
     let c = if c == '−' { '-' } else { c };
@@ -275,7 +412,7 @@ fn superscript(c: char) -> Option<char> {
         .and_then(|i| TO.chars().nth(i))
 }
 
-fn subscript(c: char) -> Option<char> {
+pub fn subscript(c: char) -> Option<char> {
     const FROM: &str = "0123456789+-=()aehijklmnoprstuvxβγρφχ";
     const TO: &str = "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓᵦᵧᵨᵩᵪ";
     let c = if c == '−' { '-' } else { c };
@@ -573,6 +710,15 @@ pub fn looks_like_latex(s: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn every_symbol_name_is_listed_once_with_a_symbol() {
+        let mut seen = std::collections::HashSet::new();
+        for (name, symbol) in super::SYMBOLS {
+            assert!(!symbol.is_empty(), "{name} has no symbol");
+            assert!(seen.insert(*name), "{name} is listed twice");
+        }
+    }
+
     use super::*;
 
     fn u(s: &str) -> String {

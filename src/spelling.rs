@@ -61,7 +61,9 @@ pub const PAIRS: &[(&str, &str, bool)] = &[
     ("คลิ๊ก", "คลิก", false),
     ("เปอร์เซ็นต", "เปอร์เซ็นต์", false),
     ("มาตราฐาน", "มาตรฐาน", false),
-    ("เชี่ยวชาน", "เชี่ยวชาญ", false),
+    ("ผู้เชี่ยวชาน", "ผู้เชี่ยวชาญ", true),
+    ("เชี่ยวชาน", "เชี่ยวชาญ", true),
+    ("ประสบการณ", "ประสบการณ์", false),
     ("ประสบการ", "ประสบการณ์", false),
     ("เหตุการ", "เหตุการณ์", false),
     ("สถานการ", "สถานการณ์", false),
@@ -75,7 +77,6 @@ pub const PAIRS: &[(&str, &str, bool)] = &[
     ("คำนวน", "คำนวณ", false),
     ("ทรัพยากรณ์", "ทรัพยากร", false),
     ("อนุมัต", "อนุมัติ", false),
-    ("ผู้เชี่ยวชาน", "ผู้เชี่ยวชาญ", false),
     ("ปรัชญ์", "ปรัชญา", false),
     ("แกงบวช", "แกงบวด", false),
     ("ปฎิบัติ", "ปฏิบัติ", false),
@@ -86,7 +87,6 @@ pub const PAIRS: &[(&str, &str, bool)] = &[
     ("ปรับปรุ่ง", "ปรับปรุง", false),
     ("ผู้บรืหาร", "ผู้บริหาร", false),
     ("กะเพาะ", "กระเพาะ", false),
-    ("ประสบการณ", "ประสบการณ์", false),
 ];
 
 /// Letters of `text` the dictionary does not account for.
@@ -108,12 +108,24 @@ pub fn fix(run: &str, th: &Dictionary) -> Option<(String, &'static str, &'static
     for &(wrong, right, always) in PAIRS {
         let mut from = 0;
         while let Some(at) = out[from..].find(wrong).map(|i| i + from) {
-            // Part of the right spelling already (`เหตุการ` in `เหตุการณ์`).
-            if right.starts_with(wrong) && out[at..].starts_with(right) {
-                from = at + wrong.len();
-                continue;
+            let mut match_len = wrong.len();
+            // Part of the right spelling already (`เหตุการ` in `เหตุการณ์`, or
+            // `เหตุการณ` where only the final mark is missing).
+            if right.starts_with(wrong) {
+                if out[at..].starts_with(right) {
+                    from = at + right.len();
+                    continue;
+                }
+                for (idx, ch) in right[wrong.len()..].char_indices() {
+                    let cand_len = wrong.len() + idx + ch.len_utf8();
+                    if out[at..].starts_with(&right[..cand_len]) {
+                        match_len = cand_len;
+                    } else {
+                        break;
+                    }
+                }
             }
-            out.replace_range(at..at + wrong.len(), right);
+            out.replace_range(at..at + match_len, right);
             first.get_or_insert((wrong, right));
             always_only &= always;
             from = at + right.len();
@@ -147,6 +159,18 @@ mod tests {
     }
 
     #[test]
+    fn longer_misspellings_precede_shorter_substrings() {
+        for (i, &(shorter, _, _)) in PAIRS.iter().enumerate() {
+            for &(longer, _, _) in &PAIRS[i + 1..] {
+                assert!(
+                    !longer.contains(shorter),
+                    "{shorter:?} precedes superstring {longer:?} in PAIRS"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn misspellings_are_put_right_in_a_run() {
         let th = dict::thai();
         assert_eq!(
@@ -160,6 +184,22 @@ mod tests {
         assert_eq!(
             fix("ขอบคุณนะค่ะ", th).map(|f| f.0),
             Some("ขอบคุณนะคะ".to_string())
+        );
+        assert_eq!(
+            fix("ประสบการณ", th),
+            Some(("ประสบการณ์".to_string(), "ประสบการณ", "ประสบการณ์"))
+        );
+        assert_eq!(
+            fix("เหตุการณ", th).map(|f| f.0),
+            Some("เหตุการณ์".to_string())
+        );
+        assert_eq!(
+            fix("สถานการณ", th).map(|f| f.0),
+            Some("สถานการณ์".to_string())
+        );
+        assert_eq!(
+            fix("ผู้เชี่ยวชาน", th),
+            Some(("ผู้เชี่ยวชาญ".to_string(), "ผู้เชี่ยวชาน", "ผู้เชี่ยวชาญ"))
         );
     }
 
@@ -182,6 +222,7 @@ mod tests {
         assert_eq!(fix("กระทิง", th), None);
         // Already right.
         assert_eq!(fix("เหตุการณ์", th), None);
+        assert_eq!(fix("ประสบการณ์", th), None);
         assert_eq!(fix("สวัสดี", th), None);
     }
 }

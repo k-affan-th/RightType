@@ -199,6 +199,7 @@ impl<'d> Engine<'d> {
                 .unwrap_or_default();
             if !policy::run_goes_back(&word, &rendered, self.en, self.th) {
                 self.owned = None;
+                self.caps = false;
                 self.counters.live_anchors += 1;
                 self.request_layout(InputLayout::ThaiKedmanee);
                 self.screen.push(boundary);
@@ -259,14 +260,27 @@ impl<'d> Engine<'d> {
                 self.counters.boundary_corrections += 1;
                 self.counters.injected_backspaces += n;
                 self.counters.injected_chars += d.corrected.chars().count() + 1;
-                let thai = d.corrected.chars().any(is_thai);
+                let thai = d
+                    .corrected
+                    .trim_end_matches(|c: char| c.is_ascii_punctuation())
+                    .chars()
+                    .last()
+                    .map_or_else(|| d.corrected.chars().any(is_thai), is_thai);
+                if thai {
+                    self.caps = false;
+                }
                 self.request_layout(if thai {
                     InputLayout::ThaiKedmanee
                 } else {
                     InputLayout::UsQwerty
                 });
             }
-            None => self.screen.push(boundary),
+            None => {
+                if converted {
+                    self.caps = false;
+                }
+                self.screen.push(boundary);
+            }
         }
     }
 
@@ -532,10 +546,12 @@ mod tests {
     #[test]
     fn thai_typed_with_capslock_on_arrives_as_thai() {
         // CapsLock left on: the English layout shows `L;YLFU`, but the keys
-        // are the ones for สวัสดี.
+        // are the ones for สวัสดี, and CapsLock is turned off for the next word.
         assert_eq!(type_with_caps("l;ylfu "), "สวัสดี ");
+        assert_eq!(type_with_caps("l;ylfu 8iy[ "), "สวัสดี ครับ ");
         assert_eq!(type_with_caps("l;ylfu8iy[ "), "สวัสดีครับ ");
         assert_eq!(type_with_caps("giupo "), "เรียน ");
+        assert_eq!(type_blind("นำ้ ", InputLayout::ThaiKedmanee), "น้ำ ");
     }
 
     #[test]
@@ -593,6 +609,8 @@ mod tests {
     fn mixed_sentence_needs_no_manual_switch() {
         let text = "ระบบนี้ใช้ middleware สำหรับจัดการข้อมูล ";
         assert_eq!(type_blind(text, InputLayout::UsQwerty), text);
+        let joined = "กินKFC ส่งไฟล์report ใช้API ";
+        assert_eq!(type_blind(joined, InputLayout::UsQwerty), joined);
     }
 
     #[test]

@@ -50,6 +50,19 @@ pub fn breaks_thai_words(exe: &str) -> bool {
     THAI_WORD_BREAKING.contains(&exe.to_ascii_lowercase().as_str())
 }
 
+/// Programs that mark each run of text with the language of the keyboard in
+/// use *when it arrives* (Word's proofing language). Text typed in while the
+/// other keyboard is still on is marked in that language: Thai flagged as
+/// English comes out with red squiggles and wrong word breaks.
+const TAGS_LANGUAGE: &[&str] = &["winword.exe", "outlook.exe", "powerpnt.exe", "onenote.exe"];
+
+/// Does `exe` tag text with the keyboard language at the moment it arrives?
+/// RightType then switches the keyboard *before* it writes a correction, and
+/// does not rewrite words mid-keystroke there (see `hook::tags_language_here`).
+pub fn tags_language(exe: &str) -> bool {
+    TAGS_LANGUAGE.contains(&exe.to_ascii_lowercase().as_str())
+}
+
 /// Programs whose fields fill in the rest of what is typed and select it,
 /// like a browser's address bar (Excel's AutoComplete in a cell).
 pub fn completes_inline(exe: &str) -> bool {
@@ -151,6 +164,8 @@ mod tests {
         assert!(!breaks_thai_words("notepad.exe"));
         assert!(completes_inline("EXCEL.EXE"));
         assert!(!completes_inline("notepad.exe"));
+        assert!(tags_language("WINWORD.EXE"));
+        assert!(!tags_language("notepad.exe"));
         assert!(is_google_docs("Report - Google Docs - Google Chrome"));
         assert!(!is_google_docs("Google - Google Chrome"));
     }

@@ -2,6 +2,40 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.5.0]
+
+### Added
+
+- **Thai and English typed together without a space** are told apart at the
+  end of the word: `กินKFC`, `ส่งไฟล์report`, `ใช้API`, `KFCอร่อยมาก`.
+- **More symbols**: about 130 more LaTeX-style names (negated relations,
+  big operators, arrows, card suits, `\baht` ฿, `\celsius` ℃, `\numero` №).
+  New ghost shortcuts (Tab): `-->` `==>` `<==>` `|->` `~~` `/=` `+/-` and the
+  fifths, sixths and eighths (⅕ … ⅞).
+- **Superscripts and subscripts**: `x_1`, `a_n`, `x_12` offered as ₁ ₙ ₁₂ (not
+  `my_var`); `e^x`, `10^-3` use every superscript Unicode has.
+- Common Thai misspellings: `ผู้เชี่ยวชาน`, `เชี่ยวชาน`; `ประสบการณ`-style
+  endings no longer double the last letter.
+- Number words `฿500`, `500 บาทถ้วน`; a space after `ฯ` before Thai text.
+- Modern code editors (Antigravity, Trae, Positron, Fleet, Neovim, Helix…)
+  and terminals (Windows Terminal, Warp, Tabby, Hyper) are recognised.
+
+### Changed
+
+- **CapsLock** is turned off when a word finishes as Thai, so a whole Thai
+  sentence typed with CapsLock on arrives right.
+- **Word, Outlook, PowerPoint, OneNote**: the keyboard is switched *before* a
+  correction is written, so Thai is no longer marked as English (red
+  squiggles). Words there are corrected at their end, not key by key.
+- A multi-line snippet in a chat app uses Shift+Enter between lines.
+- Ghost suggestions no longer take Tab in browser address and search bars.
+
+### Fixed
+
+- A layout switch an app ignored no longer wipes the word being typed.
+- Two-key Thai typos such as `คมขุ` are no longer read as numbers.
+- A leading quote or bracket no longer stops Title Case from capitalising.
+
 ## [2.4.0]
 
 ### Added

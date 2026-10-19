@@ -20,11 +20,30 @@ pub const RULES: &[(&str, &str)] = &[
     ("!=", "≠"),
     ("+-", "±"),
     ("~=", "≈"),
+    ("~~", "≈"),
+    ("/=", "≠"),
+    ("+/-", "±"),
+    ("|->", "↦"),
+    ("-->", "⟶"),
+    ("<--", "⟵"),
+    ("==>", "⟹"),
+    ("<==", "⟸"),
+    ("<==>", "⟺"),
     ("1/2", "½"),
     ("1/3", "⅓"),
     ("2/3", "⅔"),
     ("1/4", "¼"),
     ("3/4", "¾"),
+    ("1/5", "⅕"),
+    ("2/5", "⅖"),
+    ("3/5", "⅗"),
+    ("4/5", "⅘"),
+    ("1/6", "⅙"),
+    ("5/6", "⅚"),
+    ("1/8", "⅛"),
+    ("3/8", "⅜"),
+    ("5/8", "⅝"),
+    ("7/8", "⅞"),
     ("...", "…"),
     ("--", "–"),
     ("---", "—"),
@@ -37,24 +56,10 @@ pub struct Ghost {
     pub text: String,
 }
 
+/// Every character Unicode has as a superscript (digits, signs, most
+/// letters, a few Greek): the same table the LaTeX reader uses.
 fn superscript(c: char) -> Option<char> {
-    Some(match c {
-        '0' => '⁰',
-        '1' => '¹',
-        '2' => '²',
-        '3' => '³',
-        '4' => '⁴',
-        '5' => '⁵',
-        '6' => '⁶',
-        '7' => '⁷',
-        '8' => '⁸',
-        '9' => '⁹',
-        '+' => '⁺',
-        '-' => '⁻',
-        'n' => 'ⁿ',
-        'i' => 'ⁱ',
-        _ => return None,
-    })
+    crate::latex::superscript(c)
 }
 
 /// The offer for text ending in `before` (what is before the cursor), if
@@ -66,19 +71,52 @@ pub fn offer(before: &str) -> Option<Ghost> {
     if let Some(g) = math(before) {
         return Some(g);
     }
-    // x^2, a^n: a letter or digit, ^, then digits (or n, i).
+    // x^2, a^n, e^x, 10^-3: a letter or digit, ^, then up to three
+    // characters that all have a superscript.
     if let Some(at) = before.rfind('^') {
         let (head, tail) = (&before[..at], &before[at + 1..]);
         let base = head.chars().next_back();
+        let signed_number = tail
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_digit() || c == '+' || c == '-');
         if base.is_some_and(|c| c.is_alphanumeric() || c == ')')
             && !tail.is_empty()
             && tail.chars().count() <= 3
+            && (signed_number || tail.chars().count() == 1)
         {
             let sup: Option<String> = tail.chars().map(superscript).collect();
             if let Some(sup) = sup {
                 return Some(Ghost {
                     replace: tail.chars().count() + 1,
                     text: sup,
+                });
+            }
+        }
+    }
+    // x_1, a_n, H_2, (x+1)_k: one subscript after a one-letter base (or a
+    // bracket). Longer names (`my_var`, `snake_case`) are identifiers, not
+    // math, and never offered.
+    if let Some(at) = before.rfind('_') {
+        let (head, tail) = (&before[..at], &before[at + 1..]);
+        let mut back = head.chars().rev();
+        let base = back.next();
+        let before_base = back.next();
+        let one_letter_base = base.is_some_and(|c| c.is_alphanumeric())
+            && !before_base.is_some_and(|c| c.is_alphanumeric() || c == '_');
+        let after_bracket = base == Some(')');
+        let first = tail.chars().next();
+        let digits_or_sign = first.is_some_and(|c| c.is_ascii_digit() || c == '+' || c == '-');
+        if (one_letter_base || after_bracket)
+            && !tail.is_empty()
+            && tail.chars().count() <= 3
+            && (digits_or_sign || tail.chars().count() == 1)
+        {
+            let sub: Option<String> = tail.chars().map(crate::latex::subscript).collect();
+            if let Some(sub) = sub {
+                return Some(Ghost {
+                    replace: tail.chars().count() + 1,
+                    text: sub,
                 });
             }
         }
@@ -436,12 +474,26 @@ mod tests {
         assert_eq!(o("x^2+y^2"), Some((7, "x²+y²".into())));
         assert_eq!(o("^1234"), Some((5, "¹²³⁴".into())));
         assert_eq!(o("H_2O_2"), Some((6, "H₂O₂".into())));
+        // Single superscripts and subscripts, more letters, long arrows.
+        assert_eq!(o("e^x"), Some((2, "ˣ".into())));
+        assert_eq!(o("10^-3"), Some((3, "⁻³".into())));
+        assert_eq!(o("x_1"), Some((2, "₁".into())));
+        assert_eq!(o("a_n"), Some((2, "ₙ".into())));
+        assert_eq!(o("x_12"), Some((3, "₁₂".into())));
+        assert_eq!(o("a -->"), Some((3, "⟶".into())));
+        assert_eq!(o("p ==>"), Some((3, "⟹".into())));
+        assert_eq!(o("p <==>"), Some((4, "⟺".into())));
+        assert_eq!(o("about 5/8"), Some((3, "⅝".into())));
+        assert_eq!(o("a ~~"), Some((2, "≈".into())));
     }
 
     #[test]
     fn leaves_what_is_something_else() {
         assert_eq!(o("hello"), None);
-        assert_eq!(o("<--"), None, "an arrow of its own");
+        assert_eq!(o("my_var"), None, "an identifier is not math");
+        assert_eq!(o("snake_case"), None);
+        assert_eq!(o("a_b_c_d"), None);
+        assert_eq!(o("<---"), None, "more dashes than an arrow");
         assert_eq!(o("=->"), None);
         assert_eq!(o("(->"), Some((2, "→".into())));
         assert_eq!(o("11/2"), None, "a bigger number");

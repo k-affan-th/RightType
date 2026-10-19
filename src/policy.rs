@@ -199,6 +199,7 @@ pub fn detect_token(
                 // unless its Thai reading is itself a Thai word (กำหนด is
                 // `desof`, de + sof).
                 .filter(|d| !english::is_affixed(token, en) || th.contains(&d.corrected))
+                .or_else(|| us_layout_mixed_token(token, en, th))
         }
         InputLayout::ThaiKedmanee => {
             if !has_thai || has_latin {
@@ -215,6 +216,7 @@ pub fn detect_token(
                 .or_else(|| thai_layout_compound(token, th))
                 .or_else(|| thai_layout_technical(token, en, th))
                 .or_else(|| thai_layout_trailing_mark(token, th))
+                .or_else(|| (!is_thai).then(|| thai_layout_mixed_token(token, en, th)).flatten())
         }
     }
 }
@@ -368,14 +370,29 @@ fn thai_layout_number(token: &str, th: &Dictionary) -> Option<Detection> {
         .strip_suffix('%')
         .unwrap_or_else(|| keys.strip_prefix(['$', '฿']).unwrap_or(&keys));
     let digits = core.chars().filter(char::is_ascii_digit).count();
+    let no_double_sep = !core
+        .as_bytes()
+        .windows(2)
+        .any(|w| ",.:/-".contains(w[0] as char) && ",.:/-".contains(w[1] as char));
+    // On Kedmanee `,` is ม, a very common final consonant (`คุมภ` -> `86,4`),
+    // so commas in a number must follow thousands grouping (`1,250`, `12,480`).
+    let commas_valid = !core.contains(',') || {
+        let whole = core.split(['.', ':', '/', '-']).next().unwrap_or(core);
+        let mut parts = whole.split(',');
+        let first = parts.next().unwrap_or("");
+        !first.is_empty()
+            && first.len() <= 3
+            && first.chars().all(|c| c.is_ascii_digit())
+            && parts.all(|p| p.len() == 3 && p.chars().all(|c| c.is_ascii_digit()))
+    };
     let shaped = !core.is_empty()
         && core.starts_with(|c: char| c.is_ascii_digit())
         && core.ends_with(|c: char| c.is_ascii_digit())
         && core
             .chars()
             .all(|c| c.is_ascii_digit() || ",.:/-".contains(c))
-        && !core.contains(",,")
-        && !core.contains("..");
+        && no_double_sep
+        && commas_valid;
     (digits >= 2 && shaped && !th.contains(token)).then_some(Detection {
         corrected: keys,
         confidence: Confidence::High,
@@ -491,6 +508,216 @@ fn thai_layout_compound(token: &str, th: &Dictionary) -> Option<Detection> {
     })
 }
 
+/// Common uppercase acronyms often written directly next to a Thai word
+/// without an intervening space (`กินKFC`, `ใช้API`, `ไฟล์PDF`, `สายUSB`).
+fn is_common_acronym(s: &str) -> bool {
+    matches!(
+        s,
+        "AI" | "API" | "APP" | "ATM" | "AWS" | "BIOS" | "CDN" | "CEO" | "CLI"
+            | "CORS" | "CPU" | "CRM" | "CSS" | "CSV" | "DAO" | "DNS" | "DOM"
+            | "DTO" | "EMS" | "ERP" | "ETF" | "FAQ" | "FTP" | "GCC" | "GDP"
+            | "GDPR" | "GIF" | "GIS" | "GPS" | "GPU" | "GUI" | "HDD" | "HDMI"
+            | "HTML" | "HTTP" | "HTTPS" | "IDE" | "IMAP" | "IOS" | "IOT" | "IPO"
+            | "ISBN" | "ISP" | "JPEG" | "JPG" | "JSON" | "JWT" | "KFC" | "KPI"
+            | "LAN" | "LCD" | "LED" | "LINE" | "LLM" | "LTE" | "MAC" | "MIME"
+            | "MVC" | "MVP" | "NAS" | "NFC" | "NLP" | "NPM" | "NVME" | "OCR"
+            | "OEM" | "OLED" | "ORM" | "OTP" | "PDF" | "PDPA" | "PHP" | "PIN"
+            | "PNG" | "POS" | "PWA" | "QHD" | "RAM" | "REST" | "RGB" | "ROI"
+            | "ROM" | "RPC" | "RSS" | "SDK" | "SEO" | "SIM" | "SLA" | "SMB"
+            | "SMS" | "SMTP" | "SOAP" | "SQL" | "SSD" | "SSH" | "SSL" | "SSO"
+            | "SVG" | "TCP" | "TLS" | "TOML" | "TTL" | "UDP" | "UEFI" | "UHD"
+            | "URL" | "URI" | "USB" | "UTF" | "UUID" | "VAT" | "VGA" | "VIP"
+            | "VLAN" | "VM" | "VPN" | "VRAM" | "VSC" | "WAN" | "WASM" | "WEB"
+            | "WIFI" | "WSL" | "WWW" | "XML" | "YAML" | "ZIP"
+    )
+}
+
+/// Whether `s` is a well-formed, known Thai word or phrase that starts with a
+/// Thai consonant or leading vowel and does not end in a dangling vowel.
+fn is_well_formed_thai_chunk(s: &str, th: &Dictionary) -> bool {
+    let mut chars = s.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    s.chars().count() >= 3
+        && matches!(first, '\u{0E01}'..='\u{0E2E}' | '\u{0E40}'..='\u{0E44}')
+        && s.chars().all(|c| ('\u{0E01}'..='\u{0E4E}').contains(&c))
+        && !is_unfinished_thai(s)
+        && (th.contains(s)
+            || (segment::is_fully_known(s, th) && !only_short_thai_words(s, th)))
+}
+
+/// Number of characters in `s` that the Thai segmenter leaves unknown.
+fn unknown_thai_chars(s: &str, th: &Dictionary) -> usize {
+    segment::segment(s, th)
+        .iter()
+        .filter(|seg| !seg.known)
+        .map(|seg| seg.text.chars().count())
+        .sum()
+}
+
+/// Whether `s` contains no known Thai word of three or more characters (only
+/// unknown characters and 1–2 character fragments).
+fn no_real_thai_word(s: &str, th: &Dictionary) -> bool {
+    segment::segment(s, th)
+        .iter()
+        .all(|seg| !seg.known || seg.text.chars().count() <= 2)
+}
+
+fn is_hard_secret(token: &str) -> bool {
+    matches!(
+        secret::classify_token(token),
+        Some(
+            SecretKind::Hex
+                | SecretKind::Base58Wif
+                | SecretKind::Bech32
+                | SecretKind::ExtendedKey
+                | SecretKind::TooLong
+        )
+    )
+}
+
+/// A Thai word and an English word typed together without a space while on
+/// the Thai layout (or after the Thai prefix was anchored by `reconcile_run`):
+/// `ส่งไฟล์พำยนพะ` → `ส่งไฟล์report`, `กินษโฉ` → `กินKFC`.
+fn thai_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    if token.chars().count() < 6 || is_hard_secret(&th_to_en(token)) {
+        return None;
+    }
+    if segment::segment(token, th)
+        .iter()
+        .all(|s| s.known && s.text.chars().count() >= 3)
+    {
+        return None;
+    }
+    for (idx, _) in token.char_indices().skip(3) {
+        let (head, tail) = token.split_at(idx);
+        if tail.chars().count() < 3 {
+            break;
+        }
+        // Thai prefix + wrong-layout English tail (`ส่งไฟล์report`, `กินKFC`).
+        if is_well_formed_thai_chunk(head, th) && !th.contains(tail) {
+            let en_tail = th_to_en(tail);
+            let is_acro = !segment::is_fully_known(tail, th)
+                && en_tail.len() >= 3
+                && en_tail.chars().all(|c| c.is_ascii_uppercase())
+                && is_common_acronym(&en_tail);
+            let is_word = en_tail.len() >= 6
+                && en_tail.chars().all(|c| c.is_ascii_lowercase())
+                && ((unknown_thai_chars(tail, th) >= 2
+                    && (en.contains(&en_tail) || english::is_compound(&en_tail)))
+                    || (!segment::is_fully_known(tail, th)
+                        && no_real_thai_word(tail, th)
+                        && english::is_common(&en_tail)));
+            if is_acro || is_word {
+                return Some(Detection {
+                    corrected: format!("{head}{en_tail}"),
+                    confidence: Confidence::High,
+                    evidence: Evidence::ExactDictionary,
+                });
+            }
+        }
+        // Wrong-layout English prefix + Thai tail (`KFCอร่อยมาก`, `reportสรุปผล`).
+        if !th.contains(head)
+            && tail.chars().count() >= 3
+            && is_well_formed_thai_chunk(tail, th)
+        {
+            let en_head = th_to_en(head);
+            let is_acro = !segment::is_fully_known(head, th)
+                && en_head.len() >= 3
+                && en_head.chars().all(|c| c.is_ascii_uppercase())
+                && is_common_acronym(&en_head);
+            let is_word = en_head.len() >= 6
+                && en_head.chars().all(|c| c.is_ascii_lowercase())
+                && ((unknown_thai_chars(head, th) >= 2
+                    && (en.contains(&en_head) || english::is_compound(&en_head)))
+                    || (!segment::is_fully_known(head, th)
+                        && no_real_thai_word(head, th)
+                        && english::is_common(&en_head)));
+            if is_acro || is_word {
+                return Some(Detection {
+                    corrected: format!("{en_head}{tail}"),
+                    confidence: Confidence::High,
+                    evidence: Evidence::ExactDictionary,
+                });
+            }
+        }
+    }
+    None
+}
+
+/// A Thai word and an English word typed together without a space while on
+/// the US layout: `dboKFC` → `กินKFC`, `lj'report` → `ส่งreport`,
+/// `KFCvijkp,kd` → `KFCอร่อยมาก`, `APIit[[` → `APIระบบ`.
+fn us_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    let ascii_core = token.trim_matches(|c: char| c.is_ascii_punctuation());
+    if token.chars().count() < 6
+        || ascii_core.is_empty()
+        || english::is_word(token, en)
+        || english::is_word(ascii_core, en)
+        || english::is_compound(ascii_core)
+        || english::is_affixed(ascii_core, en)
+        || is_hard_secret(token)
+    {
+        return None;
+    }
+    for (idx, _) in token.char_indices().skip(3) {
+        let (head, tail) = token.split_at(idx);
+        if tail.chars().count() < 3 {
+            break;
+        }
+        // Wrong-layout Thai prefix + English tail (`dboKFC`, `.=hAPI`, `lj'report`).
+        let thai_head = en_to_th(head);
+        if is_well_formed_thai_chunk(&thai_head, th)
+            && !en.contains(&head.to_ascii_lowercase())
+        {
+            let is_acro = tail.len() >= 3
+                && tail.chars().all(|c| c.is_ascii_uppercase())
+                && is_common_acronym(tail)
+                && !head.chars().all(|c| c.is_ascii_uppercase())
+                && (head.chars().any(|c| !c.is_ascii_alphabetic())
+                    || (thai_head.chars().count() >= 3 && th.contains(&thai_head)));
+            let is_word = tail.len() >= 5
+                && tail.chars().all(|c| c.is_ascii_lowercase())
+                && (en.contains(tail) || english::is_compound(tail))
+                && head.chars().any(|c| !c.is_ascii_alphabetic());
+            if is_acro || is_word {
+                return Some(Detection {
+                    corrected: format!("{thai_head}{tail}"),
+                    confidence: Confidence::High,
+                    evidence: Evidence::ExactDictionary,
+                });
+            }
+        }
+        // English prefix + wrong-layout Thai tail (`KFCvijkp,kd`, `APIit[[`, `reportli6xz]`).
+        let thai_tail = en_to_th(tail);
+        if is_well_formed_thai_chunk(&thai_tail, th)
+            && !en.contains(&tail.to_ascii_lowercase())
+        {
+            let is_acro = head.len() >= 3
+                && head.chars().all(|c| c.is_ascii_uppercase())
+                && is_common_acronym(head)
+                && !tail.chars().all(|c| c.is_ascii_uppercase())
+                && (tail.chars().any(|c| !c.is_ascii_alphabetic())
+                    || (thai_tail.chars().count() >= 3 && th.contains(&thai_tail)));
+            let is_word = head.len() >= 5
+                && head.chars().all(|c| c.is_ascii_lowercase())
+                && (en.contains(head) || english::is_compound(head))
+                && tail.chars().any(|c| !c.is_ascii_alphabetic());
+            if is_acro || is_word {
+                return Some(Detection {
+                    corrected: format!("{head}{thai_tail}"),
+                    confidence: Confidence::High,
+                    evidence: Evidence::ExactDictionary,
+                });
+            }
+        }
+    }
+    None
+}
+
 /// A Thai word typed in an order that looks right but is not: two เ for แ,
 /// nikhahit + า for ำ, a tone mark before the vowel above or below it, the
 /// same mark twice. Search and word breaking miss such words. `Some` with the
@@ -507,10 +734,14 @@ pub fn thai_spelling(word: &str, th: &Dictionary) -> Option<String> {
     let mut c: Vec<char> = word.replace("เเ", "แ").chars().collect();
     let mut i = 0;
     while i + 1 < c.len() {
-        if c[i] == '\u{0E4D}' && c[i + 1] == '\u{0E32}' {
-            // ํ + า is ำ (a tone mark may sit between: นํ้า).
+        if c[i] == c[i + 1] && (TONES.contains(&c[i]) || ABOVE_BELOW.contains(&c[i])) {
+            c.remove(i + 1);
+            continue;
+        } else if c[i] == '\u{0E4D}' && c[i + 1] == '\u{0E32}' {
+            // ํ + า is ำ (a tone mark may sit between: นํ้า, or follow: นํา้).
             c[i] = '\u{0E33}';
             c.remove(i + 1);
+            continue;
         } else if c[i] == '\u{0E4D}'
             && i + 2 < c.len()
             && TONES.contains(&c[i + 1])
@@ -520,11 +751,13 @@ pub fn thai_spelling(word: &str, th: &Dictionary) -> Option<String> {
             c[i] = tone;
             c[i + 1] = '\u{0E33}';
             c.remove(i + 2);
+        } else if c[i] == '\u{0E33}' && TONES.contains(&c[i + 1]) {
+            // ำ + tone mark -> tone mark + ำ (นำ้ -> น้ำ).
+            c.swap(i, i + 1);
+            i = i.saturating_sub(1);
+            continue;
         } else if TONES.contains(&c[i]) && ABOVE_BELOW.contains(&c[i + 1]) {
             c.swap(i, i + 1);
-        } else if c[i] == c[i + 1] && (TONES.contains(&c[i]) || ABOVE_BELOW.contains(&c[i])) {
-            c.remove(i + 1);
-            continue;
         }
         i += 1;
     }
@@ -599,20 +832,20 @@ pub fn revise_converted(token: &str, en: &Dictionary, th: &Dictionary) -> Option
     // this layout most ASCII punctuation is a Thai letter (`[` is บ, `;` is น),
     // so only a short trailing run is set aside and the rest must be letters.
     let core = raw.trim_end_matches(|c: char| c.is_ascii_punctuation());
-    if raw.len() - core.len() > 2
-        || core.chars().count() < 3
-        || !core.chars().all(|c| c.is_ascii_alphabetic())
-        || !(english::is_word(core, en)
+    if raw.len() - core.len() <= 2
+        && core.chars().count() >= 3
+        && core.chars().all(|c| c.is_ascii_alphabetic())
+        && (english::is_word(core, en)
             || is_unfinished_thai(token.trim())
             || (english::is_affixed(core, en) && !th.contains(token.trim())))
     {
-        return None;
+        return Some(Detection {
+            corrected: raw,
+            confidence: Confidence::High,
+            evidence: Evidence::ExactDictionary,
+        });
     }
-    Some(Detection {
-        corrected: raw,
-        confidence: Confidence::High,
-        evidence: Evidence::ExactDictionary,
-    })
+    thai_layout_mixed_token(token, en, th)
 }
 
 /// Learning is allowed only for ordinary text produced under exact US QWERTY
@@ -665,7 +898,7 @@ pub fn live_decision(
     if layout != Some(InputLayout::UsQwerty)
         || d.confidence != detect::Confidence::High
         || token.chars().count() < MIN_LIVE_COMMIT_CHARS
-        || d.corrected.chars().any(|c| c.is_ascii_whitespace())
+        || d.corrected.chars().any(|c| c.is_ascii_whitespace() || c.is_ascii_alphabetic())
     {
         return LiveDecision::None;
     }
@@ -1149,6 +1382,8 @@ mod tests {
             crate::layout::en_to_th("1"),
             "ภาค".to_string(),
             "จุด".to_string(),
+            "คุมภ".to_string(),
+            "คมขุ".to_string(),
         ] {
             assert!(thai_layout_number(&word, th).is_none(), "{word}");
         }
@@ -1170,5 +1405,50 @@ mod tests {
             let d = detect_token(word, InputLayout::ThaiKedmanee, en, th);
             assert!(d.is_none(), "{word}");
         }
+    }
+
+    #[test]
+    fn sara_am_and_tone_marks_are_put_in_canonical_order() {
+        let th = crate::dict::thai();
+        assert_eq!(thai_spelling("นำ้", th).as_deref(), Some("น้ำ"));
+        assert_eq!(thai_spelling("นํา้", th).as_deref(), Some("น้ำ"));
+        assert_eq!(thai_spelling("นํ้า", th).as_deref(), Some("น้ำ"));
+    }
+
+    #[test]
+    fn mixed_thai_and_english_tokens_without_space_are_resolved() {
+        let (en, th) = (crate::dict::english(), crate::dict::thai());
+        // Typed on Thai layout (or after anchoring to Thai):
+        assert_eq!(
+            on_thai(&format!("ส่งไฟล์{}", crate::layout::en_to_th("report"))).as_deref(),
+            Some("ส่งไฟล์report")
+        );
+        assert_eq!(
+            on_thai(&format!("กิน{}", crate::layout::en_to_th("KFC"))).as_deref(),
+            Some("กินKFC")
+        );
+        assert_eq!(
+            revise_converted(&format!("ส่งไฟล์{}", crate::layout::en_to_th("report")), en, th)
+                .map(|d| d.corrected)
+                .as_deref(),
+            Some("ส่งไฟล์report")
+        );
+        // Typed on US layout:
+        assert_eq!(
+            on_us(&format!("{}KFC", crate::layout::th_to_en("กิน"))).as_deref(),
+            Some("กินKFC")
+        );
+        assert_eq!(
+            on_us(&format!("{}report", crate::layout::th_to_en("ส่ง"))).as_deref(),
+            Some("ส่งreport")
+        );
+        assert_eq!(
+            on_us(&format!("KFC{}", crate::layout::th_to_en("อร่อยมาก"))).as_deref(),
+            Some("KFCอร่อยมาก")
+        );
+        assert_eq!(
+            on_us(&format!("report{}", crate::layout::th_to_en("สรุปผล"))).as_deref(),
+            Some("reportสรุปผล")
+        );
     }
 }

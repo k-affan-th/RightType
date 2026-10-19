@@ -51,10 +51,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VK_TAB, VK_UP,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, PostMessageW,
-    SetWindowsHookExW, UnhookWindowsHookEx, GUITHREADINFO, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT,
-    LLKHF_INJECTED, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_INPUTLANGCHANGEREQUEST, WM_KEYDOWN,
-    WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_XBUTTONDOWN,
+    CallNextHookEx, GetAncestor, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId,
+    PostMessageW, SetWindowsHookExW, UnhookWindowsHookEx, GA_ROOT, GUITHREADINFO, HC_ACTION, HHOOK,
+    KBDLLHOOKSTRUCT, LLKHF_INJECTED, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_INPUTLANGCHANGEREQUEST,
+    WM_KEYDOWN, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_XBUTTONDOWN,
 };
 
 use crate::{inject, manual, safety};
@@ -549,10 +549,24 @@ unsafe fn expand_snippet(word: &str, vk: u16, text: &str) -> bool {
     let shown = policy::shown_with_caps(word, caps_on());
     inject::expect_before_caret(&shown);
     let lines: Vec<&str> = text.split('\n').collect();
+    let chat = is_current_chat_app();
     for (i, line) in lines.iter().enumerate() {
         let delete = if i == 0 { word.chars().count() } else { 0 };
-        let then = if i + 1 < lines.len() { VK_RETURN.0 } else { vk };
-        if !inject::apply(delete, line, Some(then)) {
+        if i + 1 < lines.len() {
+            if chat {
+                if !inject::apply(delete, line, None)
+                    || !inject::press_chord(&[VK_SHIFT.0, VK_RETURN.0])
+                {
+                    crate::overlay::show(righttype::i18n::tr(
+                        righttype::i18n::T::ErrCorrectionInject,
+                    ));
+                    return false;
+                }
+            } else if !inject::apply(delete, line, Some(VK_RETURN.0)) {
+                crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
+                return false;
+            }
+        } else if !inject::apply(delete, line, Some(vk)) {
             crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ErrCorrectionInject));
             return false;
         }
@@ -865,6 +879,7 @@ fn ghost_here(key: Key, mode_now: Mode) -> bool {
     matches!(key, Key::Char(_))
         && ghosts()
         && mode_now != Mode::Code
+        && !crate::focus::completes_inline()
         && !current_app().is_some_and(|e| righttype::code::is_code_editor(&e))
 }
 
@@ -1150,6 +1165,41 @@ thread_local! {
         const { std::cell::Cell::new(None) };
 }
 
+/// The focused program marks text with the keyboard language at arrival
+/// (Word): see `righttype::compat::tags_language`.
+pub(crate) fn tags_language_here() -> bool {
+    current_app().is_some_and(|e| righttype::compat::tags_language(&e))
+}
+
+/// Before text is written into a program that tags it by keyboard language,
+/// put the keyboard of that text on (Thai text, Thai keyboard), so the text
+/// carries the right proofing language. Text with no letters is left alone.
+pub(crate) unsafe fn prepare_layout_for(text: &str) {
+    if !tags_language_here() {
+        return;
+    }
+    let letters = text
+        .chars()
+        .any(|c| c.is_ascii_alphabetic() || ('\u{0E01}'..='\u{0E4E}').contains(&c));
+    if !letters {
+        return;
+    }
+    let target = layout_of(text);
+    if policy::supported_layout_id(layout_id(effective_layout())) != Some(target) {
+        activate_layout(target);
+    }
+}
+
+fn is_current_chat_app() -> bool {
+    STATE
+        .with(|s| s.borrow().app_exe.clone())
+        .is_some_and(|exe| {
+            CHAT_APPS
+                .read()
+                .is_ok_and(|extra| righttype::per_app::is_chat_app(&exe, &extra))
+        })
+}
+
 /// Hold this Enter? In a chat app (with the guard on, not in Code mode),
 /// when the words of the message so far look typed on the wrong keyboard
 /// and this is not the second Enter that sends anyway.
@@ -1162,14 +1212,7 @@ unsafe fn hold_enter(mode_now: Mode) -> bool {
     if !guards_enter() || mode_now == Mode::Code {
         return false;
     }
-    let chat = STATE
-        .with(|s| s.borrow().app_exe.clone())
-        .is_some_and(|exe| {
-            CHAT_APPS
-                .read()
-                .is_ok_and(|extra| righttype::per_app::is_chat_app(&exe, &extra))
-        });
-    if !chat {
+    if !is_current_chat_app() {
         return false;
     }
     let mut words = STATE.with(|s| {
@@ -2906,8 +2949,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         {
             offer_completion();
         }
+        // In Word the text is tagged with the keyboard language when it
+        // arrives, so words are corrected at their boundary only (after the
+        // keyboard has been switched), never rewritten key by key.
         if may_reconcile
             && mode_now == Mode::Auto
+            && !tags_language_here()
             && STATE.with(|s| s.borrow().mark == TokenMark::Plain)
             && policy::supported_layout_id(layout_id(effective_layout()))
                 == Some(policy::InputLayout::UsQwerty)
@@ -3347,6 +3394,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                 diag::note("CapsLock on by accident: word put right, CapsLock off", &[]);
                 crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastCapsOff));
             } else if done {
+                if caps_on() && layout_of(&corrected) == policy::InputLayout::ThaiKedmanee {
+                    inject::toggle_capslock();
+                }
                 // Shift+Backspace right after an automatic correction flips it
                 // back — the undo gesture people reach for first.
                 remember_completed(&corrected, vk, true);
@@ -3381,6 +3431,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         _ => false,
     };
     if !swallow {
+        if converted && caps_on() {
+            inject::toggle_capslock();
+        }
         remember_as_shown(&word, vk, converted);
     }
     word.zeroize();
@@ -3768,6 +3821,15 @@ unsafe fn activate_layout(target: policy::InputLayout) {
                     LPARAM(hkl.0 as isize),
                 );
             }
+            let root = GetAncestor(foreground, GA_ROOT);
+            if !root.0.is_null() && root != target && root != foreground {
+                let _ = PostMessageW(
+                    root,
+                    WM_INPUTLANGCHANGEREQUEST,
+                    WPARAM(0),
+                    LPARAM(hkl.0 as isize),
+                );
+            }
             // Record that we are waiting for this HKL to activate, and adopt it
             // as the context's layout now: this switch is ours, so it must not
             // read as the context change that drops the token in progress.
@@ -3826,15 +3888,7 @@ unsafe fn accept_suggestion() {
         has_thai(&suggestion.corrected),
     );
 
-    let to_thai = suggestion
-        .corrected
-        .chars()
-        .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
-    activate_layout(if to_thai {
-        policy::InputLayout::ThaiKedmanee
-    } else {
-        policy::InputLayout::UsQwerty
-    });
+    activate_layout(layout_of(&suggestion.corrected));
     suggestion.original.zeroize();
     suggestion.corrected.zeroize();
 }
@@ -4107,14 +4161,7 @@ unsafe fn convert_last_word() {
         crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastFlippedOne));
 
         // Switch language layout to the one of the converted word
-        let to_thai = converted
-            .chars()
-            .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
-        activate_layout(if to_thai {
-            policy::InputLayout::ThaiKedmanee
-        } else {
-            policy::InputLayout::UsQwerty
-        });
+        activate_layout(layout_of(&converted));
     }
     word.zeroize();
     converted.zeroize();
@@ -4161,14 +4208,22 @@ unsafe fn anchor_owned_run(run: &str, boundary_vk: u16) -> Option<String> {
         UndoKind::AutoWord,
     );
     restore.zeroize();
+    if caps_on() {
+        inject::toggle_capslock();
+    }
     crate::stats::record_auto();
     activate_layout(policy::InputLayout::ThaiKedmanee);
     Some(owned.rendered.clone())
 }
 
-/// The layout a piece of text is written in, for switching to after a flip.
+/// The layout a piece of text ends in, for switching to after a correction or flip.
 fn layout_of(text: &str) -> policy::InputLayout {
-    if text.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c)) {
+    let trailing_thai = text
+        .chars()
+        .rev()
+        .find(|c| !c.is_ascii_punctuation())
+        .is_some_and(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+    if trailing_thai {
         policy::InputLayout::ThaiKedmanee
     } else {
         policy::InputLayout::UsQwerty
@@ -4381,17 +4436,11 @@ where
     crate::stats::record_auto();
     restore.zeroize();
 
-    // Switch to whichever language we just produced, so the rest of the sentence
+    // Switch to whichever language the word ends in, so the rest of the sentence
     // types natively — same idea as the live Thai path, now for the EN direction.
-    let to_thai = corrected
-        .chars()
-        .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+    let next_layout = layout_of(&corrected);
     corrected.zeroize();
-    activate_layout(if to_thai {
-        policy::InputLayout::ThaiKedmanee
-    } else {
-        policy::InputLayout::UsQwerty
-    });
+    activate_layout(next_layout);
     true
 }
 
@@ -4466,14 +4515,18 @@ unsafe fn sync_context() {
     // latency to the next physical key. While our own request is in flight the
     // context is already on the requested layout (see `effective_layout`);
     // once it lands it is confirmed, and if the app ignores it past the grace
-    // period the real layout wins and reads as the context change it then is.
+    // period we resync `last_hkl` to the real layout without treating it as a
+    // manual user layout switch that would wipe the current token buffer.
     let actual = GetKeyboardLayout(tid).0 as isize;
     let hkl_i = STATE.with(|s| {
         let mut st = s.borrow_mut();
         match st.pending_hkl {
             Some(p) if p.hkl != actual && p.since.elapsed() < PENDING_LAYOUT_GRACE => p.hkl,
-            Some(_) => {
+            Some(p) => {
                 st.pending_hkl = None;
+                if p.hkl != actual && st.last_hkl == p.hkl {
+                    st.last_hkl = actual;
+                }
                 actual
             }
             None => actual,
