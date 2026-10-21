@@ -101,8 +101,8 @@ pub fn layout_switched(layout: InputLayout) {
         return;
     }
     overlay::badge_at_caret(match layout {
-        InputLayout::ThaiKedmanee => "TH",
-        InputLayout::UsQwerty => "EN",
+        InputLayout::ThaiKedmanee => "ไทย",
+        InputLayout::UsQwerty => "ENG",
     });
 }
 

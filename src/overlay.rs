@@ -80,7 +80,7 @@ enum Style {
 }
 
 const BADGE_MIN_W: i32 = 44;
-const BADGE_MS: u32 = 800;
+const BADGE_MS: u32 = 450;
 /// How long an offer for Tab is shown, and can be taken.
 pub const OFFER_MS: u32 = 2000;
 
@@ -526,12 +526,12 @@ unsafe fn draw_centered(hdc: HDC, text: &str, rc: &mut RECT) {
 /// Fill and border of the pill: a tag's own colour, or dark for messages.
 fn tag_colours(text: &str, badge: bool) -> (u32, u32) {
     match (badge, text) {
-        (true, "TH") => (0x005C_6F1F, 0x007A_8F33),   // teal
-        (true, "EN") => (0x0097_572B, 0x00B3_7040),   // blue
+        (true, "TH") | (true, "ไทย") => (0x005C_6F1F, 0x007A_8F33),   // teal
+        (true, "EN") | (true, "ENG") => (0x0097_572B, 0x00B3_7040),   // blue
         (true, "CAPS") => (0x0000_5A8A, 0x0010_74AA), // amber
         // A spelling fix: its own colour, so it is not mistaken for a
         // keyboard fix.
-        (false, t) if t.starts_with('✎') => (0x0078_3C6A, 0x0092_5487), // purple
+        (false, t) if t.starts_with("Spelling:") || t.starts_with("แก้คำสะกด:") => (0x0078_3C6A, 0x0092_5487), // purple
         _ => (0x002A_2A2A, 0x0045_4545),
     }
 }

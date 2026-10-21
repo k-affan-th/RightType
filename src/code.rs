@@ -109,8 +109,14 @@ pub fn is_name(s: &str) -> bool {
 /// English that is code by its shape alone: `camelCase`, `PascalCase` with a
 /// second capital, `snake_case`, `CONSTANT` (two or more capitals and no
 /// lower case), or anything with a digit or `_ . :: ->` in it.
+/// Characters that exist on the QWERTY keyboard as Thai Kedmanee keys
+/// but can never be part of a standard identifier in C/JS/Rust/Python/etc.
+pub fn has_non_identifier_keys(word: &str) -> bool {
+    word.contains(['\'', ';', '[', ']', '^', '/', '\\', '`'])
+}
+
 pub fn looks_like_identifier(word: &str) -> bool {
-    if !word.is_ascii() || word.is_empty() {
+    if !word.is_ascii() || word.is_empty() || has_non_identifier_keys(word) {
         return false;
     }
     if word.contains(['_', '.', ':', '>', '(', ')', '[', ']', '{', '}', '=', '<'])
@@ -329,6 +335,13 @@ mod tests {
         assert_eq!(
             verdict("getUser", InputLayout::UsQwerty, Some("เ"), Some(true), th),
             Verdict::Leave
+        );
+        // Words typed on QWERTY with punctuation/digits for Thai keys (me'ko5^d -> ทำงานถูก)
+        assert!(!looks_like_identifier("me'ko5^d"));
+        assert!(!looks_like_identifier("l;ylfu"));
+        assert_eq!(
+            verdict("me'ko5^d", InputLayout::UsQwerty, Some("ทำงานถูก"), Some(true), th),
+            Verdict::Fix("ทำงานถูก".into())
         );
     }
 

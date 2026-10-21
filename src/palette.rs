@@ -135,6 +135,10 @@ enum Command {
     Practice,
     /// English prefix words written with their hyphen, on or off.
     Hyphens,
+    /// Explicitly learn a new word typed or open learned words manager.
+    LearnWord,
+    /// Explicitly learn a recent word by its place in `words`.
+    LearnRecent(usize),
 }
 
 /// The palette's sections, top to bottom. Things done to text come first
@@ -255,6 +259,7 @@ impl Command {
             Command::KeyTest => '\u{E9D9}',      // Diagnostic
             Command::Sheet => '\u{E765}',        // KeyboardClassic
             Command::Practice => '\u{E7FC}',     // Game
+            Command::LearnWord | Command::LearnRecent(_) => '\u{E82D}', // Dictionary
         }
     }
 }
@@ -394,10 +399,24 @@ pub fn key(vk: u16, ch: Option<char>) -> bool {
 /// packed from the top, and select the first.
 fn refilter(p: &Palette) {
     use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SWP_NOMOVE, SWP_NOZORDER, SW_HIDE};
-    let filter = p.filter.borrow().to_lowercase();
+    let raw_filter = p.filter.borrow().clone();
+    let filter = raw_filter.to_lowercase();
     // Typed on the wrong keyboard still finds it (`fxw` and `ซ่อม` alike).
     let other = righttype::layout::auto_convert(&filter).to_lowercase();
     let searching = !filter.is_empty();
+
+    // Dynamically update label for Command::LearnWord
+    for (i, (_, cmd)) in p.items.iter().enumerate() {
+        if let Command::LearnWord = cmd {
+            let label = if searching {
+                trf(T::PaletteLearnWord, &[("word", raw_filter.trim())])
+            } else {
+                tr(T::PaletteLearnNew).to_string()
+            };
+            p.labels.borrow_mut()[i] = label;
+        }
+    }
+
     // A section opened with its row is a page of its own: only its rows,
     // not appended under everything (the options ran off the screen).
     let page = !searching && p.expanded.get() != 0;
@@ -405,6 +424,9 @@ fn refilter(p: &Palette) {
         let command = p.items[i].1;
         let section = p.item_sections[i];
         let open = p.expanded.get() & section.bit() != 0;
+        if let Command::LearnWord = command {
+            return true;
+        }
         if let Command::More(_) = command {
             return !searching && !open && !page;
         }
@@ -492,12 +514,15 @@ fn refilter(p: &Palette) {
             p.surface.hwnd,
             windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST,
         ));
-        if wr.bottom > wa.bottom {
-            let top = (wa.bottom - (wr.bottom - wr.top)).max(wa.top);
+        let width = wr.right - wr.left;
+        let height = wr.bottom - wr.top;
+        let left = wr.left.clamp(wa.left, (wa.right - width).max(wa.left));
+        let top = wr.top.clamp(wa.top, (wa.bottom - height).max(wa.top));
+        if left != wr.left || top != wr.top {
             let _ = SetWindowPos(
                 p.surface.hwnd,
                 None,
-                wr.left,
+                left,
                 top,
                 0,
                 0,
@@ -665,8 +690,12 @@ fn toggle_checked(p: &Palette) -> bool {
     let i = p.visible.borrow()[k];
     let label = {
         let mut labels = p.labels.borrow_mut();
-        let rest = labels[i].chars().skip(1).collect::<String>();
-        labels[i] = format!("{}{rest}", if on { '☑' } else { '☐' });
+        let rest = if labels[i].starts_with("[x]") || labels[i].starts_with("[ ]") {
+            labels[i][3..].to_string()
+        } else {
+            labels[i].chars().skip(1).collect::<String>()
+        };
+        labels[i] = format!("{}{rest}", if on { "[x]" } else { "[ ]" });
         labels[i].clone()
     };
     let text = match number_of(p, k) {
@@ -743,6 +772,30 @@ fn run_shown(p: &Rc<Palette>, k: usize) {
             .position(|&v| p.item_sections[v] == section && p.item_folded[v]);
         if let Some(k) = first {
             select(p, k);
+        }
+        return;
+    }
+    if let Command::LearnWord = command {
+        let raw = p.filter.borrow().trim().to_string();
+        close(p, true);
+        if raw.is_empty() {
+            crate::settings::open();
+        } else {
+            match crate::learn::add_explicit(&raw) {
+                Ok(w) => overlay::show(&trf(T::ToastWordLearned, &[("word", &w)])),
+                Err(_) => overlay::show(tr(T::ToastWordInvalid)),
+            }
+        }
+        return;
+    }
+    if let Command::LearnRecent(idx) = command {
+        let word = p.words.borrow().get(idx).cloned();
+        close(p, true);
+        if let Some(w) = word {
+            match crate::learn::add_explicit(&w) {
+                Ok(learned) => overlay::show(&trf(T::ToastWordLearned, &[("word", &learned)])),
+                Err(_) => overlay::show(tr(T::ToastWordInvalid)),
+            }
         }
         return;
     }
@@ -825,7 +878,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
         let mut flipped = hook::flipped(word);
         add(
             Section::Words,
-            format!("☐  {word}  →  {flipped}"),
+            format!("[ ]  {word}  →  {flipped}"),
             "",
             Command::History(i),
         );
@@ -839,6 +892,25 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             Command::KeepAsTyped(i),
         );
     }
+    // Offer to remember the latest typed word as-is directly if eligible
+    if let Some((i, last_word)) = words.iter().enumerate().rev().next() {
+        let clean = last_word.trim();
+        if !clean.is_empty() {
+            add(
+                Section::Words,
+                trf(T::PaletteLearnRecent, &[("word", clean)]),
+                "",
+                Command::LearnRecent(i),
+            );
+        }
+    }
+    // Quick learn / add custom word entry
+    add(
+        Section::Words,
+        tr(T::PaletteLearnNew).to_string(),
+        "",
+        Command::LearnWord,
+    );
     if app.is_some() {
         add(
             Section::Fix,
@@ -876,13 +948,13 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
         add(
             Section::Selection,
             tr(T::PaletteMoreSelection).to_string(),
-            "▸",
+            "›",
             Command::More(Section::Selection),
         );
         add(
             Section::Symbols,
             tr(T::PaletteMoreSymbols).to_string(),
-            "▸",
+            "›",
             Command::More(Section::Symbols),
         );
         add(
@@ -989,7 +1061,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
     add(
         Section::Mode,
         tr(T::PaletteMoreOptions).to_string(),
-        "▸",
+        "›",
         Command::More(Section::Options),
     );
     let state = |on: bool| tr(if on { T::HintOn } else { T::HintOff });
@@ -1132,7 +1204,7 @@ fn review_commands(changes: &[(String, String)]) -> Vec<Entry> {
         .map(|(i, (original, fixed))| Entry {
             section: Section::Review,
             folded: false,
-            label: format!("☑  {original}  →  {fixed}"),
+            label: format!("[x]  {original}  →  {fixed}"),
             hint: String::new(),
             command: Command::Review(i),
         })
@@ -1312,11 +1384,20 @@ fn open_with(review: Option<Review>) {
         })
         .collect();
     ui::size_and_center(surface.hwnd, W, h);
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowDisplayAffinity(
+            surface.hwnd,
+            windows::Win32::UI::WindowsAndMessaging::WDA_EXCLUDEFROMCAPTURE,
+        );
+    }
     // Next to the caret when there is one: below it, or above it when there
     // is no room below, and always inside that monitor's work area.
     if let Some(caret) = caret {
         unsafe {
-            let (w, h) = (ui::px(W), ui::px(h));
+            let mut wr = RECT::default();
+            let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(surface.hwnd, &mut wr);
+            let w = (wr.right - wr.left).max(ui::px(W));
+            let h = (wr.bottom - wr.top).max(ui::px(h));
             let monitor = MonitorFromPoint(
                 POINT {
                     x: caret.left,
@@ -1452,7 +1533,7 @@ fn close(p: &Rc<Palette>, refocus: bool) {
 fn run(command: Command, app: Option<&str>) {
     match command {
         // Handled in `run_shown`.
-        Command::History(_) => {}
+        Command::History(_) | Command::LearnWord | Command::LearnRecent(_) => {}
         Command::FixText => crate::fixer::open(),
         Command::Settings => crate::settings::open(),
         Command::Clean => crate::clean::request_open(crate::clean::Mode::Clean),

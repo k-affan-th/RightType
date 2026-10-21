@@ -13,7 +13,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicIsize, AtomicU8, Ordering};
 
 use native_windows_gui as nwg;
 use righttype::i18n::{self, tr, trf, Lang, T};
@@ -47,8 +47,9 @@ const PAGE_ABOUT: u8 = 5;
 const PAGE_SNIPPETS: u8 = 6;
 const PAGE_KEYBOARD: u8 = 7;
 const PAGE_TOOLS: u8 = 8;
+const PAGE_SPONSOR: u8 = 9;
 /// Sidebar entries, top to bottom, and their pages.
-const NAV: [(T, u8); 8] = [
+const NAV: [(T, u8); 9] = [
     (T::NavGeneral, PAGE_GENERAL),
     (T::NavKeyboard, PAGE_KEYBOARD),
     (T::NavTools, PAGE_TOOLS),
@@ -57,15 +58,56 @@ const NAV: [(T, u8); 8] = [
     (T::NavSnippets, PAGE_SNIPPETS),
     (T::NavBlocked, PAGE_BLOCKED),
     (T::NavAbout, PAGE_ABOUT),
+    (T::NavSponsor, PAGE_SPONSOR),
 ];
+
+pub const BTC_LIGHTNING: &str = "yawninggrass92@walletofsatoshi.com";
+pub const BTC_MAINNET: &str = "bc1qdac8h7hl57x3kv8x8xpz6zg0fgw6zvp7uld3a6";
+
+pub const QR_LIGHTNING: [u64; 33] = [
+    0x1fc9b207f, 0x10452fe41, 0x1748fa15d, 0x17571495d,
+    0x17504955d, 0x10457d341, 0x1fd55557f, 0x00020c900,
+    0x07cd6ec7d, 0x184b9552f, 0x0e4348e60, 0x17961d61d,
+    0x09b240041, 0x144d3ffa5, 0x0b62c616d, 0x06cf953ad,
+    0x19bce6af6, 0x1649b3f9d, 0x0bc43a9ff, 0x1f30ed594,
+    0x191f19afe, 0x14484fc87, 0x0f257dec9, 0x077a4bdb9,
+    0x1bf5098f5, 0x111bd4700, 0x0d5b5927f, 0x071f90d41,
+    0x0bf24935d, 0x17871fb5d, 0x0464c735d, 0x06e7d2641,
+    0x085cb6b7f,
+];
+
+pub const QR_BITCOIN: [u64; 33] = [
+    0x1fcab727f, 0x10572e241, 0x17476b95d, 0x17451515d,
+    0x174a4b75d, 0x104338b41, 0x1fd55557f, 0x000e09500,
+    0x07d53ee7d, 0x18e88599a, 0x0fa6495e1, 0x17730c49e,
+    0x0b04c144c, 0x107b3d129, 0x0950c4be9, 0x1657d4024,
+    0x01a0f194d, 0x1e4fb4918, 0x04262afd6, 0x17d26f0a9,
+    0x11a092bec, 0x166c4e21d, 0x0b927d165, 0x144b8a989,
+    0x03f43d741, 0x1d1bc5900, 0x0b594887f, 0x071791941,
+    0x01f54fb5d, 0x1da8b915d, 0x045365b5d, 0x074a15e41,
+    0x09593337f,
+];
+
+static TIP_NETWORK: AtomicU8 = AtomicU8::new(0);
+
+const AB_CARD1_Y: i32 = 68;
+const AB_CARD1_H: i32 = 66;
+const AB_CARD2_Y: i32 = AB_CARD1_Y + AB_CARD1_H + 12; // 146
+const AB_CARD2_H: i32 = 186;
+const AB_CARD3_Y: i32 = AB_CARD2_Y + AB_CARD2_H + 12; // 344
+const AB_CARD3_H: i32 = 72;
+const RESTART_Y: i32 = AB_CARD3_Y + AB_CARD3_H + 12; // 428
+
+const SP_CARD1_Y: i32 = 68;
+const SP_CARD1_H: i32 = 84;
+const SP_CARD2_Y: i32 = SP_CARD1_Y + SP_CARD1_H + 14; // 166
+const SP_CARD2_H: i32 = 216;
 
 /// Toggle rows on the General page: y of each row inside the behaviour card.
 const ROW_H: i32 = 64;
 const CARD_B_Y: i32 = 282;
 /// The per-field language card on the Apps page.
 const PREDICT_Y: i32 = 548;
-/// The restart-after-a-crash card on the Privacy & about page.
-const RESTART_Y: i32 = 486;
 /// The Keyboard page: its three cards (y of each card's top) and how tall
 /// the page is (it scrolls).
 const KB_PICK_Y: i32 = 98;
@@ -108,7 +150,7 @@ pub fn hotkey_rows() -> Vec<(T, String)> {
 }
 
 struct Ids {
-    nav: [u16; 8],
+    nav: [u16; 9],
     snip_table: u16,
     snip_trigger: u16,
     snip_text: u16,
@@ -187,6 +229,12 @@ struct Ids {
     sync_folder: u16,
     this_pc: u16,
     sync_settings: u16,
+    link_github: u16,
+    tip_ln: u16,
+    tip_onchain: u16,
+    tip_address: u16,
+    tip_desc: u16,
+    tip_copy: u16,
 }
 
 thread_local! {
@@ -310,27 +358,31 @@ fn open_on(page: u8) {
     let p = pal();
 
     // --- sidebar (every page) ---------------------------------------------
-    s.label("RightType", TextStyle::Subtitle, (24, 22, 180, 26), p.bg, 0);
+    s.label("RightType", TextStyle::Subtitle, (24, 20, 180, 26), p.bg, 0);
     s.label(
-        &format!("v{}", env!("CARGO_PKG_VERSION")),
+        tr(T::BrandTagline),
         TextStyle::Small,
-        (24, 48, 180, 18),
+        (24, 46, 180, 18),
         p.bg,
         0,
     );
-    let mut nav = [0u16; 8];
-    for (i, (label, _)) in NAV.iter().enumerate() {
-        nav[i] = s.nav(tr(*label), i == 0, (12, 84 + i as i32 * 40, 196, 36));
+    let mut nav = [0u16; 9];
+    for (i, (label, p_id)) in NAV.iter().enumerate() {
+        nav[i] = s.nav(tr(*label), *p_id == page, (12, 74 + i as i32 * 38, 196, 34));
     }
+
     s.label(
         tr(T::HeadLanguage),
         TextStyle::Small,
-        (24, H - 92, 180, 18),
+        (20, H - 98, 180, 16),
         p.bg,
         0,
     );
-    let lang_en = s.segment("English", true, (20, H - 66, 90, 32), p.inset, 0);
-    let lang_th = s.segment("ไทย", false, (110, H - 66, 90, 32), p.inset, 0);
+    let lang_en = s.segment("English", true, (16, H - 78, 92, 30), p.inset, 0);
+    let lang_th = s.segment("ไทย", false, (112, H - 78, 92, 30), p.inset, 0);
+
+    let ver_str = trf(T::VersionLabel, &[("v", env!("CARGO_PKG_VERSION"))]);
+    s.label(&ver_str, TextStyle::Dim, (20, H - 36, 188, 20), p.bg, 0);
 
     // --- General ----------------------------------------------------------
     let g = PAGE_GENERAL;
@@ -921,76 +973,97 @@ fn open_on(page: u8) {
         b,
     );
 
-    // --- Privacy & about --------------------------------------------------
+    // --- Privacy ----------------------------------------------------------
     let a = PAGE_ABOUT;
-    s.label(tr(T::NavAbout), TextStyle::Title, (X0, 18, CW, 36), p.bg, a);
-    for (i, line) in [T::Privacy1, T::Privacy2, T::Privacy3, T::Privacy4]
-        .iter()
-        .enumerate()
-    {
-        let y = 74 + i as i32 * 56;
-        s.label(
-            tr(*line),
-            TextStyle::Body,
-            (X0 + 52, y + 8, CW - 72, 42),
-            p.surface,
-            a,
-        );
+    s.label(tr(T::HeadPrivacy), TextStyle::Title, (X0, 18, CW, 36), p.bg, a);
+
+    // Card 1: Software info & Github link
+    s.label("RightType", TextStyle::BodyStrong, (X0 + 20, AB_CARD1_Y + 12, 280, 22), p.surface, a);
+    s.label(tr(T::PrivacyLicense), TextStyle::Dim, (X0 + 20, AB_CARD1_Y + 36, 320, 20), p.surface, a);
+    let link_github = s.button(tr(T::BtnGitHub), false, (X0 + CW - 110, AB_CARD1_Y + 17, 94, 32), p.surface, a);
+
+    // Card 2: Privacy promises
+    for (i, (head, sub)) in [
+        (T::Privacy1, T::SubPrivacy1),
+        (T::Privacy2, T::SubPrivacy2),
+        (T::Privacy3, T::SubPrivacy3),
+    ].iter().enumerate() {
+        let y = AB_CARD2_Y + 8 + i as i32 * 58;
+        s.label(tr(*head), TextStyle::BodyStrong, (X0 + 20, y + 6, CW - 40, 22), p.surface, a);
+        s.label(tr(*sub), TextStyle::Dim, (X0 + 20, y + 28, CW - 40, 20), p.surface, a);
     }
-    let about_y = 74 + 4 * 56 + 28;
-    s.label(
-        tr(T::HeadAbout),
-        TextStyle::BodyStrong,
-        (X0, about_y, CW, 20),
-        p.bg,
-        a,
-    );
-    s.label(
-        &trf(T::AboutVersion, &[("v", env!("CARGO_PKG_VERSION"))]),
-        TextStyle::Body,
-        (X0, about_y + 28, CW, 22),
-        p.bg,
-        a,
-    );
-    s.label(
-        tr(T::AboutLicense),
-        TextStyle::Dim,
-        (X0, about_y + 52, CW, 22),
-        p.bg,
-        a,
-    );
-    let check_updates = s.button(
-        tr(T::BtnCheckUpdates),
-        false,
-        (X0, about_y + 88, 190, 34),
-        p.bg,
-        a,
-    );
-    s.label(
-        tr(T::AboutUpdates),
-        TextStyle::Small,
-        (X0 + 204, about_y + 86, CW - 204, 40),
-        p.bg,
-        a,
-    );
-    let restart = s.toggle(
-        tr(T::RowRestart),
-        tr(T::SubRestart),
-        (X0 + 4, RESTART_Y + 4, CW - 8, 64),
-        p.surface,
-        a,
-    );
-    // Two corrections of one word, Windows' after RightType's, look like a
-    // RightType fault: say where that comes from.
+
+    // Card 3: Updates
+    s.label(tr(T::HeadUpdates), TextStyle::BodyStrong, (X0 + 20, AB_CARD3_Y + 14, 250, 22), p.surface, a);
+    s.label(tr(T::AboutUpdates), TextStyle::Dim, (X0 + 20, AB_CARD3_Y + 38, CW - 180, 22), p.surface, a);
+    let check_updates = s.button(tr(T::BtnCheckUpdates), false, (X0 + CW - 156, AB_CARD3_Y + 20, 140, 32), p.surface, a);
+
+    // Card 4: Crash recovery toggle
+    let restart = s.toggle(tr(T::RowRestart), tr(T::SubRestart), (X0 + 4, RESTART_Y + 4, CW - 8, 60), p.surface, a);
     if ui::windows_autocorrects() {
         s.label(
             tr(T::AboutWindowsAutocorrect),
             TextStyle::Small,
-            (X0, RESTART_Y + 84, CW, 40),
+            (X0, RESTART_Y + 70, CW, 36),
             p.bg,
             a,
         );
     }
+
+    // --- Sponsor / Support ------------------------------------------------
+    let sp = PAGE_SPONSOR;
+    s.label(tr(T::HeadSponsor), TextStyle::Title, (X0, 18, CW, 36), p.bg, sp);
+
+    // Card 1: Free and open source
+    s.label(tr(T::SponsorFreeHead), TextStyle::BodyStrong, (X0 + 20, SP_CARD1_Y + 12, CW - 40, 22), p.surface, sp);
+    s.label(tr(T::SponsorFreeSub), TextStyle::Dim, (X0 + 20, SP_CARD1_Y + 36, CW - 40, 42), p.surface, sp);
+
+    // Card 2: Support options
+    s.label(tr(T::SponsorChannelHead), TextStyle::BodyStrong, (X0 + 20, SP_CARD2_Y + 14, 200, 24), p.surface, sp);
+    let tip_seg_w = 88;
+    let tip_ln = s.segment(
+        "Lightning",
+        true,
+        (X0 + CW - 20 - 2 * tip_seg_w - 4, SP_CARD2_Y + 12, tip_seg_w, 28),
+        p.inset,
+        sp,
+    );
+    let tip_onchain = s.segment(
+        "Bitcoin",
+        false,
+        (X0 + CW - 20 - tip_seg_w, SP_CARD2_Y + 12, tip_seg_w, 28),
+        p.inset,
+        sp,
+    );
+
+    let tip_desc = s.label(
+        tr(T::SponsorLnDesc),
+        TextStyle::Dim,
+        (X0 + 172, SP_CARD2_Y + 54, 312, 22),
+        p.surface,
+        sp,
+    );
+    let tip_address = s.label(
+        BTC_LIGHTNING,
+        TextStyle::SingleLine,
+        (X0 + 180, SP_CARD2_Y + 90, 236, 22),
+        p.inset,
+        sp,
+    );
+    let tip_copy = s.button(
+        tr(T::BtnCopy),
+        false,
+        (X0 + CW - 20 - 64, SP_CARD2_Y + 85, 60, 32),
+        p.surface,
+        sp,
+    );
+    s.label(
+        tr(T::SponsorQrNote),
+        TextStyle::Dim,
+        (X0 + 172, SP_CARD2_Y + 128, 312, 44),
+        p.surface,
+        sp,
+    );
 
     let ids = Ids {
         nav,
@@ -1066,6 +1139,12 @@ fn open_on(page: u8) {
         sync_folder,
         this_pc,
         sync_settings,
+        link_github,
+        tip_ln,
+        tip_onchain,
+        tip_address,
+        tip_desc,
+        tip_copy,
     };
 
     ui::size_and_center(surface.hwnd, W, H);
@@ -1214,12 +1293,53 @@ fn sync(win: &SettingsWindow) {
     let lang = i18n::lang();
     s.set_checked(ids.lang_en, lang == Lang::En);
     s.set_checked(ids.lang_th, lang == Lang::Th);
+    let ln = TIP_NETWORK.load(Ordering::Relaxed) == 0;
+    s.set_checked(ids.tip_ln, ln);
+    s.set_checked(ids.tip_onchain, !ln);
+    if ln {
+        s.set_text(ids.tip_address, BTC_LIGHTNING);
+        s.set_text(ids.tip_desc, tr(T::SponsorLnDesc));
+    } else {
+        s.set_text(ids.tip_address, BTC_MAINNET);
+        s.set_text(ids.tip_desc, tr(T::SponsorBtcDesc));
+    }
 }
 
 fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     let ids = &win.ids;
     let s = &win.surface;
+    if id == ids.link_github {
+        open_repo_page();
+        return;
+    }
+    if id == ids.tip_ln {
+        TIP_NETWORK.store(0, Ordering::Relaxed);
+        sync(win);
+        ui::redraw_all(s.hwnd);
+        return;
+    }
+    if id == ids.tip_onchain {
+        TIP_NETWORK.store(1, Ordering::Relaxed);
+        sync(win);
+        ui::redraw_all(s.hwnd);
+        return;
+    }
+    if id == ids.tip_copy || id == ids.tip_address {
+        let addr = if TIP_NETWORK.load(Ordering::Relaxed) == 0 {
+            BTC_LIGHTNING
+        } else {
+            BTC_MAINNET
+        };
+        unsafe {
+            let _ = crate::clipboard::set_text(addr);
+        }
+        overlay::show(tr(T::ToastCopied));
+        return;
+    }
     if let Some(i) = ids.nav.iter().position(|&n| n == id) {
+        for (idx, &btn) in ids.nav.iter().enumerate() {
+            s.set_checked(btn, idx == i);
+        }
         s.show_page(NAV[i].1);
         if NAV[i].1 == PAGE_TOOLS {
             fill_health(win);
@@ -1465,7 +1585,7 @@ fn fill_snippets(win: &SettingsWindow, trigger: Option<&str>) {
     let cells: Vec<Vec<String>> = list
         .iter()
         .map(|sn| {
-            let text: String = sn.text.replace('\n', " ⏎ ");
+            let text: String = sn.text.replace('\n', " \\n ");
             let scope = tr(match sn.scope {
                 righttype::snippets::Scope::Thai => T::ScopeThai,
                 righttype::snippets::Scope::English => T::ScopeEnglish,
@@ -1956,7 +2076,26 @@ fn show_in_folder(path: &str) {
 
 /// Where new versions are published. Opened in the browser: RightType itself
 /// never connects to a network.
+const REPO_URL: &str = "https://github.com/k-affan-th/RightType";
 const RELEASES_URL: &str = "https://github.com/k-affan-th/RightType/releases/latest";
+
+fn open_repo_page() {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let verb: Vec<u16> = "open\0".encode_utf16().collect();
+    let url: Vec<u16> = format!("{REPO_URL}\0").encode_utf16().collect();
+    unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR(verb.as_ptr()),
+            PCWSTR(url.as_ptr()),
+            PCWSTR::null(),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        );
+    }
+}
 
 fn open_releases_page() {
     use windows::core::PCWSTR;
@@ -1973,6 +2112,33 @@ fn open_releases_page() {
             PCWSTR::null(),
             SW_SHOWNORMAL,
         );
+    }
+}
+
+fn draw_qr(hdc: HDC, x0: i32, y0: i32, size: i32, matrix: &[u64; 33]) {
+    let cell = ((size * 78) / 100) / 33;
+    let cell = cell.max(1);
+    let qr_w = cell * 33;
+    let pad = (size - qr_w) / 2;
+    unsafe {
+        let brush = windows::Win32::Graphics::Gdi::CreateSolidBrush(windows::Win32::Foundation::COLORREF(0x00000000));
+        for r in 0..33 {
+            let row = matrix[r];
+            for c in 0..33 {
+                if (row & (1 << c)) != 0 {
+                    let rx = x0 + pad + c as i32 * cell;
+                    let ry = y0 + pad + r as i32 * cell;
+                    let rect = windows::Win32::Foundation::RECT {
+                        left: rx,
+                        top: ry,
+                        right: rx + cell,
+                        bottom: ry + cell,
+                    };
+                    windows::Win32::Graphics::Gdi::FillRect(hdc, &rect, brush);
+                }
+            }
+        }
+        let _ = windows::Win32::Graphics::Gdi::DeleteObject(brush);
     }
 }
 
@@ -2159,7 +2325,7 @@ fn finish(win: &Rc<SettingsWindow>) {
 /// Cards and decoration behind the controls of `page`.
 fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8) {
     // Sidebar language picker track.
-    track(g, rect(16, H - 70, 188, 40));
+    track(g, rect(16, H - 80, 188, 34));
     match page {
         PAGE_GENERAL => {
             card(g, rect(X0, 98, CW, 132));
@@ -2257,18 +2423,28 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             card(g, rect(X0, PREDICT_Y, CW, 76));
         }
         PAGE_ABOUT => {
-            card(g, rect(X0, RESTART_Y, CW, 72));
-            card(g, rect(X0, 68, CW, 4 * 56 + 8));
-            for i in 0..4 {
-                let y = 74 + i * 56;
-                // A check mark in an accent circle, one per promise.
-                let c = rect(X0 + 16, y + 10, 22, 22);
-                g.fill_round(c, ui::px(11) as f32, pal().accent);
-                g.check_mark(c, pal().on_accent);
-                if i > 0 {
-                    divider(hdc, X0 + 16, y - 2, CW - 32);
-                }
+            card(g, rect(X0, AB_CARD1_Y, CW, AB_CARD1_H));
+            card(g, rect(X0, AB_CARD2_Y, CW, AB_CARD2_H));
+            for i in 1..3 {
+                let y = AB_CARD2_Y + 8 + i * 58;
+                divider(hdc, X0 + 20, y - 2, CW - 40);
             }
+            card(g, rect(X0, AB_CARD3_Y, CW, AB_CARD3_H));
+            card(g, rect(X0, RESTART_Y, CW, 60));
+        }
+        PAGE_SPONSOR => {
+            card(g, rect(X0, SP_CARD1_Y, CW, SP_CARD1_H));
+            card(g, rect(X0, SP_CARD2_Y, CW, SP_CARD2_H));
+            track(g, rect(X0 + CW - 20 - 2 * 88 - 6, SP_CARD2_Y + 10, 2 * 88 + 6, 32));
+
+            let qr_box = rect(X0 + 20, SP_CARD2_Y + 54, 136, 136);
+            g.fill_round(qr_box, ui::px(8) as f32, 0x00FFFFFF);
+            let is_ln = TIP_NETWORK.load(Ordering::Relaxed) == 0;
+            let qr_matrix = if is_ln { &QR_LIGHTNING } else { &QR_BITCOIN };
+            draw_qr(hdc, ui::px(X0 + 20), ui::px(SP_CARD2_Y + 54), ui::px(136), qr_matrix);
+
+            let addr_box = rect(X0 + 172, SP_CARD2_Y + 82, 312, 38);
+            field(g, addr_box);
         }
         _ => {}
     }
