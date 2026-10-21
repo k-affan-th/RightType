@@ -4,7 +4,7 @@
 //! and emits it once a boundary (space/tab/enter) closes it. It holds nothing
 //! more than the word in progress and **zeroizes** its storage on every boundary,
 //! so secrets spend the minimum possible time in memory (see the privacy section
-//! of `docs/PLAN.md`).
+//! of `docs/archive/PLAN.md`).
 //!
 //! It is deliberately OS-free: it consumes already-translated [`Key`] events, not
 //! raw virtual-key codes, so the whole boundary/length policy is unit-testable

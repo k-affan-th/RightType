@@ -288,7 +288,7 @@ The crate is split into an OS-free **core** (`layout`, `secret`, `dict`, `detect
 behind the `winos` feature (`hook`, `inject`, `manual`, `safety`, `focus`, `session`,
 `tray`, `toast`, `config`, `startup`, `learn`). Keeping the core OS-free makes it
 testable anywhere and a future macOS backend additive. See the long-term
-[`docs/PLAN.md`](docs/PLAN.md) and the current
+[`docs/archive/PLAN.md`](docs/archive/PLAN.md) and the current
 [`docs/DYNAMIC_PLAN.md`](docs/DYNAMIC_PLAN.md) for active decisions, evidence, and
 the next implementation step. What comes next is planned there as
 [RightType 2.0](docs/DYNAMIC_PLAN.md#s8--righttype-20); every feature idea — in 2.0

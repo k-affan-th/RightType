@@ -2,7 +2,7 @@
 
 > **Execution status:** แผนนี้เก็บ vision และ architecture ระยะยาว ส่วนสถานะงาน,
 > decision gates, verification evidence และ next action ปัจจุบันอยู่ที่
-> [DYNAMIC_PLAN.md](DYNAMIC_PLAN.md) ซึ่งเป็น source of truth สำหรับการลงมือทำ
+> [DYNAMIC_PLAN.md](../DYNAMIC_PLAN.md) ซึ่งเป็น source of truth สำหรับการลงมือทำ
 
 > **Name:** project **RightType**, Cargo package/crate `righttype`.
 

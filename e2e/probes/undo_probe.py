@@ -4,11 +4,17 @@ import sys
 import time
 from pathlib import Path
 
+import sys
+from pathlib import Path
+
+# The probes sit one folder below `lib.py` and `matrix.py`.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import matrix as m
 import lib
 
 sys.stdout.reconfigure(encoding="utf-8")
-LOG = Path(__file__).resolve().parent / "rt_stderr.log"
+LOG = Path(__file__).resolve().parent.parent / "rt_stderr.log"
 
 m.set_config_mode("auto")
 rt = lib.start_righttype(stderr_log=LOG)

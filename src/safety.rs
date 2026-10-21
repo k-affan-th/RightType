@@ -4,7 +4,7 @@
 //! the whole pipeline when the focused control is a **password field**, or when
 //! the foreground app is a known **wallet, password manager, or terminal**. The
 //! secret-shaped bail-out in `secret` is the per-token backstop; this is the
-//! per-context one (see `docs/PLAN.md`, the security section).
+//! per-context one (see `docs/archive/PLAN.md`, the security section).
 
 use std::sync::Mutex;
 

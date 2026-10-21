@@ -17,7 +17,7 @@
 //!
 //! The work here is tiny (a `ToUnicodeEx` call + two hashed dictionary lookups +
 //! a small `SendInput`), so the callback stays far under the `LowLevelHooksTimeout`
-//! that evicts slow hooks — see `docs/PLAN.md`, Bug 1. We also ignore our own
+//! that evicts slow hooks — see `docs/archive/PLAN.md`, Bug 1. We also ignore our own
 //! injected events (tagged in `dwExtraInfo`, plus `LLKHF_INJECTED`) so a
 //! correction can never feed back into itself.
 
