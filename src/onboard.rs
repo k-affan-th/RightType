@@ -13,8 +13,9 @@ use righttype::i18n::{tr, trf, T};
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Gdi::HDC;
 
+use crate::icons;
 use crate::settings::hotkey_rows;
-use crate::ui::{self, card, divider, pal, rect, Gfx, Surface, TextStyle};
+use crate::ui::{self, card, divider, field, pal, rect, Gfx, Surface, TextStyle};
 use crate::{config, hook};
 
 const W: i32 = 560;
@@ -116,7 +117,7 @@ pub fn show(first_run: bool) {
         s.edit("", (X, example_y + 106, CW, 34), 0);
         s.label(
             tr(T::HeadHotkeys),
-            TextStyle::BodyStrong,
+            TextStyle::Section(icons::HOTKEYS),
             (X, lay.keys_y - 30, CW, 20),
             p.bg,
             0,
@@ -154,12 +155,17 @@ pub fn show(first_run: bool) {
         p.bg,
         0,
     );
-    let start = s.button(
+    let start = s.button_icon(
         tr(if first_run {
             T::BtnGetStarted
         } else {
             T::BtnClose
         }),
+        if first_run {
+            icons::CHECK
+        } else {
+            icons::CLOSE
+        },
         true,
         (X + CW - 150, foot_y + 4, 150, 36),
         p.bg,
@@ -211,6 +217,8 @@ fn paint(g: &Gfx, hdc: HDC, _rc: RECT, lay: &Layout) {
         card(g, rect(X, example_y, CW, 72));
         // Accent edge: this card is the product in one line.
         g.fill_round(rect(X, example_y, 4, 72), ui::px(2) as f32, pal().accent);
+        // The box to try it in, framed like the other fields.
+        field(g, rect(X - 2, example_y + 104, CW + 4, 38));
     }
     card(g, rect(X, lay.keys_y, CW, lay.rows as i32 * ROW + 8));
     for i in 1..lay.rows as i32 {

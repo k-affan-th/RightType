@@ -301,7 +301,7 @@ texts! {
     Clean30s => "30 seconds", "30 วินาที";
     Clean1m => "1 minute", "1 นาที";
     Clean2m => "2 minutes", "2 นาที";
-    RowLockMouse => "Lock the touchpad and mouse too", "ล็อกทัชแพดและเมาส์ด้วย";
+    RowLockMouse => "Lock touchpad and mouse", "ล็อกทัชแพดและเมาส์";
     SubLockMouse => "Then only the time unlocks it.", "เมื่อล็อกแล้วจะปลดได้เมื่อหมดเวลาเท่านั้น";
     BtnStartLock => "Lock and start", "ล็อกและเริ่มเช็ด";
     CleanStarting => "Locking in {n}…", "จะล็อกใน {n}…";

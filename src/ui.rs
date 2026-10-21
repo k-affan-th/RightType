@@ -1039,6 +1039,25 @@ pub fn icon_tile(g: &Gfx, hdc: HDC, rc: RECT, icon: char, lit: bool) {
     }
 }
 
+/// `icon` (a glyph of the icon font) alone, small, centred in `rc`: before a
+/// caption drawn by a page painter. Nothing where the font is missing.
+pub fn icon_glyph(hdc: HDC, rc: RECT, icon: char, color: Rgb) {
+    let Some(font) = make_icon_font(14) else {
+        return;
+    };
+    text(
+        hdc,
+        &icon.to_string(),
+        rc,
+        font,
+        color,
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+    );
+    unsafe {
+        let _ = DeleteObject(HGDIOBJ(font.0));
+    }
+}
+
 pub fn glyph(hdc: HDC, s: &str, rc: RECT, color: Rgb) {
     let size = (rc.bottom - rc.top) * 7 / 10;
     // `make_font` takes 96-DPI units; `rc` is already in device pixels.
@@ -2536,18 +2555,6 @@ impl Surface {
             bg,
             0,
         )
-    }
-
-    /// A card row that is a check box.
-    pub fn toggle(
-        &self,
-        title: &str,
-        sub: &str,
-        rc: (i32, i32, i32, i32),
-        bg: Rgb,
-        page: u8,
-    ) -> u16 {
-        self.toggle_icon(title, sub, '\0', rc, bg, page)
     }
 
     /// A card row that is a check box, with an icon tile before the title.

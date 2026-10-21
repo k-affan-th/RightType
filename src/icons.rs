@@ -58,6 +58,8 @@ pub const TOOL_MAP: char = '\u{E8A9}'; // ViewAll (the keys laid out)
 pub const TOOL_PRACTICE: char = '\u{E7BE}'; // Education (a graduation cap)
 pub const MODE_SECTION: char = '\u{E9E9}'; // Equalizer (the palette's Mode section)
 pub const HEALTH: char = '\u{E95E}'; // HeartPulse
+pub const MOUSE: char = '\u{E962}'; // Mouse
+pub const SCORE: char = '\u{E9D9}'; // Chart
 
 // --- Actions ---------------------------------------------------------------
 pub const ADD: char = '\u{E710}'; // Add
@@ -76,6 +78,7 @@ pub const CHECK: char = '\u{E73E}'; // Accept
 pub const WARNING: char = '\u{E7BA}'; // Warning
 pub const CLOSE: char = '\u{E711}'; // Cancel
 pub const CHEVRON: char = '\u{E76C}'; // ChevronRight
+pub const PASTE: char = '\u{E77F}'; // Paste
 pub const CALENDAR: char = '\u{E787}'; // Calendar
 pub const PIN: char = '\u{E718}'; // Pin
 pub const UNLOCK: char = '\u{E785}'; // Unlock

@@ -20,6 +20,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     KillTimer, SetTimer, SetWindowPos, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE,
 };
 
+use crate::icons;
 use crate::ui::{self, pal, Gfx, Surface, TextStyle};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -175,15 +176,17 @@ fn open(mode: Mode) {
         )
     });
     s.set_checked(durations[1], true);
-    let lock_mouse = s.toggle(
+    let lock_mouse = s.toggle_icon(
         tr(T::RowLockMouse),
         tr(T::SubLockMouse),
+        icons::MOUSE,
         (PAD + 3 * seg_w + 28, 128, 340, 60),
         p.bg,
         SETUP,
     );
-    let start = s.button(
+    let start = s.button_icon(
         tr(T::BtnStartLock),
+        icons::TOOL_CLEAN,
         true,
         (W - PAD - 190, 140, 190, 40),
         p.bg,
@@ -193,31 +196,34 @@ fn open(mode: Mode) {
     // buttons of the other mode, even hidden, are still there for screen
     // readers and UI Automation.
     let clean = mode == Mode::Clean;
-    let make = |on: bool, label: T, primary: bool, rc: (i32, i32, i32, i32), page: u8| {
-        if on {
-            s.button(tr(label), primary, rc, p.bg, page)
-        } else {
-            0
-        }
-    };
+    let make =
+        |on: bool, label: T, icon: char, primary: bool, rc: (i32, i32, i32, i32), page: u8| {
+            if on {
+                s.button_icon(tr(label), icon, primary, rc, p.bg, page)
+            } else {
+                0
+            }
+        };
     let right = (W - PAD - 160, FOOT_Y, 160, 40);
-    let unlock = make(clean, T::BtnUnlock, true, right, RUNNING);
+    let unlock = make(clean, T::BtnUnlock, icons::UNLOCK, true, right, RUNNING);
     let start_over = make(
         !clean,
         T::BtnStartOver,
+        icons::REFRESH,
         false,
         (W - PAD - 160 - 12 - 140, FOOT_Y, 140, 40),
         RUNNING,
     );
-    let close_id = make(!clean, T::BtnClose, true, right, RUNNING);
+    let close_id = make(!clean, T::BtnClose, icons::CLOSE, true, right, RUNNING);
     let test_keys = make(
         clean,
         T::BtnTestKeys,
+        icons::TOOL_TEST,
         false,
         (W - PAD - 160 - 12 - 160, FOOT_Y, 160, 40),
         DONE,
     );
-    let close_done = make(clean, T::BtnClose, true, right, DONE);
+    let close_done = make(clean, T::BtnClose, icons::CLOSE, true, right, DONE);
     s.label(
         tr(if mode == Mode::Clean {
             T::CleanLimits

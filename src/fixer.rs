@@ -18,6 +18,7 @@ use windows::Win32::Graphics::Gdi::HDC;
 use windows::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, SW_RESTORE};
 use zeroize::Zeroize;
 
+use crate::icons;
 use crate::ui::{self, field, pal, rect, Gfx, Surface, TextStyle};
 
 static OPEN: AtomicIsize = AtomicIsize::new(0);
@@ -94,15 +95,17 @@ fn open_with(initial: Option<&str>) {
         0,
     );
     let input = s.edit("", (X + 10, IN_Y + 8, CW - 20, IN_H - 16), 0);
-    let paste_fix = s.button(
+    let paste_fix = s.button_icon(
         tr(T::BtnPasteFix),
+        icons::PASTE,
         false,
         (X, IN_Y + IN_H + 12, 180, 34),
         p.bg,
         0,
     );
-    let fix = s.button(
+    let fix = s.button_icon(
         tr(T::BtnFix),
+        icons::TOOLS,
         true,
         (X + CW - 140, IN_Y + IN_H + 12, 140, 34),
         p.bg,
@@ -123,15 +126,17 @@ fn open_with(initial: Option<&str>) {
         p.bg,
         0,
     );
-    let copy = s.button(
+    let copy = s.button_icon(
         tr(T::BtnCopy),
+        icons::COPY,
         false,
         (X + CW - 256, OUT_Y + OUT_H + 12, 120, 34),
         p.bg,
         0,
     );
-    let close = s.button(
+    let close = s.button_icon(
         tr(T::BtnClose),
+        icons::CLOSE,
         false,
         (X + CW - 128, OUT_Y + OUT_H + 12, 128, 34),
         p.bg,
