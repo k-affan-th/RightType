@@ -143,11 +143,11 @@ const AB_CARD1_H: i32 = 66;
 const AB_CARD2_Y: i32 = AB_CARD1_Y + AB_CARD1_H + 12; // 146
 const AB_CARD2_H: i32 = 186;
 const AB_CARD3_Y: i32 = AB_CARD2_Y + AB_CARD2_H + 12; // 344
-const AB_CARD3_H: i32 = 72;
+const AB_CARD3_H: i32 = 88;
 const RESTART_Y: i32 = AB_CARD3_Y + AB_CARD3_H + 12; // 428
 
 const SP_CARD1_Y: i32 = 68;
-const SP_CARD1_H: i32 = 84;
+const SP_CARD1_H: i32 = 92;
 const SP_CARD2_Y: i32 = SP_CARD1_Y + SP_CARD1_H + 14; // 166
 const SP_CARD2_H: i32 = 216;
 
@@ -378,7 +378,7 @@ pub fn open() {
 /// Open on a given page (1 = General … 5 = Privacy & about); debug harness use.
 #[cfg(debug_assertions)]
 pub fn open_page(page: u8) {
-    open_on(page.clamp(PAGE_GENERAL, PAGE_TOOLS));
+    open_on(page.clamp(PAGE_GENERAL, PAGE_SPONSOR));
 }
 
 fn open_on(page: u8) {
@@ -1091,7 +1091,7 @@ fn open_on(page: u8) {
     s.label(
         tr(T::AboutUpdates),
         TextStyle::Dim,
-        (X0 + 20, AB_CARD3_Y + 38, CW - 180, 22),
+        (X0 + 20, AB_CARD3_Y + 38, CW - 180, 40),
         p.surface,
         a,
     );
@@ -2571,7 +2571,7 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
                 divider(hdc, X0 + 20, y - 2, CW - 40);
             }
             card(g, rect(X0, AB_CARD3_Y, CW, AB_CARD3_H));
-            card(g, rect(X0, RESTART_Y, CW, 60));
+            card(g, rect(X0, RESTART_Y, CW, 68));
         }
         PAGE_SPONSOR => {
             card(g, rect(X0, SP_CARD1_Y, CW, SP_CARD1_H));
