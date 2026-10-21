@@ -22,7 +22,7 @@ use windows::Win32::Graphics::Gdi::HDC;
 use windows::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, SW_RESTORE};
 
 use crate::ui::{self, card, divider, field, pal, rect, track, Gfx, Surface, TextStyle};
-use crate::{config, hook, learn, overlay, safety, startup};
+use crate::{config, hook, icons, learn, overlay, safety, startup};
 use righttype::hotkeys::{Action, Hotkeys, Refusal};
 use righttype::per_app::AppMode;
 use zeroize::Zeroize;
@@ -49,16 +49,16 @@ const PAGE_KEYBOARD: u8 = 7;
 const PAGE_TOOLS: u8 = 8;
 const PAGE_SPONSOR: u8 = 9;
 /// Sidebar entries, top to bottom, and their pages.
-const NAV: [(T, u8); 9] = [
-    (T::NavGeneral, PAGE_GENERAL),
-    (T::NavKeyboard, PAGE_KEYBOARD),
-    (T::NavTools, PAGE_TOOLS),
-    (T::NavHotkeys, PAGE_HOTKEYS),
-    (T::NavLearned, PAGE_LEARNED),
-    (T::NavSnippets, PAGE_SNIPPETS),
-    (T::NavBlocked, PAGE_BLOCKED),
-    (T::NavAbout, PAGE_ABOUT),
-    (T::NavSponsor, PAGE_SPONSOR),
+const NAV: [(T, u8, char); 9] = [
+    (T::NavGeneral, PAGE_GENERAL, icons::GENERAL),
+    (T::NavKeyboard, PAGE_KEYBOARD, icons::KEYBOARD),
+    (T::NavTools, PAGE_TOOLS, icons::TOOLS),
+    (T::NavHotkeys, PAGE_HOTKEYS, icons::HOTKEYS),
+    (T::NavLearned, PAGE_LEARNED, icons::LEARNED),
+    (T::NavSnippets, PAGE_SNIPPETS, icons::SNIPPETS),
+    (T::NavBlocked, PAGE_BLOCKED, icons::APPS),
+    (T::NavAbout, PAGE_ABOUT, icons::PRIVACY),
+    (T::NavSponsor, PAGE_SPONSOR, icons::SUPPORT),
 ];
 
 pub const BTC_LIGHTNING: &str = "yawninggrass92@walletofsatoshi.com";
@@ -415,8 +415,13 @@ fn open_on(page: u8) {
         0,
     );
     let mut nav = [0u16; 9];
-    for (i, (label, p_id)) in NAV.iter().enumerate() {
-        nav[i] = s.nav(tr(*label), *p_id == page, (12, 74 + i as i32 * 38, 196, 34));
+    for (i, (label, p_id, icon)) in NAV.iter().enumerate() {
+        nav[i] = s.nav(
+            tr(*label),
+            *icon,
+            *p_id == page,
+            (12, 74 + i as i32 * 38, 196, 34),
+        );
     }
 
     s.label(
@@ -480,11 +485,55 @@ fn open_on(page: u8) {
         g,
     );
     let row = |i: i32| (X0 + 4, CARD_B_Y + 4 + i * ROW_H, CW - 8, ROW_H - 4);
-    let enabled = s.toggle(tr(T::RowEnabled), tr(T::SubEnabled), row(0), p.surface, g);
-    let startup = s.toggle(tr(T::RowStartup), tr(T::SubStartup), row(1), p.surface, g);
-    let learn = s.toggle(tr(T::RowLearn), tr(T::SubLearn), row(2), p.surface, g);
-    let caret_hints = s.toggle(tr(T::RowCaret), tr(T::SubCaret), row(3), p.surface, g);
-    let spelling = s.toggle(tr(T::RowSpelling), tr(T::SubSpelling), row(4), p.surface, g);
+    let enabled = s.toggle_icon(
+        tr(T::RowEnabled),
+        tr(T::SubEnabled),
+        icons::POWER,
+        row(0),
+        p.surface,
+        g,
+    );
+    let startup = s.toggle_icon(
+        tr(T::RowStartup),
+        tr(T::SubStartup),
+        icons::START_WITH_WINDOWS,
+        row(1),
+        p.surface,
+        g,
+    );
+    let learn = s.toggle_icon(
+        tr(T::RowLearn),
+        tr(T::SubLearn),
+        icons::LEARNED,
+        row(2),
+        p.surface,
+        g,
+    );
+    let caret_hints = s.toggle_icon(
+        tr(T::RowCaret),
+        tr(T::SubCaret),
+        icons::CURSOR_HINTS,
+        row(3),
+        p.surface,
+        g,
+    );
+    let spelling = s.toggle_icon(
+        tr(T::RowSpelling),
+        tr(T::SubSpellingShort),
+        icons::SPELLING,
+        row(4),
+        p.surface,
+        g,
+    );
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubSpelling),
+        row(4),
+        true,
+        tr(T::RowSpelling),
+        p.surface,
+        g,
+    );
     let learned_y = CARD_B_Y + 5 * ROW_H + 14;
     let learned = s.label(
         "",
@@ -493,8 +542,9 @@ fn open_on(page: u8) {
         p.surface,
         g,
     );
-    let edit_learned = s.button(
+    let edit_learned = s.button_icon(
         tr(T::BtnEditLearned),
+        icons::EDIT,
         false,
         (X0 + CW - 136, learned_y, 116, 32),
         p.surface,
@@ -1302,7 +1352,7 @@ fn open_on(page: u8) {
     fill_snippets(&win, None);
     win.surface.set_checked(win.ids.snip_scope[2], true);
     sync(&win);
-    if let Some(i) = NAV.iter().position(|(_, p)| *p == page) {
+    if let Some(i) = NAV.iter().position(|(_, p, _)| *p == page) {
         win.surface.set_checked(win.ids.nav[i], true);
     }
     win.surface.show_page(page);

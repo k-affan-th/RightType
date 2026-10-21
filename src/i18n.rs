@@ -233,6 +233,8 @@ texts! {
     ToastSpellingKept => "Put back as typed — “{word}” will not be changed again", "คืนคำที่พิมพ์ไว้แล้ว จะไม่แก้ “{word}” อีก";
     PaletteSpelling => "Fix common Thai misspellings", "แก้คำไทยที่สะกดผิดบ่อย";
     RowSpelling => "Fix common Thai misspellings", "แก้คำไทยที่สะกดผิดบ่อย";
+    SubSpellingShort => "Fixes about 60 common misspellings in Auto.", "แก้คำสะกดผิดที่พบบ่อยราว 60 คำ ในโหมดอัตโนมัติ";
+    InfoMore => "More information", "ข้อมูลเพิ่มเติม";
     SubSpelling => "อนุญาติ → อนุญาต and about 60 more, in Auto. Each fix is shown; Backspace right after puts it back.", "เช่น อนุญาติ → อนุญาต และอีกราว 60 คำ (โหมดอัตโนมัติ) แจ้งทุกครั้งที่แก้ กด Backspace ทันทีเพื่อคืนคำเดิม";
     PaletteFieldOff => "Off in this field", "ปิดเฉพาะช่องนี้";
     PaletteFieldOn => "On again in this field", "เปิดในช่องนี้อีกครั้ง";
