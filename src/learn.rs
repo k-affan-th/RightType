@@ -329,14 +329,15 @@ fn eligible_thai_shape(word: &str) -> bool {
 fn eligible_explicit_shape(word: &str) -> bool {
     let len = word.chars().count();
     (2..=32).contains(&len)
-        && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         && !secret::is_secret_token(word)
 }
 
 fn eligible_explicit_thai_shape(word: &str) -> bool {
     let len = word.chars().count();
-    (2..=32).contains(&len)
-        && word.chars().all(|c| ('\u{0E01}'..='\u{0E5B}').contains(&c))
+    (2..=32).contains(&len) && word.chars().all(|c| ('\u{0E01}'..='\u{0E5B}').contains(&c))
 }
 
 /// Explicitly learn a new word from the typist (Quick Panel or Settings).

@@ -407,7 +407,10 @@ pub fn tidy_spacing(input: &str) -> String {
             space_before(&mut out);
             out.extend(['ฯ', 'ล', 'ฯ']);
             i += 3;
-            if chars.get(i).is_some_and(|&n| thai(n) || n == '(' || n.is_alphanumeric()) {
+            if chars
+                .get(i)
+                .is_some_and(|&n| thai(n) || n == '(' || n.is_alphanumeric())
+            {
                 out.push(' ');
             }
             continue;
@@ -430,7 +433,8 @@ pub fn tidy_spacing(input: &str) -> String {
                     out.pop();
                 }
                 out.push('ฯ');
-                if !is_phan && next.is_some_and(|n| (thai(n) && n != 'ฯ') || n.is_alphanumeric()) {
+                if !is_phan && next.is_some_and(|n| (thai(n) && n != 'ฯ') || n.is_alphanumeric())
+                {
                     out.push(' ');
                 }
             }
@@ -448,7 +452,7 @@ pub fn tidy_spacing(input: &str) -> String {
                     out.pop();
                 }
                 out.push(')');
-                if next.is_some_and(|n| thai_word(n)) {
+                if next.is_some_and(thai_word) {
                     out.push(' ');
                 }
             }
@@ -466,12 +470,9 @@ pub fn tidy_spacing(input: &str) -> String {
             _ => {
                 out.push(c);
                 // Space between Thai letter/vowel and Latin/Digit boundary
-                if thai_word(c)
-                    && next.is_some_and(|n| n.is_ascii_alphabetic() || n.is_ascii_digit())
-                {
-                    out.push(' ');
-                } else if (c.is_ascii_alphabetic() || c.is_ascii_digit())
-                    && next.is_some_and(thai_word)
+                let latin = |ch: char| ch.is_ascii_alphabetic() || ch.is_ascii_digit();
+                if (thai_word(c) && next.is_some_and(latin))
+                    || (latin(c) && next.is_some_and(thai_word))
                 {
                     out.push(' ');
                 }

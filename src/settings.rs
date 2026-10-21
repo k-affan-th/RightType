@@ -65,26 +65,74 @@ pub const BTC_LIGHTNING: &str = "yawninggrass92@walletofsatoshi.com";
 pub const BTC_MAINNET: &str = "bc1qdac8h7hl57x3kv8x8xpz6zg0fgw6zvp7uld3a6";
 
 pub const QR_LIGHTNING: [u64; 33] = [
-    0x1fc9b207f, 0x10452fe41, 0x1748fa15d, 0x17571495d,
-    0x17504955d, 0x10457d341, 0x1fd55557f, 0x00020c900,
-    0x07cd6ec7d, 0x184b9552f, 0x0e4348e60, 0x17961d61d,
-    0x09b240041, 0x144d3ffa5, 0x0b62c616d, 0x06cf953ad,
-    0x19bce6af6, 0x1649b3f9d, 0x0bc43a9ff, 0x1f30ed594,
-    0x191f19afe, 0x14484fc87, 0x0f257dec9, 0x077a4bdb9,
-    0x1bf5098f5, 0x111bd4700, 0x0d5b5927f, 0x071f90d41,
-    0x0bf24935d, 0x17871fb5d, 0x0464c735d, 0x06e7d2641,
+    0x1fc9b207f,
+    0x10452fe41,
+    0x1748fa15d,
+    0x17571495d,
+    0x17504955d,
+    0x10457d341,
+    0x1fd55557f,
+    0x00020c900,
+    0x07cd6ec7d,
+    0x184b9552f,
+    0x0e4348e60,
+    0x17961d61d,
+    0x09b240041,
+    0x144d3ffa5,
+    0x0b62c616d,
+    0x06cf953ad,
+    0x19bce6af6,
+    0x1649b3f9d,
+    0x0bc43a9ff,
+    0x1f30ed594,
+    0x191f19afe,
+    0x14484fc87,
+    0x0f257dec9,
+    0x077a4bdb9,
+    0x1bf5098f5,
+    0x111bd4700,
+    0x0d5b5927f,
+    0x071f90d41,
+    0x0bf24935d,
+    0x17871fb5d,
+    0x0464c735d,
+    0x06e7d2641,
     0x085cb6b7f,
 ];
 
 pub const QR_BITCOIN: [u64; 33] = [
-    0x1fcab727f, 0x10572e241, 0x17476b95d, 0x17451515d,
-    0x174a4b75d, 0x104338b41, 0x1fd55557f, 0x000e09500,
-    0x07d53ee7d, 0x18e88599a, 0x0fa6495e1, 0x17730c49e,
-    0x0b04c144c, 0x107b3d129, 0x0950c4be9, 0x1657d4024,
-    0x01a0f194d, 0x1e4fb4918, 0x04262afd6, 0x17d26f0a9,
-    0x11a092bec, 0x166c4e21d, 0x0b927d165, 0x144b8a989,
-    0x03f43d741, 0x1d1bc5900, 0x0b594887f, 0x071791941,
-    0x01f54fb5d, 0x1da8b915d, 0x045365b5d, 0x074a15e41,
+    0x1fcab727f,
+    0x10572e241,
+    0x17476b95d,
+    0x17451515d,
+    0x174a4b75d,
+    0x104338b41,
+    0x1fd55557f,
+    0x000e09500,
+    0x07d53ee7d,
+    0x18e88599a,
+    0x0fa6495e1,
+    0x17730c49e,
+    0x0b04c144c,
+    0x107b3d129,
+    0x0950c4be9,
+    0x1657d4024,
+    0x01a0f194d,
+    0x1e4fb4918,
+    0x04262afd6,
+    0x17d26f0a9,
+    0x11a092bec,
+    0x166c4e21d,
+    0x0b927d165,
+    0x144b8a989,
+    0x03f43d741,
+    0x1d1bc5900,
+    0x0b594887f,
+    0x071791941,
+    0x01f54fb5d,
+    0x1da8b915d,
+    0x045365b5d,
+    0x074a15e41,
     0x09593337f,
 ];
 
@@ -975,31 +1023,94 @@ fn open_on(page: u8) {
 
     // --- Privacy ----------------------------------------------------------
     let a = PAGE_ABOUT;
-    s.label(tr(T::HeadPrivacy), TextStyle::Title, (X0, 18, CW, 36), p.bg, a);
+    s.label(
+        tr(T::HeadPrivacy),
+        TextStyle::Title,
+        (X0, 18, CW, 36),
+        p.bg,
+        a,
+    );
 
     // Card 1: Software info & Github link
-    s.label("RightType", TextStyle::BodyStrong, (X0 + 20, AB_CARD1_Y + 12, 280, 22), p.surface, a);
-    s.label(tr(T::PrivacyLicense), TextStyle::Dim, (X0 + 20, AB_CARD1_Y + 36, 320, 20), p.surface, a);
-    let link_github = s.button(tr(T::BtnGitHub), false, (X0 + CW - 110, AB_CARD1_Y + 17, 94, 32), p.surface, a);
+    s.label(
+        "RightType",
+        TextStyle::BodyStrong,
+        (X0 + 20, AB_CARD1_Y + 12, 280, 22),
+        p.surface,
+        a,
+    );
+    s.label(
+        tr(T::PrivacyLicense),
+        TextStyle::Dim,
+        (X0 + 20, AB_CARD1_Y + 36, 320, 20),
+        p.surface,
+        a,
+    );
+    let link_github = s.button(
+        tr(T::BtnGitHub),
+        false,
+        (X0 + CW - 110, AB_CARD1_Y + 17, 94, 32),
+        p.surface,
+        a,
+    );
 
     // Card 2: Privacy promises
     for (i, (head, sub)) in [
         (T::Privacy1, T::SubPrivacy1),
         (T::Privacy2, T::SubPrivacy2),
         (T::Privacy3, T::SubPrivacy3),
-    ].iter().enumerate() {
+    ]
+    .iter()
+    .enumerate()
+    {
         let y = AB_CARD2_Y + 8 + i as i32 * 58;
-        s.label(tr(*head), TextStyle::BodyStrong, (X0 + 20, y + 6, CW - 40, 22), p.surface, a);
-        s.label(tr(*sub), TextStyle::Dim, (X0 + 20, y + 28, CW - 40, 20), p.surface, a);
+        s.label(
+            tr(*head),
+            TextStyle::BodyStrong,
+            (X0 + 20, y + 6, CW - 40, 22),
+            p.surface,
+            a,
+        );
+        s.label(
+            tr(*sub),
+            TextStyle::Dim,
+            (X0 + 20, y + 28, CW - 40, 20),
+            p.surface,
+            a,
+        );
     }
 
     // Card 3: Updates
-    s.label(tr(T::HeadUpdates), TextStyle::BodyStrong, (X0 + 20, AB_CARD3_Y + 14, 250, 22), p.surface, a);
-    s.label(tr(T::AboutUpdates), TextStyle::Dim, (X0 + 20, AB_CARD3_Y + 38, CW - 180, 22), p.surface, a);
-    let check_updates = s.button(tr(T::BtnCheckUpdates), false, (X0 + CW - 156, AB_CARD3_Y + 20, 140, 32), p.surface, a);
+    s.label(
+        tr(T::HeadUpdates),
+        TextStyle::BodyStrong,
+        (X0 + 20, AB_CARD3_Y + 14, 250, 22),
+        p.surface,
+        a,
+    );
+    s.label(
+        tr(T::AboutUpdates),
+        TextStyle::Dim,
+        (X0 + 20, AB_CARD3_Y + 38, CW - 180, 22),
+        p.surface,
+        a,
+    );
+    let check_updates = s.button(
+        tr(T::BtnCheckUpdates),
+        false,
+        (X0 + CW - 156, AB_CARD3_Y + 20, 140, 32),
+        p.surface,
+        a,
+    );
 
     // Card 4: Crash recovery toggle
-    let restart = s.toggle(tr(T::RowRestart), tr(T::SubRestart), (X0 + 4, RESTART_Y + 4, CW - 8, 60), p.surface, a);
+    let restart = s.toggle(
+        tr(T::RowRestart),
+        tr(T::SubRestart),
+        (X0 + 4, RESTART_Y + 4, CW - 8, 60),
+        p.surface,
+        a,
+    );
     if ui::windows_autocorrects() {
         s.label(
             tr(T::AboutWindowsAutocorrect),
@@ -1012,19 +1123,48 @@ fn open_on(page: u8) {
 
     // --- Sponsor / Support ------------------------------------------------
     let sp = PAGE_SPONSOR;
-    s.label(tr(T::HeadSponsor), TextStyle::Title, (X0, 18, CW, 36), p.bg, sp);
+    s.label(
+        tr(T::HeadSponsor),
+        TextStyle::Title,
+        (X0, 18, CW, 36),
+        p.bg,
+        sp,
+    );
 
     // Card 1: Free and open source
-    s.label(tr(T::SponsorFreeHead), TextStyle::BodyStrong, (X0 + 20, SP_CARD1_Y + 12, CW - 40, 22), p.surface, sp);
-    s.label(tr(T::SponsorFreeSub), TextStyle::Dim, (X0 + 20, SP_CARD1_Y + 36, CW - 40, 42), p.surface, sp);
+    s.label(
+        tr(T::SponsorFreeHead),
+        TextStyle::BodyStrong,
+        (X0 + 20, SP_CARD1_Y + 12, CW - 40, 22),
+        p.surface,
+        sp,
+    );
+    s.label(
+        tr(T::SponsorFreeSub),
+        TextStyle::Dim,
+        (X0 + 20, SP_CARD1_Y + 36, CW - 40, 42),
+        p.surface,
+        sp,
+    );
 
     // Card 2: Support options
-    s.label(tr(T::SponsorChannelHead), TextStyle::BodyStrong, (X0 + 20, SP_CARD2_Y + 14, 200, 24), p.surface, sp);
+    s.label(
+        tr(T::SponsorChannelHead),
+        TextStyle::BodyStrong,
+        (X0 + 20, SP_CARD2_Y + 14, 200, 24),
+        p.surface,
+        sp,
+    );
     let tip_seg_w = 88;
     let tip_ln = s.segment(
         "Lightning",
         true,
-        (X0 + CW - 20 - 2 * tip_seg_w - 4, SP_CARD2_Y + 12, tip_seg_w, 28),
+        (
+            X0 + CW - 20 - 2 * tip_seg_w - 4,
+            SP_CARD2_Y + 12,
+            tip_seg_w,
+            28,
+        ),
         p.inset,
         sp,
     );
@@ -2121,7 +2261,9 @@ fn draw_qr(hdc: HDC, x0: i32, y0: i32, size: i32, matrix: &[u64; 33]) {
     let qr_w = cell * 33;
     let pad = (size - qr_w) / 2;
     unsafe {
-        let brush = windows::Win32::Graphics::Gdi::CreateSolidBrush(windows::Win32::Foundation::COLORREF(0x00000000));
+        let brush = windows::Win32::Graphics::Gdi::CreateSolidBrush(
+            windows::Win32::Foundation::COLORREF(0x00000000),
+        );
         for r in 0..33 {
             let row = matrix[r];
             for c in 0..33 {
@@ -2435,13 +2577,22 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
         PAGE_SPONSOR => {
             card(g, rect(X0, SP_CARD1_Y, CW, SP_CARD1_H));
             card(g, rect(X0, SP_CARD2_Y, CW, SP_CARD2_H));
-            track(g, rect(X0 + CW - 20 - 2 * 88 - 6, SP_CARD2_Y + 10, 2 * 88 + 6, 32));
+            track(
+                g,
+                rect(X0 + CW - 20 - 2 * 88 - 6, SP_CARD2_Y + 10, 2 * 88 + 6, 32),
+            );
 
             let qr_box = rect(X0 + 20, SP_CARD2_Y + 54, 136, 136);
             g.fill_round(qr_box, ui::px(8) as f32, 0x00FFFFFF);
             let is_ln = TIP_NETWORK.load(Ordering::Relaxed) == 0;
             let qr_matrix = if is_ln { &QR_LIGHTNING } else { &QR_BITCOIN };
-            draw_qr(hdc, ui::px(X0 + 20), ui::px(SP_CARD2_Y + 54), ui::px(136), qr_matrix);
+            draw_qr(
+                hdc,
+                ui::px(X0 + 20),
+                ui::px(SP_CARD2_Y + 54),
+                ui::px(136),
+                qr_matrix,
+            );
 
             let addr_box = rect(X0 + 172, SP_CARD2_Y + 82, 312, 38);
             field(g, addr_box);
