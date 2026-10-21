@@ -1017,6 +1017,28 @@ fn label_with_icon(
     );
 }
 
+/// A rounded tile with `icon` (a glyph of the icon font) in it, for a row that
+/// is not a switch: drawn from a page painter, like a card. Nothing where the
+/// font is missing.
+pub fn icon_tile(g: &Gfx, hdc: HDC, rc: RECT, icon: char, lit: bool) {
+    let p = pal();
+    g.fill_round(rc, pxf(8.0), p.inset);
+    let Some(font) = make_icon_font(16) else {
+        return;
+    };
+    text(
+        hdc,
+        &icon.to_string(),
+        rc,
+        font,
+        if lit { p.accent } else { p.text_dim },
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+    );
+    unsafe {
+        let _ = DeleteObject(HGDIOBJ(font.0));
+    }
+}
+
 pub fn glyph(hdc: HDC, s: &str, rc: RECT, color: Rgb) {
     let size = (rc.bottom - rc.top) * 7 / 10;
     // `make_font` takes 96-DPI units; `rc` is already in device pixels.
@@ -1118,8 +1140,9 @@ pub enum TextStyle {
     BodyStrong,
     Dim,
     Small,
-    /// A single line of text with ellipsis if it overflows, vertically centered.
-    SingleLine,
+    /// A section heading of a page: `icon` (a glyph of the icon font) before
+    /// a semibold line.
+    Section(char),
     /// `Shift + Backspace` drawn as key caps.
     Keys,
     /// A palette heading: small dim text after an icon (a glyph of the icon
@@ -1146,8 +1169,11 @@ pub enum Kind {
         /// A glyph of the icon font in a round tile before the title, or `'\0'`.
         icon: char,
     },
-    /// One option of a segmented picker (a radio button).
-    Segment,
+    /// One option of a segmented picker (a radio button), with an optional
+    /// icon before its label.
+    Segment {
+        icon: char,
+    },
     /// A navigation entry (a radio button), with an optional icon.
     Nav {
         icon: char,
@@ -1772,7 +1798,9 @@ impl Surface {
         };
         let to96 = |v: i32| v * 96 / self.dpi.get().max(1) as i32;
         let x = row.0 + 16 + if icon { 32 + 12 } else { 0 } + to96(width) + 4;
-        self.info(label, text, (x, row.1 + 9, 24, 24), bg, page)
+        // The title line of a title + one-line description block centred in the row.
+        let y = row.1 + (row.3 - 38) / 2 - 2;
+        self.info(label, text, (x, y, 24, 24), bg, page)
     }
 
     /// Open the popover for the info button `id`, or close it if it is the
@@ -1912,17 +1940,35 @@ impl Surface {
             TextStyle::BodyStrong => text(hdc, &s, rc, f.body_strong, p.text, wrap),
             TextStyle::Dim => text(hdc, &s, rc, f.body, p.text_dim, wrap),
             TextStyle::Small => text(hdc, &s, rc, f.small, p.text_dim, wrap),
-            TextStyle::SingleLine => text(
-                hdc,
-                &s,
-                rc,
-                f.body,
-                p.text,
-                DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS,
-            ),
             TextStyle::Keys => {
                 self.paint_keys(hdc, &s, rc);
                 0
+            }
+            TextStyle::Section(icon) => {
+                let mut t = rc;
+                if let Some(font) = f.icons_small {
+                    let ic = RECT {
+                        right: rc.left + px(18),
+                        ..rc
+                    };
+                    text(
+                        hdc,
+                        &icon.to_string(),
+                        ic,
+                        font,
+                        p.text_dim,
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE,
+                    );
+                    t.left += px(26);
+                }
+                text(
+                    hdc,
+                    &s,
+                    t,
+                    f.body_strong,
+                    p.text,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                )
             }
             TextStyle::Heading(icon) => {
                 let mut t = rc;
@@ -2181,16 +2227,16 @@ impl Surface {
                 }
                 return;
             }
-            Kind::Segment => {
+            Kind::Segment { icon } => {
                 let pill = inset(rc, px(3));
                 if checked {
                     g.fill_round(pill, radius, p.accent);
-                    text(hdc, &label, pill, f.body_strong, p.on_accent, center);
+                    label_with_icon(hdc, &f, &label, *icon, pill, f.body_strong, p.on_accent);
                 } else {
                     if hot {
                         g.fill_round(pill, radius, p.surface_hover);
                     }
-                    text(hdc, &label, pill, f.body, p.text, center);
+                    label_with_icon(hdc, &f, &label, *icon, pill, f.body, p.text);
                 }
             }
             Kind::Info { .. } => {
@@ -2537,13 +2583,26 @@ impl Surface {
         bg: Rgb,
         page: u8,
     ) -> u16 {
+        self.segment_icon(s, '\0', first, rc, bg, page)
+    }
+
+    /// A segment with an icon (a glyph of the icon font) before its label.
+    pub fn segment_icon(
+        &self,
+        s: &str,
+        icon: char,
+        first: bool,
+        rc: (i32, i32, i32, i32),
+        bg: Rgb,
+        page: u8,
+    ) -> u16 {
         let group = if first { WS_GROUP | WS_TABSTOP } else { 0 };
         self.create(
             "BUTTON",
             s,
             BS_AUTORADIOBUTTON | group,
             rc,
-            Kind::Segment,
+            Kind::Segment { icon },
             bg,
             page,
         )

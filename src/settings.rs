@@ -169,10 +169,10 @@ const KB_CARET_Y: i32 = KB_SHOW_Y + 2 * KB_ROW_H + 8 + 56;
 const KB_HEIGHT: i32 = KB_CARET_Y + 3 * KB_ROW_H + 8 + 24;
 /// The Tools page: the tools' card, the health check's card, the page.
 const TOOLS_Y: i32 = 98;
-const HEALTH_Y: i32 = 246;
+const HEALTH_Y: i32 = 294;
 const TOOLS_HEIGHT: i32 = HEALTH_Y + crate::health::COUNT as i32 * ROW_H + 8 + 24;
 /// The segment buttons at the right of a Keyboard-page row.
-const KB_SEG_W: i32 = 68;
+const KB_SEG_W: i32 = 66;
 
 /// The label of each hotkey action.
 pub fn action_label(action: Action) -> T {
@@ -448,22 +448,31 @@ fn open_on(page: u8) {
     );
     s.label(
         tr(T::HeadMode),
-        TextStyle::BodyStrong,
+        TextStyle::Section(icons::MODE_SECTION),
         (X0, 70, CW, 20),
         p.bg,
         g,
     );
     let seg_w = (CW - 32 - 8) / 3;
-    let mode_auto = s.segment(tr(T::ModeAuto), true, (X0 + 20, 114, seg_w, 40), p.inset, g);
-    let mode_suggest = s.segment(
+    let mode_auto = s.segment_icon(
+        tr(T::ModeAuto),
+        icons::MODE_AUTO,
+        true,
+        (X0 + 20, 114, seg_w, 40),
+        p.inset,
+        g,
+    );
+    let mode_suggest = s.segment_icon(
         tr(T::ModeSuggest),
+        icons::MODE_SUGGEST,
         false,
         (X0 + 20 + seg_w, 114, seg_w, 40),
         p.inset,
         g,
     );
-    let mode_manual = s.segment(
+    let mode_manual = s.segment_icon(
         tr(T::ModeManual),
+        icons::MODE_MANUAL,
         false,
         (X0 + 20 + seg_w * 2, 114, seg_w, 40),
         p.inset,
@@ -479,7 +488,7 @@ fn open_on(page: u8) {
 
     s.label(
         tr(T::HeadBehaviour),
-        TextStyle::BodyStrong,
+        TextStyle::Section(icons::GENERAL),
         (X0, CARD_B_Y - 26, CW, 20),
         p.bg,
         g,
@@ -503,17 +512,35 @@ fn open_on(page: u8) {
     );
     let learn = s.toggle_icon(
         tr(T::RowLearn),
-        tr(T::SubLearn),
+        tr(T::SubLearnShort),
         icons::LEARNED,
         row(2),
         p.surface,
         g,
     );
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubLearn),
+        row(2),
+        true,
+        tr(T::RowLearn),
+        p.surface,
+        g,
+    );
     let caret_hints = s.toggle_icon(
         tr(T::RowCaret),
-        tr(T::SubCaret),
+        tr(T::SubCaretShort),
         icons::CURSOR_HINTS,
         row(3),
+        p.surface,
+        g,
+    );
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubCaret),
+        row(3),
+        true,
+        tr(T::RowCaret),
         p.surface,
         g,
     );
@@ -571,8 +598,9 @@ fn open_on(page: u8) {
             p.surface,
             h,
         ));
-        key_buttons.push(s.button(
+        key_buttons.push(s.button_icon(
             tr(T::BtnChange),
+            icons::EDIT,
             false,
             (X0 + CW - 20 - 88, y + 10, 88, 32),
             p.surface,
@@ -587,8 +615,9 @@ fn open_on(page: u8) {
         p.bg,
         h,
     );
-    let keys_reset = s.button(
+    let keys_reset = s.button_icon(
         tr(T::BtnResetKeys),
+        icons::UNDO,
         false,
         (X0 + CW - 150, note_y, 150, 34),
         p.bg,
@@ -606,7 +635,7 @@ fn open_on(page: u8) {
     );
     s.label(
         tr(T::HeadThaiKeyboard),
-        TextStyle::BodyStrong,
+        TextStyle::Section(icons::KEYBOARD),
         (X0, KB_PICK_Y - 28, CW, 20),
         p.bg,
         k,
@@ -625,72 +654,152 @@ fn open_on(page: u8) {
     );
     s.label(
         tr(T::HeadWhileTyping),
-        TextStyle::BodyStrong,
+        TextStyle::Section(icons::EDIT),
         (X0, KB_TYPING_Y - 28, CW, 20),
         p.bg,
         k,
     );
     let kb_row = |top: i32, i: i32| (X0 + 4, top + 4 + i * KB_ROW_H, CW - 8, KB_ROW_H - 4);
-    let kb_addresses = s.toggle(
+    let kb_addresses = s.toggle_icon(
         tr(T::RowAddresses),
-        tr(T::SubAddresses),
+        tr(T::SubAddressesShort),
+        icons::WEB_ADDRESSES,
         kb_row(KB_TYPING_Y, 0),
         p.surface,
         k,
     );
-    let kb_complete = s.toggle(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubAddresses),
+        kb_row(KB_TYPING_Y, 0),
+        true,
+        tr(T::RowAddresses),
+        p.surface,
+        k,
+    );
+    let kb_complete = s.toggle_icon(
         tr(T::RowComplete),
-        tr(T::SubComplete),
+        tr(T::SubCompleteShort),
+        icons::TAB_COMPLETE,
         kb_row(KB_TYPING_Y, 1),
         p.surface,
         k,
     );
-    let kb_grave = s.toggle(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubComplete),
+        kb_row(KB_TYPING_Y, 1),
+        true,
+        tr(T::RowComplete),
+        p.surface,
+        k,
+    );
+    let kb_grave = s.toggle_icon(
         tr(T::RowGrave),
-        tr(T::SubGrave),
+        tr(T::SubGraveShort),
+        icons::LANGUAGE_SWITCH,
         kb_row(KB_TYPING_Y, 2),
         p.surface,
         k,
     );
-    let kb_guard = s.toggle(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubGrave),
+        kb_row(KB_TYPING_Y, 2),
+        true,
+        tr(T::RowGrave),
+        p.surface,
+        k,
+    );
+    let kb_guard = s.toggle_icon(
         tr(T::RowGuardSwitch),
-        tr(T::SubGuardSwitch),
+        tr(T::SubGuardSwitchShort),
+        icons::UNDO,
         kb_row(KB_TYPING_Y, 3),
         p.surface,
         k,
     );
-    let kb_accents = s.toggle(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubGuardSwitch),
+        kb_row(KB_TYPING_Y, 3),
+        true,
+        tr(T::RowGuardSwitch),
+        p.surface,
+        k,
+    );
+    let kb_accents = s.toggle_icon(
         tr(T::RowHoldAccents),
-        tr(T::SubHoldAccents),
+        tr(T::SubHoldAccentsShort),
+        icons::HOLD_KEY,
         kb_row(KB_TYPING_Y, 4),
         p.surface,
         k,
     );
-    let kb_shortcuts = s.toggle(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubHoldAccents),
+        kb_row(KB_TYPING_Y, 4),
+        true,
+        tr(T::RowHoldAccents),
+        p.surface,
+        k,
+    );
+    let kb_shortcuts = s.toggle_icon(
         tr(T::RowShortcutsEnglish),
-        tr(T::SubShortcutsEnglish),
+        tr(T::SubShortcutsEnglishShort),
+        icons::SHORTCUTS,
         kb_row(KB_TYPING_Y, 5),
         p.surface,
         k,
     );
-    let kb_ctrl_hold = s.toggle(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubShortcutsEnglish),
+        kb_row(KB_TYPING_Y, 5),
+        true,
+        tr(T::RowShortcutsEnglish),
+        p.surface,
+        k,
+    );
+    let kb_ctrl_hold = s.toggle_icon(
         tr(T::RowCtrlHold),
+        tr(T::SubCtrlHoldShort),
+        icons::KEYBOARD,
+        kb_row(KB_TYPING_Y, 6),
+        p.surface,
+        k,
+    );
+    s.info_after(
+        tr(T::InfoMore),
         tr(T::SubCtrlHold),
         kb_row(KB_TYPING_Y, 6),
+        true,
+        tr(T::RowCtrlHold),
         p.surface,
         k,
     );
     s.label(
         tr(T::HeadStateKeys),
-        TextStyle::BodyStrong,
+        TextStyle::Section(icons::SHORTCUTS),
         (X0, KB_KEYS_Y - 28, CW, 20),
         p.bg,
         k,
     );
-    let kb_password_tag = s.toggle(
+    let kb_password_tag = s.toggle_icon(
         tr(T::RowPasswordTag),
+        tr(T::SubPasswordTagShort),
+        icons::PRIVACY,
+        kb_row(KB_KEYS_Y, 0),
+        p.surface,
+        k,
+    );
+    s.info_after(
+        tr(T::InfoMore),
         tr(T::SubPasswordTag),
         kb_row(KB_KEYS_Y, 0),
+        true,
+        tr(T::RowPasswordTag),
         p.surface,
         k,
     );
@@ -698,18 +807,18 @@ fn open_on(page: u8) {
     // right where a toggle's switch would be.
     let guard_row = |i: i32, title: T, sub: T, last: T| -> [u16; 3] {
         let top = KB_KEYS_Y + 4 + i * KB_ROW_H;
-        let text_w = CW - 40 - 3 * KB_SEG_W - 16;
+        let text_w = CW - 40 - 3 * KB_SEG_W - 16 - 44;
         s.label(
             tr(title),
             TextStyle::Body,
-            (X0 + 20, top + 12, text_w, 22),
+            (X0 + 20 + 44, top + 12, text_w, 22),
             p.surface,
             k,
         );
         s.label(
             tr(sub),
             TextStyle::Small,
-            (X0 + 20, top + 34, text_w, 30),
+            (X0 + 20 + 44, top + 34, text_w, 30),
             p.surface,
             k,
         );
@@ -734,71 +843,141 @@ fn open_on(page: u8) {
     let kb_insert = guard_row(2, T::RowInsertKey, T::SubInsertKey, T::GuardBlock);
     s.label(
         tr(T::HeadDevices),
-        TextStyle::BodyStrong,
+        TextStyle::Section(icons::SCANNER),
         (X0, KB_DEV_Y - 28, CW, 20),
         p.bg,
         k,
     );
-    let kb_scanner = s.toggle(
+    let kb_scanner = s.toggle_icon(
         tr(T::RowScanner),
-        tr(T::SubScanner),
+        tr(T::SubScannerShort),
+        icons::SCANNER,
         kb_row(KB_DEV_Y, 0),
         p.surface,
         k,
     );
-    let kb_fake = s.toggle(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubScanner),
+        kb_row(KB_DEV_Y, 0),
+        true,
+        tr(T::RowScanner),
+        p.surface,
+        k,
+    );
+    let kb_fake = s.toggle_icon(
         tr(T::RowFakeKeyboard),
+        tr(T::SubFakeKeyboardShort),
+        icons::SHIELD,
+        kb_row(KB_DEV_Y, 1),
+        p.surface,
+        k,
+    );
+    s.info_after(
+        tr(T::InfoMore),
         tr(T::SubFakeKeyboard),
         kb_row(KB_DEV_Y, 1),
+        true,
+        tr(T::RowFakeKeyboard),
         p.surface,
         k,
     );
     s.label(
         tr(T::HeadComfort),
-        TextStyle::BodyStrong,
+        TextStyle::Section(icons::ON_SCREEN),
         (X0, KB_SHOW_Y - 28, CW, 20),
         p.bg,
         k,
     );
-    let kb_show_keys = s.toggle(
+    let kb_show_keys = s.toggle_icon(
         tr(T::RowShowKeys),
-        tr(T::SubShowKeys),
+        tr(T::SubShowKeysShort),
+        icons::ON_SCREEN,
         kb_row(KB_SHOW_Y, 0),
         p.surface,
         k,
     );
-    let kb_rest = s.toggle(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubShowKeys),
+        kb_row(KB_SHOW_Y, 0),
+        true,
+        tr(T::RowShowKeys),
+        p.surface,
+        k,
+    );
+    let kb_rest = s.toggle_icon(
         tr(T::RowRest),
+        tr(T::SubRestShort),
+        icons::REST,
+        kb_row(KB_SHOW_Y, 1),
+        p.surface,
+        k,
+    );
+    s.info_after(
+        tr(T::InfoMore),
         tr(T::SubRest),
         kb_row(KB_SHOW_Y, 1),
+        true,
+        tr(T::RowRest),
         p.surface,
         k,
     );
     s.label(
         tr(T::HeadCaret),
-        TextStyle::BodyStrong,
+        TextStyle::Section(icons::CURSOR_HINTS),
         (X0, KB_CARET_Y - 28, CW, 20),
         p.bg,
         k,
     );
-    let kb_caret_list = s.toggle(
+    let kb_caret_list = s.toggle_icon(
         tr(T::RowCaretList),
-        tr(T::SubCaretList),
+        tr(T::SubCaretListShort),
+        icons::SEARCH,
         kb_row(KB_CARET_Y, 0),
         p.surface,
         k,
     );
-    let kb_ghosts = s.toggle(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubCaretList),
+        kb_row(KB_CARET_Y, 0),
+        true,
+        tr(T::RowCaretList),
+        p.surface,
+        k,
+    );
+    let kb_ghosts = s.toggle_icon(
         tr(T::RowGhosts),
-        tr(T::SubGhosts),
+        tr(T::SubGhostsShort),
+        icons::MATH,
         kb_row(KB_CARET_Y, 1),
         p.surface,
         k,
     );
-    let kb_cycle = s.toggle(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubGhosts),
+        kb_row(KB_CARET_Y, 1),
+        true,
+        tr(T::RowGhosts),
+        p.surface,
+        k,
+    );
+    let kb_cycle = s.toggle_icon(
         tr(T::RowCycleChars),
+        tr(T::SubCycleCharsShort),
+        icons::REFRESH,
+        kb_row(KB_CARET_Y, 2),
+        p.surface,
+        k,
+    );
+    s.info_after(
+        tr(T::InfoMore),
         tr(T::SubCycleChars),
         kb_row(KB_CARET_Y, 2),
+        true,
+        tr(T::RowCycleChars),
         p.surface,
         k,
     );
@@ -807,29 +986,36 @@ fn open_on(page: u8) {
     let t = PAGE_TOOLS;
     surface.set_page_height(t, TOOLS_HEIGHT);
     s.label(tr(T::NavTools), TextStyle::Title, (X0, 18, CW, 36), p.bg, t);
-    let tool_w = (CW - 32 - 24) / 4;
-    let tool = |i: i32, label: T| {
-        s.button(
+    let tool_w = (CW - 32 - 8) / 2;
+    let tool = |i: i32, label: T, icon: char| {
+        s.button_icon(
             tr(label),
+            icon,
             false,
-            (X0 + 16 + i * (tool_w + 8), TOOLS_Y + 16, tool_w, 40),
+            (
+                X0 + 16 + (i % 2) * (tool_w + 8),
+                TOOLS_Y + 16 + (i / 2) * 48,
+                tool_w,
+                40,
+            ),
             p.surface,
             t,
         )
     };
-    let tools_clean = tool(0, T::ToolClean);
-    let tools_test = tool(1, T::ToolTest);
-    let tools_map = tool(2, T::KeyMapTitle);
-    let tools_practice = tool(3, T::PracticeTitle);
+    let tools_clean = tool(0, T::ToolClean, icons::TOOL_CLEAN);
+    let tools_test = tool(1, T::ToolTest, icons::TOOL_TEST);
+    let tools_map = tool(2, T::KeyMapTitle, icons::TOOL_MAP);
+    let tools_practice = tool(3, T::PracticeTitle, icons::TOOL_PRACTICE);
     s.label(
         tr(T::HeadHealth),
-        TextStyle::BodyStrong,
+        TextStyle::Section(icons::HEALTH),
         (X0, HEALTH_Y - 28, CW - 160, 20),
         p.bg,
         t,
     );
-    let health_again = s.button(
+    let health_again = s.button_icon(
         tr(T::BtnCheckAgain),
+        icons::REFRESH,
         false,
         (X0 + CW - 140, HEALTH_Y - 36, 140, 30),
         p.bg,
@@ -881,40 +1067,68 @@ fn open_on(page: u8) {
         l,
     );
     let learned_list = s.edit(&learn::list().join("\r\n"), (X0 + 10, 150, CW - 20, 252), l);
-    let import_learned = s.button(tr(T::BtnImport), false, (X0, 428, 100, 34), p.bg, l);
-    let export_learned = s.button(tr(T::BtnExport), false, (X0 + 106, 428, 100, 34), p.bg, l);
+    let import_learned = s.button_icon(
+        tr(T::BtnImport),
+        icons::IMPORT,
+        false,
+        (X0, 428, 100, 34),
+        p.bg,
+        l,
+    );
+    let export_learned = s.button_icon(
+        tr(T::BtnExport),
+        icons::EXPORT,
+        false,
+        (X0 + 106, 428, 100, 34),
+        p.bg,
+        l,
+    );
     let learned_status = s.label("", TextStyle::Small, (X0, 470, CW, 36), p.bg, l);
     let folder_label = s.label("", TextStyle::Small, (X0, 526, CW - 290, 40), p.bg, l);
-    let sync_folder = s.button(
+    let sync_folder = s.button_icon(
         tr(T::BtnSyncFolder),
+        icons::FOLDER,
         false,
         (X0 + CW - 284, 520, 150, 34),
         p.bg,
         l,
     );
-    let this_pc = s.button(
+    let this_pc = s.button_icon(
         tr(T::BtnThisPc),
+        icons::APPS,
         false,
         (X0 + CW - 126, 520, 126, 34),
         p.bg,
         l,
     );
-    let sync_settings = s.toggle(
+    let sync_settings = s.toggle_icon(
         tr(T::RowSyncSettings),
-        tr(T::SubSyncSettings),
+        tr(T::SubSyncSettingsShort),
+        icons::FOLDER,
         (X0 + 4, 576, CW - 8, 64),
         p.surface,
         l,
     );
-    let clear_learned = s.button(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubSyncSettings),
+        (X0 + 4, 576, CW - 8, 64),
+        true,
+        tr(T::RowSyncSettings),
+        p.surface,
+        l,
+    );
+    let clear_learned = s.button_icon(
         tr(T::BtnClearAll),
+        icons::REMOVE,
         false,
         (X0 + CW - 284, 428, 136, 34),
         p.bg,
         l,
     );
-    let save_learned = s.button(
+    let save_learned = s.button_icon(
         tr(T::BtnSaveLearned),
+        icons::SAVE,
         true,
         (X0 + CW - 140, 428, 140, 34),
         p.bg,
@@ -962,8 +1176,9 @@ fn open_on(page: u8) {
         n,
     );
     let snip_text = s.edit("", (X0 + 164, 348, CW - 168 - 126, 60), n);
-    let snip_date = s.button(
+    let snip_date = s.button_icon(
         tr(T::BtnInsertDate),
+        icons::CALENDAR,
         false,
         (X0 + CW - 120, 348, 120, 32),
         p.bg,
@@ -984,15 +1199,17 @@ fn open_on(page: u8) {
         );
         left += SNIP_SCOPE_WIDTHS[i];
     }
-    let snip_save = s.button(
+    let snip_save = s.button_icon(
         tr(T::BtnSaveSnippet),
+        icons::SAVE,
         true,
         (X0 + CW - 206, 424, 106, 34),
         p.bg,
         n,
     );
-    let snip_remove = s.button(
+    let snip_remove = s.button_icon(
         tr(T::BtnRemoveApp),
+        icons::REMOVE,
         false,
         (X0 + CW - 94, 424, 94, 34),
         p.bg,
@@ -1031,18 +1248,40 @@ fn open_on(page: u8) {
     let seg_w = CW / 5;
     let mut app_seg = [0u16; 5];
     for (i, mode) in APP_MODE_CHOICES.iter().enumerate() {
-        app_seg[i] = s.segment(
+        app_seg[i] = s.segment_icon(
             tr(crate::tray::app_mode_name(*mode)),
+            [
+                icons::MODE_AUTO,
+                icons::MODE_SUGGEST,
+                icons::MODE_MANUAL,
+                icons::MODE_CODE,
+                icons::MODE_OFF,
+            ][i],
             i == 0,
             (X0 + 4 + i as i32 * seg_w, 346, seg_w - 2, 32),
             p.inset,
             b,
         );
     }
-    let apps_add = s.button(tr(T::BtnAddApp), false, (X0, 392, 210, 34), p.bg, b);
-    let apps_keep = s.button(tr(T::BtnKeepMode), false, (X0 + 216, 392, 150, 34), p.bg, b);
-    let apps_remove = s.button(
+    let apps_add = s.button_icon(
+        tr(T::BtnAddApp),
+        icons::ADD,
+        false,
+        (X0, 392, 210, 34),
+        p.bg,
+        b,
+    );
+    let apps_keep = s.button_icon(
+        tr(T::BtnKeepMode),
+        icons::PIN,
+        false,
+        (X0 + 216, 392, 150, 34),
+        p.bg,
+        b,
+    );
+    let apps_remove = s.button_icon(
         tr(T::BtnRemoveApp),
+        icons::REMOVE,
         false,
         (X0 + CW - 120, 392, 120, 34),
         p.bg,
@@ -1056,15 +1295,26 @@ fn open_on(page: u8) {
         p.bg,
         b,
     );
-    let predict = s.toggle(
+    let predict = s.toggle_icon(
         tr(T::RowPredict),
-        tr(T::SubPredict),
+        tr(T::SubPredictShort),
+        icons::GUESS,
         (X0 + 4, PREDICT_Y + 4, CW - 136, 68),
         p.surface,
         b,
     );
-    let clear_habits = s.button(
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubPredict),
+        (X0 + 4, PREDICT_Y + 4, CW - 136, 68),
+        true,
+        tr(T::RowPredict),
+        p.surface,
+        b,
+    );
+    let clear_habits = s.button_icon(
         tr(T::BtnClearHabits),
+        icons::REMOVE,
         false,
         (X0 + CW - 116, PREDICT_Y + 21, 100, 34),
         p.surface,
@@ -1096,8 +1346,9 @@ fn open_on(page: u8) {
         p.surface,
         a,
     );
-    let link_github = s.button(
+    let link_github = s.button_icon(
         tr(T::BtnGitHub),
+        icons::OPEN_LINK,
         false,
         (X0 + CW - 110, AB_CARD1_Y + 17, 94, 32),
         p.surface,
@@ -1117,14 +1368,14 @@ fn open_on(page: u8) {
         s.label(
             tr(*head),
             TextStyle::BodyStrong,
-            (X0 + 20, y + 6, CW - 40, 22),
+            (X0 + 64, y + 6, CW - 84, 22),
             p.surface,
             a,
         );
         s.label(
             tr(*sub),
             TextStyle::Dim,
-            (X0 + 20, y + 28, CW - 40, 20),
+            (X0 + 64, y + 28, CW - 84, 20),
             p.surface,
             a,
         );
@@ -1141,23 +1392,34 @@ fn open_on(page: u8) {
     s.label(
         tr(T::AboutUpdates),
         TextStyle::Dim,
-        (X0 + 20, AB_CARD3_Y + 38, CW - 180, 40),
+        (X0 + 20, AB_CARD3_Y + 38, CW - 200, 40),
         p.surface,
         a,
     );
-    let check_updates = s.button(
+    let check_updates = s.button_icon(
         tr(T::BtnCheckUpdates),
+        icons::REFRESH,
         false,
-        (X0 + CW - 156, AB_CARD3_Y + 20, 140, 32),
+        (X0 + CW - 172, AB_CARD3_Y + 20, 156, 32),
         p.surface,
         a,
     );
 
     // Card 4: Crash recovery toggle
-    let restart = s.toggle(
+    let restart = s.toggle_icon(
         tr(T::RowRestart),
+        tr(T::SubRestartShort),
+        icons::RESTART,
+        (X0 + 4, RESTART_Y + 4, CW - 8, 60),
+        p.surface,
+        a,
+    );
+    s.info_after(
+        tr(T::InfoMore),
         tr(T::SubRestart),
         (X0 + 4, RESTART_Y + 4, CW - 8, 60),
+        true,
+        tr(T::RowRestart),
         p.surface,
         a,
     );
@@ -1185,14 +1447,14 @@ fn open_on(page: u8) {
     s.label(
         tr(T::SponsorFreeHead),
         TextStyle::BodyStrong,
-        (X0 + 20, SP_CARD1_Y + 12, CW - 40, 22),
+        (X0 + 64, SP_CARD1_Y + 12, CW - 84, 22),
         p.surface,
         sp,
     );
     s.label(
         tr(T::SponsorFreeSub),
         TextStyle::Dim,
-        (X0 + 20, SP_CARD1_Y + 36, CW - 40, 42),
+        (X0 + 64, SP_CARD1_Y + 36, CW - 84, 42),
         p.surface,
         sp,
     );
@@ -1234,16 +1496,17 @@ fn open_on(page: u8) {
         sp,
     );
     let tip_address = s.label(
-        BTC_LIGHTNING,
-        TextStyle::SingleLine,
-        (X0 + 180, SP_CARD2_Y + 90, 236, 22),
+        &address_lines(BTC_LIGHTNING),
+        TextStyle::Small,
+        (X0 + 180, SP_CARD2_Y + 84, 218, 34),
         p.inset,
         sp,
     );
-    let tip_copy = s.button(
+    let tip_copy = s.button_icon(
         tr(T::BtnCopy),
+        icons::COPY,
         false,
-        (X0 + CW - 20 - 64, SP_CARD2_Y + 85, 60, 32),
+        (X0 + CW - 20 - 80, SP_CARD2_Y + 85, 76, 32),
         p.surface,
         sp,
     );
@@ -1487,10 +1750,10 @@ fn sync(win: &SettingsWindow) {
     s.set_checked(ids.tip_ln, ln);
     s.set_checked(ids.tip_onchain, !ln);
     if ln {
-        s.set_text(ids.tip_address, BTC_LIGHTNING);
+        s.set_text(ids.tip_address, &address_lines(BTC_LIGHTNING));
         s.set_text(ids.tip_desc, tr(T::SponsorLnDesc));
     } else {
-        s.set_text(ids.tip_address, BTC_MAINNET);
+        s.set_text(ids.tip_address, &address_lines(BTC_MAINNET));
         s.set_text(ids.tip_desc, tr(T::SponsorBtcDesc));
     }
 }
@@ -2359,6 +2622,24 @@ fn pick_file(win: &SettingsWindow, save: bool) -> Option<std::path::PathBuf> {
     Some(path)
 }
 
+/// An address as shown: on two lines when it is longer than one line of the
+/// box holds (a drawn word is never broken in the middle, so the line break
+/// is put in). What Copy puts on the clipboard is the address itself.
+fn address_lines(addr: &str) -> String {
+    const ONE_LINE: usize = 34;
+    let n = addr.chars().count();
+    if n <= ONE_LINE {
+        return addr.to_string();
+    }
+    let cut = n.div_ceil(2);
+    let first: String = addr.chars().take(cut).collect();
+    let rest: String = addr.chars().skip(cut).collect();
+    format!(
+        "{first}
+{rest}"
+    )
+}
+
 /// Ask for a folder (the sync folder for learned words).
 fn pick_folder(win: &SettingsWindow) -> Option<std::path::PathBuf> {
     let mut dialog = nwg::FileDialog::default();
@@ -2528,7 +2809,7 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
         }
         PAGE_TOOLS => {
             let dy = ui::page_scroll();
-            card(g, rect(X0, TOOLS_Y - dy, CW, 72));
+            card(g, rect(X0, TOOLS_Y - dy, CW, 120));
             card(
                 g,
                 rect(
@@ -2579,6 +2860,14 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             divider(hdc, X0 + 16, KB_CARET_Y + 2 * KB_ROW_H + 2 - dy, CW - 32);
             for i in 1..3 {
                 divider(hdc, X0 + 16, KB_KEYS_Y + i * KB_ROW_H + 2 - dy, CW - 32);
+                let icon = [icons::NUMPAD, icons::INSERT_KEY][i as usize - 1];
+                ui::icon_tile(
+                    g,
+                    hdc,
+                    rect(X0 + 16, KB_KEYS_Y + 4 + i * KB_ROW_H + 18 - dy, 32, 32),
+                    icon,
+                    false,
+                );
                 let x = X0 + CW - 24 - 3 * KB_SEG_W;
                 track(
                     g,
@@ -2620,11 +2909,22 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
                 let y = AB_CARD2_Y + 8 + i * 58;
                 divider(hdc, X0 + 20, y - 2, CW - 40);
             }
+            for i in 0..3 {
+                let y = AB_CARD2_Y + 8 + i * 58;
+                ui::icon_tile(g, hdc, rect(X0 + 20, y + 11, 32, 32), icons::CHECK, true);
+            }
             card(g, rect(X0, AB_CARD3_Y, CW, AB_CARD3_H));
             card(g, rect(X0, RESTART_Y, CW, 68));
         }
         PAGE_SPONSOR => {
             card(g, rect(X0, SP_CARD1_Y, CW, SP_CARD1_H));
+            ui::icon_tile(
+                g,
+                hdc,
+                rect(X0 + 20, SP_CARD1_Y + (SP_CARD1_H - 32) / 2, 32, 32),
+                icons::SUPPORT,
+                true,
+            );
             card(g, rect(X0, SP_CARD2_Y, CW, SP_CARD2_H));
             track(
                 g,

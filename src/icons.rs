@@ -44,6 +44,20 @@ pub const SCANNER: char = '\u{E950}'; // Processing (a chip)
 pub const SHIELD: char = '\u{E730}'; // Shield
 pub const ON_SCREEN: char = '\u{E7F0}'; // ClosedCaption
 pub const REST: char = '\u{E823}'; // Clock
+pub const MATH: char = '\u{E94A}'; // Divide (symbol suggestions)
+pub const GUESS: char = '\u{E7B3}'; // View (guessing the field's language)
+pub const RESTART: char = '\u{E777}'; // Refresh (start again)
+pub const MODE_AUTO: char = '\u{E945}'; // Lightning (as in the palette)
+pub const MODE_SUGGEST: char = '\u{E82F}'; // Lightbulb
+pub const MODE_MANUAL: char = '\u{E765}'; // Keyboard
+pub const MODE_CODE: char = '\u{E943}'; // Code (braces)
+pub const MODE_OFF: char = '\u{E7E8}'; // PowerButton
+pub const TOOL_CLEAN: char = '\u{E72E}'; // Lock (the keyboard is locked while it is wiped)
+pub const TOOL_TEST: char = '\u{E765}'; // Keyboard
+pub const TOOL_MAP: char = '\u{E8A9}'; // ViewAll (the keys laid out)
+pub const TOOL_PRACTICE: char = '\u{E7BE}'; // Education (a graduation cap)
+pub const MODE_SECTION: char = '\u{E9E9}'; // Equalizer (the palette's Mode section)
+pub const HEALTH: char = '\u{E95E}'; // HeartPulse
 
 // --- Actions ---------------------------------------------------------------
 pub const ADD: char = '\u{E710}'; // Add
@@ -62,4 +76,6 @@ pub const CHECK: char = '\u{E73E}'; // Accept
 pub const WARNING: char = '\u{E7BA}'; // Warning
 pub const CLOSE: char = '\u{E711}'; // Cancel
 pub const CHEVRON: char = '\u{E76C}'; // ChevronRight
+pub const CALENDAR: char = '\u{E787}'; // Calendar
+pub const PIN: char = '\u{E718}'; // Pin
 pub const UNLOCK: char = '\u{E785}'; // Unlock
