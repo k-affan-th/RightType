@@ -110,7 +110,6 @@ texts! {
     StateOff => "Off", "ปิดอยู่";
     StateHookLost => "Not working — retrying", "หยุดทำงาน — กำลังลองใหม่";
     StatePaused => "Paused — back in {n} min", "หยุดชั่วคราว — กลับมาในอีก {n} นาที";
-    StateAppMode => "{mode} in {app}", "{mode} ใน {app}";
     ModeOff => "Off", "ปิด";
 
     // Toasts.
@@ -153,12 +152,6 @@ texts! {
     ToastWordLearned => "Added “{word}”", "เพิ่ม “{word}” แล้ว";
     ToastWordInvalid => "Can't add this word", "เพิ่มคำนี้ไม่ได้";
     ToastCopied => "Copied", "คัดลอกแล้ว";
-    HeadDonate => "Support RightType", "สนับสนุน RightType";
-    SubDonateLn => "Lightning · small tips", "Lightning · ทิปเล็กน้อย";
-    SubDonateOnchain => "Bitcoin on-chain · larger amounts", "Bitcoin on-chain · ยอดใหญ่";
-    BtnDonate => "Donate", "สนับสนุน";
-    BtnCopyAddress => "Copy", "คัดลอก";
-    DonateOfflineNote => "Nothing is sent from this app.", "แอปนี้ไม่ส่งข้อมูลออกไป";
     ToastCapsOff => "CapsLock was on — word fixed, CapsLock off · Shift+Backspace if you meant capitals", "CapsLock ค้าง — แก้คำและปิด CapsLock แล้ว · ตั้งใจพิมพ์ตัวใหญ่? กด Shift+Backspace";
     ToastCapsKept => "Capitals kept, CapsLock on again", "คืนตัวพิมพ์ใหญ่และเปิด CapsLock ให้แล้ว";
     ToastModeCode => "Code mode: only what is clearly a slip — never names, Thai only in comments and strings", "โหมดโค้ด: แก้เฉพาะที่พิมพ์ผิดแป้นชัด ๆ ไม่แตะชื่อตัวแปร และแปลงเป็นไทยเฉพาะใน comment/string";
@@ -309,7 +302,6 @@ texts! {
     CleanLeft => "{t} left", "เหลือ {t}";
     CleanWiped => "{n} of {all} keys pressed", "กดไปแล้ว {n} จาก {all} ปุ่ม";
     BtnUnlock => "Unlock", "ปลดล็อก";
-    CleanMouseLocked => "The mouse is locked too: it unlocks when the time is up.", "เมาส์ถูกล็อกด้วย จะปลดล็อกเมื่อหมดเวลา";
     CleanLimits => "Fn, brightness, Wi-Fi and some laptop keys work inside the laptop itself: no program can hold them. Ctrl+Alt+Del always works.", "ปุ่ม Fn ความสว่าง Wi-Fi และปุ่มพิเศษบางปุ่มบนโน้ตบุ๊กทำงานในตัวเครื่อง ไม่มีโปรแกรมใดกันได้ · Ctrl+Alt+Del ใช้ได้เสมอ";
     CleanDone => "Done: the keyboard is unlocked", "เสร็จแล้ว ปลดล็อกคีย์บอร์ดแล้ว";
     BtnTestKeys => "Test the keys", "ทดสอบปุ่ม";
@@ -430,7 +422,6 @@ texts! {
     PracticeDone => "Done: {speed}, {acc}", "เสร็จแล้ว: {speed} {acc}";
     PracticeBestToday => "Best today: {speed}", "ดีที่สุดวันนี้: {speed}";
     PracticeGameScore => "Score {n}", "คะแนน {n}";
-    PracticeLives => "Lives {n}", "ชีวิต {n}";
     PracticeLevel => "Level {n}", "ระดับ {n}";
     PracticeCombo => "{n} in a row", "ต่อเนื่อง {n} คำ";
     PracticeBestCombo => "Best run {n}", "ต่อเนื่องสูงสุด {n} คำ";
@@ -584,8 +575,6 @@ texts! {
     ErrClipboardTooLong => "The copied text is too long to type (over {n} characters)", "ข้อความที่คัดลอกยาวเกินจะพิมพ์ (เกิน {n} ตัวอักษร)";
     ToastEnterHeld => "Not sent: it looks typed on the wrong keyboard · Enter sends it anyway · Shift+Backspace fixes", "ยังไม่ส่ง: ดูเหมือนพิมพ์ผิดแป้น · กด Enter อีกครั้งเพื่อส่ง · Shift+Backspace เพื่อแก้";
     PalettePause => "Pause for 30 minutes", "หยุดชั่วคราว 30 นาที";
-    PaletteAppOff => "Turn off in {app}", "ปิดใน {app}";
-    PaletteAppOn => "Turn back on in {app}", "เปิดกลับใน {app}";
     HkFlip => "Fix or flip back the last word", "แก้หรือสลับคำล่าสุดกลับ";
     HkSelection => "Convert the selected text", "แปลงข้อความที่เลือก";
     HkCycle => "Switch correction mode", "สลับโหมดการแก้คำ";
@@ -608,19 +597,13 @@ texts! {
     FileFilter => "Text files (*.txt)", "ไฟล์ข้อความ (*.txt)";
     LearnedSaved => "Saved {n} words.", "บันทึก {n} คำแล้ว";
     LearnedSkipped => "Saved {n} words. Skipped {k} lines that are not a single word.", "บันทึก {n} คำแล้ว ข้าม {k} บรรทัดที่ไม่ใช่คำเดียว";
-    HeadBlocked => "Blocked apps", "แอปที่ไม่ทำงาน";
-    HeadAppModes => "Mode per app", "โหมดของแต่ละแอป";
-    AppModesIntro => "Set mode per application: name.exe = auto, suggest, manual, or off.", "กำหนดโหมดการทำงานแยกตามโปรแกรม: ชื่อ.exe = auto, suggest, manual หรือ off";
     AppsSaved => "Saved.", "บันทึกแล้ว";
     RowPredict => "Guess each field's language", "เดาภาษาของแต่ละช่อง";
     SubPredictShort => "Switches language as you click into a field.", "สลับภาษาเมื่อคลิกเข้าช่องที่ใช้ภาษาเดียว";
     SubPredict => "Switches language as you click into a field you use for one. Counts only.", "สลับภาษาให้เมื่อคลิกเข้าช่องที่ใช้ภาษาเดียว เก็บแค่จำนวนคำ";
     BtnClearHabits => "Clear", "ล้าง";
     ToastHabitsCleared => "Field habits cleared", "ล้างข้อมูลการเดาภาษาแล้ว";
-    AppsSkipped => "Saved. Skipped {k} lines that are not name.exe = mode.", "บันทึกแล้ว ข้าม {k} บรรทัดที่ไม่ใช่รูปแบบ ชื่อ.exe = โหมด";
     BlockedAlways => "RightType stays out of password fields, terminals, wallets, and full-screen games automatically.", "RightType ยกเว้นช่องรหัสผ่าน, เทอร์มินัล, กระเป๋าคริปโต และเกมเต็มจอโดยอัตโนมัติ";
-    BlockedAdd => "Additional apps to exclude (one process name per line, e.g. notepad.exe):", "แอปที่ต้องการยกเว้นเพิ่มเติม (หนึ่งชื่อโปรแกรมต่อบรรทัด เช่น notepad.exe):";
-    BtnSaveList => "Save list", "บันทึกรายการ";
     HeadPrivacy => "Privacy", "ความเป็นส่วนตัว";
     PrivacyLicense => "Free software under MIT or Apache-2.0", "ซอฟต์แวร์ฟรี ภายใต้ MIT หรือ Apache-2.0";
     Privacy1 => "Never connects to the internet", "ไม่ต่ออินเทอร์เน็ต";
@@ -629,13 +612,10 @@ texts! {
     SubPrivacy2 => "Password fields and protected apps are bypassed.", "ช่องรหัสผ่านและแอปที่อยู่ในรายการป้องกันจะถูกข้าม";
     Privacy3 => "Clear remembered data anytime", "ล้างข้อมูลที่จำไว้ได้ทุกเมื่อ";
     SubPrivacy3 => "View and manage in the “Learned words” page.", "ดูและลบได้ที่หน้า “คำที่จำไว้”";
-    Privacy4 => "Temporary keystrokes kept in memory only", "คำที่กำลังพิมพ์อยู่ในหน่วยความจำเท่านั้น";
     HeadUpdates => "Updates", "อัปเดต";
     AboutUpdates => "Open download page in browser (app never connects).", "เปิดหน้าดาวน์โหลดบนเว็บเบราว์เซอร์ (ตัวแอปไม่ต่อเน็ต)";
     BtnCheckUpdates => "Check for updates", "ตรวจสอบอัปเดต";
-    HeadAbout => "About", "เกี่ยวกับ";
     AboutVersion => "RightType {v}", "RightType {v}";
-    AboutLicense => "Free and open source — MIT or Apache-2.0. Manoonchai layout © Manassarn Manoonchai (MIT).", "ฟรีและโอเพนซอร์ส — MIT หรือ Apache-2.0 · แป้นมนูญชัย © Manassarn Manoonchai (MIT)";
     HeadSponsor => "Support RightType", "สนับสนุน RightType";
     SponsorFreeHead => "Free and open source", "แอปนี้ฟรีและเปิดซอร์ส";
     SponsorFreeSub => "If this tool helps your workflow, feel free to support a coffee. Every feature remains 100% free as always.", "หาก RightType ช่วยให้คุณทำงานสะดวกขึ้น สามารถร่วมสนับสนุนค่ากาแฟได้ตามสะดวก โดยทุกฟีเจอร์ใช้งานฟรี 100% เสมอ";
@@ -644,7 +624,6 @@ texts! {
     SponsorBtcDesc => "Bitcoin on-chain · for larger amounts", "Bitcoin on-chain · สำหรับยอดใหญ่";
     SponsorQrNote => "QR generated locally. App never connects and does not check balances.", "QR สร้างในเครื่อง RightType ไม่ต่อเน็ตและไม่เช็คยอดเงิน";
     BtnGitHub => "GitHub", "GitHub";
-    BtnSponsor => "Support", "สนับสนุน";
     VersionLabel => "Version {v}", "เวอร์ชัน {v}";
     BtnClose => "Close", "ปิด";
 
