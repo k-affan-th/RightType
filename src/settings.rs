@@ -35,6 +35,9 @@ const W: i32 = 760;
 const H: i32 = 700;
 const X0: i32 = 232;
 const CW: i32 = 504;
+/// The snippet scope buttons ("English only" is the widest): together with
+/// their frame they end before the Add / save button.
+const SNIP_SCOPE_WIDTHS: [i32; 4] = [68, 84, 62, 68];
 
 const PAGE_GENERAL: u8 = 1;
 const PAGE_HOTKEYS: u8 = 2;
@@ -815,6 +818,7 @@ fn open_on(page: u8) {
         n,
     );
     let mut snip_scope = [0u16; 4];
+    let mut left = X0 + 4;
     for (i, key) in [T::ScopeThai, T::ScopeEnglish, T::ScopeEither, T::ScopeTypo]
         .iter()
         .enumerate()
@@ -822,10 +826,11 @@ fn open_on(page: u8) {
         snip_scope[i] = s.segment(
             tr(*key),
             i == 0,
-            (X0 + 4 + i as i32 * 72, 426, 70, 32),
+            (left, 426, SNIP_SCOPE_WIDTHS[i], 32),
             p.inset,
             n,
         );
+        left += SNIP_SCOPE_WIDTHS[i];
     }
     let snip_save = s.button(
         tr(T::BtnSaveSnippet),
@@ -2231,7 +2236,10 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
         PAGE_SNIPPETS => {
             field(g, rect(X0, 344, 150, 32));
             field(g, rect(X0 + 160, 344, CW - 160, 68));
-            track(g, rect(X0, 422, 3 * 104 + 6, 40));
+            track(
+                g,
+                rect(X0, 422, SNIP_SCOPE_WIDTHS.iter().sum::<i32>() + 8, 40),
+            );
         }
         PAGE_BLOCKED => {
             track(g, rect(X0, 342, CW, 40));

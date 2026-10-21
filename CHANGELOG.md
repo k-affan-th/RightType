@@ -9,6 +9,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 - **Tidying Thai text** (`normalize`) now settles in one go: a tone mark typed
   before a vowel that is also typed twice (`ก` + `่` + `ี` + `ี`) came out as
   `กีี่` instead of `กี่`.
+- **Tables in dark mode**: the column headers (Apps, Snippets, How each app is
+  doing) were white; they now follow the dark theme.
+- **Snippets**: the four keyboard choices fit their frame, which no longer runs
+  under the Add / save button, and "English only" is no longer cut off.
 - **Windows checkouts** no longer embed CRLF into the dictionaries and the
   benchmark article (`.gitattributes` keeps them LF), so a Windows build
   carries the same data as a Linux one and `typing_benchmark` runs there.

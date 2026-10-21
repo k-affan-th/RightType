@@ -2174,6 +2174,18 @@ impl Surface {
             if is_dark() {
                 let theme: Vec<u16> = "DarkMode_Explorer\0".encode_utf16().collect();
                 let _ = SetWindowTheme(hwnd, PCWSTR(theme.as_ptr()), PCWSTR::null());
+                // The column header is a control of its own and stays white
+                // unless it gets the dark "items view" theme too.
+                const LVM_GETHEADER: u32 = 0x101F;
+                let header = SendMessageW(hwnd, LVM_GETHEADER, WPARAM(0), LPARAM(0));
+                if header.0 != 0 {
+                    let items: Vec<u16> = "DarkMode_ItemsView\0".encode_utf16().collect();
+                    let _ = SetWindowTheme(
+                        HWND(header.0 as *mut std::ffi::c_void),
+                        PCWSTR(items.as_ptr()),
+                        PCWSTR::null(),
+                    );
+                }
             }
             for (i, (title, width)) in columns.iter().enumerate() {
                 let mut text: Vec<u16> = format!("{title}\0").encode_utf16().collect();
