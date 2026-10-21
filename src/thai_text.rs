@@ -17,9 +17,11 @@
 ///   letters and marks they draw.
 pub fn normalize(input: &str) -> String {
     // One pass moves a mark past one neighbour; a run of misplaced marks
-    // needs another, so go on until nothing changes (a few passes at most).
+    // needs another, so go on until nothing changes. Every pass that changes
+    // something moves a mark closer to its place, so one pass per character
+    // is always enough.
     let mut text = normalize_pass(input);
-    for _ in 0..8 {
+    for _ in 0..input.chars().count() {
         let next = normalize_pass(&text);
         if next == text {
             break;

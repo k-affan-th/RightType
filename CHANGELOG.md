@@ -8,7 +8,8 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 - **Tidying Thai text** (`normalize`) now settles in one go: a tone mark typed
   before a vowel that is also typed twice (`ก` + `่` + `ี` + `ี`) came out as
-  `กีี่` instead of `กี่`.
+  `กีี่` instead of `กี่`. A long run of misplaced marks
+  (ten or more before a vowel) is settled too: there is no fixed number of passes.
 - **Tables in dark mode**: the column headers (Apps, Snippets, How each app is
   doing) were white, then dim grey; they are now painted in the interface
   colours.

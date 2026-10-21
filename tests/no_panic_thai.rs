@@ -180,6 +180,17 @@ fn a_tone_before_a_doubled_vowel_leaves_one_vowel_then_the_tone() {
 }
 
 #[test]
+fn a_long_run_of_misplaced_marks_is_normalized_in_one_go() {
+    // More than nine marks before a vowel: each pass moves only the last
+    // mark across it, so a fixed number of passes is not enough.
+    let run = "ก\u{e48}\u{e49}\u{e4a}\u{e4b}\u{e48}\u{e49}\u{e4a}\u{e4b}\u{e48}\u{e49}\u{e35}";
+    let once = thai_text::normalize(run);
+    assert_eq!(thai_text::normalize(&once), once);
+    // The vowel ends up first, then the tone marks.
+    assert!(once.starts_with("ก\u{e35}"), "{once:?}");
+}
+
+#[test]
 fn switching_layout_and_back_returns_the_word() {
     for w in dict::english_words().take(30_000) {
         assert_eq!(layout::th_to_en(&layout::en_to_th(w)), w, "english {w:?}");
