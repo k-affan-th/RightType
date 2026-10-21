@@ -10,7 +10,12 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   before a vowel that is also typed twice (`ก` + `่` + `ี` + `ี`) came out as
   `กีี่` instead of `กี่`.
 - **Tables in dark mode**: the column headers (Apps, Snippets, How each app is
-  doing) were white; they now follow the dark theme.
+  doing) were white, then dim grey; they are now painted in the interface
+  colours.
+- **Check marks** (Privacy & about, Keyboard health) are drawn, not typed: the
+  font's "✓" read as a "V" at that size.
+- **Keyboard page**: rows are taller, so a two-line description no longer
+  touches the line below it.
 - **Snippets**: the four keyboard choices fit their frame, which no longer runs
   under the Add / save button, and "English only" is no longer cut off.
 - **Windows checkouts** no longer embed CRLF into the dictionaries and the

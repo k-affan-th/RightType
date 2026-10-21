@@ -70,11 +70,13 @@ const RESTART_Y: i32 = 486;
 /// the page is (it scrolls).
 const KB_PICK_Y: i32 = 98;
 const KB_TYPING_Y: i32 = 246;
-const KB_KEYS_Y: i32 = 558 + 3 * ROW_H;
-const KB_DEV_Y: i32 = KB_KEYS_Y + 3 * ROW_H + 8 + 56;
-const KB_SHOW_Y: i32 = KB_DEV_Y + 2 * ROW_H + 8 + 56;
-const KB_CARET_Y: i32 = KB_SHOW_Y + 2 * ROW_H + 8 + 56;
-const KB_HEIGHT: i32 = KB_CARET_Y + 3 * ROW_H + 8 + 24;
+/// Taller than the General page's rows: a two-line description needs the room.
+const KB_ROW_H: i32 = 72;
+const KB_KEYS_Y: i32 = KB_TYPING_Y + 7 * KB_ROW_H + 8 + 56;
+const KB_DEV_Y: i32 = KB_KEYS_Y + 3 * KB_ROW_H + 8 + 56;
+const KB_SHOW_Y: i32 = KB_DEV_Y + 2 * KB_ROW_H + 8 + 56;
+const KB_CARET_Y: i32 = KB_SHOW_Y + 2 * KB_ROW_H + 8 + 56;
+const KB_HEIGHT: i32 = KB_CARET_Y + 3 * KB_ROW_H + 8 + 24;
 /// The Tools page: the tools' card, the health check's card, the page.
 const TOOLS_Y: i32 = 98;
 const HEALTH_Y: i32 = 246;
@@ -478,7 +480,7 @@ fn open_on(page: u8) {
         p.bg,
         k,
     );
-    let kb_row = |top: i32, i: i32| (X0 + 4, top + 4 + i * ROW_H, CW - 8, ROW_H - 4);
+    let kb_row = |top: i32, i: i32| (X0 + 4, top + 4 + i * KB_ROW_H, CW - 8, KB_ROW_H - 4);
     let kb_addresses = s.toggle(
         tr(T::RowAddresses),
         tr(T::SubAddresses),
@@ -545,19 +547,19 @@ fn open_on(page: u8) {
     // A row with three choices: title and description left, the choices
     // right where a toggle's switch would be.
     let guard_row = |i: i32, title: T, sub: T, last: T| -> [u16; 3] {
-        let top = KB_KEYS_Y + 4 + i * ROW_H;
+        let top = KB_KEYS_Y + 4 + i * KB_ROW_H;
         let text_w = CW - 40 - 3 * KB_SEG_W - 16;
         s.label(
             tr(title),
             TextStyle::Body,
-            (X0 + 20, top + 8, text_w, 22),
+            (X0 + 20, top + 12, text_w, 22),
             p.surface,
             k,
         );
         s.label(
             tr(sub),
             TextStyle::Small,
-            (X0 + 20, top + 30, text_w, 30),
+            (X0 + 20, top + 34, text_w, 30),
             p.surface,
             k,
         );
@@ -569,7 +571,7 @@ fn open_on(page: u8) {
                 s.segment(
                     tr(*label),
                     j == 0,
-                    (x + j as i32 * KB_SEG_W, top + 14, KB_SEG_W, 32),
+                    (x + j as i32 * KB_SEG_W, top + 18, KB_SEG_W, 32),
                     p.inset,
                     k,
                 )
@@ -2194,7 +2196,11 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
                     (pal().accent, pal().on_accent, "!")
                 };
                 g.fill_round(c, ui::px(12) as f32, fill);
-                ui::glyph(hdc, mark, c, ink);
+                if *ok {
+                    g.check_mark(c, ink);
+                } else {
+                    ui::glyph(hdc, mark, c, ink);
+                }
             }
         }
         PAGE_KEYBOARD => {
@@ -2202,24 +2208,29 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             let dy = ui::page_scroll();
             card(g, rect(X0, KB_PICK_Y - dy, CW, 100));
             track(g, rect(X0 + 16, KB_PICK_Y + 12 - dy, CW - 32, 48));
-            card(g, rect(X0, KB_TYPING_Y - dy, CW, 7 * ROW_H + 8));
+            card(g, rect(X0, KB_TYPING_Y - dy, CW, 7 * KB_ROW_H + 8));
             for i in 1..7 {
-                divider(hdc, X0 + 16, KB_TYPING_Y + i * ROW_H + 2 - dy, CW - 32);
+                divider(hdc, X0 + 16, KB_TYPING_Y + i * KB_ROW_H + 2 - dy, CW - 32);
             }
-            card(g, rect(X0, KB_KEYS_Y - dy, CW, 3 * ROW_H + 8));
-            card(g, rect(X0, KB_DEV_Y - dy, CW, 2 * ROW_H + 8));
-            divider(hdc, X0 + 16, KB_DEV_Y + ROW_H + 2 - dy, CW - 32);
-            card(g, rect(X0, KB_SHOW_Y - dy, CW, 2 * ROW_H + 8));
-            divider(hdc, X0 + 16, KB_SHOW_Y + ROW_H + 2 - dy, CW - 32);
-            card(g, rect(X0, KB_CARET_Y - dy, CW, 3 * ROW_H + 8));
-            divider(hdc, X0 + 16, KB_CARET_Y + ROW_H + 2 - dy, CW - 32);
-            divider(hdc, X0 + 16, KB_CARET_Y + 2 * ROW_H + 2 - dy, CW - 32);
+            card(g, rect(X0, KB_KEYS_Y - dy, CW, 3 * KB_ROW_H + 8));
+            card(g, rect(X0, KB_DEV_Y - dy, CW, 2 * KB_ROW_H + 8));
+            divider(hdc, X0 + 16, KB_DEV_Y + KB_ROW_H + 2 - dy, CW - 32);
+            card(g, rect(X0, KB_SHOW_Y - dy, CW, 2 * KB_ROW_H + 8));
+            divider(hdc, X0 + 16, KB_SHOW_Y + KB_ROW_H + 2 - dy, CW - 32);
+            card(g, rect(X0, KB_CARET_Y - dy, CW, 3 * KB_ROW_H + 8));
+            divider(hdc, X0 + 16, KB_CARET_Y + KB_ROW_H + 2 - dy, CW - 32);
+            divider(hdc, X0 + 16, KB_CARET_Y + 2 * KB_ROW_H + 2 - dy, CW - 32);
             for i in 1..3 {
-                divider(hdc, X0 + 16, KB_KEYS_Y + i * ROW_H + 2 - dy, CW - 32);
+                divider(hdc, X0 + 16, KB_KEYS_Y + i * KB_ROW_H + 2 - dy, CW - 32);
                 let x = X0 + CW - 24 - 3 * KB_SEG_W;
                 track(
                     g,
-                    rect(x, KB_KEYS_Y + 4 + i * ROW_H + 10 - dy, 3 * KB_SEG_W + 8, 40),
+                    rect(
+                        x,
+                        KB_KEYS_Y + 4 + i * KB_ROW_H + 14 - dy,
+                        3 * KB_SEG_W + 8,
+                        40,
+                    ),
                 );
             }
         }
@@ -2253,7 +2264,7 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
                 // A check mark in an accent circle, one per promise.
                 let c = rect(X0 + 16, y + 10, 22, 22);
                 g.fill_round(c, ui::px(11) as f32, pal().accent);
-                ui::glyph(hdc, "✓", c, pal().on_accent);
+                g.check_mark(c, pal().on_accent);
                 if i > 0 {
                     divider(hdc, X0 + 16, y - 2, CW - 32);
                 }
