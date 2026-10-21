@@ -28,10 +28,25 @@
 - ทำบน branch เดียวในเครื่อง (`ui-2.6`) commit ต่อ phase; push และเปิด PR ครั้งเดียวตอนจบ; สำรองด้วย `git bundle` ทุกจบ phase
 - แต่ละหน้าที่แก้ต้องมีภาพยืนยันก่อนและหลัง และรายงานส่วนที่ยังไม่ได้ตรวจไว้ตรงๆ
 
-## สถานะ P0
+## สถานะ (2026-10-22)
 
-- PR #19 รอ job `e2e` จบก่อน merge
-- หน้า Support ตรวจบนจอแล้ว; QR ทั้งสองถอดรหัสได้ตรงกับที่อยู่และรหัสแก้ข้อผิดพลาดถูกต้อง (`tools/check_support_qr.py`); ยังไม่ได้สแกนด้วยมือถือจริง
-- การ์ด "Free and open source" ในหน้า Support (สูงขึ้นเป็น 92) กับการ์ด "Start again after a crash" ในหน้า Privacy (สูงขึ้นเป็น 68) แก้แล้วแต่ยังไม่ได้ถ่ายภาพยืนยัน
-- `is_righttype_process` (ตรวจชื่อโปรเซสก่อนสั่งปิด) ยังไม่ถูกเรียกใช้ใน `end_process` การต่อเข้าไปเปลี่ยนเส้นทางปิดโปรเซสเก่า ยังรอการตัดสินใจ
-- โค้ด "review" ของ palette (`Section::Review`, `open_review`, `UI_REVIEW`) ยังอยู่ แต่ไม่มีอะไรเรียกมันหลังงานค้างตัดสาย `request_review` ออก ยังไม่ได้ลบ
+ทำแล้วและมีภาพยืนยัน (หน้าต่างจริงของ debug build):
+- P0 เคลียร์ clippy ของ `winos`; หน้า Support ตรวจบนจอ; QR ทั้งสองถอดรหัสได้ตรงกับที่อยู่และรหัสแก้ข้อผิดพลาดถูกต้อง
+- P1 ตารางไอคอน `src/icons.rs` 62 ตัวมีครบทั้งใน Fluent และ MDL2 (`tools/check_icons.py`)
+- P2 วิดเจ็ต: ไอคอนที่เมนูซ้าย สวิตช์ ปุ่ม ปุ่มเลือก; หัวข้อส่วนมีไอคอน; ปุ่ม (i) พร้อม popover
+- P3 หน้า Settings ทุกหน้า (General, Keyboard, Tools, Hotkeys, Learned words, Snippets, Ignored apps, Privacy, Support)
+- P4 Stats, Fix text, Clean, Practice, Welcome
+- P5 ตัด 21 ข้อความที่ไม่มีใครเรียกใช้; คำอธิบายของสวิตช์ 20 แถวเหลือบรรทัดเดียว ที่เหลือย้ายเข้า (i)
+- P6 ตรวจแล้วทั้งธีมมืด ธีมสว่าง (ตัวแปร debug `RIGHTTYPE_THEME=light`) และหน้าจอภาษาไทย
+
+ยังไม่ได้ตรวจ:
+- ธีม high contrast และ DPI อื่นนอกจากที่เครื่องพัฒนาใช้
+- การกด Tab/Space ผ่านหน้าต่างจริงด้วยมือ (popover ปิดเมื่อคลิกที่อื่น กด Tab ไปที่อื่น เลื่อนหน้า หรือเปลี่ยนหน้า ยังไม่ปิดด้วย Esc)
+- ป้ายข้างเคอร์เซอร์ ghost, caret list, toast, overlay, เมนูถาด (เมนูถาดของ Windows ยังไม่มีไอคอน), หน้า Palette และ Keymap (ไม่ได้แก้ในรอบนี้)
+- สแกน QR ด้วยมือถือจริง
+- e2e พิมพ์จริงบน Windows (probes ที่ย้ายไป `e2e/probes/` ยังไม่ได้รัน)
+
+ยังรอตัดสินใจ:
+- `is_righttype_process` ยังไม่ถูกเรียกใช้ใน `end_process` (การต่อเข้าไปเปลี่ยนเส้นทางปิดโปรเซสเก่า)
+- โค้ด "review" ของ palette (`Section::Review`, `open_review`, `UI_REVIEW`) ยังอยู่ แต่ไม่มีอะไรเรียกมันแล้ว
+- ชื่อหน้า "Ignored apps" แต่เนื้อหาเป็นโหมดต่อแอป (Auto/Suggest/Manual/Code/Off)

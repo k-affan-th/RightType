@@ -4,6 +4,42 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+
+- **Icons across the settings and the other windows.** Every page of Settings
+  has one in the sidebar, every switch has one in a round tile, buttons carry
+  one before their label, section headings and the Stats cards have them too,
+  and the three correction modes use the palette's icons. One table
+  (`src/icons.rs`) says which icon is which; `tools/check_icons.py` checks
+  that each exists in both Segoe Fluent Icons and Segoe MDL2 Assets.
+- **An (i) button after a setting's title** opens a popover with the full
+  explanation, so the row itself keeps one line. A screen reader hears the
+  row's name with it ("More information: Fix common Thai misspellings").
+- **A Support page** with a Lightning address and a Bitcoin address, each with
+  a QR code drawn on the device (nothing is sent anywhere) and a Copy button;
+  the whole address is shown, on two lines when it must be.
+  `tools/check_support_qr.py` decodes both QR codes and checks them against
+  the addresses and their error-correction codewords.
+
+### Changed
+
+- **Settings descriptions are one line.** The longer text moved behind (i);
+  the Thai text was written again for each, not translated word by word.
+- **Tools** lays its four buttons out as a 2 by 2 grid so each can show its
+  icon; Keyboard health moved down to match.
+- **Privacy** (was Privacy & about) is a new page with a GitHub link; the
+  Apps page is called **Ignored apps** in the sidebar.
+- **Fix this field** no longer opens a review popup after fixing; Ctrl+Z
+  undoes it.
+- **Words typed with `'` `;` `[` `]` `^` `/` `\` or `` ` `` in them** are no longer
+  taken for code identifiers, so they are fixed.
+- **The "TH" / "EN" tag** by the cursor has its own colour for each language.
+
+### Removed
+
+- 21 texts no part of the program used any more (the first Donate set among
+  them).
+
 ### Fixed
 
 - **Tidying Thai text** (`normalize`) now settles in one go: a tone mark typed

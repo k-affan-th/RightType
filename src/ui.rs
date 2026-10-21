@@ -180,8 +180,23 @@ pub fn refresh() {
         DPI.store(monitor_dpi(cursor_monitor()), Ordering::Relaxed);
         return;
     }
-    DARK_MODE.store(windows_prefers_dark(), Ordering::Relaxed);
+    DARK_MODE.store(preferred_dark(), Ordering::Relaxed);
     DPI.store(monitor_dpi(cursor_monitor()), Ordering::Relaxed);
+}
+
+/// The theme to use: Windows' app setting. A debug build takes
+/// `RIGHTTYPE_THEME=light|dark` instead, to look at a theme without changing
+/// the one Windows has.
+fn preferred_dark() -> bool {
+    #[cfg(debug_assertions)]
+    if let Ok(theme) = std::env::var("RIGHTTYPE_THEME") {
+        match theme.as_str() {
+            "light" => return false,
+            "dark" => return true,
+            _ => {}
+        }
+    }
+    windows_prefers_dark()
 }
 
 /// The monitor under the mouse pointer.
@@ -1819,7 +1834,9 @@ impl Surface {
         let x = row.0 + 16 + if icon { 32 + 12 } else { 0 } + to96(width) + 4;
         // The title line of a title + one-line description block centred in the row.
         let y = row.1 + (row.3 - 38) / 2 - 2;
-        self.info(label, text, (x, y, 24, 24), bg, page)
+        // Spoken by a screen reader, never drawn: which row the button is for.
+        let name = format!("{label}: {title}");
+        self.info(&name, text, (x, y, 24, 24), bg, page)
     }
 
     /// Open the popover for the info button `id`, or close it if it is the
