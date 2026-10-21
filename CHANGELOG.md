@@ -2,6 +2,17 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Tidying Thai text** (`normalize`) now settles in one go: a tone mark typed
+  before a vowel that is also typed twice (`ก` + `่` + `ี` + `ี`) came out as
+  `กีี่` instead of `กี่`.
+- **Windows checkouts** no longer embed CRLF into the dictionaries and the
+  benchmark article (`.gitattributes` keeps them LF), so a Windows build
+  carries the same data as a Linux one and `typing_benchmark` runs there.
+
 ## [2.5.0]
 
 ### Added

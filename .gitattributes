@@ -7,3 +7,9 @@ packaging/windows/Thai.isl -whitespace
 # cmd.exe misreads some batch files with LF line endings.
 *.bat text eol=crlf
 assets/chars/names.bin binary
+
+# Text compiled into the program (`include_str!`) stays LF on every checkout,
+# so a Windows build embeds the same bytes as a Linux one and the benchmarks
+# read the same article.
+assets/**/*.txt text eol=lf
+examples/data/*.txt text eol=lf
