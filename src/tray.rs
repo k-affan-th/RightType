@@ -475,6 +475,7 @@ pub fn run() {
             "settings-snippets" => settings::open_page(6),
             "settings-keyboard" => settings::open_page(7),
             "settings-tools" => settings::open_page(8),
+            "settings-sponsor" => settings::open_page(9),
             "clean" => crate::clean::request_open(crate::clean::Mode::Clean),
             "keytest" => crate::clean::request_open(crate::clean::Mode::Test),
             "sheet" => crate::sheet::request_open(),

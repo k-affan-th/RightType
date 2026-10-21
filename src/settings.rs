@@ -2264,11 +2264,10 @@ fn draw_qr(hdc: HDC, x0: i32, y0: i32, size: i32, matrix: &[u64; 33]) {
         let brush = windows::Win32::Graphics::Gdi::CreateSolidBrush(
             windows::Win32::Foundation::COLORREF(0x00000000),
         );
-        for r in 0..33 {
-            let row = matrix[r];
+        for (r, &row) in matrix.iter().enumerate() {
             for c in 0..33 {
                 if (row & (1 << c)) != 0 {
-                    let rx = x0 + pad + c as i32 * cell;
+                    let rx = x0 + pad + c * cell;
                     let ry = y0 + pad + r as i32 * cell;
                     let rect = windows::Win32::Foundation::RECT {
                         left: rx,

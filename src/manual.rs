@@ -220,9 +220,6 @@ pub fn request_transform(hwnd: isize, transform: fn(&str) -> String) {
 /// Longest field "Fix this field" retypes (characters).
 const MAX_FIELD_CHARS: usize = 4000;
 
-/// More words than this are fixed at once rather than listed to check.
-const MAX_REVIEW: usize = 12;
-
 /// Read the whole field from the app (UI Automation or the text box itself
 /// — never the clipboard, and without selecting it), find the words in the
 /// wrong layout (as the Fix text window does), and show them in the palette,

@@ -893,7 +893,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
         );
     }
     // Offer to remember the latest typed word as-is directly if eligible
-    if let Some((i, last_word)) = words.iter().enumerate().rev().next() {
+    if let Some((i, last_word)) = words.iter().enumerate().next_back() {
         let clean = last_word.trim();
         if !clean.is_empty() {
             add(
@@ -1257,15 +1257,6 @@ impl Drop for Review {
 }
 
 static REVIEW: std::sync::Mutex<Option<Review>> = std::sync::Mutex::new(None);
-
-/// Show `review` in the palette, from any thread (the fix-field worker):
-/// the tray window's thread opens it.
-pub fn request_review(review: Review) {
-    if let Ok(mut r) = REVIEW.lock() {
-        *r = Some(review);
-    }
-    crate::tray::on_ui(crate::tray::UI_REVIEW);
-}
 
 /// Open the palette on the waiting review (the tray window's thread).
 pub fn open_review() {

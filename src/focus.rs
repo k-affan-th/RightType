@@ -710,61 +710,6 @@ pub fn field_text(max: usize) -> Option<zeroize::Zeroizing<String>> {
     from_uia().or_else(from_box)
 }
 
-/// Where pieces of the focused field are on screen: for each `(start,
-/// len)` in characters from the field's start, its box in screen pixels,
-/// or `None`. Through UI Automation; empty when the app does not say. Any
-/// thread but the keyboard hook's.
-pub fn field_boxes(spans: &[(usize, usize)]) -> Vec<Option<windows::Win32::Foundation::RECT>> {
-    use windows::Win32::UI::Accessibility::{
-        IUIAutomationTextPattern, TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
-        TextUnit_Character, UIA_TextPatternId,
-    };
-    let none = || vec![None; spans.len()];
-    let start = || unsafe {
-        let element = uia_here()?.GetFocusedElement().ok()?;
-        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
-            return None;
-        }
-        let pattern = element
-            .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
-            .ok()?;
-        let range = pattern.DocumentRange().ok()?;
-        // An empty range at the start.
-        range
-            .MoveEndpointByRange(
-                TextPatternRangeEndpoint_End,
-                &range,
-                TextPatternRangeEndpoint_Start,
-            )
-            .ok()?;
-        Some(range)
-    };
-    let Some(origin) = start() else {
-        return none();
-    };
-    spans
-        .iter()
-        .map(|&(at, len)| unsafe {
-            let r = origin.Clone().ok()?;
-            let moved = r
-                .MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, at as i32)
-                .ok()?;
-            if moved != at as i32 {
-                return None;
-            }
-            r.MoveEndpointByRange(
-                TextPatternRangeEndpoint_Start,
-                &r,
-                TextPatternRangeEndpoint_End,
-            )
-            .ok()?;
-            r.MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, len as i32)
-                .ok()?;
-            union_of_boxes(&r)
-        })
-        .collect()
-}
-
 /// Select the `nth` (from 0) place `word` appears in the focused field,
 /// found by its text through UI Automation, and check the selection holds
 /// just that. Text, not character counts: one UI Automation "character"
