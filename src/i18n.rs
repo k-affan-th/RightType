@@ -146,7 +146,6 @@ texts! {
     ToastNothingToFix => "Nothing to fix in this field", "ไม่มีคำที่ต้องแก้ในช่องนี้";
     ToastFixedWords => "Fixed {n} words · Ctrl+Z undoes it", "แก้ {n} คำ · Ctrl+Z ย้อนได้";
     PaletteKeepAsTyped => "Never convert “{word}”", "ไม่ต้องแปลง “{word}” อีก";
-    PaletteLearnNew => "Add a word…", "เพิ่มคำใหม่…";
     PaletteLearnWord => "Add “{word}”", "เพิ่ม “{word}”";
     PaletteLearnRecent => "Keep “{word}”", "เก็บ “{word}” ไว้";
     ToastWordLearned => "Added “{word}”", "เพิ่ม “{word}” แล้ว";

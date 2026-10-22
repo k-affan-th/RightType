@@ -1119,6 +1119,8 @@ enum ContextAsk {
     ),
     /// Is text selected in the focused field?
     Selected(std::sync::mpsc::SyncSender<bool>),
+    /// The text selected in the focused field.
+    Selection(std::sync::mpsc::SyncSender<Option<zeroize::Zeroizing<String>>>),
     /// Where the text cursor is, by UI Automation.
     Caret(std::sync::mpsc::SyncSender<Option<windows::Win32::Foundation::RECT>>),
 }
@@ -1137,6 +1139,18 @@ pub fn has_selection_within(max: std::time::Duration) -> bool {
         return false;
     }
     reply_rx.recv_timeout(max).unwrap_or(false)
+}
+
+/// The text selected in the focused field (through UI Automation or, for a
+/// standard text box, the box itself; never the clipboard; `None` for a
+/// password field). Asked of the context worker,
+/// waiting at most `max`; `None` when the app does not say in time.
+pub fn selected_text_within(max: std::time::Duration) -> Option<zeroize::Zeroizing<String>> {
+    let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+    context_worker()
+        .try_send(ContextAsk::Selection(reply_tx))
+        .ok()?;
+    reply_rx.recv_timeout(max).ok().flatten()
 }
 
 /// Up to `n` characters before the caret, for the keyboard hook, which must not make the
@@ -1184,6 +1198,9 @@ fn context_worker() -> &'static std::sync::mpsc::SyncSender<ContextAsk> {
                         }
                         ContextAsk::Selected(reply) => {
                             let _ = reply.try_send(uia_selected_text().is_some());
+                        }
+                        ContextAsk::Selection(reply) => {
+                            let _ = reply.try_send(selected_text());
                         }
                         ContextAsk::Caret(reply) => {
                             let _ = reply.try_send(uia_caret_rect());

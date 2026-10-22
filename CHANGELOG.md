@@ -31,6 +31,12 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   Apps page is called **Ignored apps** in the sidebar.
 - **Fix this field** no longer opens a review popup after fixing; Ctrl+Z
   undoes it.
+- **The palette's "Add a word"** shows only while a word is selected in the
+  app, and adds that word (it was always there, and took what was typed in the
+  search box). While you search it sits below the matches, so Enter runs the
+  command you found. The selection is read when the palette opens, through UI
+  Automation or the text box itself, never the clipboard, and is wiped when the
+  palette closes.
 - **Words typed with `'` `;` `[` `]` `^` `/` `\` or `` ` `` in them** are no longer
   taken for code identifiers, so they are fixed.
 - **The "TH" / "EN" tag** by the cursor has its own colour for each language.

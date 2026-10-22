@@ -300,6 +300,9 @@ struct Palette {
     labels: RefCell<Vec<String>>,
     /// The recent words listed (oldest first), wiped on close.
     words: RefCell<Vec<String>>,
+    /// The word selected in the app when the palette opened (what "Add a word"
+    /// adds), wiped on close; empty when nothing usable was selected.
+    selection: RefCell<String>,
     /// Where each recent word is on screen, when the app says.
     boxes: Vec<Option<RECT>>,
     /// Recent words ticked with Space (their places in `words`).
@@ -410,23 +413,10 @@ fn listed_in(section: Section, is_add_word: bool, searching: bool) -> Section {
 
 fn refilter(p: &Palette) {
     use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SWP_NOMOVE, SWP_NOZORDER, SW_HIDE};
-    let raw_filter = p.filter.borrow().clone();
-    let filter = raw_filter.to_lowercase();
+    let filter = p.filter.borrow().to_lowercase();
     // Typed on the wrong keyboard still finds it (`fxw` and `ซ่อม` alike).
     let other = righttype::layout::auto_convert(&filter).to_lowercase();
     let searching = !filter.is_empty();
-
-    // Dynamically update label for Command::LearnWord
-    for (i, (_, cmd)) in p.items.iter().enumerate() {
-        if let Command::LearnWord = cmd {
-            let label = if searching {
-                trf(T::PaletteLearnWord, &[("word", raw_filter.trim())])
-            } else {
-                tr(T::PaletteLearnNew).to_string()
-            };
-            p.labels.borrow_mut()[i] = label;
-        }
-    }
 
     // A section opened with its row is a page of its own: only its rows,
     // not appended under everything (the options ran off the screen).
@@ -794,12 +784,10 @@ fn run_shown(p: &Rc<Palette>, k: usize) {
         return;
     }
     if let Command::LearnWord = command {
-        let raw = p.filter.borrow().trim().to_string();
+        let word = p.selection.borrow().clone();
         close(p, true);
-        if raw.is_empty() {
-            crate::settings::open();
-        } else {
-            match crate::learn::add_explicit(&raw) {
+        if !word.is_empty() {
+            match crate::learn::add_explicit(&word) {
                 Ok(w) => overlay::show(&trf(T::ToastWordLearned, &[("word", &w)])),
                 Err(_) => overlay::show(tr(T::ToastWordInvalid)),
             }
@@ -879,7 +867,7 @@ pub fn request_open() {
 
 /// The rows, in order, for the current state. `words` are the recent words
 /// (oldest first).
-fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
+fn commands(app: Option<&str>, words: &[String], selection: Option<&str>) -> Vec<Entry> {
     let mut list = Vec::new();
     let mut add = |section, label: String, hint: &str, command| {
         list.push(Entry {
@@ -922,13 +910,16 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             );
         }
     }
-    // Quick learn / add custom word entry
-    add(
-        Section::Words,
-        tr(T::PaletteLearnNew).to_string(),
-        "",
-        Command::LearnWord,
-    );
+    // "Add a word" only while a word is selected: otherwise it is one more row
+    // in the way of everything else.
+    if let Some(word) = selection.and_then(crate::learn::explicit_candidate) {
+        add(
+            Section::Words,
+            trf(T::PaletteLearnWord, &[("word", &word)]),
+            "",
+            Command::LearnWord,
+        );
+    }
     if app.is_some() {
         add(
             Section::Fix,
@@ -1314,6 +1305,18 @@ fn open_with(review: Option<Review>) {
     let caret = crate::caret::caret_rect();
     ui::refresh();
 
+    // The selected word, asked while the app still has the focus; waits a
+    // moment at most (UI Automation can be slow, and keys typed meanwhile wait
+    // for the palette).
+    let selected = if app.is_some() && review.is_none() {
+        crate::focus::selected_text_within(std::time::Duration::from_millis(150))
+    } else {
+        None
+    };
+    let selection = selected
+        .as_deref()
+        .and_then(|s| crate::learn::explicit_candidate(s))
+        .unwrap_or_default();
     let reviewing = review.as_ref().map_or(0, |r| r.changes.len());
     let (words, boxes, list) = match &review {
         // The words as typed stand in for the recent words: ticked, marked
@@ -1335,7 +1338,11 @@ fn open_with(review: Option<Review>) {
                     std::time::Duration::from_millis(150),
                 )
             };
-            let list = commands(app.as_deref(), &words);
+            let list = commands(
+                app.as_deref(),
+                &words,
+                selected.as_deref().map(|s| s.as_str()),
+            );
             (words, boxes, list)
         }
     };
@@ -1439,6 +1446,7 @@ fn open_with(review: Option<Review>) {
         numbers: RefCell::new(Vec::new()),
         labels: RefCell::new(list.iter().map(|e| e.label.clone()).collect()),
         words: RefCell::new(words),
+        selection: RefCell::new(selection),
         boxes,
         // Every word of a review starts ticked.
         checked: RefCell::new((0..reviewing).collect()),
@@ -1524,6 +1532,7 @@ fn close(p: &Rc<Palette>, refocus: bool) {
     for word in p.words.borrow_mut().iter_mut() {
         word.zeroize();
     }
+    p.selection.borrow_mut().zeroize();
     for label in p.labels.borrow_mut().iter_mut() {
         label.zeroize();
     }
