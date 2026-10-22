@@ -397,6 +397,17 @@ pub fn key(vk: u16, ch: Option<char>) -> bool {
 
 /// Show the items that match the filter under their headings, numbered,
 /// packed from the top, and select the first.
+/// The section a row is listed under. "Add a word" is offered below everything
+/// that matches while searching, so Enter runs the command that was found, not
+/// "remember what I typed".
+fn listed_in(section: Section, is_add_word: bool, searching: bool) -> Section {
+    if searching && is_add_word {
+        Section::Options
+    } else {
+        section
+    }
+}
+
 fn refilter(p: &Palette) {
     use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SWP_NOMOVE, SWP_NOZORDER, SW_HIDE};
     let raw_filter = p.filter.borrow().clone();
@@ -420,9 +431,16 @@ fn refilter(p: &Palette) {
     // A section opened with its row is a page of its own: only its rows,
     // not appended under everything (the options ran off the screen).
     let page = !searching && p.expanded.get() != 0;
+    let section_of = |i: usize| {
+        listed_in(
+            p.item_sections[i],
+            matches!(p.items[i].1, Command::LearnWord),
+            searching,
+        )
+    };
     let shows = |i: usize| {
         let command = p.items[i].1;
-        let section = p.item_sections[i];
+        let section = section_of(i);
         let open = p.expanded.get() & section.bit() != 0;
         if let Command::LearnWord = command {
             return true;
@@ -445,7 +463,7 @@ fn refilter(p: &Palette) {
     let mut y = PAD + 28;
     for section in Section::ALL {
         let rows: Vec<usize> = (0..p.items.len())
-            .filter(|&i| p.item_sections[i] == section && shows(i))
+            .filter(|&i| section_of(i) == section && shows(i))
             .collect();
         let heading = p.headings.iter().find(|(s, _)| *s == section).map(|h| h.1);
         if let Some(id) = heading {
@@ -1735,4 +1753,23 @@ fn paint(g: &Gfx, _hdc: HDC, rc: RECT, _page: u8) {
     let p = pal();
     g.fill_round(rc, ui::px(8) as f32, p.border);
     g.fill_round(ui::inset(rc, ui::px(1)), ui::px(7) as f32, p.surface);
+}
+
+#[cfg(test)]
+mod listing_tests {
+    use super::*;
+
+    #[test]
+    fn add_a_word_is_last_while_searching_and_in_place_otherwise() {
+        // Searching: below the sections of real matches (Options is the last).
+        assert!(listed_in(Section::Words, true, true) == Section::Options);
+        assert!(Section::ALL.last() == Some(&Section::Options));
+        // Not searching: where it was put.
+        assert!(listed_in(Section::Words, true, false) == Section::Words);
+        // Every other row stays in its own section, searching or not.
+        for section in Section::ALL {
+            assert!(listed_in(section, false, true) == section);
+            assert!(listed_in(section, false, false) == section);
+        }
+    }
 }

@@ -155,7 +155,7 @@ def palette_text_tools(t):
     """2.1: the palette's text tools, in Manual mode so nothing is fixed as
     typed: amounts and years rewritten, a special character typed, only the
     wrong-keyboard words of a selection fixed, the copied text typed key by
-    key, and "Fix this field" checked word by word before fixing."""
+    key, and "Fix this field" fixing only the wrong words of the field."""
     fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
     try:
         fs.run(t, "palette: amount in words", "1250", "หนึ่งพันสองร้อยห้าสิบบาทถ้วน",
@@ -170,34 +170,18 @@ def palette_text_tools(t):
         put_on_clipboard("hi สวัสดี")
         fs.run(t, "palette: copied text typed key by key", "", "hi สวัสดี",
                then=[palette_search("key by key", settle=2.0)])
-        # Fix this field: the words are listed ticked; Enter fixes them, or
-        # Space first leaves the selected one as typed.
-        fs.run(t, "fix this field after checking", "l;ylfu 8iy[", "สวัสดี ครับ",
-               then=[palette_search("fix this", settle=1.5), lambda: tap(ENTER),
+        # Fix this field: the wrong-keyboard words are fixed at once (no popup to
+        # confirm; Ctrl+Z undoes it).
+        fs.run(t, "fix this field", "l;ylfu 8iy[", "สวัสดี ครับ",
+               then=[palette_search("fix this", settle=1.5),
                      lambda: time.sleep(1.5)])
-        # Space only once the words are listed, as the typist would see them
-        # first (reading the field can take seconds: CI once took 3.6 s).
-        def listed_then(*steps):
-            def go():
-                start = fs.log_size()
-                palette_search("fix this", settle=0.3)()
-                deadline = time.time() + 8
-                while time.time() < deadline and \
-                        "words to fix listed" not in fs.log_since(start):
-                    time.sleep(0.2)
-                time.sleep(0.4)
-                for step in steps:
-                    step()
-            return go
-        fs.run(t, "fix this field with a word unticked", "l;ylfu 8iy[", "l;ylfu ครับ",
-               then=[listed_then(lambda: tap(fs.SPACE), lambda: time.sleep(0.3),
-                                 lambda: tap(ENTER), lambda: time.sleep(1.5))])
         # Only the wrong word is typed over; the rest of the field (quotes,
         # numbers, English) is left exactly as it is, never retyped (Word
         # turned every quote curly and lost text when the whole field was).
         fs.run(t, "fix this field touches only the wrong word",
                'see "Unicode" 1,975 l;ylfu ok', 'see "Unicode" 1,975 สวัสดี ok',
-               then=[listed_then(lambda: tap(ENTER), lambda: time.sleep(1.5))])
+               then=[palette_search("fix this", settle=1.5),
+                     lambda: time.sleep(1.5)])
     finally:
         fs.set_mode("auto")
 
