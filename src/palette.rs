@@ -1305,11 +1305,13 @@ fn open_with(review: Option<Review>) {
     let caret = crate::caret::caret_rect();
     ui::refresh();
 
-    // The selected word, asked while the app still has the focus; waits a
-    // moment at most (UI Automation can be slow, and keys typed meanwhile wait
-    // for the palette).
+    // The selected word, asked while the app still has the focus. This and
+    // the words' boxes below share one budget of 150 ms: the keyboard hook
+    // runs on this thread, and past its timeout Windows lets a key go by
+    // (CI: the H of `why` was lost while the palette opened).
+    let asked = std::time::Instant::now();
     let selected = if app.is_some() && review.is_none() {
-        crate::focus::selected_text_within(std::time::Duration::from_millis(150))
+        crate::focus::selected_text_within(std::time::Duration::from_millis(40))
     } else {
         None
     };
@@ -1335,7 +1337,9 @@ fn open_with(review: Option<Review>) {
             } else {
                 crate::focus::boxes_before_caret_within(
                     spans,
-                    std::time::Duration::from_millis(150),
+                    std::time::Duration::from_millis(150)
+                        .saturating_sub(asked.elapsed())
+                        .max(std::time::Duration::from_millis(30)),
                 )
             };
             let list = commands(
