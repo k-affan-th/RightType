@@ -710,61 +710,6 @@ pub fn field_text(max: usize) -> Option<zeroize::Zeroizing<String>> {
     from_uia().or_else(from_box)
 }
 
-/// Where pieces of the focused field are on screen: for each `(start,
-/// len)` in characters from the field's start, its box in screen pixels,
-/// or `None`. Through UI Automation; empty when the app does not say. Any
-/// thread but the keyboard hook's.
-pub fn field_boxes(spans: &[(usize, usize)]) -> Vec<Option<windows::Win32::Foundation::RECT>> {
-    use windows::Win32::UI::Accessibility::{
-        IUIAutomationTextPattern, TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
-        TextUnit_Character, UIA_TextPatternId,
-    };
-    let none = || vec![None; spans.len()];
-    let start = || unsafe {
-        let element = uia_here()?.GetFocusedElement().ok()?;
-        if element.CurrentIsPassword().map_or(true, |b| b.as_bool()) {
-            return None;
-        }
-        let pattern = element
-            .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
-            .ok()?;
-        let range = pattern.DocumentRange().ok()?;
-        // An empty range at the start.
-        range
-            .MoveEndpointByRange(
-                TextPatternRangeEndpoint_End,
-                &range,
-                TextPatternRangeEndpoint_Start,
-            )
-            .ok()?;
-        Some(range)
-    };
-    let Some(origin) = start() else {
-        return none();
-    };
-    spans
-        .iter()
-        .map(|&(at, len)| unsafe {
-            let r = origin.Clone().ok()?;
-            let moved = r
-                .MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, at as i32)
-                .ok()?;
-            if moved != at as i32 {
-                return None;
-            }
-            r.MoveEndpointByRange(
-                TextPatternRangeEndpoint_Start,
-                &r,
-                TextPatternRangeEndpoint_End,
-            )
-            .ok()?;
-            r.MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, len as i32)
-                .ok()?;
-            union_of_boxes(&r)
-        })
-        .collect()
-}
-
 /// Select the `nth` (from 0) place `word` appears in the focused field,
 /// found by its text through UI Automation, and check the selection holds
 /// just that. Text, not character counts: one UI Automation "character"
@@ -1174,6 +1119,8 @@ enum ContextAsk {
     ),
     /// Is text selected in the focused field?
     Selected(std::sync::mpsc::SyncSender<bool>),
+    /// The text selected in the focused field.
+    Selection(std::sync::mpsc::SyncSender<Option<zeroize::Zeroizing<String>>>),
     /// Where the text cursor is, by UI Automation.
     Caret(std::sync::mpsc::SyncSender<Option<windows::Win32::Foundation::RECT>>),
 }
@@ -1192,6 +1139,18 @@ pub fn has_selection_within(max: std::time::Duration) -> bool {
         return false;
     }
     reply_rx.recv_timeout(max).unwrap_or(false)
+}
+
+/// The text selected in the focused field (through UI Automation or, for a
+/// standard text box, the box itself; never the clipboard; `None` for a
+/// password field). Asked of the context worker,
+/// waiting at most `max`; `None` when the app does not say in time.
+pub fn selected_text_within(max: std::time::Duration) -> Option<zeroize::Zeroizing<String>> {
+    let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+    context_worker()
+        .try_send(ContextAsk::Selection(reply_tx))
+        .ok()?;
+    reply_rx.recv_timeout(max).ok().flatten()
 }
 
 /// Up to `n` characters before the caret, for the keyboard hook, which must not make the
@@ -1239,6 +1198,9 @@ fn context_worker() -> &'static std::sync::mpsc::SyncSender<ContextAsk> {
                         }
                         ContextAsk::Selected(reply) => {
                             let _ = reply.try_send(uia_selected_text().is_some());
+                        }
+                        ContextAsk::Selection(reply) => {
+                            let _ = reply.try_send(selected_text());
                         }
                         ContextAsk::Caret(reply) => {
                             let _ = reply.try_send(uia_caret_rect());

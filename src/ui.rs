@@ -61,8 +61,9 @@ use windows::Win32::UI::HiDpi::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, GetClientRect, GetCursorPos, GetWindowLongPtrW, GetWindowTextLengthW,
     GetWindowTextW, SendMessageW, SetWindowPos, SetWindowTextW, ShowWindow, SystemParametersInfoW,
-    GWL_EXSTYLE, GWL_STYLE, HMENU, SPI_GETWORKAREA, SWP_NOACTIVATE, SWP_NOZORDER, SW_HIDE, SW_SHOW,
-    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, WINDOW_EX_STYLE, WINDOW_STYLE,
+    GWL_EXSTYLE, GWL_STYLE, HMENU, SPI_GETWORKAREA, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_NOZORDER, SW_HIDE, SW_SHOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, WINDOW_EX_STYLE,
+    WINDOW_STYLE,
 };
 use zeroize::Zeroize;
 
@@ -179,8 +180,23 @@ pub fn refresh() {
         DPI.store(monitor_dpi(cursor_monitor()), Ordering::Relaxed);
         return;
     }
-    DARK_MODE.store(windows_prefers_dark(), Ordering::Relaxed);
+    DARK_MODE.store(preferred_dark(), Ordering::Relaxed);
     DPI.store(monitor_dpi(cursor_monitor()), Ordering::Relaxed);
+}
+
+/// The theme to use: Windows' app setting. A debug build takes
+/// `RIGHTTYPE_THEME=light|dark` instead, to look at a theme without changing
+/// the one Windows has.
+fn preferred_dark() -> bool {
+    #[cfg(debug_assertions)]
+    if let Ok(theme) = std::env::var("RIGHTTYPE_THEME") {
+        match theme.as_str() {
+            "light" => return false,
+            "dark" => return true,
+            _ => {}
+        }
+    }
+    windows_prefers_dark()
 }
 
 /// The monitor under the mouse pointer.
@@ -963,6 +979,100 @@ pub fn text(
 }
 
 /// A single symbol (e.g. a check mark) centred in `rc`, sized to fit it.
+/// A button's label centred in `rc`, with `icon` (a glyph of the icon font,
+/// `'\0'` for none) before it; the label alone where the font is missing or
+/// the two do not fit.
+fn label_with_icon(
+    hdc: HDC,
+    f: &Fonts,
+    label: &str,
+    icon: char,
+    rc: RECT,
+    font: HFONT,
+    color: Rgb,
+) {
+    let center = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
+    let (Some(icons), false) = (f.icons_small, icon == '\0') else {
+        text(hdc, label, rc, font, color, center);
+        return;
+    };
+    let icon_w = px(16);
+    let gap = px(8);
+    let total = icon_w + gap + measure_width(hdc, label, font);
+    if total > rc.right - rc.left - px(12) {
+        text(hdc, label, rc, font, color, center);
+        return;
+    }
+    let left = rc.left + ((rc.right - rc.left) - total) / 2;
+    let ic = RECT {
+        left,
+        right: left + icon_w,
+        ..rc
+    };
+    text(
+        hdc,
+        &icon.to_string(),
+        ic,
+        icons,
+        color,
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+    );
+    let lr = RECT {
+        left: left + icon_w + gap,
+        right: left + total,
+        ..rc
+    };
+    text(
+        hdc,
+        label,
+        lr,
+        font,
+        color,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE,
+    );
+}
+
+/// A rounded tile with `icon` (a glyph of the icon font) in it, for a row that
+/// is not a switch: drawn from a page painter, like a card. Nothing where the
+/// font is missing.
+pub fn icon_tile(g: &Gfx, hdc: HDC, rc: RECT, icon: char, lit: bool) {
+    let p = pal();
+    g.fill_round(rc, pxf(8.0), p.inset);
+    let Some(font) = make_icon_font(16) else {
+        return;
+    };
+    text(
+        hdc,
+        &icon.to_string(),
+        rc,
+        font,
+        if lit { p.accent } else { p.text_dim },
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+    );
+    unsafe {
+        let _ = DeleteObject(HGDIOBJ(font.0));
+    }
+}
+
+/// `icon` (a glyph of the icon font) alone, small, centred in `rc`: before a
+/// caption drawn by a page painter. Nothing where the font is missing.
+pub fn icon_glyph(hdc: HDC, rc: RECT, icon: char, color: Rgb) {
+    let Some(font) = make_icon_font(14) else {
+        return;
+    };
+    text(
+        hdc,
+        &icon.to_string(),
+        rc,
+        font,
+        color,
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+    );
+    unsafe {
+        let _ = DeleteObject(HGDIOBJ(font.0));
+    }
+}
+
 pub fn glyph(hdc: HDC, s: &str, rc: RECT, color: Rgb) {
     let size = (rc.bottom - rc.top) * 7 / 10;
     // `make_font` takes 96-DPI units; `rc` is already in device pixels.
@@ -1064,6 +1174,9 @@ pub enum TextStyle {
     BodyStrong,
     Dim,
     Small,
+    /// A section heading of a page: `icon` (a glyph of the icon font) before
+    /// a semibold line.
+    Section(char),
     /// `Shift + Backspace` drawn as key caps.
     Keys,
     /// A palette heading: small dim text after an icon (a glyph of the icon
@@ -1074,19 +1187,31 @@ pub enum TextStyle {
 #[derive(Clone)]
 pub enum Kind {
     Text(TextStyle),
-    /// Filled accent button — the one action a window is about.
-    Primary,
+    /// Filled accent button — the one action a window is about. `icon` is a
+    /// glyph of the icon font before the label, or `'\0'` for none.
+    Primary {
+        icon: char,
+    },
     /// Neutral button.
-    Secondary,
+    Secondary {
+        icon: char,
+    },
     /// A whole card row that is a check box: title, optional description,
     /// switch at the right.
     Toggle {
         sub: String,
+        /// A glyph of the icon font in a round tile before the title, or `'\0'`.
+        icon: char,
     },
-    /// One option of a segmented picker (a radio button).
-    Segment,
-    /// A navigation entry (a radio button).
-    Nav,
+    /// One option of a segmented picker (a radio button), with an optional
+    /// icon before its label.
+    Segment {
+        icon: char,
+    },
+    /// A navigation entry (a radio button), with an optional icon.
+    Nav {
+        icon: char,
+    },
     Edit,
     /// A list with columns (a report-view list view); drawn by Windows in
     /// the window's colours.
@@ -1098,6 +1223,15 @@ pub enum Kind {
     Row {
         hint: String,
         icon: char,
+    },
+    /// A small "i" button: a click shows `text` in a popover next to it, so a
+    /// long explanation does not have to sit in the row.
+    Info {
+        text: String,
+    },
+    /// The popover itself (one per window, reused).
+    Popover {
+        text: String,
     },
 }
 
@@ -1157,6 +1291,9 @@ pub struct Surface {
     page_heights: RefCell<HashMap<u8, i32>>,
     /// Buttons whose label is faded toward their fill, 0–100 (percent).
     faded: RefCell<HashMap<isize, u8>>,
+    /// The popover control, once made, and the info button it is open for
+    /// (`None` while closed).
+    popover: RefCell<(Option<u16>, Option<u16>)>,
 }
 
 thread_local! {
@@ -1177,6 +1314,12 @@ pub fn focus_moved_to(hwnd: HWND) {
         SURFACES.with(|v| v.borrow().iter().filter_map(|w| w.upgrade()).collect());
     for s in surfaces {
         s.scroll_into_view(hwnd);
+        // Tab to another control closes an open popover (not onto its own
+        // button).
+        let keep = s.popover.borrow().1.map(|id| s.hwnd_of(id));
+        if keep != Some(hwnd) {
+            s.close_popover();
+        }
     }
 }
 
@@ -1192,6 +1335,7 @@ const WM_MOUSEWHEEL: u32 = 0x020A;
 
 const WM_ERASEBKGND: u32 = 0x0014;
 const WM_COMMAND: u32 = 0x0111;
+const WM_LBUTTONDOWN: u32 = 0x0201;
 const BN_CLICKED: usize = 0;
 const WM_DRAWITEM: u32 = 0x002B;
 const WM_NOTIFY: u32 = 0x004E;
@@ -1243,6 +1387,7 @@ struct DrawItem {
 }
 
 const WS_CHILD: u32 = 0x4000_0000;
+const WS_CLIPSIBLINGS: u32 = 0x0400_0000;
 const WS_VISIBLE: u32 = 0x1000_0000;
 const WS_TABSTOP: u32 = 0x0001_0000;
 const WS_GROUP: u32 = 0x0002_0000;
@@ -1288,6 +1433,7 @@ impl Surface {
             scroll: std::cell::Cell::new(0),
             page_heights: RefCell::new(HashMap::new()),
             faded: RefCell::new(HashMap::new()),
+            popover: RefCell::new((None, None)),
         });
         let weak = Rc::downgrade(&surface);
         let handler =
@@ -1355,6 +1501,20 @@ impl Surface {
             }
             WM_COMMAND if (w >> 16) & 0xFFFF == BN_CLICKED && l != 0 => {
                 let id = (w & 0xFFFF) as u16;
+                let info =
+                    self.controls
+                        .borrow()
+                        .iter()
+                        .find(|c| c.id == id)
+                        .and_then(|c| match &c.kind {
+                            Kind::Info { text } => Some(text.clone()),
+                            _ => None,
+                        });
+                if let Some(text) = info {
+                    self.toggle_popover(id, &text);
+                    return Some(LRESULT(0));
+                }
+                self.close_popover();
                 // Clone out of the cell: the callback may rebuild this window.
                 let cb = self.on_click.borrow().clone();
                 if let Some(cb) = cb {
@@ -1417,11 +1577,19 @@ impl Surface {
                 self.scroll_to(self.scroll.get() - notches * WHEEL_STEP);
                 Some(LRESULT(0))
             }
+            WM_LBUTTONDOWN => {
+                self.close_popover();
+                None
+            }
             WM_DRAWITEM => {
                 let di = &*(l as *const DrawItem);
                 let (kind, bg) = self.find(di.hwnd_item)?;
                 if let Kind::Text(style) = kind {
                     self.paint_text(di.hdc, di.hwnd_item, di.rc, style, bg);
+                    return Some(LRESULT(1));
+                }
+                if let Kind::Popover { text } = kind {
+                    self.paint_popover(di.hdc, di.rc, &text);
                     return Some(LRESULT(1));
                 }
                 None
@@ -1536,6 +1704,7 @@ impl Surface {
         if y == self.scroll.get() {
             return;
         }
+        self.close_popover();
         self.scroll.set(y);
         const WM_SETREDRAW: u32 = 0x000B;
         unsafe {
@@ -1608,11 +1777,189 @@ impl Surface {
     fn font_for(&self, kind: &Kind) -> HFONT {
         let f = self.fonts.borrow();
         match kind {
-            Kind::Edit | Kind::Secondary | Kind::Toggle { .. } | Kind::Table | Kind::Row { .. } => {
-                f.body
-            }
+            Kind::Edit
+            | Kind::Secondary { .. }
+            | Kind::Toggle { .. }
+            | Kind::Table
+            | Kind::Row { .. } => f.body,
             _ => f.body_strong,
         }
+    }
+
+    /// A small "i" button that shows `text` in a popover (see [`Kind::Info`]).
+    /// `label` is what a screen reader says for it.
+    pub fn info(
+        &self,
+        label: &str,
+        text: &str,
+        rc: (i32, i32, i32, i32),
+        bg: Rgb,
+        page: u8,
+    ) -> u16 {
+        self.create(
+            "BUTTON",
+            label,
+            BS_PUSHBUTTON | WS_TABSTOP,
+            rc,
+            Kind::Info {
+                text: text.to_string(),
+            },
+            bg,
+            page,
+        )
+    }
+
+    /// An info button right after the title of a toggle row (the row's `rc`,
+    /// `icon` whether the row has an icon tile), where the title ends: the
+    /// pattern is "Title (i)" with a one-line description below. `label` is
+    /// what a screen reader says for it, `text` what the popover shows.
+    #[allow(clippy::too_many_arguments)]
+    pub fn info_after(
+        &self,
+        label: &str,
+        text: &str,
+        row: (i32, i32, i32, i32),
+        icon: bool,
+        title: &str,
+        bg: Rgb,
+        page: u8,
+    ) -> u16 {
+        let width = unsafe {
+            let hdc = windows::Win32::Graphics::Gdi::GetDC(self.hwnd);
+            let w = measure_width(hdc, title, self.fonts.borrow().body);
+            windows::Win32::Graphics::Gdi::ReleaseDC(self.hwnd, hdc);
+            w
+        };
+        let to96 = |v: i32| v * 96 / self.dpi.get().max(1) as i32;
+        let x = row.0 + 16 + if icon { 32 + 12 } else { 0 } + to96(width) + 4;
+        // The title line of a title + one-line description block centred in the row.
+        let y = row.1 + (row.3 - 38) / 2 - 2;
+        // Spoken by a screen reader, never drawn: which row the button is for.
+        let name = format!("{label}: {title}");
+        self.info(&name, text, (x, y, 24, 24), bg, page)
+    }
+
+    /// Open the popover for the info button `id`, or close it if it is the
+    /// one already open.
+    fn toggle_popover(&self, id: u16, text: &str) {
+        if self.popover.borrow().1 == Some(id) {
+            self.close_popover();
+            return;
+        }
+        let anchor = {
+            let controls = self.controls.borrow();
+            let Some(c) = controls.iter().find(|c| c.id == id) else {
+                return;
+            };
+            let (x, y, w, h) = c.rc96;
+            let dy = if c.page != 0 && c.page == self.page.get() {
+                self.scroll.get()
+            } else {
+                0
+            };
+            RECT {
+                left: px(x),
+                top: px(y - dy),
+                right: px(x + w),
+                bottom: px(y - dy + h),
+            }
+        };
+        let mut client = RECT::default();
+        unsafe {
+            let _ = GetClientRect(self.hwnd, &mut client);
+        }
+        let width = px(300).min(client.right - px(24));
+        let pad = px(14);
+        let height = unsafe {
+            let hdc = windows::Win32::Graphics::Gdi::GetDC(self.hwnd);
+            let h = measure(hdc, text, width - 2 * pad, self.fonts.borrow().small);
+            windows::Win32::Graphics::Gdi::ReleaseDC(self.hwnd, hdc);
+            h + 2 * pad
+        };
+        // Under the button, its right edges level (the button sits at the
+        // right of its row); above it when there is no room below.
+        let left =
+            (anchor.right - width).clamp(px(12), (client.right - width - px(12)).max(px(12)));
+        let mut top = anchor.bottom + px(26);
+        if top + height > client.bottom - px(8) {
+            top = (anchor.top - height - px(6)).max(px(8));
+        }
+        let to96 = |v: i32| v * 96 / self.dpi.get().max(1) as i32;
+        let rc96 = (to96(left), to96(top), to96(width), to96(height));
+        let existing = self.popover.borrow().0;
+        let pid = match existing {
+            Some(pid) => {
+                if let Some(c) = self.controls.borrow_mut().iter_mut().find(|c| c.id == pid) {
+                    c.kind = Kind::Popover {
+                        text: text.to_string(),
+                    };
+                    c.rc96 = rc96;
+                }
+                pid
+            }
+            None => self.create(
+                "STATIC",
+                "",
+                SS_OWNERDRAW | SS_NOPREFIX | WS_CLIPSIBLINGS,
+                rc96,
+                Kind::Popover {
+                    text: text.to_string(),
+                },
+                pal().surface,
+                0,
+            ),
+        };
+        let hwnd = self.hwnd_of(pid);
+        unsafe {
+            let _ = SetWindowPos(
+                hwnd,
+                windows::Win32::UI::WindowsAndMessaging::HWND_TOP,
+                left,
+                top,
+                width,
+                height,
+                windows::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW | SWP_NOACTIVATE,
+            );
+            let _ = InvalidateRect(hwnd, None, true);
+        }
+        *self.popover.borrow_mut() = (Some(pid), Some(id));
+    }
+
+    /// Hide the popover, if one is open.
+    pub fn close_popover(&self) {
+        let (pid, open_for) = *self.popover.borrow();
+        if open_for.is_none() {
+            return;
+        }
+        if let Some(pid) = pid {
+            unsafe {
+                let _ = ShowWindow(self.hwnd_of(pid), SW_HIDE);
+            }
+        }
+        *self.popover.borrow_mut() = (pid, None);
+    }
+
+    unsafe fn paint_popover(&self, hdc: HDC, rc: RECT, body: &str) {
+        let p = pal();
+        fill(hdc, rc, p.bg);
+        let Some(g) = Gfx::new(hdc) else { return };
+        g.fill_round(rc, pxf(8.0), p.border);
+        g.fill_round(inset(rc, px(1)), pxf(7.0), p.surface_hover);
+        let f = self.fonts.borrow();
+        let pad = px(14);
+        text(
+            hdc,
+            body,
+            RECT {
+                left: rc.left + pad,
+                top: rc.top + pad,
+                right: rc.right - pad,
+                bottom: rc.bottom - pad,
+            },
+            f.small,
+            p.text,
+            DT_WORDBREAK | DT_LEFT,
+        );
     }
 
     unsafe fn paint_text(&self, hdc: HDC, hwnd: HWND, rc: RECT, style: TextStyle, bg: Rgb) {
@@ -1632,6 +1979,32 @@ impl Surface {
             TextStyle::Keys => {
                 self.paint_keys(hdc, &s, rc);
                 0
+            }
+            TextStyle::Section(icon) => {
+                let mut t = rc;
+                if let Some(font) = f.icons_small {
+                    let ic = RECT {
+                        right: rc.left + px(18),
+                        ..rc
+                    };
+                    text(
+                        hdc,
+                        &icon.to_string(),
+                        ic,
+                        font,
+                        p.text_dim,
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE,
+                    );
+                    t.left += px(26);
+                }
+                text(
+                    hdc,
+                    &s,
+                    t,
+                    f.body_strong,
+                    p.text,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                )
             }
             TextStyle::Heading(icon) => {
                 let mut t = rc;
@@ -1771,7 +2144,7 @@ impl Surface {
         let center = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 
         match kind {
-            Kind::Primary => {
+            Kind::Primary { icon } => {
                 let fillc = if pressed {
                     p.accent_pressed
                 } else if hot {
@@ -1780,9 +2153,9 @@ impl Surface {
                     p.accent
                 };
                 g.fill_round(rc, radius, if disabled { p.button } else { fillc });
-                text(hdc, &label, rc, f.body_strong, p.on_accent, center);
+                label_with_icon(hdc, &f, &label, *icon, rc, f.body_strong, p.on_accent);
             }
-            Kind::Secondary => {
+            Kind::Secondary { icon } => {
                 let fillc = if pressed {
                     p.button_pressed
                 } else if hot {
@@ -1804,9 +2177,9 @@ impl Surface {
                 } else {
                     blend(p.text, fillc, fade)
                 };
-                text(hdc, &label, rc, f.body, ink, center);
+                label_with_icon(hdc, &f, &label, *icon, rc, f.body, ink);
             }
-            Kind::Toggle { sub } => {
+            Kind::Toggle { sub, icon } => {
                 if hot {
                     g.fill_round(rc, pxf(6.0), p.surface_hover);
                 }
@@ -1829,9 +2202,31 @@ impl Surface {
                     g.stroke_round(sw, sw_h as f32 / 2.0, pxf(1.0).max(1.0), p.toggle_off);
                     g.fill_circle(sw.left as f32 + pxf(10.0), cy, knob_r, p.toggle_off);
                 }
-                // Title and description, left of the switch.
+                // Title and description, left of the switch; after the icon tile
+                // when there is one.
+                let mut text_left = rc.left + px(16);
+                if let (Some(font), false) = (f.icons, *icon == '\0') {
+                    let tile = px(32);
+                    let top = rc.top + ((rc.bottom - rc.top) - tile) / 2;
+                    let tile_rc = RECT {
+                        left: text_left,
+                        top,
+                        right: text_left + tile,
+                        bottom: top + tile,
+                    };
+                    g.fill_round(tile_rc, pxf(8.0), p.inset);
+                    text(
+                        hdc,
+                        &icon.to_string(),
+                        tile_rc,
+                        font,
+                        if checked { p.accent } else { p.text_dim },
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+                    );
+                    text_left += tile + px(12);
+                }
                 let text_rc = RECT {
-                    left: rc.left + px(16),
+                    left: text_left,
                     top: rc.top,
                     right: sw.left - px(16),
                     bottom: rc.bottom,
@@ -1868,19 +2263,34 @@ impl Surface {
                 }
                 return;
             }
-            Kind::Segment => {
+            Kind::Segment { icon } => {
                 let pill = inset(rc, px(3));
                 if checked {
                     g.fill_round(pill, radius, p.accent);
-                    text(hdc, &label, pill, f.body_strong, p.on_accent, center);
+                    label_with_icon(hdc, &f, &label, *icon, pill, f.body_strong, p.on_accent);
                 } else {
                     if hot {
                         g.fill_round(pill, radius, p.surface_hover);
                     }
-                    text(hdc, &label, pill, f.body, p.text, center);
+                    label_with_icon(hdc, &f, &label, *icon, pill, f.body, p.text);
                 }
             }
-            Kind::Nav => {
+            Kind::Info { .. } => {
+                if let Some(font) = f.icons {
+                    let lit = hot || pressed || focus;
+                    text(
+                        hdc,
+                        &crate::icons::INFO.to_string(),
+                        rc,
+                        font,
+                        if lit { p.accent } else { p.text_dim },
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+                    );
+                } else {
+                    text(hdc, "i", rc, f.body_strong, p.text_dim, center);
+                }
+            }
+            Kind::Nav { icon } => {
                 if checked || hot {
                     g.fill_round(
                         rc,
@@ -1898,8 +2308,25 @@ impl Surface {
                     };
                     g.fill_round(bar, pxf(1.5), p.accent);
                 }
+                let mut text_left = rc.left + px(14);
+                if let (Some(font), false) = (f.icons, *icon == '\0') {
+                    let ic = RECT {
+                        left: text_left,
+                        right: text_left + px(20),
+                        ..rc
+                    };
+                    text(
+                        hdc,
+                        &icon.to_string(),
+                        ic,
+                        font,
+                        if checked { p.accent } else { p.text_dim },
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+                    );
+                    text_left += px(20) + px(10);
+                }
                 let t = RECT {
-                    left: rc.left + px(14),
+                    left: text_left,
                     ..rc
                 };
                 text(
@@ -1911,6 +2338,7 @@ impl Surface {
                     DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
                 );
             }
+            Kind::Popover { .. } => {}
             Kind::Row { hint, icon } => {
                 if focus || hot || pressed {
                     g.fill_round(rc, radius, p.surface_hover);
@@ -2074,7 +2502,7 @@ impl Surface {
         self.create(
             "STATIC",
             s,
-            SS_OWNERDRAW | SS_NOPREFIX,
+            SS_OWNERDRAW | SS_NOPREFIX | WS_CLIPSIBLINGS,
             rc,
             Kind::Text(style),
             bg,
@@ -2090,10 +2518,23 @@ impl Surface {
         bg: Rgb,
         page: u8,
     ) -> u16 {
+        self.button_icon(s, '\0', primary, rc, bg, page)
+    }
+
+    /// A button with an icon (a glyph of the icon font) before its label.
+    pub fn button_icon(
+        &self,
+        s: &str,
+        icon: char,
+        primary: bool,
+        rc: (i32, i32, i32, i32),
+        bg: Rgb,
+        page: u8,
+    ) -> u16 {
         let kind = if primary {
-            Kind::Primary
+            Kind::Primary { icon }
         } else {
-            Kind::Secondary
+            Kind::Secondary { icon }
         };
         self.create(
             "BUTTON",
@@ -2133,11 +2574,12 @@ impl Surface {
         )
     }
 
-    /// A card row that is a check box.
-    pub fn toggle(
+    /// A card row that is a check box, with an icon tile before the title.
+    pub fn toggle_icon(
         &self,
         title: &str,
         sub: &str,
+        icon: char,
         rc: (i32, i32, i32, i32),
         bg: Rgb,
         page: u8,
@@ -2145,10 +2587,11 @@ impl Surface {
         self.create(
             "BUTTON",
             title,
-            BS_AUTOCHECKBOX | WS_TABSTOP | WS_GROUP,
+            BS_AUTOCHECKBOX | WS_TABSTOP | WS_GROUP | WS_CLIPSIBLINGS,
             rc,
             Kind::Toggle {
                 sub: sub.to_string(),
+                icon,
             },
             bg,
             page,
@@ -2164,26 +2607,39 @@ impl Surface {
         bg: Rgb,
         page: u8,
     ) -> u16 {
+        self.segment_icon(s, '\0', first, rc, bg, page)
+    }
+
+    /// A segment with an icon (a glyph of the icon font) before its label.
+    pub fn segment_icon(
+        &self,
+        s: &str,
+        icon: char,
+        first: bool,
+        rc: (i32, i32, i32, i32),
+        bg: Rgb,
+        page: u8,
+    ) -> u16 {
         let group = if first { WS_GROUP | WS_TABSTOP } else { 0 };
         self.create(
             "BUTTON",
             s,
             BS_AUTORADIOBUTTON | group,
             rc,
-            Kind::Segment,
+            Kind::Segment { icon },
             bg,
             page,
         )
     }
 
-    pub fn nav(&self, s: &str, first: bool, rc: (i32, i32, i32, i32)) -> u16 {
+    pub fn nav(&self, s: &str, icon: char, first: bool, rc: (i32, i32, i32, i32)) -> u16 {
         let group = if first { WS_GROUP | WS_TABSTOP } else { 0 };
         self.create(
             "BUTTON",
             s,
             BS_AUTORADIOBUTTON | group,
             rc,
-            Kind::Nav,
+            Kind::Nav { icon },
             pal().bg,
             0,
         )
@@ -2492,6 +2948,7 @@ impl Surface {
 
     /// Show the controls of `page` (and the always-visible ones).
     pub fn show_page(&self, page: u8) {
+        self.close_popover();
         self.page.set(page);
         // Each page opens at its top.
         if self.scroll.replace(0) != 0 {
@@ -2506,9 +2963,22 @@ impl Surface {
             SendMessageW(self.hwnd, WM_SETREDRAW, WPARAM(0), LPARAM(0));
         }
         for c in self.controls.borrow().iter() {
-            let show = c.page == 0 || c.page == page;
+            let show = (c.page == 0 || c.page == page) && !matches!(c.kind, Kind::Popover { .. });
             unsafe {
                 let _ = ShowWindow(c.hwnd, if show { SW_SHOW } else { SW_HIDE });
+            }
+            if show && matches!(c.kind, Kind::Info { .. }) {
+                unsafe {
+                    let _ = SetWindowPos(
+                        c.hwnd,
+                        windows::Win32::UI::WindowsAndMessaging::HWND_TOP,
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                    );
+                }
             }
             if show && matches!(c.kind, Kind::Table) && is_dark() {
                 theme_table_header(c.hwnd);

@@ -135,6 +135,10 @@ enum Command {
     Practice,
     /// English prefix words written with their hyphen, on or off.
     Hyphens,
+    /// Explicitly learn a new word typed or open learned words manager.
+    LearnWord,
+    /// Explicitly learn a recent word by its place in `words`.
+    LearnRecent(usize),
 }
 
 /// The palette's sections, top to bottom. Things done to text come first
@@ -255,6 +259,7 @@ impl Command {
             Command::KeyTest => '\u{E9D9}',      // Diagnostic
             Command::Sheet => '\u{E765}',        // KeyboardClassic
             Command::Practice => '\u{E7FC}',     // Game
+            Command::LearnWord | Command::LearnRecent(_) => '\u{E82D}', // Dictionary
         }
     }
 }
@@ -295,6 +300,9 @@ struct Palette {
     labels: RefCell<Vec<String>>,
     /// The recent words listed (oldest first), wiped on close.
     words: RefCell<Vec<String>>,
+    /// The word selected in the app when the palette opened (what "Add a word"
+    /// adds), wiped on close; empty when nothing usable was selected.
+    selection: RefCell<String>,
     /// Where each recent word is on screen, when the app says.
     boxes: Vec<Option<RECT>>,
     /// Recent words ticked with Space (their places in `words`).
@@ -392,19 +400,41 @@ pub fn key(vk: u16, ch: Option<char>) -> bool {
 
 /// Show the items that match the filter under their headings, numbered,
 /// packed from the top, and select the first.
+/// The section a row is listed under. "Add a word" is offered below everything
+/// that matches while searching, so Enter runs the command that was found, not
+/// "remember what I typed".
+fn listed_in(section: Section, is_add_word: bool, searching: bool) -> Section {
+    if searching && is_add_word {
+        Section::Options
+    } else {
+        section
+    }
+}
+
 fn refilter(p: &Palette) {
     use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SWP_NOMOVE, SWP_NOZORDER, SW_HIDE};
     let filter = p.filter.borrow().to_lowercase();
     // Typed on the wrong keyboard still finds it (`fxw` and `ซ่อม` alike).
     let other = righttype::layout::auto_convert(&filter).to_lowercase();
     let searching = !filter.is_empty();
+
     // A section opened with its row is a page of its own: only its rows,
     // not appended under everything (the options ran off the screen).
     let page = !searching && p.expanded.get() != 0;
+    let section_of = |i: usize| {
+        listed_in(
+            p.item_sections[i],
+            matches!(p.items[i].1, Command::LearnWord),
+            searching,
+        )
+    };
     let shows = |i: usize| {
         let command = p.items[i].1;
-        let section = p.item_sections[i];
+        let section = section_of(i);
         let open = p.expanded.get() & section.bit() != 0;
+        if let Command::LearnWord = command {
+            return true;
+        }
         if let Command::More(_) = command {
             return !searching && !open && !page;
         }
@@ -423,7 +453,7 @@ fn refilter(p: &Palette) {
     let mut y = PAD + 28;
     for section in Section::ALL {
         let rows: Vec<usize> = (0..p.items.len())
-            .filter(|&i| p.item_sections[i] == section && shows(i))
+            .filter(|&i| section_of(i) == section && shows(i))
             .collect();
         let heading = p.headings.iter().find(|(s, _)| *s == section).map(|h| h.1);
         if let Some(id) = heading {
@@ -492,12 +522,15 @@ fn refilter(p: &Palette) {
             p.surface.hwnd,
             windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST,
         ));
-        if wr.bottom > wa.bottom {
-            let top = (wa.bottom - (wr.bottom - wr.top)).max(wa.top);
+        let width = wr.right - wr.left;
+        let height = wr.bottom - wr.top;
+        let left = wr.left.clamp(wa.left, (wa.right - width).max(wa.left));
+        let top = wr.top.clamp(wa.top, (wa.bottom - height).max(wa.top));
+        if left != wr.left || top != wr.top {
             let _ = SetWindowPos(
                 p.surface.hwnd,
                 None,
-                wr.left,
+                left,
                 top,
                 0,
                 0,
@@ -665,8 +698,12 @@ fn toggle_checked(p: &Palette) -> bool {
     let i = p.visible.borrow()[k];
     let label = {
         let mut labels = p.labels.borrow_mut();
-        let rest = labels[i].chars().skip(1).collect::<String>();
-        labels[i] = format!("{}{rest}", if on { '☑' } else { '☐' });
+        let rest = if labels[i].starts_with("[x]") || labels[i].starts_with("[ ]") {
+            labels[i][3..].to_string()
+        } else {
+            labels[i].chars().skip(1).collect::<String>()
+        };
+        labels[i] = format!("{}{rest}", if on { "[x]" } else { "[ ]" });
         labels[i].clone()
     };
     let text = match number_of(p, k) {
@@ -746,6 +783,28 @@ fn run_shown(p: &Rc<Palette>, k: usize) {
         }
         return;
     }
+    if let Command::LearnWord = command {
+        let word = p.selection.borrow().clone();
+        close(p, true);
+        if !word.is_empty() {
+            match crate::learn::add_explicit(&word) {
+                Ok(w) => overlay::show(&trf(T::ToastWordLearned, &[("word", &w)])),
+                Err(_) => overlay::show(tr(T::ToastWordInvalid)),
+            }
+        }
+        return;
+    }
+    if let Command::LearnRecent(idx) = command {
+        let word = p.words.borrow().get(idx).cloned();
+        close(p, true);
+        if let Some(w) = word {
+            match crate::learn::add_explicit(&w) {
+                Ok(learned) => overlay::show(&trf(T::ToastWordLearned, &[("word", &learned)])),
+                Err(_) => overlay::show(tr(T::ToastWordInvalid)),
+            }
+        }
+        return;
+    }
     if let Command::Review(_) | Command::ApplyReview = command {
         let keep: Vec<bool> = (0..p.words.borrow().len())
             .map(|i| p.checked.borrow().contains(&i))
@@ -808,7 +867,7 @@ pub fn request_open() {
 
 /// The rows, in order, for the current state. `words` are the recent words
 /// (oldest first).
-fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
+fn commands(app: Option<&str>, words: &[String], selection: Option<&str>) -> Vec<Entry> {
     let mut list = Vec::new();
     let mut add = |section, label: String, hint: &str, command| {
         list.push(Entry {
@@ -825,7 +884,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
         let mut flipped = hook::flipped(word);
         add(
             Section::Words,
-            format!("☐  {word}  →  {flipped}"),
+            format!("[ ]  {word}  →  {flipped}"),
             "",
             Command::History(i),
         );
@@ -837,6 +896,28 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             trf(T::PaletteKeepAsTyped, &[("word", word)]),
             "",
             Command::KeepAsTyped(i),
+        );
+    }
+    // Offer to remember the latest typed word as-is directly if eligible
+    if let Some((i, last_word)) = words.iter().enumerate().next_back() {
+        let clean = last_word.trim();
+        if !clean.is_empty() {
+            add(
+                Section::Words,
+                trf(T::PaletteLearnRecent, &[("word", clean)]),
+                "",
+                Command::LearnRecent(i),
+            );
+        }
+    }
+    // "Add a word" only while a word is selected: otherwise it is one more row
+    // in the way of everything else.
+    if let Some(word) = selection.and_then(crate::learn::explicit_candidate) {
+        add(
+            Section::Words,
+            trf(T::PaletteLearnWord, &[("word", &word)]),
+            "",
+            Command::LearnWord,
         );
     }
     if app.is_some() {
@@ -876,13 +957,13 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
         add(
             Section::Selection,
             tr(T::PaletteMoreSelection).to_string(),
-            "▸",
+            "›",
             Command::More(Section::Selection),
         );
         add(
             Section::Symbols,
             tr(T::PaletteMoreSymbols).to_string(),
-            "▸",
+            "›",
             Command::More(Section::Symbols),
         );
         add(
@@ -989,7 +1070,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
     add(
         Section::Mode,
         tr(T::PaletteMoreOptions).to_string(),
-        "▸",
+        "›",
         Command::More(Section::Options),
     );
     let state = |on: bool| tr(if on { T::HintOn } else { T::HintOff });
@@ -1132,7 +1213,7 @@ fn review_commands(changes: &[(String, String)]) -> Vec<Entry> {
         .map(|(i, (original, fixed))| Entry {
             section: Section::Review,
             folded: false,
-            label: format!("☑  {original}  →  {fixed}"),
+            label: format!("[x]  {original}  →  {fixed}"),
             hint: String::new(),
             command: Command::Review(i),
         })
@@ -1186,15 +1267,6 @@ impl Drop for Review {
 
 static REVIEW: std::sync::Mutex<Option<Review>> = std::sync::Mutex::new(None);
 
-/// Show `review` in the palette, from any thread (the fix-field worker):
-/// the tray window's thread opens it.
-pub fn request_review(review: Review) {
-    if let Ok(mut r) = REVIEW.lock() {
-        *r = Some(review);
-    }
-    crate::tray::on_ui(crate::tray::UI_REVIEW);
-}
-
 /// Open the palette on the waiting review (the tray window's thread).
 pub fn open_review() {
     let review = REVIEW.lock().ok().and_then(|mut r| r.take());
@@ -1233,6 +1305,20 @@ fn open_with(review: Option<Review>) {
     let caret = crate::caret::caret_rect();
     ui::refresh();
 
+    // The selected word, asked while the app still has the focus. This and
+    // the words' boxes below share one budget of 150 ms: the keyboard hook
+    // runs on this thread, and past its timeout Windows lets a key go by
+    // (CI: the H of `why` was lost while the palette opened).
+    let asked = std::time::Instant::now();
+    let selected = if app.is_some() && review.is_none() {
+        crate::focus::selected_text_within(std::time::Duration::from_millis(40))
+    } else {
+        None
+    };
+    let selection = selected
+        .as_deref()
+        .and_then(|s| crate::learn::explicit_candidate(s))
+        .unwrap_or_default();
     let reviewing = review.as_ref().map_or(0, |r| r.changes.len());
     let (words, boxes, list) = match &review {
         // The words as typed stand in for the recent words: ticked, marked
@@ -1251,10 +1337,16 @@ fn open_with(review: Option<Review>) {
             } else {
                 crate::focus::boxes_before_caret_within(
                     spans,
-                    std::time::Duration::from_millis(150),
+                    std::time::Duration::from_millis(150)
+                        .saturating_sub(asked.elapsed())
+                        .max(std::time::Duration::from_millis(30)),
                 )
             };
-            let list = commands(app.as_deref(), &words);
+            let list = commands(
+                app.as_deref(),
+                &words,
+                selected.as_deref().map(|s| s.as_str()),
+            );
             (words, boxes, list)
         }
     };
@@ -1312,11 +1404,20 @@ fn open_with(review: Option<Review>) {
         })
         .collect();
     ui::size_and_center(surface.hwnd, W, h);
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowDisplayAffinity(
+            surface.hwnd,
+            windows::Win32::UI::WindowsAndMessaging::WDA_EXCLUDEFROMCAPTURE,
+        );
+    }
     // Next to the caret when there is one: below it, or above it when there
     // is no room below, and always inside that monitor's work area.
     if let Some(caret) = caret {
         unsafe {
-            let (w, h) = (ui::px(W), ui::px(h));
+            let mut wr = RECT::default();
+            let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(surface.hwnd, &mut wr);
+            let w = (wr.right - wr.left).max(ui::px(W));
+            let h = (wr.bottom - wr.top).max(ui::px(h));
             let monitor = MonitorFromPoint(
                 POINT {
                     x: caret.left,
@@ -1349,6 +1450,7 @@ fn open_with(review: Option<Review>) {
         numbers: RefCell::new(Vec::new()),
         labels: RefCell::new(list.iter().map(|e| e.label.clone()).collect()),
         words: RefCell::new(words),
+        selection: RefCell::new(selection),
         boxes,
         // Every word of a review starts ticked.
         checked: RefCell::new((0..reviewing).collect()),
@@ -1434,6 +1536,7 @@ fn close(p: &Rc<Palette>, refocus: bool) {
     for word in p.words.borrow_mut().iter_mut() {
         word.zeroize();
     }
+    p.selection.borrow_mut().zeroize();
     for label in p.labels.borrow_mut().iter_mut() {
         label.zeroize();
     }
@@ -1452,7 +1555,7 @@ fn close(p: &Rc<Palette>, refocus: bool) {
 fn run(command: Command, app: Option<&str>) {
     match command {
         // Handled in `run_shown`.
-        Command::History(_) => {}
+        Command::History(_) | Command::LearnWord | Command::LearnRecent(_) => {}
         Command::FixText => crate::fixer::open(),
         Command::Settings => crate::settings::open(),
         Command::Clean => crate::clean::request_open(crate::clean::Mode::Clean),
@@ -1663,4 +1766,23 @@ fn paint(g: &Gfx, _hdc: HDC, rc: RECT, _page: u8) {
     let p = pal();
     g.fill_round(rc, ui::px(8) as f32, p.border);
     g.fill_round(ui::inset(rc, ui::px(1)), ui::px(7) as f32, p.surface);
+}
+
+#[cfg(test)]
+mod listing_tests {
+    use super::*;
+
+    #[test]
+    fn add_a_word_is_last_while_searching_and_in_place_otherwise() {
+        // Searching: below the sections of real matches (Options is the last).
+        assert!(listed_in(Section::Words, true, true) == Section::Options);
+        assert!(Section::ALL.last() == Some(&Section::Options));
+        // Not searching: where it was put.
+        assert!(listed_in(Section::Words, true, false) == Section::Words);
+        // Every other row stays in its own section, searching or not.
+        for section in Section::ALL {
+            assert!(listed_in(section, false, true) == section);
+            assert!(listed_in(section, false, false) == section);
+        }
+    }
 }

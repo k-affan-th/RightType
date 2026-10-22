@@ -220,9 +220,6 @@ pub fn request_transform(hwnd: isize, transform: fn(&str) -> String) {
 /// Longest field "Fix this field" retypes (characters).
 const MAX_FIELD_CHARS: usize = 4000;
 
-/// More words than this are fixed at once rather than listed to check.
-const MAX_REVIEW: usize = 12;
-
 /// Read the whole field from the app (UI Automation or the text box itself
 /// — never the clipboard, and without selecting it), find the words in the
 /// wrong layout (as the Fix text window does), and show them in the palette,
@@ -254,34 +251,12 @@ unsafe fn fix_field(hwnd: isize) {
         righttype::repair::repair(&text, righttype::dict::english(), righttype::dict::thai());
     if repaired.changes.is_empty() {
         overlay::show(tr(T::ToastNothingToFix));
-    } else if repaired.changes.len() > MAX_REVIEW {
+    } else {
+        // Apply the fixes directly in one clean pass without an awkward second
+        // review popup interrupting the keyboard flow. Ctrl+Z undoes it.
         let pairs = pairs_of(&repaired);
         *PENDING.lock().unwrap() = Some(Pending { hwnd, pairs });
         apply_review(vec![true; repaired.changes.len()]);
-    } else {
-        // Where each word is in the field as typed (the changes count in
-        // the fixed text).
-        let mut shift: isize = 0;
-        let spans: Vec<(usize, usize)> = repaired
-            .changes
-            .iter()
-            .map(|c| {
-                let len = c.original.chars().count();
-                let at = (c.start as isize - shift).max(0) as usize;
-                shift += c.fixed.chars().count() as isize - len as isize;
-                (at, len)
-            })
-            .collect();
-        let boxes = focus::field_boxes(&spans);
-        let pairs = pairs_of(&repaired);
-        *PENDING.lock().unwrap() = Some(Pending {
-            hwnd,
-            pairs: pairs.clone(),
-        });
-        crate::palette::request_review(crate::palette::Review {
-            changes: pairs,
-            boxes,
-        });
     }
     repaired.text.zeroize();
     for c in &mut repaired.changes {
@@ -473,10 +448,10 @@ unsafe fn run_macro(hwnd: isize, steps: Vec<righttype::macros::Step>, wait: bool
         // A dialog the macro opened is still the app; another app is not.
         // Text is never typed into a password field (the focus may have
         // moved there).
-        let types = matches!(step, Step::Text(_) | Step::Clipboard);
         if GetAsyncKeyState(VK_ESCAPE.0 as i32) < 0
             || pid(GetForegroundWindow()) != app
-            || (types && (crate::safety::is_password_field() || focus::is_password_field()))
+            || crate::safety::is_password_field()
+            || focus::is_password_field()
         {
             crate::hook::trace_note("macro: stopped");
             overlay::show(tr(T::ToastMacroStopped));

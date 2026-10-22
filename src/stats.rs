@@ -24,6 +24,7 @@ use windows::Win32::Graphics::Gdi::HDC;
 use windows::Win32::Graphics::Gdi::{DeleteObject, DT_CENTER, DT_NOPREFIX, DT_SINGLELINE, HGDIOBJ};
 use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
+use crate::icons;
 use crate::learn;
 use crate::ui::{self, card, pal, rect, Gfx, Surface, TextStyle};
 
@@ -285,7 +286,7 @@ pub fn open() {
         s.label(
             tr(*caption),
             TextStyle::Small,
-            (x + 18, TILE_Y + 66, TILE_W - 36, 40),
+            (x + 18 + 22, TILE_Y + 66, TILE_W - 36 - 22, 40),
             p.surface,
             0,
         );
@@ -299,7 +300,7 @@ pub fn open() {
     );
     s.label(
         tr(T::StatsWeekHead),
-        TextStyle::BodyStrong,
+        TextStyle::Section(icons::SCORE),
         (X + 18, WEEK_Y + 14, W - 2 * X - 36, 22),
         p.surface,
         0,
@@ -325,23 +326,26 @@ pub fn open() {
         p.surface,
         0,
     );
-    let keep = s.toggle(
+    let keep = s.toggle_icon(
         tr(T::RowKeepStats),
         tr(T::SubKeepStats),
+        icons::CALENDAR,
         (X + 4, KEEP_Y + 4, W - 2 * X - 8, 64),
         p.surface,
         0,
     );
     s.set_checked(keep, keeps_daily());
-    let by_app = s.button(
+    let by_app = s.button_icon(
         tr(T::ByAppButton),
+        icons::APPS,
         false,
         (X, H - 28 - 34, 150, 34),
         p.bg,
         0,
     );
-    let close = s.button(
+    let close = s.button_icon(
         tr(T::BtnClose),
+        icons::CLOSE,
         false,
         (W - X - 110, H - 28 - 34, 110, 34),
         p.bg,
@@ -402,6 +406,13 @@ fn paint(g: &Gfx, hdc: HDC, _rc: RECT, _page: u8, week: Option<&[(u32, Day); 7]>
     for i in 0..4 {
         let x = X + i * (TILE_W + TILE_GAP);
         card(g, rect(x, TILE_Y, TILE_W, TILE_H));
+        let icon = [
+            icons::MODE_AUTO,
+            icons::KEYBOARD,
+            icons::LEARNED,
+            icons::REST,
+        ][i as usize];
+        ui::icon_glyph(hdc, rect(x + 18, TILE_Y + 66, 18, 18), icon, pal().text_dim);
     }
     card(g, rect(X, WEEK_Y, W - 2 * X, WEEK_H));
     card(g, rect(X, KEEP_Y, W - 2 * X, 72));

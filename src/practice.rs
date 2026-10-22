@@ -27,6 +27,7 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{KillTimer, SetTimer};
 
+use crate::icons;
 use crate::ui::{self, pal, Gfx, Rgb, Surface, TextStyle};
 
 const W: i32 = 1040;
@@ -397,16 +398,18 @@ fn open() {
     let lessons: [u16; 8] = seg(&LESSON_LABELS, PAD + 4, ROW2_Y, (W - 2 * PAD - 8) / 8)
         .try_into()
         .unwrap_or([0; 8]);
-    let on_screen = s.button(
+    let on_screen = s.button_icon(
         tr(T::PracticeOnScreen),
+        icons::PIN,
         false,
         (W - PAD - 260, 18, 260, 34),
         pl.bg,
         0,
     );
-    let keep = s.toggle(
+    let keep = s.toggle_icon(
         tr(T::RowKeepScores),
         tr(T::SubKeepScores),
+        icons::SCORE,
         (PAD, FOOT_Y, 520, 56),
         pl.bg,
         0,

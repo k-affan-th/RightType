@@ -110,7 +110,6 @@ texts! {
     StateOff => "Off", "ปิดอยู่";
     StateHookLost => "Not working — retrying", "หยุดทำงาน — กำลังลองใหม่";
     StatePaused => "Paused — back in {n} min", "หยุดชั่วคราว — กลับมาในอีก {n} นาที";
-    StateAppMode => "{mode} in {app}", "{mode} ใน {app}";
     ModeOff => "Off", "ปิด";
 
     // Toasts.
@@ -147,14 +146,20 @@ texts! {
     ToastNothingToFix => "Nothing to fix in this field", "ไม่มีคำที่ต้องแก้ในช่องนี้";
     ToastFixedWords => "Fixed {n} words · Ctrl+Z undoes it", "แก้ {n} คำ · Ctrl+Z ย้อนได้";
     PaletteKeepAsTyped => "Never convert “{word}”", "ไม่ต้องแปลง “{word}” อีก";
+    PaletteLearnWord => "Add “{word}”", "เพิ่ม “{word}”";
+    PaletteLearnRecent => "Keep “{word}”", "เก็บ “{word}” ไว้";
+    ToastWordLearned => "Added “{word}”", "เพิ่ม “{word}” แล้ว";
+    ToastWordInvalid => "Can't add this word", "เพิ่มคำนี้ไม่ได้";
+    ToastCopied => "Copied", "คัดลอกแล้ว";
     ToastCapsOff => "CapsLock was on — word fixed, CapsLock off · Shift+Backspace if you meant capitals", "CapsLock ค้าง — แก้คำและปิด CapsLock แล้ว · ตั้งใจพิมพ์ตัวใหญ่? กด Shift+Backspace";
     ToastCapsKept => "Capitals kept, CapsLock on again", "คืนตัวพิมพ์ใหญ่และเปิด CapsLock ให้แล้ว";
     ToastModeCode => "Code mode: only what is clearly a slip — never names, Thai only in comments and strings", "โหมดโค้ด: แก้เฉพาะที่พิมพ์ผิดแป้นชัด ๆ ไม่แตะชื่อตัวแปร และแปลงเป็นไทยเฉพาะใน comment/string";
     RowSyncSettings => "Sync settings and snippets too", "ซิงก์การตั้งค่าและคำย่อด้วย";
+    SubSyncSettingsShort => "Share modes, apps, hotkeys and snippets too.", "ซิงก์โหมด แอป ปุ่มลัด และคำย่อด้วย";
     SubSyncSettings => "Modes, apps, hotkeys and snippets, in the same folder, for every PC that uses it. Off by default.", "โหมด รายการแอป ปุ่มลัด และคำย่อ เก็บในโฟลเดอร์เดียวกัน ใช้ร่วมกันทุกเครื่องที่ใช้โฟลเดอร์นี้ (ปิดไว้เป็นค่าเริ่มต้น)";
     SyncNeedsFolder => "Choose a sync folder first.", "เลือกโฟลเดอร์สำหรับซิงก์ก่อน";
     NavSnippets => "Snippets", "คำย่อ";
-    SnippetsIntro => "Type a short trigger, then Space or Enter, and it becomes the text. Shift+Backspace right after puts the trigger back.", "พิมพ์คำย่อแล้วกด Space หรือ Enter จะกลายเป็นข้อความเต็ม กด Shift+Backspace ทันทีเพื่อคืนคำย่อ";
+    SnippetsIntro => "Type a short trigger, then Space or Enter, to expand into full text. Shift+Backspace undoes it.", "พิมพ์คำย่อแล้วกด Space หรือ Enter เพื่อแปลงเป็นข้อความเต็ม กด Shift+Backspace เพื่อย้อนคืน";
     ColTrigger => "Trigger", "คำย่อ";
     ColText => "Text", "ข้อความ";
     ColKeyboard => "Keyboard", "แป้นพิมพ์";
@@ -162,8 +167,8 @@ texts! {
     ScopeEnglish => "English only", "แป้นอังกฤษ";
     ScopeEither => "Either", "ทั้งสองแป้น";
     BtnSaveSnippet => "Add / save", "เพิ่ม / บันทึก";
-    BtnInsertDate => "Date / time ▾", "วันที่ / เวลา ▾";
-    SnippetsNote => "“Either” matches the keys you press, so ;addr works on the Thai keyboard too. Start triggers with ; so they never clash with a word. “My typo”: the trigger is a word you often misspell and the text its right spelling, fixed like the built-in misspellings. Date / time puts in today's date when the snippet is typed, such as {วันที่} → 2 ตุลาคม 2569. A macro: put steps in the text, such as {style Heading 1}Report{press Enter}, {press Ctrl+B}, {wait 300}, {command Bold}, {clipboard}; Esc stops it. Not in password fields. Snippets are saved with the settings.", "“ทั้งสองแป้น” จับจากปุ่มที่กด ;addr จึงใช้ได้แม้เปิดแป้นไทยอยู่ แนะนำให้ขึ้นต้นด้วย ; จะได้ไม่ชนกับคำปกติ “คำผิดของฉัน”: ใส่คำที่คุณพิมพ์ผิดบ่อยเป็นคำย่อ และคำที่ถูกเป็นข้อความ จะแก้ให้แบบเดียวกับคำผิดที่มีมาให้ ปุ่ม วันที่ / เวลา ใส่วันที่ตอนที่พิมพ์ เช่น {วันที่} → 2 ตุลาคม 2569 ทำเป็น Macro ได้ด้วยการใส่ขั้นตอนในข้อความ เช่น {สไตล์ Heading 1}รายงาน{กด Enter}, {กด Ctrl+B}, {รอ 300}, {คำสั่ง ตัวหนา}, {คลิปบอร์ด} กด Esc เพื่อหยุด ไม่ทำงานในช่องรหัสผ่าน คำย่อถูกบันทึกไว้กับการตั้งค่า";
+    BtnInsertDate => "Date / time…", "วันที่ / เวลา…";
+    SnippetsNote => "Tip: Start triggers with ; (e.g. ;email) to avoid clashing with words. Use “My typo” to auto-correct frequent slips.", "คำแนะนำ: ควรขึ้นต้นคำย่อด้วย ; (เช่น ;email) เพื่อไม่ให้ชนกับคำทั่วไป หรือใช้ “คำผิดของฉัน” เพื่อแก้คำสะกดผิดอัตโนมัติ";
     SnipTriggerLength => "A trigger is 2 to 32 characters.", "คำย่อต้องยาว 2–32 ตัวอักษร";
     SnipTriggerSpace => "A trigger has no spaces.", "คำย่อต้องไม่มีช่องว่าง";
     SnipTextEmpty => "Write the text it becomes.", "ใส่ข้อความที่ต้องการ";
@@ -171,7 +176,7 @@ texts! {
     SnipTextLong => "The text is too long (1,000 characters at most).", "ข้อความยาวเกินไป (ไม่เกิน 1,000 ตัวอักษร)";
     SnipTooMany => "200 snippets at most.", "มีคำย่อได้ไม่เกิน 200 รายการ";
     SnipRemoved => "Removed.", "ลบแล้ว";
-    AppsIntro => "Apps with a mode of their own. Select one and pick a mode below, or right-click it. Apps not listed use the general mode.", "แอปที่มีโหมดของตัวเอง เลือกแถวแล้วกดโหมดด้านล่าง หรือคลิกขวาที่แถว แอปที่ไม่อยู่ในรายการใช้โหมดหลัก";
+    AppsIntro => "Configure correction mode per application. Unlisted apps follow the default mode.", "กำหนดโหมดการทำงานแยกตามโปรแกรม แอปที่ไม่อยู่ในรายการจะใช้โหมดหลัก";
     ColApp => "App", "แอป";
     ColMode => "Mode", "โหมด";
     ColSetBy => "Set by", "ตั้งโดย";
@@ -181,9 +186,9 @@ texts! {
     SetByYouBlocked => "You (blocked)", "คุณ (บล็อก)";
     SetByDefault => "Default: code editor", "ค่าเริ่มต้น: โปรแกรมเขียนโค้ด";
     SetBySafety => "Safety (built in)", "ความปลอดภัย (ในตัว)";
-    ModeAlwaysOff => "Always off 🔒", "ปิดเสมอ 🔒";
+    ModeAlwaysOff => "Always off", "ปิดเสมอ";
     ModeBlocked => "Off (blocked)", "ปิด (บล็อก)";
-    BtnAddApp => "+ Add an app that is open…", "+ เพิ่มจากแอปที่เปิดอยู่…";
+    BtnAddApp => "Add an app that is open…", "เพิ่มจากแอปที่เปิดอยู่…";
     BtnKeepMode => "Keep for good", "ใช้ตลอด";
     BtnRemoveApp => "Remove", "ลบออก";
     BtnShowFile => "Show the program file", "เปิดตำแหน่งไฟล์";
@@ -194,6 +199,7 @@ texts! {
     AppsNoneRunning => "No other app with a window is open.", "ไม่มีแอปอื่นที่เปิดหน้าต่างอยู่";
     AppsAdded => "Added {app} — now pick its mode below.", "เพิ่ม {app} แล้ว เลือกโหมดด้านล่างได้เลย";
     RowRestart => "Start again after a crash", "เปิดใหม่เองเมื่อโปรแกรมล่ม";
+    SubRestartShort => "Not after you quit it or end it.", "ไม่เปิดเองหลังคุณสั่งปิด";
     SubRestart => "Not after you quit it or end it in Task Manager. From the next start.", "ไม่เปิดเองหลังจากคุณสั่งปิด หรือปิดจาก Task Manager มีผลตั้งแต่เปิดครั้งถัดไป";
     ToastOfferMode => "Fixes keep being taken back in {app} — {keys} to switch it to {mode}", "ใน {app} มีการย้อนคำที่แก้บ่อย กด {keys} เพื่อเปลี่ยนเป็นโหมด{mode}";
     PaletteOfferForNow => "{mode} in {app}, only this time", "ใช้โหมด{mode}ใน {app} เฉพาะครั้งนี้";
@@ -217,10 +223,12 @@ texts! {
     HintOff => "Off", "ปิด";
     HintInUse => "in use", "ใช้อยู่";
     PaletteHistoryHint => "Recent words · Space ticks more than one · Enter flips them", "คำล่าสุด · Space เลือกหลายคำ · Enter แปลงคำที่เลือก";
-    ToastSpellingFixed => "✎ Spelling: {wrong} → {right} · Backspace or Shift+Backspace puts it back", "✎ แก้คำสะกด: {wrong} → {right} · กด Backspace หรือ Shift+Backspace เพื่อคืนคำเดิม";
+    ToastSpellingFixed => "Spelling: {wrong} → {right} · Backspace or Shift+Backspace puts it back", "แก้คำสะกด: {wrong} → {right} · กด Backspace หรือ Shift+Backspace เพื่อคืนคำเดิม";
     ToastSpellingKept => "Put back as typed — “{word}” will not be changed again", "คืนคำที่พิมพ์ไว้แล้ว จะไม่แก้ “{word}” อีก";
     PaletteSpelling => "Fix common Thai misspellings", "แก้คำไทยที่สะกดผิดบ่อย";
     RowSpelling => "Fix common Thai misspellings", "แก้คำไทยที่สะกดผิดบ่อย";
+    SubSpellingShort => "Fixes about 60 common misspellings in Auto.", "แก้คำสะกดผิดที่พบบ่อยราว 60 คำ ในโหมดอัตโนมัติ";
+    InfoMore => "More information", "ข้อมูลเพิ่มเติม";
     SubSpelling => "อนุญาติ → อนุญาต and about 60 more, in Auto. Each fix is shown; Backspace right after puts it back.", "เช่น อนุญาติ → อนุญาต และอีกราว 60 คำ (โหมดอัตโนมัติ) แจ้งทุกครั้งที่แก้ กด Backspace ทันทีเพื่อคืนคำเดิม";
     PaletteFieldOff => "Off in this field", "ปิดเฉพาะช่องนี้";
     PaletteFieldOn => "On again in this field", "เปิดในช่องนี้อีกครั้ง";
@@ -255,19 +263,24 @@ texts! {
     HeadWhileTyping => "While you type", "ระหว่างพิมพ์";
     HeadStateKeys => "Keys that change how you type", "ปุ่มที่เปลี่ยนวิธีพิมพ์";
     RowAddresses => "Web addresses, email and numbers", "ที่อยู่เว็บ อีเมล และตัวเลข";
+    SubAddressesShort => "Fixes name@gmail.com, www.…, 100, 10:30.", "แก้ name@gmail.com, www.…, 100, 10:30 ให้ถูก";
     SubAddresses => "Typed with the Thai keyboard on, they come back: name@gmail.com, www.…, 100, 10:30.", "พิมพ์ตอนแป้นไทยเปิดอยู่ แก้กลับให้ เช่น name@gmail.com, www.…, 100, 10:30";
     RowComplete => "Finish long Thai words with Tab", "เติมคำไทยยาวด้วย Tab";
+    SubCompleteShort => "Shows the rest of a long word; Tab takes it.", "แสดงส่วนที่เหลือของคำยาว กด Tab เพื่อเติม";
     SubComplete => "When only one word can follow, the rest is shown next to the cursor; Tab takes it.", "เมื่อเหลือคำเดียวที่เป็นไปได้ จะแสดงส่วนที่เหลือข้างเคอร์เซอร์ กด Tab เพื่อเติม";
     RowGrave => "Grave key (`) types its character", "ปุ่มตัวหนอน (`) พิมพ์ตัวอักษร";
+    SubGraveShort => "Switch language with Alt+Shift or CapsLock.", "สลับภาษาด้วย Alt+Shift หรือ CapsLock แทน";
     SubGrave => "Instead of switching language. Switch with Alt+Shift, or let CapsLock switch it.", "แทนการสลับภาษา ใช้ Alt+Shift หรือ CapsLock สลับภาษาแทน";
     RowGuardSwitch => "Undo a language switch made by a shortcut", "เปลี่ยนภาษากลับเมื่อสลับเพราะปุ่มลัด";
+    SubGuardSwitchShort => "Puts the language back after a stray shortcut.", "เปลี่ยนภาษากลับเมื่อกดปุ่มลัดพลาด";
     SubGuardSwitch => "Ctrl/Alt + Shift + a key can switch the language by accident; it is put back.", "Ctrl/Alt + Shift + ปุ่ม อาจสลับภาษาโดยไม่ตั้งใจ RightType จะเปลี่ยนกลับให้";
     RowPasswordTag => "TH / CAPS tag at password fields", "แท็ก TH / CAPS ที่ช่องรหัสผ่าน";
+    SubPasswordTagShort => "Shows language and CapsLock at password fields.", "บอกภาษาและ CapsLock ที่ช่องรหัสผ่าน";
     SubPasswordTag => "Shows the language and CapsLock before you type a password. Nothing typed is read.", "บอกภาษาและ CapsLock ก่อนพิมพ์รหัสผ่าน ไม่อ่านสิ่งที่พิมพ์";
     RowNumLock => "Keypad with NumLock off", "แป้นตัวเลขตอน NumLock ปิด";
-    SubNumLock => "Moves the cursor instead of typing digits.", "เลื่อนเคอร์เซอร์แทนการพิมพ์ตัวเลข";
+    SubNumLock => "Moves the cursor, not digits.", "เลื่อนเคอร์เซอร์ ไม่พิมพ์ตัวเลข";
     RowInsertKey => "Insert key in text", "ปุ่ม Insert ในช่องข้อความ";
-    SubInsertKey => "Some apps then type over the next letters.", "บางแอปจะพิมพ์ทับตัวอักษรหลังเคอร์เซอร์";
+    SubInsertKey => "Some apps overtype letters.", "บางแอปพิมพ์ทับตัวอักษร";
     GuardOff => "Off", "ปิด";
     GuardWarn => "Warn", "เตือน";
     GuardFix => "Fix", "แก้ให้";
@@ -280,7 +293,7 @@ texts! {
     Clean30s => "30 seconds", "30 วินาที";
     Clean1m => "1 minute", "1 นาที";
     Clean2m => "2 minutes", "2 นาที";
-    RowLockMouse => "Lock the touchpad and mouse too", "ล็อกทัชแพดและเมาส์ด้วย";
+    RowLockMouse => "Lock touchpad and mouse", "ล็อกทัชแพดและเมาส์";
     SubLockMouse => "Then only the time unlocks it.", "เมื่อล็อกแล้วจะปลดได้เมื่อหมดเวลาเท่านั้น";
     BtnStartLock => "Lock and start", "ล็อกและเริ่มเช็ด";
     CleanStarting => "Locking in {n}…", "จะล็อกใน {n}…";
@@ -288,7 +301,6 @@ texts! {
     CleanLeft => "{t} left", "เหลือ {t}";
     CleanWiped => "{n} of {all} keys pressed", "กดไปแล้ว {n} จาก {all} ปุ่ม";
     BtnUnlock => "Unlock", "ปลดล็อก";
-    CleanMouseLocked => "The mouse is locked too: it unlocks when the time is up.", "เมาส์ถูกล็อกด้วย จะปลดล็อกเมื่อหมดเวลา";
     CleanLimits => "Fn, brightness, Wi-Fi and some laptop keys work inside the laptop itself: no program can hold them. Ctrl+Alt+Del always works.", "ปุ่ม Fn ความสว่าง Wi-Fi และปุ่มพิเศษบางปุ่มบนโน้ตบุ๊กทำงานในตัวเครื่อง ไม่มีโปรแกรมใดกันได้ · Ctrl+Alt+Del ใช้ได้เสมอ";
     CleanDone => "Done: the keyboard is unlocked", "เสร็จแล้ว ปลดล็อกคีย์บอร์ดแล้ว";
     BtnTestKeys => "Test the keys", "ทดสอบปุ่ม";
@@ -388,14 +400,19 @@ texts! {
     HeadCaret => "At the text cursor", "ที่เคอร์เซอร์";
     RowCaretList => "Tap Shift twice to search", "แตะ Shift สองครั้งเพื่อค้น";
     RowCycleChars => "Tap Right Alt to change the last character", "แตะ Right Alt เพื่อเปลี่ยนอักขระล่าสุด";
+    SubCycleCharsShort => "2 → ² → ₂ → ⅔, e → é → è. Ctrl+P pins.", "2 → ² → ₂ → ⅔, e → é → è ผูกด้วย Ctrl+P";
     SubCycleChars => "2 → ² → ₂ → ⅔, e → é → è. Pin your own from the list (Ctrl+P).", "2 → ² → ₂ → ⅔, e → é → è ผูกเพิ่มเองได้จากรายการ (Ctrl+P)";
     RowGhosts => "Offer symbols for what you type, Tab takes it", "เสนอสัญลักษณ์จากที่พิมพ์ กด Tab เพื่อใช้";
+    SubGhostsShort => "-> becomes →, != becomes ≠. Not in code editors.", "-> เป็น →  != เป็น ≠ ไม่ทำในโปรแกรมโค้ด";
     SubGhosts => "-> becomes →, != becomes ≠, x^2 becomes x². Not in code editors.", "-> เป็น →  != เป็น ≠  x^2 เป็น x² ไม่ทำในโปรแกรมเขียนโค้ด";
+    SubCaretListShort => "Search characters and snippets.", "ค้นอักขระพิเศษและคำย่อ";
     SubCaretList => "Characters and snippets. The search never lands in your text.", "อักขระพิเศษและคำย่อ พิมพ์ลงตรงที่ใช้อยู่ คำที่ค้นไม่ลงไปในข้อความ";
     HeadComfort => "On screen and comfort", "บนจอและสุขภาพมือ";
     RowShowKeys => "Show shortcuts on screen", "แสดงปุ่มลัดบนจอ";
+    SubShowKeysShort => "Ctrl+C, Alt+Tab… for teaching. Never letters.", "Ctrl+C, Alt+Tab… สำหรับสอน ไม่แสดงตัวอักษร";
     SubShowKeys => "For teaching or recording: Ctrl+C, Alt+Tab… Never letters.", "Ctrl+C, Alt+Tab, Enter… สำหรับสอนหรืออัดคลิป ไม่แสดงตัวอักษรหรือรหัสผ่าน";
     RowRest => "Remind me to rest my hands", "เตือนให้พักมือ";
+    SubRestShort => "After 50 minutes of typing with no 5-minute break.", "เมื่อพิมพ์ 50 นาทีโดยไม่พัก 5 นาที";
     SubRest => "After 50 minutes of typing with no 5-minute break. Counts only.", "เมื่อพิมพ์ต่อเนื่อง 50 นาทีโดยไม่พัก 5 นาที นับแค่จำนวน";
     RestDue => "{minutes} minutes of typing ({keys} keys) — rest your hands for a few minutes", "พิมพ์มา {minutes} นาทีแล้ว ({keys} ปุ่ม) พักมือสักครู่นะ";
     PracticeOnScreen => "Keep this keyboard on screen", "เปิดแป้นนี้ค้างไว้บนจอ";
@@ -404,7 +421,6 @@ texts! {
     PracticeDone => "Done: {speed}, {acc}", "เสร็จแล้ว: {speed} {acc}";
     PracticeBestToday => "Best today: {speed}", "ดีที่สุดวันนี้: {speed}";
     PracticeGameScore => "Score {n}", "คะแนน {n}";
-    PracticeLives => "Lives {n}", "ชีวิต {n}";
     PracticeLevel => "Level {n}", "ระดับ {n}";
     PracticeCombo => "{n} in a row", "ต่อเนื่อง {n} คำ";
     PracticeBestCombo => "Best run {n}", "ต่อเนื่องสูงสุด {n} คำ";
@@ -419,19 +435,26 @@ texts! {
     SheetNote => "Enter or a double-click uses the shortcut in the app. Esc closes.", "กด Enter หรือดับเบิลคลิกเพื่อใช้ปุ่มลัดนั้นในแอป กด Esc เพื่อปิด";
     PaletteSheet => "This app's shortcuts", "ปุ่มลัดของแอปนี้";
     RowCtrlHold => "Hold Ctrl to see the app's shortcuts", "กด Ctrl ค้างเพื่อดูปุ่มลัดของแอป";
+    SubCtrlHoldShort => "Hold Ctrl for a second, with no other key.", "กด Ctrl ค้าง 1 วินาที โดยไม่กดปุ่มอื่น";
     SubCtrlHold => "A second with no other key. The list is also in the command palette.", "ค้างไว้ 1 วินาทีโดยไม่กดปุ่มอื่น (เปิดจากเมนูคำสั่งได้ด้วย)";
     RowShortcutsEnglish => "Ctrl and Alt shortcuts in English", "ปุ่มลัด Ctrl / Alt เป็นภาษาอังกฤษ";
+    SubShortcutsEnglishShort => "Ctrl+C stays Ctrl+C with the Thai keyboard on.", "Ctrl+C ยังเป็น Ctrl+C แม้เปิดแป้นไทย";
     SubShortcutsEnglish => "With the Thai keyboard on, Ctrl+C stays Ctrl+C in web apps that read the letter.", "เมื่อแป้นไทยเปิดอยู่ Ctrl+C จะยังเป็น Ctrl+C ในเว็บแอปที่อ่านตัวอักษร";
     RowHoldAccents => "Hold a key for more characters", "กดค้างเพื่อเลือกอักขระพิเศษ";
+    SubHoldAccentsShort => "Hold . for …, e for é, a digit for a numeral.", "กดค้าง . ได้ … กด e ได้ é กดเลขได้เลขไทย";
     SubHoldAccents => "Hold . for … ·, e for é, a digit for its Thai numeral, then press a number.", "กดค้าง . ได้ … · กดค้าง e ได้ é กดค้างตัวเลขได้เลขไทย แล้วกดเลขเพื่อเลือก";
     RowScanner => "Barcode scanners", "เครื่องสแกนบาร์โค้ด";
+    SubScannerShort => "A scan comes back as its digits and letters.", "ค่าที่สแกนกลับเป็นตัวเลขและตัวอักษรเดิม";
     SubScanner => "With the Thai keyboard on, a scan comes back as its digits and letters.", "เมื่อแป้นไทยเปิดอยู่ ค่าที่สแกนจะกลับเป็นตัวเลขและตัวอักษรเดิม";
     RowFakeKeyboard => "Block fake keyboards", "กันคีย์บอร์ดปลอม";
+    SubFakeKeyboardShort => "Holds back a device typing faster than a hand.", "กันอุปกรณ์ที่พิมพ์เร็วเกินมือคน";
     SubFakeKeyboard => "A device typing into the Run box faster than any hand is held back.", "อุปกรณ์ที่พิมพ์ลงช่อง Run เร็วเกินมือคนจะถูกกันไว้ รวมถึง Enter";
     ToastFakeKeyboard => "A device typed into the Run box faster than any hand: its keys, Enter included, were held back. Close that box if you did not mean it.", "มีอุปกรณ์พิมพ์ลงช่อง Run เร็วเกินมือคน RightType กันปุ่มไว้แล้วรวมถึง Enter ถ้าไม่ได้ตั้งใจให้ปิดหน้าต่างนั้น";
-    NavLearned => "Learned words", "คำที่เรียนรู้";
-    NavBlocked => "Apps", "แอป";
-    NavAbout => "Privacy & about", "ความเป็นส่วนตัว";
+    BrandTagline => "Type in the right layout automatically", "พิมพ์ถูกแป้น ไม่ต้องสลับเอง";
+    NavLearned => "Learned words", "คำที่จำไว้";
+    NavBlocked => "Ignored apps", "แอปที่ไม่ใช้";
+    NavAbout => "Privacy", "ความเป็นส่วนตัว";
+    NavSponsor => "Support", "สนับสนุน";
     HeadMode => "Correction mode", "วิธีแก้คำ";
     DescAuto => "Fixes words as you type — Thai as soon as your keys spell a Thai word, English when you press Space.", "แก้ให้ทันทีขณะพิมพ์ — เป็นภาษาไทยทันทีที่ปุ่มที่กดสะกดเป็นคำไทย และเป็นภาษาอังกฤษเมื่อกดเว้นวรรค";
     DescSuggest => "Shows the fix in a small hint next to the cursor. Press Tab (or Alt+CapsLock) to use it.", "แสดงคำที่ถูกเป็นคำแนะนำเล็ก ๆ ข้างเคอร์เซอร์ กด Tab (หรือ Alt+CapsLock) เพื่อใช้คำนั้น";
@@ -442,8 +465,10 @@ texts! {
     RowStartup => "Start with Windows", "เปิดพร้อม Windows";
     SubStartup => "Runs quietly in the notification area when you sign in.", "ทำงานเงียบ ๆ ที่มุมจอเมื่อเข้าสู่ระบบ";
     RowLearn => "Learn new words", "เรียนรู้คำใหม่";
+    SubLearnShort => "Remembers words you keep, on this PC only.", "จำคำที่คุณใช้บ่อย เก็บในเครื่องนี้เท่านั้น";
     SubLearn => "Remembers words you type often or put back. Saved on this PC only.", "จำคำที่คุณพิมพ์บ่อยหรือแก้กลับ บันทึกไว้ในเครื่องนี้เท่านั้น";
     RowCaret => "Hints at the text cursor", "แสดงป้ายข้างเคอร์เซอร์";
+    SubCaretShort => "A TH / EN tag at the cursor, and Suggest hints.", "ป้าย TH / EN ข้างเคอร์เซอร์ และคำแนะนำ";
     SubCaret => "A TH / EN tag when the language switches, and Suggest hints (Tab to use).", "ป้าย TH / EN เมื่อสลับภาษา และคำแนะนำ (กด Tab เพื่อใช้)";
     LearnedCount => "Learned words: {n}", "คำที่เรียนรู้แล้ว: {n}";
     BtnEditLearned => "Edit…", "แก้ไข…";
@@ -549,15 +574,13 @@ texts! {
     ErrClipboardTooLong => "The copied text is too long to type (over {n} characters)", "ข้อความที่คัดลอกยาวเกินจะพิมพ์ (เกิน {n} ตัวอักษร)";
     ToastEnterHeld => "Not sent: it looks typed on the wrong keyboard · Enter sends it anyway · Shift+Backspace fixes", "ยังไม่ส่ง: ดูเหมือนพิมพ์ผิดแป้น · กด Enter อีกครั้งเพื่อส่ง · Shift+Backspace เพื่อแก้";
     PalettePause => "Pause for 30 minutes", "หยุดชั่วคราว 30 นาที";
-    PaletteAppOff => "Turn off in {app}", "ปิดใน {app}";
-    PaletteAppOn => "Turn back on in {app}", "เปิดกลับใน {app}";
     HkFlip => "Fix or flip back the last word", "แก้หรือสลับคำล่าสุดกลับ";
     HkSelection => "Convert the selected text", "แปลงข้อความที่เลือก";
     HkCycle => "Switch correction mode", "สลับโหมดการแก้คำ";
     HkUndo => "Undo the last fix", "ย้อนการแก้ล่าสุด";
     HkAccept => "Use the suggestion", "ใช้คำแนะนำ";
     HkPanic => "Turn RightType off / on", "ปิด / เปิด RightType";
-    LearnedIntro => "RightType treats these as real words and never converts them. One word per line, Thai or English — delete a line to forget that word.", "RightType ถือว่าคำเหล่านี้เป็นคำจริงและจะไม่แปลงเลย หนึ่งคำต่อบรรทัด ภาษาไทยหรืออังกฤษก็ได้ — ลบบรรทัดออกเพื่อให้ลืมคำนั้น";
+    LearnedIntro => "Words exempt from automatic conversion (one word per line).", "รายการคำศัพท์ที่ยกเว้นการแปลงภาษา (หนึ่งคำต่อบรรทัด)";
     BtnSaveLearned => "Save", "บันทึก";
     BtnClearAll => "Clear all", "ล้างทั้งหมด";
     BtnImport => "Import…", "นำเข้า…";
@@ -573,28 +596,34 @@ texts! {
     FileFilter => "Text files (*.txt)", "ไฟล์ข้อความ (*.txt)";
     LearnedSaved => "Saved {n} words.", "บันทึก {n} คำแล้ว";
     LearnedSkipped => "Saved {n} words. Skipped {k} lines that are not a single word.", "บันทึก {n} คำแล้ว ข้าม {k} บรรทัดที่ไม่ใช่คำเดียว";
-    HeadBlocked => "Blocked apps", "แอปที่ไม่ทำงาน";
-    HeadAppModes => "Mode per app", "โหมดของแต่ละแอป";
-    AppModesIntro => "One app per line: name.exe = auto, suggest, manual or off. Quicker: tray menu → In this app.", "หนึ่งแอปต่อบรรทัด: ชื่อ.exe = auto, suggest, manual หรือ off หรือตั้งจากเมนูที่ถาดไอคอน → ในแอปนี้";
     AppsSaved => "Saved.", "บันทึกแล้ว";
     RowPredict => "Guess each field's language", "เดาภาษาของแต่ละช่อง";
+    SubPredictShort => "Switches language as you click into a field.", "สลับภาษาเมื่อคลิกเข้าช่องที่ใช้ภาษาเดียว";
     SubPredict => "Switches language as you click into a field you use for one. Counts only.", "สลับภาษาให้เมื่อคลิกเข้าช่องที่ใช้ภาษาเดียว เก็บแค่จำนวนคำ";
     BtnClearHabits => "Clear", "ล้าง";
     ToastHabitsCleared => "Field habits cleared", "ล้างข้อมูลการเดาภาษาแล้ว";
-    AppsSkipped => "Saved. Skipped {k} lines that are not name.exe = mode.", "บันทึกแล้ว ข้าม {k} บรรทัดที่ไม่ใช่รูปแบบ ชื่อ.exe = โหมด";
-    BlockedAlways => "RightType always stays out of password fields, terminals, password managers, crypto wallets, remote desktops and virtual machines, and full-screen games.", "RightType ไม่ทำงานในช่องรหัสผ่าน เทอร์มินัล โปรแกรมจัดการรหัสผ่าน กระเป๋าคริปโต รีโมตเดสก์ท็อปและเครื่องเสมือน และเกมเต็มจอเสมอ";
-    BlockedAdd => "Also stay out of these apps — one program name per line, for example notepad.exe:", "ไม่ทำงานในแอปเหล่านี้ด้วย — หนึ่งชื่อโปรแกรมต่อบรรทัด เช่น notepad.exe:";
-    BtnSaveList => "Save list", "บันทึกรายการ";
+    BlockedAlways => "RightType stays out of password fields, terminals, wallets, and full-screen games automatically.", "RightType ยกเว้นช่องรหัสผ่าน, เทอร์มินัล, กระเป๋าคริปโต และเกมเต็มจอโดยอัตโนมัติ";
     HeadPrivacy => "Privacy", "ความเป็นส่วนตัว";
-    Privacy1 => "Nothing you type is written to disk.", "สิ่งที่คุณพิมพ์ไม่ถูกบันทึกลงดิสก์";
-    Privacy2 => "No internet access — RightType never connects to a network.", "ไม่ใช้อินเทอร์เน็ต — RightType ไม่เชื่อมต่อเครือข่ายเลย";
-    Privacy3 => "Seed phrases, private keys and passwords are recognised and left alone.", "จดจำ seed phrase คีย์ส่วนตัว และรหัสผ่านได้ และจะไม่แตะต้อง";
-    Privacy4 => "The word being typed is kept in memory only, and wiped at every space.", "คำที่กำลังพิมพ์อยู่ในหน่วยความจำเท่านั้น และถูกล้างทุกครั้งที่เว้นวรรค";
-    HeadAbout => "About", "เกี่ยวกับ";
-    AboutVersion => "RightType {v}", "RightType {v}";
-    AboutLicense => "Free and open source — MIT or Apache-2.0. Manoonchai layout © Manassarn Manoonchai (MIT).", "ฟรีและโอเพนซอร์ส — MIT หรือ Apache-2.0 · แป้นมนูญชัย © Manassarn Manoonchai (MIT)";
+    PrivacyLicense => "Free software under MIT or Apache-2.0", "ซอฟต์แวร์ฟรี ภายใต้ MIT หรือ Apache-2.0";
+    Privacy1 => "Never connects to the internet", "ไม่ต่ออินเทอร์เน็ต";
+    SubPrivacy1 => "Everything runs locally. No data is ever sent out.", "ทุกอย่างทำงานบนเครื่องคุณ ไม่มีการส่งข้อมูลออก";
+    Privacy2 => "Keeps no typed text", "ไม่เก็บข้อความที่พิมพ์";
+    SubPrivacy2 => "Password fields and protected apps are bypassed.", "ช่องรหัสผ่านและแอปที่อยู่ในรายการป้องกันจะถูกข้าม";
+    Privacy3 => "Clear remembered data anytime", "ล้างข้อมูลที่จำไว้ได้ทุกเมื่อ";
+    SubPrivacy3 => "View and manage in the “Learned words” page.", "ดูและลบได้ที่หน้า “คำที่จำไว้”";
+    HeadUpdates => "Updates", "อัปเดต";
+    AboutUpdates => "Open download page in browser (app never connects).", "เปิดหน้าดาวน์โหลดบนเว็บเบราว์เซอร์ (ตัวแอปไม่ต่อเน็ต)";
     BtnCheckUpdates => "Check for updates", "ตรวจสอบอัปเดต";
-    AboutUpdates => "Opens the download page in your browser. RightType itself never goes online.", "เปิดหน้าดาวน์โหลดในเบราว์เซอร์ ตัว RightType เองไม่ต่ออินเทอร์เน็ต";
+    AboutVersion => "RightType {v}", "RightType {v}";
+    HeadSponsor => "Support RightType", "สนับสนุน RightType";
+    SponsorFreeHead => "Free and open source", "แอปนี้ฟรีและเปิดซอร์ส";
+    SponsorFreeSub => "If this tool helps your workflow, feel free to support a coffee. Every feature remains 100% free as always.", "หาก RightType ช่วยให้คุณทำงานสะดวกขึ้น สามารถร่วมสนับสนุนค่ากาแฟได้ตามสะดวก โดยทุกฟีเจอร์ใช้งานฟรี 100% เสมอ";
+    SponsorChannelHead => "Support options", "ช่องทางสนับสนุน";
+    SponsorLnDesc => "Lightning Network · small tips, instant, low fee", "Lightning Network · ทิปเล็กน้อย โอนไว ค่าธรรมเนียมต่ำ";
+    SponsorBtcDesc => "Bitcoin on-chain · for larger amounts", "Bitcoin on-chain · สำหรับยอดใหญ่";
+    SponsorQrNote => "QR generated locally. App never connects and does not check balances.", "QR สร้างในเครื่อง RightType ไม่ต่อเน็ตและไม่เช็คยอดเงิน";
+    BtnGitHub => "GitHub", "GitHub";
+    VersionLabel => "Version {v}", "เวอร์ชัน {v}";
     BtnClose => "Close", "ปิด";
 
     // Welcome / help window.
@@ -679,6 +708,7 @@ mod tests {
             T::WelcomeExample,
             T::PaletteHead,
             T::LessonShift,
+            T::BtnGitHub,
         ];
         for key in T::ALL {
             if SAME.contains(key) {

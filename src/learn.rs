@@ -178,10 +178,10 @@ pub fn load() {
 
 /// Add a word to whichever live dictionary its script belongs to.
 fn teach(word: &str) -> bool {
-    if eligible_shape(word) {
+    if eligible_explicit_shape(word) {
         dict::english().learn(word);
         true
-    } else if eligible_thai_shape(word) {
+    } else if eligible_explicit_thai_shape(word) {
         dict::thai().learn(word);
         true
     } else {
@@ -326,6 +326,53 @@ fn eligible_thai_shape(word: &str) -> bool {
         && word.chars().all(|c| ('\u{0E01}'..='\u{0E5B}').contains(&c))
 }
 
+fn eligible_explicit_shape(word: &str) -> bool {
+    let len = word.chars().count();
+    (2..=32).contains(&len)
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && !secret::is_secret_token(word)
+}
+
+fn eligible_explicit_thai_shape(word: &str) -> bool {
+    let len = word.chars().count();
+    (2..=32).contains(&len) && word.chars().all(|c| ('\u{0E01}'..='\u{0E5B}').contains(&c))
+}
+
+/// Explicitly learn a new word from the typist (Quick Panel or Settings).
+/// Takes effect at once regardless of whether auto-learning is enabled.
+pub fn add_explicit(word: &str) -> Result<String, &'static str> {
+    let key = explicit_key(word)?;
+
+    PENDING.lock().unwrap().remove(&key);
+    commit(&key);
+    Ok(key)
+}
+
+/// The word as it would be learned, or why it cannot be.
+fn explicit_key(word: &str) -> Result<String, &'static str> {
+    let clean = word
+        .trim()
+        .trim_matches(|c: char| c.is_ascii_punctuation() || c.is_whitespace());
+    if clean.is_empty() {
+        return Err("Word is empty");
+    }
+    if eligible_explicit_shape(clean) {
+        Ok(clean.to_ascii_lowercase())
+    } else if eligible_explicit_thai_shape(clean) {
+        Ok(clean.to_string())
+    } else {
+        Err("Invalid characters or length")
+    }
+}
+
+/// The word `add_explicit` would learn from `selection`, when it is one
+/// (the palette offers "Add a word" only then).
+pub fn explicit_candidate(selection: &str) -> Option<String> {
+    explicit_key(selection).ok()
+}
+
 /// Every learned word, sorted, for the Settings editor.
 pub fn list() -> Vec<String> {
     let mut words: Vec<String> = LEARNED
@@ -354,9 +401,9 @@ pub fn replace(lines: &[String]) -> Replaced {
     let mut kept: Vec<String> = Vec::new();
     let mut skipped = 0;
     for line in lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty()) {
-        let word = if eligible_shape(line) {
+        let word = if eligible_explicit_shape(line) {
             line.to_ascii_lowercase()
-        } else if eligible_thai_shape(line) {
+        } else if eligible_explicit_thai_shape(line) {
             line.to_string()
         } else {
             skipped += 1;
@@ -454,7 +501,31 @@ fn persist_word(word: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{eligible_shape, eligible_thai_shape};
+    use super::{eligible_shape, eligible_thai_shape, explicit_candidate};
+
+    #[test]
+    fn a_selection_is_offered_only_when_it_is_one_word_to_learn() {
+        assert_eq!(
+            explicit_candidate("Kubernetes").as_deref(),
+            Some("kubernetes")
+        );
+        assert_eq!(
+            explicit_candidate("  tokenizer, ").as_deref(),
+            Some("tokenizer")
+        );
+        assert_eq!(explicit_candidate("ไลน์").as_deref(), Some("ไลน์"));
+        for denied in [
+            "",
+            "   ",
+            "a",
+            "two words",
+            "P@ssw0rd123",
+            "a line\nof text",
+            "ไลน์ x",
+        ] {
+            assert!(explicit_candidate(denied).is_none(), "{denied:?}");
+        }
+    }
 
     #[test]
     fn thai_learning_shape_is_thai_letters_only() {
@@ -481,5 +552,20 @@ mod tests {
                 "unexpected learning candidate: {denied}"
             );
         }
+    }
+
+    #[test]
+    fn explicit_word_learning_allows_slang_and_short_words() {
+        use super::{add_explicit, eligible_explicit_shape, eligible_explicit_thai_shape};
+        assert!(eligible_explicit_shape("ai"));
+        assert!(eligible_explicit_shape("gpt4"));
+        assert!(eligible_explicit_shape("nextjs"));
+        assert!(eligible_explicit_thai_shape("ต๊าช"));
+        assert!(eligible_explicit_thai_shape("จึ้ง"));
+
+        let res = add_explicit("  Turbopack  ");
+        assert_eq!(res, Ok("turbopack".to_string()));
+        let res_th = add_explicit("จึ้ง");
+        assert_eq!(res_th, Ok("จึ้ง".to_string()));
     }
 }
