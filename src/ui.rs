@@ -47,9 +47,10 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::Graphics::GdiPlus::{
     FillModeAlternate, GdipAddPathArc, GdipClosePathFigure, GdipCreateFromHDC, GdipCreatePath,
     GdipCreatePen1, GdipCreateSolidFill, GdipDeleteBrush, GdipDeleteGraphics, GdipDeletePath,
-    GdipDeletePen, GdipDrawPath, GdipFillEllipse, GdipFillPath, GdipSetPixelOffsetMode,
-    GdipSetSmoothingMode, GdiplusStartup, GdiplusStartupInput, GpBrush, GpGraphics, GpPath, GpPen,
-    GpSolidFill, PixelOffsetModeHalf, SmoothingModeAntiAlias, UnitPixel,
+    GdipDeletePen, GdipDrawLine, GdipDrawPath, GdipFillEllipse, GdipFillPath, GdipSetPenEndCap,
+    GdipSetPenStartCap, GdipSetPixelOffsetMode, GdipSetSmoothingMode, GdiplusStartup,
+    GdiplusStartupInput, GpBrush, GpGraphics, GpPath, GpPen, GpSolidFill, LineCapRound,
+    PixelOffsetModeHalf, SmoothingModeAntiAlias, UnitPixel,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
@@ -708,6 +709,104 @@ fn gdiplus() -> bool {
     })
 }
 
+/// A table's column header is a control of its own. The theme draws its
+/// text in a dim grey, so the header is painted here (`header_proc`) in the
+/// interface colours. Safe to call again for the same table.
+fn theme_table_header(table: HWND) {
+    const LVM_GETHEADER: u32 = 0x101F;
+    unsafe {
+        let header = SendMessageW(table, LVM_GETHEADER, WPARAM(0), LPARAM(0));
+        if header.0 != 0 {
+            let _ = windows::Win32::UI::Shell::SetWindowSubclass(
+                HWND(header.0 as *mut c_void),
+                Some(header_proc),
+                1,
+                0,
+            );
+        }
+    }
+}
+
+unsafe extern "system" fn header_proc(
+    hwnd: HWND,
+    msg: u32,
+    w: WPARAM,
+    l: LPARAM,
+    _id: usize,
+    _data: usize,
+) -> LRESULT {
+    use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
+    use windows::Win32::UI::Controls::{HDITEMW, HDI_TEXT};
+    const WM_ERASEBKGND: u32 = 0x0014;
+    const WM_PAINT: u32 = 0x000F;
+    const HDM_GETITEMCOUNT: u32 = 0x1200;
+    const HDM_GETITEMRECT: u32 = 0x1207;
+    const HDM_GETITEMW: u32 = 0x120B;
+    match msg {
+        WM_ERASEBKGND => LRESULT(1),
+        WM_PAINT => {
+            let mut ps = PAINTSTRUCT::default();
+            let hdc = BeginPaint(hwnd, &mut ps);
+            let mut client = RECT::default();
+            let _ = GetClientRect(hwnd, &mut client);
+            let p = pal();
+            fill(hdc, client, p.surface);
+            let font = make_font(14, 400);
+            let count = SendMessageW(hwnd, HDM_GETITEMCOUNT, WPARAM(0), LPARAM(0))
+                .0
+                .max(0);
+            for i in 0..count as usize {
+                let mut rc = RECT::default();
+                SendMessageW(
+                    hwnd,
+                    HDM_GETITEMRECT,
+                    WPARAM(i),
+                    LPARAM(&mut rc as *mut _ as isize),
+                );
+                let mut buf = [0u16; 128];
+                let mut item = HDITEMW {
+                    mask: HDI_TEXT,
+                    pszText: windows::core::PWSTR(buf.as_mut_ptr()),
+                    cchTextMax: buf.len() as i32,
+                    ..Default::default()
+                };
+                SendMessageW(
+                    hwnd,
+                    HDM_GETITEMW,
+                    WPARAM(i),
+                    LPARAM(&mut item as *mut _ as isize),
+                );
+                let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+                let title = String::from_utf16_lossy(&buf[..len]);
+                fill(
+                    hdc,
+                    RECT {
+                        left: rc.right - 1,
+                        ..rc
+                    },
+                    p.border,
+                );
+                text(
+                    hdc,
+                    &title,
+                    RECT {
+                        left: rc.left + px(6),
+                        right: rc.right - px(4),
+                        ..rc
+                    },
+                    font,
+                    p.text,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                );
+            }
+            let _ = DeleteObject(HGDIOBJ(font.0));
+            let _ = EndPaint(hwnd, &ps);
+            LRESULT(0)
+        }
+        _ => windows::Win32::UI::Shell::DefSubclassProc(hwnd, msg, w, l),
+    }
+}
+
 /// Anti-aliased shapes on one device context.
 pub struct Gfx {
     g: *mut GpGraphics,
@@ -784,6 +883,24 @@ impl Gfx {
             GdipDrawPath(self.g, pen, path);
             GdipDeletePen(pen);
             GdipDeletePath(path);
+        }
+    }
+
+    /// A check mark drawn as two rounded strokes inside `rc`: a font's own
+    /// "✓" reads as a "V" at this size.
+    pub fn check_mark(&self, rc: RECT, color: Rgb) {
+        let (x, y) = (rc.left as f32, rc.top as f32);
+        let (w, h) = ((rc.right - rc.left) as f32, (rc.bottom - rc.top) as f32);
+        let at = |fx: f32, fy: f32| (x + w * fx, y + h * fy);
+        let (a, b, c) = (at(0.27, 0.52), at(0.43, 0.68), at(0.74, 0.34));
+        unsafe {
+            let mut pen: *mut GpPen = std::ptr::null_mut();
+            GdipCreatePen1(argb(color), (h * 0.11).max(1.5), UnitPixel, &mut pen);
+            GdipSetPenStartCap(pen, LineCapRound);
+            GdipSetPenEndCap(pen, LineCapRound);
+            GdipDrawLine(self.g, pen, a.0, a.1, b.0, b.1);
+            GdipDrawLine(self.g, pen, b.0, b.1, c.0, c.1);
+            GdipDeletePen(pen);
         }
     }
 
@@ -2174,6 +2291,7 @@ impl Surface {
             if is_dark() {
                 let theme: Vec<u16> = "DarkMode_Explorer\0".encode_utf16().collect();
                 let _ = SetWindowTheme(hwnd, PCWSTR(theme.as_ptr()), PCWSTR::null());
+                theme_table_header(hwnd);
             }
             for (i, (title, width)) in columns.iter().enumerate() {
                 let mut text: Vec<u16> = format!("{title}\0").encode_utf16().collect();
@@ -2391,6 +2509,9 @@ impl Surface {
             let show = c.page == 0 || c.page == page;
             unsafe {
                 let _ = ShowWindow(c.hwnd, if show { SW_SHOW } else { SW_HIDE });
+            }
+            if show && matches!(c.kind, Kind::Table) && is_dark() {
+                theme_table_header(c.hwnd);
             }
         }
         unsafe {

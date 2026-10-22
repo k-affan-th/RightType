@@ -16,6 +16,22 @@
 /// - the private-use glyphs of old Thai fonts (U+F700–U+F71A) for the
 ///   letters and marks they draw.
 pub fn normalize(input: &str) -> String {
+    // One pass moves a mark past one neighbour; a run of misplaced marks
+    // needs another, so go on until nothing changes. Every pass that changes
+    // something moves a mark closer to its place, so one pass per character
+    // is always enough.
+    let mut text = normalize_pass(input);
+    for _ in 0..input.chars().count() {
+        let next = normalize_pass(&text);
+        if next == text {
+            break;
+        }
+        text = next;
+    }
+    text
+}
+
+fn normalize_pass(input: &str) -> String {
     let chars: Vec<char> = input.chars().map(from_private_use).collect();
     let mut out: Vec<char> = Vec::with_capacity(chars.len());
     let mut i = 0;

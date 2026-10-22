@@ -17,7 +17,7 @@
 //!
 //! The work here is tiny (a `ToUnicodeEx` call + two hashed dictionary lookups +
 //! a small `SendInput`), so the callback stays far under the `LowLevelHooksTimeout`
-//! that evicts slow hooks — see `docs/PLAN.md`, Bug 1. We also ignore our own
+//! that evicts slow hooks — see `docs/archive/PLAN.md`, Bug 1. We also ignore our own
 //! injected events (tagged in `dwExtraInfo`, plus `LLKHF_INJECTED`) so a
 //! correction can never feed back into itself.
 
@@ -3375,10 +3375,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
                 );
             } else if done && !caps_accident && crate::caret::is_enabled() {
                 // The first few fixes of a session show how to take one back.
-                if UNDO_TIPS_LEFT
+                // `try_update` replaces `fetch_update` only on newer toolchains.
+                #[allow(deprecated)]
+                let tip_due = UNDO_TIPS_LEFT
                     .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
-                    .is_ok()
-                {
+                    .is_ok();
+                if tip_due {
                     crate::overlay::badge_at_caret(righttype::i18n::tr(
                         righttype::i18n::T::TipShiftBackspace,
                     ));

@@ -13,6 +13,12 @@ import tempfile
 import time
 from pathlib import Path
 
+import sys
+from pathlib import Path
+
+# The probes sit one folder below `lib.py` and `matrix.py`.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import lib
 from lib import (
     close_app,
@@ -26,7 +32,7 @@ from lib import (
 )
 
 sys.stdout.reconfigure(encoding="utf-8")
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent
 
 p = argparse.ArgumentParser()
 p.add_argument("--app", choices=["notepad", "edge", "chrome"], default="notepad")

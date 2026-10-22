@@ -1,7 +1,7 @@
 # RightType Dynamic Execution Plan
 
 > เอกสารนี้เป็น **source of truth สำหรับการลงมือทำงานปัจจุบัน**
-> ส่วน [PLAN.md](PLAN.md) เก็บ vision, architecture และประวัติการวางแผนระยะยาว
+> ส่วน [PLAN.md](archive/PLAN.md) เก็บ vision, architecture และประวัติการวางแผนระยะยาว
 
 ## Current control panel
 

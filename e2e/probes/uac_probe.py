@@ -5,12 +5,18 @@ import sys
 import time
 from pathlib import Path
 
+import sys
+from pathlib import Path
+
+# The probes sit one folder below `lib.py` and `matrix.py`.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import matrix as m
 import lib
 from pywinauto import mouse as _mouse
 
 sys.stdout.reconfigure(encoding="utf-8")
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent
 LOG = HERE / "rt_stderr.log"
 
 

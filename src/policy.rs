@@ -216,7 +216,11 @@ pub fn detect_token(
                 .or_else(|| thai_layout_compound(token, th))
                 .or_else(|| thai_layout_technical(token, en, th))
                 .or_else(|| thai_layout_trailing_mark(token, th))
-                .or_else(|| (!is_thai).then(|| thai_layout_mixed_token(token, en, th)).flatten())
+                .or_else(|| {
+                    (!is_thai)
+                        .then(|| thai_layout_mixed_token(token, en, th))
+                        .flatten()
+                })
         }
     }
 }
@@ -513,22 +517,132 @@ fn thai_layout_compound(token: &str, th: &Dictionary) -> Option<Detection> {
 fn is_common_acronym(s: &str) -> bool {
     matches!(
         s,
-        "AI" | "API" | "APP" | "ATM" | "AWS" | "BIOS" | "CDN" | "CEO" | "CLI"
-            | "CORS" | "CPU" | "CRM" | "CSS" | "CSV" | "DAO" | "DNS" | "DOM"
-            | "DTO" | "EMS" | "ERP" | "ETF" | "FAQ" | "FTP" | "GCC" | "GDP"
-            | "GDPR" | "GIF" | "GIS" | "GPS" | "GPU" | "GUI" | "HDD" | "HDMI"
-            | "HTML" | "HTTP" | "HTTPS" | "IDE" | "IMAP" | "IOS" | "IOT" | "IPO"
-            | "ISBN" | "ISP" | "JPEG" | "JPG" | "JSON" | "JWT" | "KFC" | "KPI"
-            | "LAN" | "LCD" | "LED" | "LINE" | "LLM" | "LTE" | "MAC" | "MIME"
-            | "MVC" | "MVP" | "NAS" | "NFC" | "NLP" | "NPM" | "NVME" | "OCR"
-            | "OEM" | "OLED" | "ORM" | "OTP" | "PDF" | "PDPA" | "PHP" | "PIN"
-            | "PNG" | "POS" | "PWA" | "QHD" | "RAM" | "REST" | "RGB" | "ROI"
-            | "ROM" | "RPC" | "RSS" | "SDK" | "SEO" | "SIM" | "SLA" | "SMB"
-            | "SMS" | "SMTP" | "SOAP" | "SQL" | "SSD" | "SSH" | "SSL" | "SSO"
-            | "SVG" | "TCP" | "TLS" | "TOML" | "TTL" | "UDP" | "UEFI" | "UHD"
-            | "URL" | "URI" | "USB" | "UTF" | "UUID" | "VAT" | "VGA" | "VIP"
-            | "VLAN" | "VM" | "VPN" | "VRAM" | "VSC" | "WAN" | "WASM" | "WEB"
-            | "WIFI" | "WSL" | "WWW" | "XML" | "YAML" | "ZIP"
+        "AI" | "API"
+            | "APP"
+            | "ATM"
+            | "AWS"
+            | "BIOS"
+            | "CDN"
+            | "CEO"
+            | "CLI"
+            | "CORS"
+            | "CPU"
+            | "CRM"
+            | "CSS"
+            | "CSV"
+            | "DAO"
+            | "DNS"
+            | "DOM"
+            | "DTO"
+            | "EMS"
+            | "ERP"
+            | "ETF"
+            | "FAQ"
+            | "FTP"
+            | "GCC"
+            | "GDP"
+            | "GDPR"
+            | "GIF"
+            | "GIS"
+            | "GPS"
+            | "GPU"
+            | "GUI"
+            | "HDD"
+            | "HDMI"
+            | "HTML"
+            | "HTTP"
+            | "HTTPS"
+            | "IDE"
+            | "IMAP"
+            | "IOS"
+            | "IOT"
+            | "IPO"
+            | "ISBN"
+            | "ISP"
+            | "JPEG"
+            | "JPG"
+            | "JSON"
+            | "JWT"
+            | "KFC"
+            | "KPI"
+            | "LAN"
+            | "LCD"
+            | "LED"
+            | "LINE"
+            | "LLM"
+            | "LTE"
+            | "MAC"
+            | "MIME"
+            | "MVC"
+            | "MVP"
+            | "NAS"
+            | "NFC"
+            | "NLP"
+            | "NPM"
+            | "NVME"
+            | "OCR"
+            | "OEM"
+            | "OLED"
+            | "ORM"
+            | "OTP"
+            | "PDF"
+            | "PDPA"
+            | "PHP"
+            | "PIN"
+            | "PNG"
+            | "POS"
+            | "PWA"
+            | "QHD"
+            | "RAM"
+            | "REST"
+            | "RGB"
+            | "ROI"
+            | "ROM"
+            | "RPC"
+            | "RSS"
+            | "SDK"
+            | "SEO"
+            | "SIM"
+            | "SLA"
+            | "SMB"
+            | "SMS"
+            | "SMTP"
+            | "SOAP"
+            | "SQL"
+            | "SSD"
+            | "SSH"
+            | "SSL"
+            | "SSO"
+            | "SVG"
+            | "TCP"
+            | "TLS"
+            | "TOML"
+            | "TTL"
+            | "UDP"
+            | "UEFI"
+            | "UHD"
+            | "URL"
+            | "URI"
+            | "USB"
+            | "UTF"
+            | "UUID"
+            | "VAT"
+            | "VGA"
+            | "VIP"
+            | "VLAN"
+            | "VM"
+            | "VPN"
+            | "VRAM"
+            | "VSC"
+            | "WAN"
+            | "WASM"
+            | "WEB"
+            | "WIFI"
+            | "WSL"
+            | "WWW"
+            | "XML"
+            | "YAML"
+            | "ZIP"
     )
 }
 
@@ -543,8 +657,7 @@ fn is_well_formed_thai_chunk(s: &str, th: &Dictionary) -> bool {
         && matches!(first, '\u{0E01}'..='\u{0E2E}' | '\u{0E40}'..='\u{0E44}')
         && s.chars().all(|c| ('\u{0E01}'..='\u{0E4E}').contains(&c))
         && !is_unfinished_thai(s)
-        && (th.contains(s)
-            || (segment::is_fully_known(s, th) && !only_short_thai_words(s, th)))
+        && (th.contains(s) || (segment::is_fully_known(s, th) && !only_short_thai_words(s, th)))
 }
 
 /// Number of characters in `s` that the Thai segmenter leaves unknown.
@@ -619,10 +732,7 @@ fn thai_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Opt
             }
         }
         // Wrong-layout English prefix + Thai tail (`KFCอร่อยมาก`, `reportสรุปผล`).
-        if !th.contains(head)
-            && tail.chars().count() >= 3
-            && is_well_formed_thai_chunk(tail, th)
-        {
+        if !th.contains(head) && tail.chars().count() >= 3 && is_well_formed_thai_chunk(tail, th) {
             let en_head = th_to_en(head);
             let is_acro = !segment::is_fully_known(head, th)
                 && en_head.len() >= 3
@@ -670,9 +780,7 @@ fn us_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Optio
         }
         // Wrong-layout Thai prefix + English tail (`dboKFC`, `.=hAPI`, `lj'report`).
         let thai_head = en_to_th(head);
-        if is_well_formed_thai_chunk(&thai_head, th)
-            && !en.contains(&head.to_ascii_lowercase())
-        {
+        if is_well_formed_thai_chunk(&thai_head, th) && !en.contains(&head.to_ascii_lowercase()) {
             let is_acro = tail.len() >= 3
                 && tail.chars().all(|c| c.is_ascii_uppercase())
                 && is_common_acronym(tail)
@@ -693,9 +801,7 @@ fn us_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Optio
         }
         // English prefix + wrong-layout Thai tail (`KFCvijkp,kd`, `APIit[[`, `reportli6xz]`).
         let thai_tail = en_to_th(tail);
-        if is_well_formed_thai_chunk(&thai_tail, th)
-            && !en.contains(&tail.to_ascii_lowercase())
-        {
+        if is_well_formed_thai_chunk(&thai_tail, th) && !en.contains(&tail.to_ascii_lowercase()) {
             let is_acro = head.len() >= 3
                 && head.chars().all(|c| c.is_ascii_uppercase())
                 && is_common_acronym(head)
@@ -898,7 +1004,9 @@ pub fn live_decision(
     if layout != Some(InputLayout::UsQwerty)
         || d.confidence != detect::Confidence::High
         || token.chars().count() < MIN_LIVE_COMMIT_CHARS
-        || d.corrected.chars().any(|c| c.is_ascii_whitespace() || c.is_ascii_alphabetic())
+        || d.corrected
+            .chars()
+            .any(|c| c.is_ascii_whitespace() || c.is_ascii_alphabetic())
     {
         return LiveDecision::None;
     }
@@ -1428,9 +1536,13 @@ mod tests {
             Some("กินKFC")
         );
         assert_eq!(
-            revise_converted(&format!("ส่งไฟล์{}", crate::layout::en_to_th("report")), en, th)
-                .map(|d| d.corrected)
-                .as_deref(),
+            revise_converted(
+                &format!("ส่งไฟล์{}", crate::layout::en_to_th("report")),
+                en,
+                th
+            )
+            .map(|d| d.corrected)
+            .as_deref(),
             Some("ส่งไฟล์report")
         );
         // Typed on US layout:
