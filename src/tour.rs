@@ -21,7 +21,7 @@ use windows::core::PCWSTR;
 use windows::Win32::Foundation::{BOOL, COLORREF, HWND, LPARAM, POINT, RECT, SIZE, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     ClientToScreen, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC,
-    MonitorFromWindow, ReleaseDC, SelectObject, AC_SRC_ALPHA, AC_SRC_OVER, BITMAPINFO,
+    MonitorFromRect, ReleaseDC, SelectObject, AC_SRC_ALPHA, AC_SRC_OVER, BITMAPINFO,
     BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS, HGDIOBJ, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::Graphics::GdiPlus::{
@@ -703,7 +703,9 @@ fn overlaps(a: RECT, b: RECT) -> bool {
 fn place(callout: HWND, hole: Option<RECT>, over: RECT) {
     let me = window_rect(callout);
     let (w, h) = (me.right - me.left, me.bottom - me.top);
-    let wa = unsafe { ui::work_area(MonitorFromWindow(callout, MONITOR_DEFAULTTONEAREST)) };
+    // The monitor of the toured window, not of the callout (which starts on
+    // the cursor's): the hole is on the former.
+    let wa = unsafe { ui::work_area(MonitorFromRect(&over, MONITOR_DEFAULTTONEAREST)) };
     let gap = ui::px(14);
     let fits = |x: i32, y: i32| {
         let r = RECT {
