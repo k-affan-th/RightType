@@ -89,6 +89,8 @@ mod startup;
 #[cfg(feature = "winos")]
 mod stats;
 #[cfg(feature = "winos")]
+mod tour;
+#[cfg(feature = "winos")]
 mod tray;
 #[cfg(feature = "winos")]
 mod ui;

@@ -713,7 +713,7 @@ pub fn redraw_all(hwnd: HWND) {
 
 // ------------------------------------------------------------------ GDI+
 
-fn gdiplus() -> bool {
+pub(crate) fn gdiplus() -> bool {
     static STARTED: OnceLock<bool> = OnceLock::new();
     *STARTED.get_or_init(|| unsafe {
         let mut token = 0usize;
@@ -844,7 +844,7 @@ impl Gfx {
         Some(Gfx { g })
     }
 
-    fn path(x: f32, y: f32, w: f32, h: f32, r: f32) -> *mut GpPath {
+    pub(crate) fn path(x: f32, y: f32, w: f32, h: f32, r: f32) -> *mut GpPath {
         let mut path = std::ptr::null_mut();
         unsafe {
             GdipCreatePath(FillModeAlternate, &mut path);
