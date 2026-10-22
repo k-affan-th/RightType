@@ -416,12 +416,10 @@ fn open_on(page: u8) {
     );
     let mut nav = [0u16; 9];
     for (i, (label, p_id, icon)) in NAV.iter().enumerate() {
-        nav[i] = s.nav(
-            tr(*label),
-            *icon,
-            *p_id == page,
-            (12, 74 + i as i32 * 38, 196, 34),
-        );
+        // The first entry starts the radio group, whichever page is shown;
+        // the shown page is checked on its own.
+        nav[i] = s.nav(tr(*label), *icon, i == 0, (12, 74 + i as i32 * 38, 196, 34));
+        s.set_checked(nav[i], *p_id == page);
     }
 
     s.label(
