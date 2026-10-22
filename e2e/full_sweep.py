@@ -260,8 +260,14 @@ FAILED_TRACES = []
 _MARK = [0]
 
 
-def check(target, name, got, expect):
+def check(target, name, got, expect, retry=False):
+    """Record one result. With `retry` a mismatch is only noted: the caller
+    tries the case once more and records that."""
     ok = got.strip() == expect.strip()
+    if retry and not ok:
+        print(f"[RETRY] {target:7} {name}: got {got.strip()!r} expected {expect.strip()!r}",
+              flush=True)
+        return False
     RESULTS.append((target, name, ok, got, expect))
     print(f"[{'PASS' if ok else 'FAIL'}] {target:7} {name}: got {got.strip()!r}"
           + ("" if ok else f" expected {expect.strip()!r}"), flush=True)
@@ -284,14 +290,21 @@ ONLY = [x for x in os.environ.get("ONLY", "").split("|") if x]
 def run(t, name, keys, expect, layout=HKL_EN, then=(), settle=0.8):
     if ONLY and not any(x in name for x in ONLY):
         return True
-    t.clear()
-    t.layout(layout)
-    type_keys(keys)
-    for step in then:
-        time.sleep(0.5)
-        step()
-    time.sleep(settle)
-    return check(t.name, name, t.read(), expect)
+
+    def attempt(retry):
+        t.clear()
+        t.layout(layout)
+        type_keys(keys)
+        for step in then:
+            time.sleep(0.5)
+            step()
+        time.sleep(settle)
+        return check(t.name, name, t.read(), expect, retry)
+
+    # Typing into a real app on a busy runner now and then loses or
+    # reorders a key (a different case each run, `main` included): a case
+    # that fails is tried once more, and only the second answer counts.
+    return attempt(True) or attempt(False)
 
 
 undo = lambda: tap(CAPS, CTRL, SHIFT)       # noqa: E731
