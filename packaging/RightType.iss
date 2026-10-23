@@ -21,6 +21,8 @@
 AppId={{8C6B9A2E-52C1-4E63-9B7A-7C1F4A2B9D33}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppMutex=Local\RightType.Running
+CloseApplications=no
 DefaultDirName={autopf}\RightType
 PrivilegesRequired=lowest
 OutputDir=..\dist
@@ -81,3 +83,14 @@ Filename: "{app}\{#MyAppExe}"; Description: "{cm:Launch}"; Flags: nowait postins
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /IM righttype.exe /F"; Flags: runhidden; RunOnceId: "KillApp"
+
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Result := '';
+  Exec('taskkill.exe', '/IM righttype.exe /T /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(250);
+end;

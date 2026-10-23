@@ -947,6 +947,8 @@ pub enum TextStyle {
     BodyStrong,
     Dim,
     Small,
+    /// A single line of text with ellipsis if it overflows, vertically centered.
+    SingleLine,
     /// `Shift + Backspace` drawn as key caps.
     Keys,
     /// A palette heading: small dim text after an icon (a glyph of the icon
@@ -1512,6 +1514,14 @@ impl Surface {
             TextStyle::BodyStrong => text(hdc, &s, rc, f.body_strong, p.text, wrap),
             TextStyle::Dim => text(hdc, &s, rc, f.body, p.text_dim, wrap),
             TextStyle::Small => text(hdc, &s, rc, f.small, p.text_dim, wrap),
+            TextStyle::SingleLine => text(
+                hdc,
+                &s,
+                rc,
+                f.body,
+                p.text,
+                DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS,
+            ),
             TextStyle::Keys => {
                 self.paint_keys(hdc, &s, rc);
                 0

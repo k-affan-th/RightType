@@ -294,16 +294,26 @@ fn open() {
             ),
         };
         // Kept on the screen the caret is on.
-        let wa = ui::work_area(windows::Win32::Graphics::Gdi::MonitorFromWindow(
-            target,
-            windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST,
-        ));
+        let monitor = match caret {
+            Some(c) => windows::Win32::Graphics::Gdi::MonitorFromPoint(
+                windows::Win32::Foundation::POINT {
+                    x: c.left,
+                    y: c.bottom,
+                },
+                windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST,
+            ),
+            None => windows::Win32::Graphics::Gdi::MonitorFromWindow(
+                target,
+                windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST,
+            ),
+        };
+        let wa = ui::work_area(monitor);
         let h = height(0);
         let x = x.clamp(wa.left, (wa.right - ui::px(W)).max(wa.left));
         let y = if y + h > wa.bottom {
-            caret.map_or(wa.bottom - h, |c| c.top - h - ui::px(4))
+            caret.map_or(wa.bottom - h, |c| (c.top - h - ui::px(4)).max(wa.top))
         } else {
-            y
+            y.max(wa.top)
         };
         STATE.with(|s| {
             let mut s = s.borrow_mut();
@@ -323,6 +333,10 @@ fn open() {
         );
         round(hwnd, h);
         let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowDisplayAffinity(
+            hwnd,
+            windows::Win32::UI::WindowsAndMessaging::WDA_EXCLUDEFROMCAPTURE,
+        );
         SetTimer(hwnd, TIMER_WATCH, 300, None);
         SetTimer(hwnd, TIMER_ANIM, FRAME_MS, None);
     }

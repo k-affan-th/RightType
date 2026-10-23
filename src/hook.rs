@@ -198,8 +198,8 @@ unsafe fn caps_released(down_at: Instant) {
     activate_layout(to);
     if crate::caret::is_enabled() {
         crate::overlay::badge_at_caret(match to {
-            policy::InputLayout::ThaiKedmanee => "TH",
-            policy::InputLayout::UsQwerty => "EN",
+            policy::InputLayout::ThaiKedmanee => "ไทย",
+            policy::InputLayout::UsQwerty => "ENG",
         });
     }
 }
@@ -1187,6 +1187,9 @@ pub(crate) unsafe fn prepare_layout_for(text: &str) {
     let target = layout_of(text);
     if policy::supported_layout_id(layout_id(effective_layout())) != Some(target) {
         activate_layout(target);
+        // Give the target app (e.g. Word) a moment to process the posted
+        // WM_INPUTLANGCHANGEREQUEST so proofing tags match the incoming text.
+        std::thread::sleep(std::time::Duration::from_millis(20));
     }
 }
 
@@ -2186,7 +2189,17 @@ pub fn current_language() -> Option<policy::InputLayout> {
 
 /// The program the typist is typing in (its file name), as last seen.
 pub(crate) fn current_app() -> Option<String> {
-    STATE.with(|s| s.try_borrow().ok().and_then(|s| s.app_exe.clone()))
+    if let Some(exe) = STATE.with(|s| s.try_borrow().ok().and_then(|s| s.app_exe.clone())) {
+        return Some(exe);
+    }
+    unsafe {
+        let fg = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
+        if !fg.0.is_null() {
+            safety::foreground_exe(fg)
+        } else {
+            None
+        }
+    }
 }
 
 /// A fixed message for both the debug trace and the problem report
@@ -3376,7 +3389,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             } else if done && !caps_accident && crate::caret::is_enabled() {
                 // The first few fixes of a session show how to take one back.
                 if UNDO_TIPS_LEFT
-                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
+                    .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
                     .is_ok()
                 {
                     crate::overlay::badge_at_caret(righttype::i18n::tr(
@@ -3409,7 +3422,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             // a hint you cannot read is a hint you cannot judge.
             let mut hint = if caps_accident {
                 diag::note("CapsLock on by accident? offered the word as meant", &[]);
-                format!("⇪ {}  ·  Tab", d.corrected)
+                format!("Caps: {}  ·  Tab", d.corrected)
             } else {
                 format!("{}  ·  Tab", d.corrected)
             };

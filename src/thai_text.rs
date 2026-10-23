@@ -368,6 +368,10 @@ pub fn baht_words(input: &str) -> String {
 /// Only spaces are added or taken away; no character is changed.
 pub fn tidy_spacing(input: &str) -> String {
     let thai = |c: char| ('\u{0E01}'..='\u{0E5B}').contains(&c);
+    let thai_word = |c: char| {
+        (('\u{0E01}'..='\u{0E3A}').contains(&c) && c != '฿')
+            || ('\u{0E40}'..='\u{0E4E}').contains(&c)
+    };
     let chars: Vec<char> = input.chars().collect();
     let mut out: Vec<char> = Vec::with_capacity(chars.len() + 8);
     let space_before = |out: &mut Vec<char>| {
@@ -387,7 +391,7 @@ pub fn tidy_spacing(input: &str) -> String {
             space_before(&mut out);
             out.extend(['ฯ', 'ล', 'ฯ']);
             i += 3;
-            if chars.get(i).is_some_and(|&n| thai(n) || n == '(') {
+            if chars.get(i).is_some_and(|&n| thai(n) || n == '(' || n.is_alphanumeric()) {
                 out.push(' ');
             }
             continue;
@@ -396,7 +400,7 @@ pub fn tidy_spacing(input: &str) -> String {
             'ๆ' => {
                 space_before(&mut out);
                 out.push('ๆ');
-                if next.is_some_and(|n| thai(n) || n == '(') {
+                if next.is_some_and(|n| thai(n) || n == '(' || n.is_alphanumeric()) {
                     out.push(' ');
                 }
             }
@@ -410,12 +414,12 @@ pub fn tidy_spacing(input: &str) -> String {
                     out.pop();
                 }
                 out.push('ฯ');
-                if !is_phan && next.is_some_and(|n| thai(n) && n != 'ฯ') {
+                if !is_phan && next.is_some_and(|n| (thai(n) && n != 'ฯ') || n.is_alphanumeric()) {
                     out.push(' ');
                 }
             }
             '(' => {
-                if out.last().is_some_and(|&p| thai(p)) {
+                if out.last().is_some_and(|&p| thai_word(p)) {
                     out.push(' ');
                 }
                 out.push('(');
@@ -428,7 +432,7 @@ pub fn tidy_spacing(input: &str) -> String {
                     out.pop();
                 }
                 out.push(')');
-                if next.is_some_and(thai) {
+                if next.is_some_and(|n| thai_word(n)) {
                     out.push(' ');
                 }
             }
@@ -443,7 +447,19 @@ pub fn tidy_spacing(input: &str) -> String {
                     out.push(' ');
                 }
             }
-            _ => out.push(c),
+            _ => {
+                out.push(c);
+                // Space between Thai letter/vowel and Latin/Digit boundary
+                if thai_word(c)
+                    && next.is_some_and(|n| n.is_ascii_alphabetic() || n.is_ascii_digit())
+                {
+                    out.push(' ');
+                } else if (c.is_ascii_alphabetic() || c.is_ascii_digit())
+                    && next.is_some_and(thai_word)
+                {
+                    out.push(' ');
+                }
+            }
         }
         i += 1;
     }
@@ -579,6 +595,10 @@ mod tests {
         assert_eq!(tidy_spacing("f(x) = y"), "f(x) = y");
         assert_eq!(tidy_spacing("  ย่อหน้า\n  ต่อ"), "  ย่อหน้า\n  ต่อ");
         assert_eq!(tidy_spacing("จบ ๆ"), "จบ ๆ");
+        assert_eq!(tidy_spacing("ภาษาPythonและRust"), "ภาษา Python และ Rust");
+        assert_eq!(tidy_spacing("Pythonภาษา"), "Python ภาษา");
+        assert_eq!(tidy_spacing("ข้อ1"), "ข้อ 1");
+        assert_eq!(tidy_spacing("1ข้อ"), "1 ข้อ");
         // Only spaces move.
         for s in ["เด็กๆ(ฯลฯ)กรุงเทพ ฯ  x", "a ( b ) c", "ๆๆ ฯฯ"]
         {
