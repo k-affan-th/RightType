@@ -5,6 +5,7 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 ## [Unreleased]
 
 ### Added
+- A guided tour of Settings (tray menu → Take the tour): a spotlight and a short explanation for each of 11 steps across four chapters, with Back, Next and Skip.
 
 - **Icons across the settings and the other windows.** Every page of Settings
   has one in the sidebar, every switch has one in a round tile, buttons carry

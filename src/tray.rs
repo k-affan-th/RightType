@@ -74,6 +74,7 @@ struct Tray {
     m_settings: nwg::MenuItem,
     m_stats: nwg::MenuItem,
     m_help: nwg::MenuItem,
+    m_tour: nwg::MenuItem,
     m_report: nwg::MenuItem,
     _sep: nwg::MenuSeparator,
     m_quit: nwg::MenuItem,
@@ -287,6 +288,13 @@ pub fn run() {
         .build(&mut m_help)
         .expect("help item");
 
+    let mut m_tour = nwg::MenuItem::default();
+    nwg::MenuItem::builder()
+        .text(tr(T::TrayTour))
+        .parent(&menu)
+        .build(&mut m_tour)
+        .expect("tour item");
+
     let mut m_report = nwg::MenuItem::default();
     nwg::MenuItem::builder()
         .text(tr(T::TrayReport))
@@ -342,6 +350,7 @@ pub fn run() {
         m_settings,
         m_stats,
         m_help,
+        m_tour,
         m_report,
         _sep: sep,
         m_quit,
@@ -445,6 +454,8 @@ pub fn run() {
                     stats::open();
                 } else if handle == ui_h.m_help.handle {
                     crate::onboard::show(false);
+                } else if handle == ui_h.m_tour.handle {
+                    crate::tour::start(crate::tour::Chapter::ALL[0]);
                 } else if handle == ui_h.m_report.handle {
                     crate::report::save();
                 }
@@ -476,6 +487,18 @@ pub fn run() {
             "settings-keyboard" => settings::open_page(7),
             "settings-tools" => settings::open_page(8),
             "settings-sponsor" => settings::open_page(9),
+            // tour-a ... tour-d, optionally ":<step>" (counting from 1)
+            tour if tour.starts_with("tour-") => {
+                let (name, step) = tour[5..].split_once(':').unwrap_or((&tour[5..], "1"));
+                let chapter = match name {
+                    "b" => crate::tour::Chapter::Yours,
+                    "c" => crate::tour::Chapter::Keyboard,
+                    "d" => crate::tour::Chapter::Privacy,
+                    _ => crate::tour::Chapter::Fixing,
+                };
+                crate::tour::start(chapter);
+                crate::tour::go_to(step.parse::<usize>().unwrap_or(1).saturating_sub(1));
+            }
             "clean" => crate::clean::request_open(crate::clean::Mode::Clean),
             "keytest" => crate::clean::request_open(crate::clean::Mode::Test),
             "sheet" => crate::sheet::request_open(),
@@ -727,6 +750,7 @@ fn sync_state(ui: &Rc<Tray>) {
             (&ui.m_settings, T::TraySettings),
             (&ui.m_stats, T::TrayStats),
             (&ui.m_help, T::TrayHelp),
+            (&ui.m_tour, T::TrayTour),
             (&ui.m_report, T::TrayReport),
             (&ui.m_quit, T::TrayQuit),
             (&ui.m_pause[0], T::TrayPause10),
