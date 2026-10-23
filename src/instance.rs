@@ -443,6 +443,11 @@ pub fn run_watchdog(args: &[String]) -> ! {
     std::process::exit(0)
 }
 
+/// Validate that the process image matches righttype.exe before terminating it.
+/// Not called yet: `end_process` opens its handle without query rights and
+/// ends the process by id alone, so wiring this in changes that path.
+#[allow(dead_code)]
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -467,6 +472,7 @@ mod tests {
 }
 
 /// Validate that the process image matches righttype.exe before terminating it.
+#[allow(dead_code)]
 fn is_righttype_process(h: windows::Win32::Foundation::HANDLE) -> bool {
     let mut buf = [0u16; 1024];
     let mut len = buf.len() as u32;

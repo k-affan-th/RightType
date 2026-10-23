@@ -300,6 +300,9 @@ struct Palette {
     labels: RefCell<Vec<String>>,
     /// The recent words listed (oldest first), wiped on close.
     words: RefCell<Vec<String>>,
+    /// The word selected in the app when the palette opened (what "Add a word"
+    /// adds), wiped on close; empty when nothing usable was selected.
+    selection: RefCell<String>,
     /// Where each recent word is on screen, when the app says.
     boxes: Vec<Option<RECT>>,
     /// Recent words ticked with Space (their places in `words`).
@@ -397,6 +400,17 @@ pub fn key(vk: u16, ch: Option<char>) -> bool {
 
 /// Show the items that match the filter under their headings, numbered,
 /// packed from the top, and select the first.
+/// The section a row is listed under. "Add a word" is offered below everything
+/// that matches while searching, so Enter runs the command that was found, not
+/// "remember what I typed".
+fn listed_in(section: Section, is_add_word: bool, searching: bool) -> Section {
+    if searching && is_add_word {
+        Section::Options
+    } else {
+        section
+    }
+}
+
 fn refilter(p: &Palette) {
     use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SWP_NOMOVE, SWP_NOZORDER, SW_HIDE};
     let raw_filter = p.filter.borrow().clone();
@@ -405,24 +419,19 @@ fn refilter(p: &Palette) {
     let other = righttype::layout::auto_convert(&filter).to_lowercase();
     let searching = !filter.is_empty();
 
-    // Dynamically update label for Command::LearnWord
-    for (i, (_, cmd)) in p.items.iter().enumerate() {
-        if let Command::LearnWord = cmd {
-            let label = if searching {
-                trf(T::PaletteLearnWord, &[("word", raw_filter.trim())])
-            } else {
-                tr(T::PaletteLearnNew).to_string()
-            };
-            p.labels.borrow_mut()[i] = label;
-        }
-    }
-
     // A section opened with its row is a page of its own: only its rows,
     // not appended under everything (the options ran off the screen).
     let page = !searching && p.expanded.get() != 0;
+    let section_of = |i: usize| {
+        listed_in(
+            p.item_sections[i],
+            matches!(p.items[i].1, Command::LearnWord),
+            searching,
+        )
+    };
     let shows = |i: usize| {
         let command = p.items[i].1;
-        let section = p.item_sections[i];
+        let section = section_of(i);
         let open = p.expanded.get() & section.bit() != 0;
         if let Command::LearnWord = command {
             return true;
@@ -445,7 +454,7 @@ fn refilter(p: &Palette) {
     let mut y = PAD + 28;
     for section in Section::ALL {
         let rows: Vec<usize> = (0..p.items.len())
-            .filter(|&i| p.item_sections[i] == section && shows(i))
+            .filter(|&i| section_of(i) == section && shows(i))
             .collect();
         let heading = p.headings.iter().find(|(s, _)| *s == section).map(|h| h.1);
         if let Some(id) = heading {
@@ -776,12 +785,10 @@ fn run_shown(p: &Rc<Palette>, k: usize) {
         return;
     }
     if let Command::LearnWord = command {
-        let raw = p.filter.borrow().trim().to_string();
+        let word = p.selection.borrow().clone();
         close(p, true);
-        if raw.is_empty() {
-            crate::settings::open();
-        } else {
-            match crate::learn::add_explicit(&raw) {
+        if !word.is_empty() {
+            match crate::learn::add_explicit(&word) {
                 Ok(w) => overlay::show(&trf(T::ToastWordLearned, &[("word", &w)])),
                 Err(_) => overlay::show(tr(T::ToastWordInvalid)),
             }
@@ -861,7 +868,7 @@ pub fn request_open() {
 
 /// The rows, in order, for the current state. `words` are the recent words
 /// (oldest first).
-fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
+fn commands(app: Option<&str>, words: &[String], selection: Option<&str>) -> Vec<Entry> {
     let mut list = Vec::new();
     let mut add = |section, label: String, hint: &str, command| {
         list.push(Entry {
@@ -893,7 +900,7 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
         );
     }
     // Offer to remember the latest typed word as-is directly if eligible
-    if let Some((i, last_word)) = words.iter().enumerate().rev().next() {
+    if let Some((i, last_word)) = words.iter().enumerate().next_back() {
         let clean = last_word.trim();
         if !clean.is_empty() {
             add(
@@ -904,13 +911,16 @@ fn commands(app: Option<&str>, words: &[String]) -> Vec<Entry> {
             );
         }
     }
-    // Quick learn / add custom word entry
-    add(
-        Section::Words,
-        tr(T::PaletteLearnNew).to_string(),
-        "",
-        Command::LearnWord,
-    );
+    // "Add a word" only while a word is selected: otherwise it is one more row
+    // in the way of everything else.
+    if let Some(word) = selection.and_then(crate::learn::explicit_candidate) {
+        add(
+            Section::Words,
+            trf(T::PaletteLearnWord, &[("word", &word)]),
+            "",
+            Command::LearnWord,
+        );
+    }
     if app.is_some() {
         add(
             Section::Fix,
@@ -1258,15 +1268,6 @@ impl Drop for Review {
 
 static REVIEW: std::sync::Mutex<Option<Review>> = std::sync::Mutex::new(None);
 
-/// Show `review` in the palette, from any thread (the fix-field worker):
-/// the tray window's thread opens it.
-pub fn request_review(review: Review) {
-    if let Ok(mut r) = REVIEW.lock() {
-        *r = Some(review);
-    }
-    crate::tray::on_ui(crate::tray::UI_REVIEW);
-}
-
 /// Open the palette on the waiting review (the tray window's thread).
 pub fn open_review() {
     let review = REVIEW.lock().ok().and_then(|mut r| r.take());
@@ -1305,6 +1306,20 @@ fn open_with(review: Option<Review>) {
     let caret = crate::caret::caret_rect();
     ui::refresh();
 
+    // The selected word, asked while the app still has the focus. This and
+    // the words' boxes below share one budget of 150 ms: the keyboard hook
+    // runs on this thread, and past its timeout Windows lets a key go by
+    // (CI: the H of `why` was lost while the palette opened).
+    let asked = std::time::Instant::now();
+    let selected = if app.is_some() && review.is_none() {
+        crate::focus::selected_text_within(std::time::Duration::from_millis(40))
+    } else {
+        None
+    };
+    let selection = selected
+        .as_deref()
+        .and_then(|s| crate::learn::explicit_candidate(s))
+        .unwrap_or_default();
     let reviewing = review.as_ref().map_or(0, |r| r.changes.len());
     let (words, boxes, list) = match &review {
         // The words as typed stand in for the recent words: ticked, marked
@@ -1323,10 +1338,16 @@ fn open_with(review: Option<Review>) {
             } else {
                 crate::focus::boxes_before_caret_within(
                     spans,
-                    std::time::Duration::from_millis(150),
+                    std::time::Duration::from_millis(150)
+                        .saturating_sub(asked.elapsed())
+                        .max(std::time::Duration::from_millis(30)),
                 )
             };
-            let list = commands(app.as_deref(), &words);
+            let list = commands(
+                app.as_deref(),
+                &words,
+                selected.as_deref().map(|s| s.as_str()),
+            );
             (words, boxes, list)
         }
     };
@@ -1430,6 +1451,7 @@ fn open_with(review: Option<Review>) {
         numbers: RefCell::new(Vec::new()),
         labels: RefCell::new(list.iter().map(|e| e.label.clone()).collect()),
         words: RefCell::new(words),
+        selection: RefCell::new(selection),
         boxes,
         // Every word of a review starts ticked.
         checked: RefCell::new((0..reviewing).collect()),
@@ -1515,6 +1537,7 @@ fn close(p: &Rc<Palette>, refocus: bool) {
     for word in p.words.borrow_mut().iter_mut() {
         word.zeroize();
     }
+    p.selection.borrow_mut().zeroize();
     for label in p.labels.borrow_mut().iter_mut() {
         label.zeroize();
     }
@@ -1744,4 +1767,23 @@ fn paint(g: &Gfx, _hdc: HDC, rc: RECT, _page: u8) {
     let p = pal();
     g.fill_round(rc, ui::px(8) as f32, p.border);
     g.fill_round(ui::inset(rc, ui::px(1)), ui::px(7) as f32, p.surface);
+}
+
+#[cfg(test)]
+mod listing_tests {
+    use super::*;
+
+    #[test]
+    fn add_a_word_is_last_while_searching_and_in_place_otherwise() {
+        // Searching: below the sections of real matches (Options is the last).
+        assert!(listed_in(Section::Words, true, true) == Section::Options);
+        assert!(Section::ALL.last() == Some(&Section::Options));
+        // Not searching: where it was put.
+        assert!(listed_in(Section::Words, true, false) == Section::Words);
+        // Every other row stays in its own section, searching or not.
+        for section in Section::ALL {
+            assert!(listed_in(section, false, true) == section);
+            assert!(listed_in(section, false, false) == section);
+        }
+    }
 }

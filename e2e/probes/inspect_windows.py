@@ -4,6 +4,12 @@ import ctypes
 import sys
 import time
 
+import sys
+from pathlib import Path
+
+# The probes sit one folder below `lib.py` and `matrix.py`.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import lib
 
 sys.stdout.reconfigure(encoding="utf-8")

@@ -16,6 +16,22 @@
 /// - the private-use glyphs of old Thai fonts (U+F700–U+F71A) for the
 ///   letters and marks they draw.
 pub fn normalize(input: &str) -> String {
+    // One pass moves a mark past one neighbour; a run of misplaced marks
+    // needs another, so go on until nothing changes. Every pass that changes
+    // something moves a mark closer to its place, so one pass per character
+    // is always enough.
+    let mut text = normalize_pass(input);
+    for _ in 0..input.chars().count() {
+        let next = normalize_pass(&text);
+        if next == text {
+            break;
+        }
+        text = next;
+    }
+    text
+}
+
+fn normalize_pass(input: &str) -> String {
     let chars: Vec<char> = input.chars().map(from_private_use).collect();
     let mut out: Vec<char> = Vec::with_capacity(chars.len());
     let mut i = 0;
@@ -391,7 +407,10 @@ pub fn tidy_spacing(input: &str) -> String {
             space_before(&mut out);
             out.extend(['ฯ', 'ล', 'ฯ']);
             i += 3;
-            if chars.get(i).is_some_and(|&n| thai(n) || n == '(' || n.is_alphanumeric()) {
+            if chars
+                .get(i)
+                .is_some_and(|&n| thai(n) || n == '(' || n.is_alphanumeric())
+            {
                 out.push(' ');
             }
             continue;
@@ -414,7 +433,8 @@ pub fn tidy_spacing(input: &str) -> String {
                     out.pop();
                 }
                 out.push('ฯ');
-                if !is_phan && next.is_some_and(|n| (thai(n) && n != 'ฯ') || n.is_alphanumeric()) {
+                if !is_phan && next.is_some_and(|n| (thai(n) && n != 'ฯ') || n.is_alphanumeric())
+                {
                     out.push(' ');
                 }
             }
@@ -432,7 +452,7 @@ pub fn tidy_spacing(input: &str) -> String {
                     out.pop();
                 }
                 out.push(')');
-                if next.is_some_and(|n| thai_word(n)) {
+                if next.is_some_and(thai_word) {
                     out.push(' ');
                 }
             }
@@ -450,12 +470,9 @@ pub fn tidy_spacing(input: &str) -> String {
             _ => {
                 out.push(c);
                 // Space between Thai letter/vowel and Latin/Digit boundary
-                if thai_word(c)
-                    && next.is_some_and(|n| n.is_ascii_alphabetic() || n.is_ascii_digit())
-                {
-                    out.push(' ');
-                } else if (c.is_ascii_alphabetic() || c.is_ascii_digit())
-                    && next.is_some_and(thai_word)
+                let latin = |ch: char| ch.is_ascii_alphabetic() || ch.is_ascii_digit();
+                if (thai_word(c) && next.is_some_and(latin))
+                    || (latin(c) && next.is_some_and(thai_word))
                 {
                     out.push(' ');
                 }

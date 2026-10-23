@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent
 LOG = HERE / "rt_stderr.log"
 
 WINFORMS_PS = r"""

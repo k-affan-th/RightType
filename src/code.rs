@@ -340,7 +340,13 @@ mod tests {
         assert!(!looks_like_identifier("me'ko5^d"));
         assert!(!looks_like_identifier("l;ylfu"));
         assert_eq!(
-            verdict("me'ko5^d", InputLayout::UsQwerty, Some("ทำงานถูก"), Some(true), th),
+            verdict(
+                "me'ko5^d",
+                InputLayout::UsQwerty,
+                Some("ทำงานถูก"),
+                Some(true),
+                th
+            ),
             Verdict::Fix("ทำงานถูก".into())
         );
     }

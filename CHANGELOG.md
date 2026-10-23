@@ -2,6 +2,77 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [2.6.0] — 2026-10-24
+
+### Added
+
+- **One-line settings with info popover**: every setting now has a title and
+  a one-line description; tap the (i) button after a title to see the full
+  explanation. A screen reader hears the row's name with it ("More
+  information: Fix common Thai misspellings").
+- **Support page**: a new page in the sidebar with a Lightning address and a
+  Bitcoin address, each with a QR code drawn on the device (nothing is sent
+  anywhere) and a Copy button; the whole address is shown, on two lines when
+  it must be. `tools/check_support_qr.py` decodes both QR codes and checks
+  them against the addresses and their error-correction codewords.
+- **Icons throughout**: every page of Settings has one in the sidebar, every
+  switch has one in a round tile, buttons carry one before their label,
+  section headings and the Stats cards have them too, and the three
+  correction modes use the palette's icons. One table (`src/icons.rs`) says
+  which icon is which; `tools/check_icons.py` checks that each exists in
+  both Segoe Fluent Icons and Segoe MDL2 Assets.
+- **An (i) button after a setting's title** opens a popover with the full
+  explanation, so the row itself keeps one line. A screen reader hears the
+  row's name with it ("More information: Fix common Thai misspellings").
+- **The palette's "Add a word"** shows only while a word is selected in the
+  app, and adds that word (it was always there, and took what was typed in
+  the search box). While you search it sits below the matches, so Enter runs
+  the command you found. The selection is read when the palette opens,
+  through UI Automation or the text box itself, never the clipboard, and is
+  wiped when the palette closes.
+- **Words typed with `'` `;` `[` `]` `^` `/` `\` or backtick** in them are no
+  longer taken for code identifiers, so they are fixed.
+- **The "TH" / "EN" tag** by the cursor has its own colour for each language.
+- **Fix this field** no longer opens a review popup after fixing; Ctrl+Z
+  undoes it.
+- **Privacy** (was Privacy & about) is a new page with a GitHub link; the
+  Apps page is called **Ignored apps** in the sidebar.
+- **Tools** lays its four buttons out as a 2 by 2 grid so each can show its
+  icon; Keyboard health moved down to match.
+
+### Changed
+
+- **Settings descriptions are one line.** The longer text moved behind (i);
+  the Thai text was written again for each, not translated word by word.
+- **Tools** lays its four buttons out as a 2 by 2 grid so each can show its
+  icon; Keyboard health moved down to match.
+
+### Removed
+
+- 21 texts no part of the program used any more (the first Donate set among
+  them).
+
+### Fixed
+
+- **Tidying Thai text** (`normalize`) now settles in one go: a tone mark
+  typed before a vowel that is also typed twice (`ก` + `่` + `ี` + `ี`) came
+  out as `กีี่` instead of `กี่`. A long run of misplaced marks (ten or more
+  before a vowel) is settled too: there is no fixed number of passes.
+- **Tables in dark mode**: the column headers (Apps, Snippets, How each app
+  is doing) were white, then dim grey; they are now painted in the
+  interface colours.
+- **Check marks** (Privacy & about, Keyboard health) are drawn, not typed:
+  the font's "✓" read as a "V" at that size.
+- **Keyboard page**: rows are taller, so a two-line description no longer
+  touches the line below it.
+- **Snippets**: the four keyboard choices fit their frame, which no longer
+  runs under the Add / save button, and "English only" is no longer cut off.
+- **Windows checkouts** no longer embed CRLF into the dictionaries and the
+  benchmark article (`.gitattributes` keeps them LF), so a Windows build
+  carries the same data as a Linux one and `typing_benchmark` runs there.
+
 ## [2.5.0]
 
 ### Added

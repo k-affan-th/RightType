@@ -111,12 +111,12 @@ pub fn fix(run: &str, th: &Dictionary) -> Option<(String, &'static str, &'static
             let mut match_len = wrong.len();
             // Part of the right spelling already (`เหตุการ` in `เหตุการณ์`, or
             // `เหตุการณ` where only the final mark is missing).
-            if right.starts_with(wrong) {
+            if let Some(tail) = right.strip_prefix(wrong) {
                 if out[at..].starts_with(right) {
                     from = at + right.len();
                     continue;
                 }
-                for (idx, ch) in right[wrong.len()..].char_indices() {
+                for (idx, ch) in tail.char_indices() {
                     let cand_len = wrong.len() + idx + ch.len_utf8();
                     if out[at..].starts_with(&right[..cand_len]) {
                         match_len = cand_len;
@@ -189,10 +189,7 @@ mod tests {
             fix("ประสบการณ", th),
             Some(("ประสบการณ์".to_string(), "ประสบการณ", "ประสบการณ์"))
         );
-        assert_eq!(
-            fix("เหตุการณ", th).map(|f| f.0),
-            Some("เหตุการณ์".to_string())
-        );
+        assert_eq!(fix("เหตุการณ", th).map(|f| f.0), Some("เหตุการณ์".to_string()));
         assert_eq!(
             fix("สถานการณ", th).map(|f| f.0),
             Some("สถานการณ์".to_string())

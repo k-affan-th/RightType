@@ -39,6 +39,8 @@ mod health;
 #[cfg(feature = "winos")]
 mod hook;
 #[cfg(feature = "winos")]
+mod icons;
+#[cfg(feature = "winos")]
 mod inject;
 #[cfg(feature = "winos")]
 mod instance;

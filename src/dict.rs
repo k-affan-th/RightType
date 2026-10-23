@@ -20,7 +20,7 @@ pub struct Dictionary {
     /// Built on first prefix query only. Membership never needs it, and only
     /// the English list is ever asked for continuations, so the Thai list never
     /// pays for an index nobody reads — which matters against the resident-memory
-    /// target in `docs/PLAN.md`.
+    /// target in `docs/archive/PLAN.md`.
     sorted: OnceLock<Vec<&'static str>>,
     /// Words the user taught at runtime (auto-learn). Kept apart from the
     /// bundled list so they can be forgotten wholesale and so the sorted
