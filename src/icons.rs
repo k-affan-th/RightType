@@ -77,6 +77,7 @@ pub const PAUSE: char = '\u{E769}'; // Pause
 pub const CHECK: char = '\u{E73E}'; // Accept
 pub const WARNING: char = '\u{E7BA}'; // Warning
 pub const CLOSE: char = '\u{E711}'; // Cancel
+pub const BACK: char = '\u{E76B}'; // ChevronLeft
 pub const CHEVRON: char = '\u{E76C}'; // ChevronRight
 pub const PASTE: char = '\u{E77F}'; // Paste
 pub const CALENDAR: char = '\u{E787}'; // Calendar

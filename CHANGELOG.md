@@ -8,6 +8,7 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Added
 
+- A guided tour of Settings (tray menu → Take the tour): a spotlight and a short explanation for each of 11 steps across four chapters, with Back, Next and Skip.
 - **One-line settings with info popover**: every setting now has a title and
   a one-line description; tap the (i) button after a title to see the full
   explanation. A screen reader hears the row's name with it ("More
@@ -44,10 +45,26 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Changed
 
+
+### Changed
+
 - **Settings descriptions are one line.** The longer text moved behind (i);
   the Thai text was written again for each, not translated word by word.
 - **Tools** lays its four buttons out as a 2 by 2 grid so each can show its
   icon; Keyboard health moved down to match.
+- **Privacy** (was Privacy & about) is a new page with a GitHub link; the
+  Apps page is called **Ignored apps** in the sidebar.
+- **Fix this field** no longer opens a review popup after fixing; Ctrl+Z
+  undoes it.
+- **The palette's "Add a word"** shows only while a word is selected in the
+  app, and adds that word (it was always there, and took what was typed in the
+  search box). While you search it sits below the matches, so Enter runs the
+  command you found. The selection is read when the palette opens, through UI
+  Automation or the text box itself, never the clipboard, and is wiped when the
+  palette closes.
+- **Words typed with `'` `;` `[` `]` `^` `/` `\` or `` ` `` in them** are no longer
+  taken for code identifiers, so they are fixed.
+- **The "TH" / "EN" tag** by the cursor has its own colour for each language.
 
 ### Removed
 

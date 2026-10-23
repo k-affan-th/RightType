@@ -1422,6 +1422,7 @@ fn open_on(page: u8) {
         p.surface,
         sp,
     );
+
     if ui::windows_autocorrects() {
         s.label(
             tr(T::AboutWindowsAutocorrect),
@@ -1433,6 +1434,7 @@ fn open_on(page: u8) {
     }
 
     // --- Sponsor / Support ------------------------------------------------
+
     s.label(
         tr(T::HeadSponsor),
         TextStyle::Title,

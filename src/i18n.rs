@@ -91,6 +91,7 @@ texts! {
     TraySettings => "Settings…", "ตั้งค่า…";
     TrayStats => "Statistics…", "สถิติ…";
     TrayHelp => "Hotkeys && help…", "ปุ่มลัดและวิธีใช้…";
+    TrayTour => "Take the tour…", "ดูทัวร์แนะนำ…";
     TrayReport => "Save a problem report…", "บันทึกรายงานปัญหา…";
     TrayQuit => "Quit", "ออกจากโปรแกรม";
     TrayPause => "Pause", "หยุดชั่วคราว";
@@ -636,6 +637,32 @@ texts! {
     HelpHeadline => "Hotkeys", "ปุ่มลัด";
     WelcomeMode => "Current mode: {mode}. Switch anytime with Ctrl+CapsLock.", "โหมดตอนนี้: {mode} สลับได้ทุกเมื่อด้วย Ctrl+CapsLock";
     BtnGetStarted => "Get started", "เริ่มใช้งาน";
+    TourTitle => "RightType tour", "ทัวร์ RightType";
+    TourStepOf => "{n} of {total}", "{n} จาก {total}";
+    BtnTourNext => "Next", "ถัดไป";
+    BtnTourBack => "Back", "ก่อนหน้า";
+    BtnTourSkip => "Skip tour", "ข้ามทัวร์";
+    BtnTourDone => "Done", "เสร็จแล้ว";
+    TourA1Title => "Three ways to fix", "แก้ได้ 3 แบบ";
+    TourA1Body => "Auto fixes as you type. Suggest shows the fix and waits for Tab. Manual changes nothing until you press Shift+Backspace.", "อัตโนมัติ: แก้ให้ทันทีที่พิมพ์ แนะนำ: โชว์คำที่แก้แล้วรอให้กด Tab กดแก้เอง: ไม่แก้อะไรจนกว่าจะกด Shift+Backspace";
+    TourA2Title => "Off in one keystroke", "ปิดได้ในปุ่มเดียว";
+    TourA2Body => "Ctrl+Alt+CapsLock turns RightType off or on in any app. It already stays out of password fields, terminals and wallets.", "Ctrl+Alt+CapsLock เปิดหรือปิด RightType ในทุกแอป และมันเลี่ยงช่องรหัสผ่าน เทอร์มินัล และกระเป๋าคริปโตให้เองอยู่แล้ว";
+    TourA3Title => "Every key is yours", "ปุ่มลัดตั้งเองได้ทุกปุ่ม";
+    TourA3Body => "Press the button beside a hotkey, then the keys you want. Hotkeys work in every app.", "กดปุ่มข้างปุ่มลัดที่ต้องการเปลี่ยน แล้วกดชุดปุ่มใหม่ ปุ่มลัดใช้ได้ในทุกแอป";
+    TourB1Title => "Words it never touches", "คำที่ไม่แตะต้อง";
+    TourB1Body => "Words you add here stay exactly as typed. Import or export the list to move it to another PC.", "คำที่เพิ่มไว้ที่นี่จะอยู่ตามที่พิมพ์เสมอ นำเข้าหรือส่งออกรายการเพื่อย้ายไปอีกเครื่องได้";
+    TourB2Title => "Short codes that expand", "คำย่อที่ขยายเป็นข้อความ";
+    TourB2Body => "Type ;addr and a space and it becomes your address. Dates, key steps and macros work too.", "พิมพ์ ;addr แล้วเว้นวรรค จะกลายเป็นที่อยู่ของคุณ ใช้กับวันที่ ขั้นตอนปุ่ม และ macro ได้ด้วย";
+    TourB3Title => "A mode for each app", "แต่ละแอปมีโหมดของตัวเอง";
+    TourB3Body => "Pick an app, then a mode: Code leaves everything alone, Off switches RightType off there. Add an app that is open to give it its own.", "เลือกแอป แล้วเลือกโหมด: Code ไม่แตะต้องอะไรเลย ปิด คือปิด RightType ในแอปนั้น เพิ่มจากแอปที่เปิดอยู่ได้เลย";
+    TourC1Title => "Four tools for the keyboard", "เครื่องมือสำหรับแป้นพิมพ์ 4 อย่าง";
+    TourC1Body => "Clean locks the keys while you wipe it. Test keys shows each key you press. The map shows where every key is. Practice builds speed.", "ทำความสะอาดล็อกปุ่มระหว่างเช็ดแป้น ทดสอบปุ่มแสดงปุ่มที่กด แผนผังแสดงตำแหน่งทุกปุ่ม ฝึกพิมพ์ช่วยให้เร็วขึ้น";
+    TourC2Title => "A health check", "ตรวจสุขภาพแป้นพิมพ์";
+    TourC2Body => "It looks for stuck keys, Sticky Keys, Filter Keys and the language switch keys, and tells you what to change.", "ตรวจปุ่มค้าง Sticky Keys Filter Keys และปุ่มสลับภาษา แล้วบอกว่าควรแก้อะไร";
+    TourD1Title => "What it never does", "สิ่งที่ไม่ทำเด็ดขาด";
+    TourD1Body => "Nothing you type is written to disk or sent anywhere. Passwords, terminals and wallets are left alone.", "ไม่บันทึกสิ่งที่พิมพ์ลงดิสก์และไม่ส่งไปที่ไหน ช่องรหัสผ่าน เทอร์มินัล และกระเป๋าคริปโตจะถูกเว้นไว้";
+    TourD2Title => "Updates only when you ask", "อัปเดตเมื่อคุณสั่งเท่านั้น";
+    TourD2Body => "Check for updates opens the download page in your browser. RightType itself never goes online.", "ปุ่มตรวจสอบอัปเดตเปิดหน้าดาวน์โหลดในเบราว์เซอร์ ตัวแอปไม่เชื่อมต่ออินเทอร์เน็ตเอง";
 
     // Fix text window.
     FixTitle => "RightType — Fix text", "RightType — ซ่อมข้อความ";
