@@ -4,6 +4,19 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [2.6.1] — 2026-10-24
+
+### Changed
+
+- A softer look: a muted blue accent and cooler greys in both the light and the dark theme, easier on the eyes than the bright blue.
+
+### Fixed
+
+- The installer no longer force-kills RightType (a hidden `taskkill` in its
+  script) before installing; it asks you to close the app, as 2.5.0 did. The
+  2.6.0 installer was flagged by antivirus software as a false positive, and
+  2.6.0 was withdrawn.
+
 ## [2.6.0] — 2026-10-24
 
 ### Added

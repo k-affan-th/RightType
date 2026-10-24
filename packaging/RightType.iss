@@ -6,7 +6,7 @@
 
 #define MyAppName "RightType"
 #ifndef MyAppVersion
-  #define MyAppVersion "2.6.0"
+  #define MyAppVersion "2.6.1"
 #endif
 #define MyAppExe "righttype.exe"
 ; x64 (default) or arm64; build_release.ps1 -Arch passes it, with where the exe is.
@@ -21,6 +21,7 @@
 AppId={{8C6B9A2E-52C1-4E63-9B7A-7C1F4A2B9D33}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+; Setup (and the uninstaller) wait for RightType to be closed rather than kill it.
 AppMutex=Local\RightType.Running
 CloseApplications=no
 DefaultDirName={autopf}\RightType
@@ -83,14 +84,3 @@ Filename: "{app}\{#MyAppExe}"; Description: "{cm:Launch}"; Flags: nowait postins
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /IM righttype.exe /F"; Flags: runhidden; RunOnceId: "KillApp"
-
-
-[Code]
-function PrepareToInstall(var NeedsRestart: Boolean): String;
-var
-  ResultCode: Integer;
-begin
-  Result := '';
-  Exec('taskkill.exe', '/IM righttype.exe /T /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Sleep(250);
-end;

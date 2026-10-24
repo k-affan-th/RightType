@@ -1405,11 +1405,15 @@ fn open_with(review: Option<Review>) {
         })
         .collect();
     ui::size_and_center(surface.hwnd, W, h);
-    unsafe {
-        let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowDisplayAffinity(
-            surface.hwnd,
-            windows::Win32::UI::WindowsAndMessaging::WDA_EXCLUDEFROMCAPTURE,
-        );
+    // (Debug builds: RIGHTTYPE_CAPTURE_OVERLAY lets documentation
+    // screenshots include it.)
+    if !(cfg!(debug_assertions) && std::env::var_os("RIGHTTYPE_CAPTURE_OVERLAY").is_some()) {
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowDisplayAffinity(
+                surface.hwnd,
+                windows::Win32::UI::WindowsAndMessaging::WDA_EXCLUDEFROMCAPTURE,
+            );
+        }
     }
     // Next to the caret when there is one: below it, or above it when there
     // is no room below, and always inside that monitor's work area.
