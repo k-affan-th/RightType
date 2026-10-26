@@ -4,6 +4,25 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [2.6.2] — 2026-10-27
+
+### Changed
+
+- The windows with a title bar (Settings, Fix text, Typing practice and the
+  others) show the RightType icon in the title bar, the taskbar and Alt+Tab
+  instead of Windows' generic one.
+- The README is now a short front page (install, first use, what is
+  different, privacy); the full manual is `docs/GUIDE.md`, and the portable zip
+  ships it under `docs/`.
+
+### Fixed
+
+- The Support page showed a stray "i" button at the bottom. It belonged to the
+  "start again after a crash" row of the Privacy & about page and had been
+  attached to the wrong page; it is back on that row.
+- The wallet address on the Support page sat at the top of its box, off the
+  line of the Copy button; it is now centred in the box.
+
 ## [2.6.1] — 2026-10-24
 
 ### Changed

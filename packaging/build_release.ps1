@@ -37,6 +37,11 @@ Copy-Item "$root\$exeDir\righttype.exe" $stage -Force
 Copy-Item "$root\packaging\install.ps1" $stage -Force
 Copy-Item "$root\packaging\uninstall.ps1" $stage -Force
 Copy-Item "$root\README.md" $stage -Force
+# The README links into docs/: ship those pages and pictures so the links work offline.
+$docs = Join-Path $stage "docs"
+New-Item -ItemType Directory -Force -Path $docs | Out-Null
+foreach ($d in "GUIDE.md", "UNDO.md", "TYPING_BENCHMARK.md", "THREAT_MODEL.md") { Copy-Item "$root\docs\$d" $docs -Force }
+Copy-Item "$root\docs\img" $docs -Recurse -Force
 Copy-Item "$root\CHANGELOG.md" $stage -Force
 Copy-Item "$root\LICENSE-MIT" $stage -Force
 Copy-Item "$root\LICENSE-APACHE" $stage -Force

@@ -1412,7 +1412,6 @@ fn open_on(page: u8) {
         p.surface,
         a,
     );
-    let sp = PAGE_SPONSOR;
     s.info_after(
         tr(T::InfoMore),
         tr(T::SubRestart),
@@ -1420,8 +1419,9 @@ fn open_on(page: u8) {
         true,
         tr(T::RowRestart),
         p.surface,
-        sp,
+        a,
     );
+    let sp = PAGE_SPONSOR;
 
     if ui::windows_autocorrects() {
         s.label(
@@ -1497,7 +1497,7 @@ fn open_on(page: u8) {
     );
     let tip_address = s.label(
         &address_lines(BTC_LIGHTNING),
-        TextStyle::Small,
+        TextStyle::SmallMiddle,
         (X0 + 180, SP_CARD2_Y + 84, 218, 34),
         p.inset,
         sp,
