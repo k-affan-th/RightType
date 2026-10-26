@@ -52,10 +52,17 @@ down; the full guide is in [docs/GUIDE.md](docs/GUIDE.md).*
 1. ดาวน์โหลด `RightType-<เวอร์ชัน>-setup.exe` จากหน้า
    [Releases ล่าสุด](https://github.com/k-affan-th/RightType/releases/latest)
 2. ดับเบิลคลิก ถ้า Windows ขึ้น "Windows protected your PC" ให้กด **More info → Run anyway**
-   (ไฟล์ยังไม่ได้ลงลายเซ็นดิจิทัล) ไม่ต้องใช้สิทธิ์ admin
+   (ไฟล์ยังไม่ได้ลงลายเซ็นดิจิทัล จึงขึ้นคำเตือนนี้ทุกครั้ง) ไม่ต้องใช้สิทธิ์ admin
 3. RightType อยู่ที่มุมขวาล่างของจอ (ไอคอน **Aก**) คลิกเพื่อเปิดเมนูและหน้าตั้งค่า
 
-มี winget? `winget install k-affan-th.RightType`
+อยากตรวจว่าไฟล์ไม่เสียหายระหว่างโหลด? เทียบกับ `SHA256.txt` ในหน้าเดียวกัน:
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\RightType-<เวอร์ชัน>-setup.exe
+```
+
+> ตอนนี้ติดตั้งได้ทางเดียวคือจากหน้า Releases ข้างบน
+> **ยังติดตั้งผ่าน winget ไม่ได้** (ยังไม่ได้ส่งแพ็กเกจเข้า microsoft/winget-pkgs) ไว้เปิดให้เมื่อพร้อม
 
 **2. ลองใช้**
 
