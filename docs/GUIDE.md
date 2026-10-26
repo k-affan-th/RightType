@@ -212,12 +212,7 @@ rather than a blanket ban on every individual BIP39 word.
 
 ถอนการติดตั้ง: Settings → Apps → RightType
 
-ยังติดตั้งผ่าน winget ไม่ได้ในตอนนี้ (ยังไม่ได้ส่งแพ็กเกจเข้า microsoft/winget-pkgs) เมื่อรับแล้วจะใช้ `winget install k-affan-th.RightType` และอัปเดตด้วย `winget upgrade k-affan-th.RightType` ได้
-
 ### Install (no building needed)
-
-**winget:** `winget install k-affan-th.RightType`, later `winget upgrade k-affan-th.RightType`
-(not available yet: the package has not been submitted to microsoft/winget-pkgs; use the installer below).
 
 **Installer (recommended, per-user, no admin):** download
 `RightType-2.6.1-setup.exe` from the

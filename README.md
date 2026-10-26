@@ -61,9 +61,6 @@ down; the full guide is in [docs/GUIDE.md](docs/GUIDE.md).*
 Get-FileHash -Algorithm SHA256 .\RightType-<เวอร์ชัน>-setup.exe
 ```
 
-> ตอนนี้ติดตั้งได้ทางเดียวคือจากหน้า Releases ข้างบน
-> **ยังติดตั้งผ่าน winget ไม่ได้** (ยังไม่ได้ส่งแพ็กเกจเข้า microsoft/winget-pkgs) ไว้เปิดให้เมื่อพร้อม
-
 **2. ลองใช้**
 
 พิมพ์ตามปกติ พอเห็นว่าพิมพ์ผิดภาษา กด **`Shift` + `Backspace`** ครั้งเดียว
