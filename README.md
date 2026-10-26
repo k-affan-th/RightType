@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/img/icon.png" width="72" alt="RightType icon">
+
 # RightType
 
 ### พิมพ์ผิดภาษา แก้ให้เอง
@@ -8,11 +10,22 @@
 
 ~~แนพพำแะ~~ → **correct**  ·  ~~l;ylfu~~ → **สวัสดี**
 
+[![Release](https://img.shields.io/github/v/release/k-affan-th/RightType?style=flat-square&labelColor=14181f&color=3f6fd1)](https://github.com/k-affan-th/RightType/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/k-affan-th/RightType/total?style=flat-square&labelColor=14181f&color=3f6fd1)](https://github.com/k-affan-th/RightType/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/k-affan-th/RightType/rust.yml?branch=main&style=flat-square&labelColor=14181f&label=CI)](https://github.com/k-affan-th/RightType/actions/workflows/rust.yml)
+[![Stars](https://img.shields.io/github/stars/k-affan-th/RightType?style=flat-square&labelColor=14181f&color=3f6fd1)](https://github.com/k-affan-th/RightType/stargazers)
+<br>
+![Platform](https://img.shields.io/badge/platform-Windows-3f6fd1?style=flat-square&labelColor=14181f)
+![Rust](https://img.shields.io/badge/rust-1.75%2B-3f6fd1?style=flat-square&labelColor=14181f&logo=rust&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-3f6fd1?style=flat-square&labelColor=14181f)
+![Network code](https://img.shields.io/badge/network%20code-none-3f6fd1?style=flat-square&labelColor=14181f)
+![Admin](https://img.shields.io/badge/admin%20rights-not%20needed-3f6fd1?style=flat-square&labelColor=14181f)
+
 [**ดาวน์โหลด**](https://github.com/k-affan-th/RightType/releases/latest) ·
+[ต่างจากตัวอื่น](#ต่างจากตัวอื่นตรงไหน) ·
+[ความเป็นส่วนตัว](#ความเป็นส่วนตัว) ·
 [คู่มือฉบับเต็ม](docs/GUIDE.md) ·
 [Changelog](CHANGELOG.md)
-
-ฟรี · โอเพนซอร์ส (MIT / Apache-2.0) · Windows · เขียนด้วย Rust
 
 </div>
 
@@ -35,6 +48,15 @@ no network code.*
 | ตั้งค่า | แต่ละแอปตั้งโหมดได้ | Command palette |
 | --- | --- | --- |
 | ![Settings](docs/img/settings.png) | ![Apps](docs/img/apps-dark.png) | ![Command palette](docs/img/palette-dark.png) |
+
+## ต่างจากตัวอื่นตรงไหน
+
+| | | |
+| --- | --- | --- |
+| **ไม่ย้ำปุ่ม** | ฉีด Unicode ครั้งเดียว ไม่เล่นปุ่มซ้ำ จึงไม่มี `ggg…` และไม่ตกหล่นใน Word | [ที่มา](docs/GUIDE.md#why-a-rebuild) |
+| **ตื่นแล้วทำต่อ** | เครื่องหลับหรือล็อกจอแล้ว ติดตั้ง keyboard hook ใหม่เอง ไม่ต้องปิดเปิดโปรแกรม | [ที่มา](docs/GUIDE.md#why-a-rebuild) |
+| **ไม่แก้คำที่ถูกให้ผิด** | ทดสอบกับคำไทย 60,964 คำและวลี 200,000 วลีที่พิมพ์ถูก แปลงผิด 0 | [ผลทดสอบ](docs/TYPING_BENCHMARK.md) |
+| **ไม่ออกเน็ต** | ไม่มีโค้ดเครือข่าย ปิดเองในช่องรหัสผ่าน ไม่ต้องใช้สิทธิ์ admin | [Threat model](docs/THREAT_MODEL.md) |
 
 ## ความเป็นส่วนตัว
 
