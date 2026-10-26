@@ -18,15 +18,17 @@ fn installer_fallback_version_matches_cargo() {
 }
 
 #[test]
-fn readme_names_the_current_artifacts() {
-    let readme = read("README.md");
+fn guide_names_the_current_artifacts() {
+    // The README keeps a <version> placeholder; the install section of the
+    // guide spells the file names out, so that is what must not go stale.
+    let guide = read("docs/GUIDE.md");
     for artifact in [
         format!("RightType-{VERSION}-setup.exe"),
         format!("RightType-{VERSION}-x64.zip"),
     ] {
         assert!(
-            readme.contains(&artifact),
-            "README.md does not mention {artifact}"
+            guide.contains(&artifact),
+            "docs/GUIDE.md does not mention {artifact}"
         );
     }
 }
