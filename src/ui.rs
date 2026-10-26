@@ -641,6 +641,44 @@ pub fn present(hwnd: HWND, name: &str, started: std::time::Instant) {
 
 // ------------------------------------------------------------------ frame
 
+/// The app icon (the exe's icon resource) in the title bar, the taskbar and
+/// Alt+Tab of a window that has a caption. Popups have none, so they are left
+/// alone. Sized for the display's DPI so it stays sharp.
+fn set_app_icon(hwnd: HWND) {
+    use windows::Win32::UI::HiDpi::GetSystemMetricsForDpi;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        LoadImageW, ICON_BIG, ICON_SMALL, IMAGE_ICON, LR_SHARED, SM_CXICON, SM_CXSMICON,
+        WM_SETICON, WS_CAPTION,
+    };
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+        if style & WS_CAPTION.0 != WS_CAPTION.0 {
+            return;
+        }
+        let dpi = DPI.load(Ordering::Relaxed).max(96);
+        let hinst = GetModuleHandleW(None).unwrap_or_default();
+        for (which, metric) in [(ICON_SMALL, SM_CXSMICON), (ICON_BIG, SM_CXICON)] {
+            let size = GetSystemMetricsForDpi(metric, dpi);
+            // Resource 1 of righttype.exe is the icon (packaging/windows/righttype.rc).
+            if let Ok(icon) = LoadImageW(
+                hinst,
+                PCWSTR(1 as *const u16),
+                IMAGE_ICON,
+                size,
+                size,
+                LR_SHARED,
+            ) {
+                SendMessageW(
+                    hwnd,
+                    WM_SETICON,
+                    WPARAM(which as usize),
+                    LPARAM(icon.0 as isize),
+                );
+            }
+        }
+    }
+}
+
 /// Title bar matching the theme, rounded corners on Windows 11.
 pub fn apply_frame(hwnd: HWND) {
     unsafe {
@@ -1425,6 +1463,7 @@ impl Surface {
             );
         }
         apply_frame(hwnd);
+        set_app_icon(hwnd);
         let surface = Rc::new(Surface {
             hwnd,
             fonts: RefCell::new(Fonts::new()),
