@@ -1175,6 +1175,9 @@ pub enum TextStyle {
     BodyStrong,
     Dim,
     Small,
+    /// `Small` in the main text colour, centred vertically in its box
+    /// (one line or two, as for a wallet address).
+    SmallMiddle,
     /// A single line of text with ellipsis if it overflows, vertically centered.
     SingleLine,
     /// A section heading of a page: `icon` (a glyph of the icon font) before
@@ -1979,6 +1982,11 @@ impl Surface {
             TextStyle::BodyStrong => text(hdc, &s, rc, f.body_strong, p.text, wrap),
             TextStyle::Dim => text(hdc, &s, rc, f.body, p.text_dim, wrap),
             TextStyle::Small => text(hdc, &s, rc, f.small, p.text_dim, wrap),
+            TextStyle::SmallMiddle => {
+                let h = measure(hdc, &s, rc.right - rc.left, f.small);
+                let top = rc.top + ((rc.bottom - rc.top) - h).max(0) / 2;
+                text(hdc, &s, RECT { top, ..rc }, f.small, p.text, wrap)
+            }
             TextStyle::SingleLine => text(
                 hdc,
                 &s,
