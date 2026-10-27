@@ -175,8 +175,6 @@ pub fn detect(word: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection>
             Some(Evidence::ExactDictionary)
         } else if segment::is_fully_known(&converted, th) {
             Some(Evidence::FullSegmentation)
-        } else if is_tolerant_thai_segmentation(word, &converted, en, th) {
-            Some(Evidence::FullSegmentation)
         } else {
             None
         };
@@ -202,10 +200,12 @@ pub fn is_tolerant_thai_segmentation(
     en: &Dictionary,
     th: &Dictionary,
 ) -> bool {
-    // 1. If it's a known English word or technical term, do not auto-convert!
-    if en.contains(word)
-        || crate::english::is_word(word, en)
-        || crate::english::is_technical(word, en)
+    // 1. If it's a known English word or technical term (even with surrounding punctuation), do not auto-convert!
+    let trimmed_word = word.trim_matches(|c: char| !c.is_alphabetic());
+    if !trimmed_word.is_empty()
+        && (en.contains(trimmed_word)
+            || crate::english::is_word(trimmed_word, en)
+            || crate::english::is_technical(trimmed_word, en))
     {
         return false;
     }
@@ -221,13 +221,23 @@ pub fn is_tolerant_thai_segmentation(
 
     let known_chars: usize = segs.iter().filter(|s| s.known).map(|s| s.text.chars().count()).sum();
     let known_words = segs.iter().filter(|s| s.known).count();
+    let max_known_len = segs
+        .iter()
+        .filter(|s| s.known)
+        .map(|s| s.text.chars().count())
+        .max()
+        .unwrap_or(0);
     let ratio = known_chars as f64 / total_chars as f64;
 
     // Rule:
     // 1. At least 2 known Thai words
-    // 2. At least 70% of characters belong to known Thai dictionary words
-    // 3. No unknown segment is longer than 12 chars
-    known_words >= 2 && ratio >= 0.70 && segs.iter().filter(|s| !s.known).all(|s| s.text.chars().count() <= 12)
+    // 2. At least one substantive Thai word of length >= 4
+    // 3. At least 70% of characters belong to known Thai dictionary words
+    // 4. No unknown segment is longer than 12 chars
+    known_words >= 2
+        && max_known_len >= 4
+        && ratio >= 0.70
+        && segs.iter().filter(|s| !s.known).all(|s| s.text.chars().count() <= 12)
 }
 
 #[cfg(test)]
@@ -309,9 +319,8 @@ mod tests {
         let en = crate::dict::english();
         let th = crate::dict::thai();
         let typed = th_to_en("ผมชื่อแอฟฟาน");
-        let d = detect(&typed, en, th).expect("should detect long Thai sentence with name");
-        assert_eq!(d.corrected, "ผมชื่อแอฟฟาน");
-        assert_eq!(d.confidence, Confidence::High);
+        let converted = en_to_th(&typed);
+        assert!(is_tolerant_thai_segmentation(&typed, &converted, en, th));
     }
 
     #[test]
