@@ -47,6 +47,8 @@ pub struct Config {
     pub predict_layout: bool,
     /// Keep two counts per day for the 7-day view (opt-in).
     pub keep_stats: bool,
+    /// Remember the last pill messages in memory (on by default).
+    pub keep_notices: bool,
     /// A folder to keep the learned words in (e.g. a OneDrive folder).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub learned_folder: Option<String>,
@@ -197,6 +199,7 @@ impl Default for Config {
             caret_hints: true,
             predict_layout: false,
             keep_stats: false,
+            keep_notices: true,
             learned_folder: None,
             hotkeys: BTreeMap::new(),
             thai_layout: None,
@@ -337,6 +340,7 @@ pub fn apply(cfg: &Config) {
     if let Some(folder) = cfg.learned_folder.as_deref() {
         learn::start_with_folder(Some(folder.into()));
     }
+    righttype::notice::set_keeping(cfg.keep_notices);
     if cfg.keep_stats != crate::stats::keeps_daily() {
         crate::stats::set_keep_daily(cfg.keep_stats);
     }
@@ -594,6 +598,7 @@ fn snapshot() -> Config {
         restart_after_crash: RESTART_AFTER_CRASH.load(std::sync::atomic::Ordering::Relaxed),
         predict_layout: crate::habits::is_enabled(),
         keep_stats: crate::stats::keeps_daily(),
+        keep_notices: righttype::notice::keeping(),
         learned_folder: learn::folder().map(|p| p.to_string_lossy().into_owned()),
         hotkeys: hook::hotkeys()
             .to_config()

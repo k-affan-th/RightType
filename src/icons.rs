@@ -68,6 +68,7 @@ pub const EDIT: char = '\u{E70F}'; // Edit
 pub const SAVE: char = '\u{E74E}'; // Save
 pub const COPY: char = '\u{E8C8}'; // Copy
 pub const REFRESH: char = '\u{E72C}'; // Refresh
+pub const HISTORY: char = '\u{E81C}'; // History (a clock with an arrow back)
 pub const IMPORT: char = '\u{E896}'; // Download
 pub const EXPORT: char = '\u{E898}'; // Upload
 pub const FOLDER: char = '\u{E8B7}'; // Folder

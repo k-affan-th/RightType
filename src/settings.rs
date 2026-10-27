@@ -48,8 +48,9 @@ const PAGE_SNIPPETS: u8 = 6;
 const PAGE_KEYBOARD: u8 = 7;
 const PAGE_TOOLS: u8 = 8;
 const PAGE_SPONSOR: u8 = 9;
+const PAGE_ACTIVITY: u8 = 10;
 /// Sidebar entries, top to bottom, and their pages.
-const NAV: [(T, u8, char); 9] = [
+const NAV: [(T, u8, char); 10] = [
     (T::NavGeneral, PAGE_GENERAL, icons::GENERAL),
     (T::NavKeyboard, PAGE_KEYBOARD, icons::KEYBOARD),
     (T::NavTools, PAGE_TOOLS, icons::TOOLS),
@@ -57,6 +58,7 @@ const NAV: [(T, u8, char); 9] = [
     (T::NavLearned, PAGE_LEARNED, icons::LEARNED),
     (T::NavSnippets, PAGE_SNIPPETS, icons::SNIPPETS),
     (T::NavBlocked, PAGE_BLOCKED, icons::APPS),
+    (T::NavActivity, PAGE_ACTIVITY, icons::HISTORY),
     (T::NavAbout, PAGE_ABOUT, icons::PRIVACY),
     (T::NavSponsor, PAGE_SPONSOR, icons::SUPPORT),
 ];
@@ -198,7 +200,7 @@ pub fn hotkey_rows() -> Vec<(T, String)> {
 }
 
 struct Ids {
-    nav: [u16; 9],
+    nav: [u16; 10],
     snip_table: u16,
     snip_trigger: u16,
     snip_text: u16,
@@ -225,6 +227,10 @@ struct Ids {
     learned_table: u16,
     learned_word: u16,
     learned_status: u16,
+    activity_table: u16,
+    activity_status: u16,
+    activity_clear: u16,
+    activity_keep: u16,
     /// Per action (in `Action::ALL` order): its keys label and Change button.
     key_labels: Vec<u16>,
     key_buttons: Vec<u16>,
@@ -380,7 +386,7 @@ pub fn open() {
 /// Open on a given page (1 = General … 5 = Privacy & about); debug harness use.
 #[cfg(debug_assertions)]
 pub fn open_page(page: u8) {
-    open_on(page.clamp(PAGE_GENERAL, PAGE_SPONSOR));
+    open_on(page.clamp(PAGE_GENERAL, PAGE_ACTIVITY));
 }
 
 fn open_on(page: u8) {
@@ -416,7 +422,7 @@ fn open_on(page: u8) {
         p.bg,
         0,
     );
-    let mut nav = [0u16; 9];
+    let mut nav = [0u16; 10];
     for (i, (label, p_id, icon)) in NAV.iter().enumerate() {
         // The first entry starts the radio group, whichever page is shown;
         // the shown page is checked on its own.
@@ -1155,6 +1161,50 @@ fn open_on(page: u8) {
         l,
     );
 
+    // --- Recent messages ----------------------------------------------------
+    let m = PAGE_ACTIVITY;
+    s.label(
+        tr(T::NavActivity),
+        TextStyle::Title,
+        (X0, 18, CW, 36),
+        p.bg,
+        m,
+    );
+    s.label(
+        tr(T::ActivityIntro),
+        TextStyle::Dim,
+        (X0, 58, CW, 40),
+        p.bg,
+        m,
+    );
+    let activity_table = s.table(
+        &[
+            (tr(T::ColWhen), 64),
+            (tr(T::ColKind), 96),
+            (tr(T::ColMessage), 320),
+        ],
+        (X0, 102, CW, 288),
+        m,
+    );
+    let activity_clear = s.button_icon(
+        tr(T::BtnClearAll),
+        icons::REMOVE,
+        false,
+        (X0 + CW - 136, 402, 136, 34),
+        p.bg,
+        m,
+    );
+    let activity_status = s.label("", TextStyle::Small, (X0, 408, CW - 150, 22), p.bg, m);
+    let activity_keep = s.toggle_icon(
+        tr(T::RowKeepMessages),
+        tr(T::SubKeepMessages),
+        icons::HISTORY,
+        (X0 + 4, 452, CW - 8, 64),
+        p.surface,
+        m,
+    );
+    s.set_checked(activity_keep, righttype::notice::keeping());
+
     // --- Snippets -----------------------------------------------------------
     let n = PAGE_SNIPPETS;
     s.label(
@@ -1566,6 +1616,10 @@ fn open_on(page: u8) {
         learned_table,
         learned_word,
         learned_status,
+        activity_table,
+        activity_status,
+        activity_clear,
+        activity_keep,
         key_labels,
         key_buttons,
         keys_status,
@@ -1638,6 +1692,7 @@ fn open_on(page: u8) {
     fill_apps(&win, None);
     fill_snippets(&win, None);
     fill_learned(&win, None);
+    fill_activity(&win);
     win.surface.set_checked(win.ids.snip_scope[2], true);
     sync(&win);
     if let Some(i) = NAV.iter().position(|(_, p, _)| *p == page) {
@@ -1824,6 +1879,9 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         if NAV[i].1 == PAGE_TOOLS {
             fill_health(win);
         }
+        if NAV[i].1 == PAGE_ACTIVITY {
+            fill_activity(win);
+        }
         return;
     }
     if id == ids.edit_learned {
@@ -1878,6 +1936,14 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         fill_learned(win, None);
         s.set_text(ids.learned_status, "");
         overlay::show(tr(T::ToastLearnedCleared));
+    } else if id == ids.activity_clear {
+        righttype::notice::clear();
+        fill_activity(win);
+        s.set_text(ids.activity_status, tr(T::ActivityCleared));
+    } else if id == ids.activity_keep {
+        righttype::notice::set_keeping(s.checked(ids.activity_keep));
+        config::persist();
+        fill_activity(win);
     } else if id == ids.learned_add {
         add_learned(win);
     } else if id == ids.learned_remove {
@@ -2141,6 +2207,54 @@ fn remove_snippet(win: &SettingsWindow) {
     s.set_text(win.ids.snip_trigger, "");
     s.set_text(win.ids.snip_text, "");
     s.set_text(win.ids.snip_status, tr(T::SnipRemoved));
+}
+
+// ------------------------------------------------- Recent messages page
+
+/// Minutes the local clock is ahead of UTC right now.
+fn local_offset_minutes() -> i32 {
+    let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+    let local = t.wHour as i32 * 60 + t.wMinute as i32;
+    let utc = ((std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+        / 60)
+        % 1440) as i32;
+    let mut offset = local - utc;
+    if offset > 14 * 60 {
+        offset -= 24 * 60;
+    } else if offset < -12 * 60 {
+        offset += 24 * 60;
+    }
+    offset
+}
+
+/// Fill the Recent messages table from the memory, newest first.
+fn fill_activity(win: &SettingsWindow) {
+    use righttype::notice::{self, Kind};
+    let offset = local_offset_minutes();
+    let cells: Vec<Vec<String>> = notice::recent()
+        .iter()
+        .map(|n| {
+            let kind = tr(match n.kind {
+                Kind::Done => T::KindDone,
+                Kind::Undo => T::KindUndo,
+                Kind::Info => T::KindInfo,
+                Kind::Attention => T::KindAttention,
+                Kind::Problem => T::KindProblem,
+            });
+            vec![notice::clock(n.at, offset), kind.to_string(), n.line()]
+        })
+        .collect();
+    win.surface.set_rows(win.ids.activity_table, &cells, None);
+    win.surface.set_text(
+        win.ids.activity_status,
+        if cells.is_empty() {
+            tr(T::ActivityEmpty)
+        } else {
+            ""
+        },
+    );
 }
 
 // ---------------------------------------------------- Learned words page
