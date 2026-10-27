@@ -68,6 +68,24 @@ pub fn supported_layout_id(hkl: u32) -> Option<InputLayout> {
     None
 }
 
+/// The layout a manual flip should read ambiguous symbols as. Exact where the
+/// keyboard is one RightType reads keys with ([`supported_layout_id`]); for any
+/// other Thai or English keyboard (a handle Windows reports differently) the
+/// language alone decides, so `.` is still `"` on a Thai keyboard and `ใ` on an
+/// English one rather than silently falling back to English.
+pub fn flip_layout_id(hkl: u32) -> Option<crate::layout::LayoutId> {
+    use crate::layout::LayoutId;
+    match supported_layout_id(hkl) {
+        Some(InputLayout::UsQwerty) => Some(LayoutId::QwertyEn),
+        Some(InputLayout::ThaiKedmanee) => Some(LayoutId::Kedmanee),
+        None => match (hkl & 0xFFFF) & 0x3FF {
+            0x1E => Some(LayoutId::Kedmanee),
+            0x09 => Some(LayoutId::QwertyEn),
+            _ => None,
+        },
+    }
+}
+
 /// Web addresses, email addresses and numbers typed with the Thai keyboard
 /// on are put back (on by default; the typist can turn it off).
 static FIXES_ADDRESSES: AtomicBool = AtomicBool::new(true);
@@ -1586,5 +1604,17 @@ mod tests {
         let d = detect_token(&typed, InputLayout::UsQwerty, en, th)
             .expect("detect token should succeed");
         assert_eq!(d.corrected, "ผมชื่อแอฟฟาน");
+    }
+    #[test]
+    fn flip_layout_follows_the_language_when_the_handle_is_unusual() {
+        use crate::layout::LayoutId;
+        assert_eq!(flip_layout_id(0x041E_041E), Some(LayoutId::Kedmanee));
+        assert_eq!(flip_layout_id(0x0409_0409), Some(LayoutId::QwertyEn));
+        // Same languages under handles the exact check does not know.
+        assert_eq!(flip_layout_id(0xE001_041E), Some(LayoutId::Kedmanee));
+        assert_eq!(flip_layout_id(0xE001_0409), Some(LayoutId::QwertyEn));
+        assert_eq!(flip_layout_id(0x0809_0809), Some(LayoutId::QwertyEn));
+        // Other languages stay out.
+        assert_eq!(flip_layout_id(0x0407_0407), None);
     }
 }

@@ -4124,10 +4124,7 @@ pub unsafe fn flip_picked(picked: &[usize]) {
 
 /// The layout the focused window is typing in, as the conversion layer names it.
 unsafe fn current_layout_id() -> Option<LayoutId> {
-    policy::supported_layout_id(layout_id(effective_layout())).map(|l| match l {
-        policy::InputLayout::UsQwerty => LayoutId::QwertyEn,
-        policy::InputLayout::ThaiKedmanee => LayoutId::Kedmanee,
-    })
+    policy::flip_layout_id(layout_id(effective_layout()))
 }
 
 /// Flip a word as the app shows it. With CapsLock on, English on screen is in
