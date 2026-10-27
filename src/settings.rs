@@ -222,7 +222,8 @@ struct Ids {
     spelling: u16,
     learned: u16,
     edit_learned: u16,
-    learned_list: u16,
+    learned_table: u16,
+    learned_word: u16,
     learned_status: u16,
     /// Per action (in `Action::ALL` order): its keys label and Change button.
     key_labels: Vec<u16>,
@@ -258,7 +259,8 @@ struct Ids {
     /// Per check: its status line and its fix button.
     health_status: [u16; crate::health::COUNT],
     health_fix: [u16; crate::health::COUNT],
-    save_learned: u16,
+    learned_add: u16,
+    learned_remove: u16,
     clear_learned: u16,
     apps_table: u16,
     /// Mode buttons for the selected app, in [`APP_MODE_CHOICES`] order.
@@ -1060,16 +1062,45 @@ fn open_on(page: u8) {
     s.label(
         tr(T::LearnedIntro),
         TextStyle::Dim,
-        (X0, 70, CW, 60),
+        (X0, 58, CW, 40),
         p.bg,
         l,
     );
-    let learned_list = s.edit(&learn::list().join("\r\n"), (X0 + 10, 150, CW - 20, 252), l);
+    let learned_table = s.table(
+        &[(tr(T::ColWord), 330), (tr(T::ColKeyboard), 150)],
+        (X0, 102, CW, 196),
+        l,
+    );
+    s.label(
+        tr(T::ColWord),
+        TextStyle::Small,
+        (X0, 310, 150, 18),
+        p.bg,
+        l,
+    );
+    let learned_word = s.line_edit("", (X0 + 4, 334, 306, 24), l);
+    let learned_add = s.button_icon(
+        tr(T::BtnAddWord),
+        icons::ADD,
+        true,
+        (X0 + 318, 330, 92, 34),
+        p.bg,
+        l,
+    );
+    let learned_remove = s.button_icon(
+        tr(T::BtnRemoveApp),
+        icons::REMOVE,
+        false,
+        (X0 + CW - 120, 330, 120, 34),
+        p.bg,
+        l,
+    );
+    let learned_status = s.label("", TextStyle::Small, (X0, 372, CW, 22), p.bg, l);
     let import_learned = s.button_icon(
         tr(T::BtnImport),
         icons::IMPORT,
         false,
-        (X0, 428, 100, 34),
+        (X0, 404, 100, 34),
         p.bg,
         l,
     );
@@ -1077,17 +1108,24 @@ fn open_on(page: u8) {
         tr(T::BtnExport),
         icons::EXPORT,
         false,
-        (X0 + 106, 428, 100, 34),
+        (X0 + 106, 404, 100, 34),
         p.bg,
         l,
     );
-    let learned_status = s.label("", TextStyle::Small, (X0, 470, CW, 36), p.bg, l);
-    let folder_label = s.label("", TextStyle::Small, (X0, 526, CW - 290, 40), p.bg, l);
+    let clear_learned = s.button_icon(
+        tr(T::BtnClearAll),
+        icons::REMOVE,
+        false,
+        (X0 + CW - 136, 404, 136, 34),
+        p.bg,
+        l,
+    );
+    let folder_label = s.label("", TextStyle::Small, (X0, 462, CW - 290, 40), p.bg, l);
     let sync_folder = s.button_icon(
         tr(T::BtnSyncFolder),
         icons::FOLDER,
         false,
-        (X0 + CW - 284, 520, 150, 34),
+        (X0 + CW - 284, 456, 150, 34),
         p.bg,
         l,
     );
@@ -1095,7 +1133,7 @@ fn open_on(page: u8) {
         tr(T::BtnThisPc),
         icons::APPS,
         false,
-        (X0 + CW - 126, 520, 126, 34),
+        (X0 + CW - 126, 456, 126, 34),
         p.bg,
         l,
     );
@@ -1103,33 +1141,17 @@ fn open_on(page: u8) {
         tr(T::RowSyncSettings),
         tr(T::SubSyncSettingsShort),
         icons::FOLDER,
-        (X0 + 4, 576, CW - 8, 64),
+        (X0 + 4, 520, CW - 8, 64),
         p.surface,
         l,
     );
     s.info_after(
         tr(T::InfoMore),
         tr(T::SubSyncSettings),
-        (X0 + 4, 576, CW - 8, 64),
+        (X0 + 4, 520, CW - 8, 64),
         true,
         tr(T::RowSyncSettings),
         p.surface,
-        l,
-    );
-    let clear_learned = s.button_icon(
-        tr(T::BtnClearAll),
-        icons::REMOVE,
-        false,
-        (X0 + CW - 284, 428, 136, 34),
-        p.bg,
-        l,
-    );
-    let save_learned = s.button_icon(
-        tr(T::BtnSaveLearned),
-        icons::SAVE,
-        true,
-        (X0 + CW - 140, 428, 140, 34),
-        p.bg,
         l,
     );
 
@@ -1541,7 +1563,8 @@ fn open_on(page: u8) {
         spelling,
         learned,
         edit_learned,
-        learned_list,
+        learned_table,
+        learned_word,
         learned_status,
         key_labels,
         key_buttons,
@@ -1574,7 +1597,8 @@ fn open_on(page: u8) {
         health_again,
         health_status,
         health_fix,
-        save_learned,
+        learned_add,
+        learned_remove,
         clear_learned,
         apps_table,
         app_seg,
@@ -1613,6 +1637,7 @@ fn open_on(page: u8) {
     });
     fill_apps(&win, None);
     fill_snippets(&win, None);
+    fill_learned(&win, None);
     win.surface.set_checked(win.ids.snip_scope[2], true);
     sync(&win);
     if let Some(i) = NAV.iter().position(|(_, p, _)| *p == page) {
@@ -1640,6 +1665,8 @@ fn open_on(page: u8) {
         if let Some(win) = weak.upgrade() {
             if id == win.ids.snip_table {
                 snippet_table_event(&win, event);
+            } else if id == win.ids.learned_table {
+                learned_table_event(&win, event);
             } else {
                 app_table_event(&win, event);
             }
@@ -1848,29 +1875,13 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         config::persist();
     } else if id == ids.clear_learned {
         learn::clear();
-        s.set_text(ids.learned_list, "");
+        fill_learned(win, None);
         s.set_text(ids.learned_status, "");
         overlay::show(tr(T::ToastLearnedCleared));
-    } else if id == ids.save_learned {
-        let lines: Vec<String> = s
-            .text_of(ids.learned_list)
-            .lines()
-            .map(str::to_string)
-            .collect();
-        let result = learn::replace(&lines);
-        // Show the list as it was kept: sorted, deduplicated, invalid lines gone.
-        s.set_text(ids.learned_list, &learn::list().join("\r\n"));
-        let n = result.kept.to_string();
-        let status = if result.skipped == 0 {
-            trf(T::LearnedSaved, &[("n", &n)])
-        } else {
-            trf(
-                T::LearnedSkipped,
-                &[("n", &n), ("k", &result.skipped.to_string())],
-            )
-        };
-        s.set_text(ids.learned_status, &status);
-        overlay::show(tr(T::ToastSaved));
+    } else if id == ids.learned_add {
+        add_learned(win);
+    } else if id == ids.learned_remove {
+        remove_learned(win);
     } else if let Some(i) = ids.app_seg.iter().position(|&b| b == id) {
         set_app_mode(win, APP_MODE_CHOICES[i]);
     } else if id == ids.snip_date {
@@ -1900,7 +1911,7 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         match learn::set_folder(folder) {
             Some(n) => {
                 config::persist();
-                s.set_text(ids.learned_list, &learn::list().join("\r\n"));
+                fill_learned(win, None);
                 s.set_text(
                     ids.learned_status,
                     &trf(T::LearnedMoved, &[("n", &n.to_string())]),
@@ -2130,6 +2141,62 @@ fn remove_snippet(win: &SettingsWindow) {
     s.set_text(win.ids.snip_trigger, "");
     s.set_text(win.ids.snip_text, "");
     s.set_text(win.ids.snip_status, tr(T::SnipRemoved));
+}
+
+// ---------------------------------------------------- Learned words page
+
+/// Fill the Learned words table, selecting `word` when given.
+fn fill_learned(win: &SettingsWindow, word: Option<&str>) {
+    let words = learn::list();
+    let cells: Vec<Vec<String>> = words
+        .iter()
+        .map(|w| {
+            let thai = w.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+            let kind = tr(if thai { T::ScopeThai } else { T::ScopeEnglish });
+            vec![w.clone(), kind.to_string()]
+        })
+        .collect();
+    let select = word.and_then(|x| words.iter().position(|w| w == x));
+    win.surface.set_rows(win.ids.learned_table, &cells, select);
+}
+
+fn learned_table_event(win: &Rc<SettingsWindow>, event: ui::TableEvent) {
+    if matches!(event, ui::TableEvent::Delete) {
+        remove_learned(win);
+    }
+}
+
+/// Learn the word in the box (the same checks as a word added from the panel).
+fn add_learned(win: &SettingsWindow) {
+    let s = &win.surface;
+    match learn::add_explicit(&s.text_of(win.ids.learned_word)) {
+        Ok(word) => {
+            fill_learned(win, Some(&word));
+            s.set_text(win.ids.learned_word, "");
+            s.set_text(
+                win.ids.learned_status,
+                &trf(T::ToastWordLearned, &[("word", &word)]),
+            );
+        }
+        Err(_) => s.set_text(win.ids.learned_status, tr(T::ToastWordInvalid)),
+    }
+}
+
+/// Forget the selected word.
+fn remove_learned(win: &SettingsWindow) {
+    let s = &win.surface;
+    let mut words = learn::list();
+    let Some(i) = s
+        .selected_row(win.ids.learned_table)
+        .filter(|&i| i < words.len())
+    else {
+        s.set_text(win.ids.learned_status, tr(T::LearnedPickFirst));
+        return;
+    };
+    words.remove(i);
+    learn::replace(&words);
+    fill_learned(win, None);
+    s.set_text(win.ids.learned_status, tr(T::SnipRemoved));
 }
 
 // ------------------------------------------------------------- Apps page
@@ -2674,10 +2741,18 @@ fn import_learned(win: &SettingsWindow) {
     text.zeroize();
     let result = learn::replace(&lines);
     let added = result.kept.saturating_sub(before);
-    s.set_text(win.ids.learned_list, &learn::list().join("\r\n"));
+    fill_learned(win, None);
+    let n = added.to_string();
     s.set_text(
         win.ids.learned_status,
-        &trf(T::LearnedImported, &[("n", &added.to_string())]),
+        &if result.skipped == 0 {
+            trf(T::LearnedImported, &[("n", &n)])
+        } else {
+            trf(
+                T::LearnedImportSkipped,
+                &[("n", &n), ("k", &result.skipped.to_string())],
+            )
+        },
     );
     overlay::show(tr(T::ToastSaved));
 }

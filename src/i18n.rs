@@ -581,8 +581,10 @@ texts! {
     HkUndo => "Undo the last fix", "ย้อนการแก้ล่าสุด";
     HkAccept => "Use the suggestion", "ใช้คำแนะนำ";
     HkPanic => "Turn RightType off / on", "ปิด / เปิด RightType";
-    LearnedIntro => "Words exempt from automatic conversion (one word per line).", "รายการคำศัพท์ที่ยกเว้นการแปลงภาษา (หนึ่งคำต่อบรรทัด)";
-    BtnSaveLearned => "Save", "บันทึก";
+    LearnedIntro => "Words RightType leaves exactly as typed. Add one below, or select a word and press Delete.", "คำที่ RightType จะไม่แก้ ปล่อยไว้ตามที่พิมพ์ เพิ่มคำได้ด้านล่าง หรือเลือกคำแล้วกด Delete เพื่อลบ";
+    ColWord => "Word", "คำ";
+    BtnAddWord => "Add", "เพิ่ม";
+    LearnedPickFirst => "Select a word in the list first.", "เลือกคำในรายการก่อน";
     BtnClearAll => "Clear all", "ล้างทั้งหมด";
     BtnImport => "Import…", "นำเข้า…";
     BtnExport => "Export…", "ส่งออก…";
@@ -592,11 +594,10 @@ texts! {
     BtnThisPc => "This PC only", "เฉพาะเครื่องนี้";
     LearnedMoved => "{n} words, merged with any already there.", "{n} คำ รวมกับที่มีอยู่แล้ว";
     LearnedImported => "Added {n} words from the file.", "เพิ่ม {n} คำจากไฟล์แล้ว";
+    LearnedImportSkipped => "Added {n} words from the file. Skipped {k} lines that are not a single word.", "เพิ่ม {n} คำจากไฟล์แล้ว ข้าม {k} บรรทัดที่ไม่ใช่คำเดียว";
     LearnedExported => "Saved {n} words to the file.", "บันทึก {n} คำลงไฟล์แล้ว";
     ErrFile => "Could not use that file.", "ใช้ไฟล์นั้นไม่ได้";
     FileFilter => "Text files (*.txt)", "ไฟล์ข้อความ (*.txt)";
-    LearnedSaved => "Saved {n} words.", "บันทึก {n} คำแล้ว";
-    LearnedSkipped => "Saved {n} words. Skipped {k} lines that are not a single word.", "บันทึก {n} คำแล้ว ข้าม {k} บรรทัดที่ไม่ใช่คำเดียว";
     AppsSaved => "Saved.", "บันทึกแล้ว";
     RowPredict => "Guess each field's language", "เดาภาษาของแต่ละช่อง";
     SubPredictShort => "Switches language as you click into a field.", "สลับภาษาเมื่อคลิกเข้าช่องที่ใช้ภาษาเดียว";

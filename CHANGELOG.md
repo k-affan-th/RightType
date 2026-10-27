@@ -4,6 +4,14 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Changed
+
+- The Learned words page now looks and works like Snippets and Apps: a table
+  of words with their keyboard, a box and Add button, Remove (or Delete), and
+  nothing to save. It used to be a plain text box with a Save button.
+- Fixed the `KFCvijkp,kd` example in a code comment (it should read
+  `KFCvijvp,kd`); the behaviour was already right.
+
 ## [2.6.2] — 2026-10-27
 
 ### Changed
