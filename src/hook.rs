@@ -32,7 +32,7 @@ use zeroize::Zeroize;
 use righttype::buffer::{Key, WordBuffer};
 use righttype::diag::{self, Shape};
 use righttype::hotkeys::{Action, Chord, Hotkeys};
-use righttype::layout::auto_convert;
+use righttype::layout::{auto_convert_with_layout, LayoutId};
 use righttype::per_app::AppMode;
 use righttype::recent::Recent;
 use righttype::render;
@@ -3936,7 +3936,8 @@ unsafe fn flip_back_recent() {
         undo_last_correction();
         return;
     }
-    let Some(step) = STATE.with(|s| s.borrow().recent.next_step(convert_shown)) else {
+    let conv = shown_converter();
+    let Some(step) = STATE.with(|s| s.borrow().recent.next_step(conv)) else {
         e2e_trace("flip back: no recent word".to_string());
         diag::note("Shift+Backspace: nothing to flip", &[]);
         // Say so: a press that does nothing looks like one that failed.
@@ -3948,7 +3949,8 @@ unsafe fn flip_back_recent() {
     {
         // Nothing changes on screen (a number, say): just move on to the
         // word before it on the next press.
-        STATE.with(|s| s.borrow_mut().recent.commit(convert_shown));
+        let conv = shown_converter();
+        STATE.with(|s| s.borrow_mut().recent.commit(conv));
         return;
     }
     // The deleted characters, so a text box that has not caught up with
@@ -3964,7 +3966,8 @@ unsafe fn flip_back_recent() {
         STATE.with(|s| s.borrow_mut().recent.clear());
         return;
     }
-    STATE.with(|s| s.borrow_mut().recent.commit(convert_shown));
+    let conv = shown_converter();
+    STATE.with(|s| s.borrow_mut().recent.commit(conv));
     set_undo(
         step.insert.chars().count() + 1,
         &step.restore,
@@ -4027,7 +4030,8 @@ unsafe fn flip_rest_of_run() {
     if !STATE.with(|s| s.borrow().buf.current().is_empty()) {
         return;
     }
-    let Some(step) = STATE.with(|s| s.borrow().recent.rest_step(convert_shown)) else {
+    let conv = shown_converter();
+    let Some(step) = STATE.with(|s| s.borrow().recent.rest_step(conv)) else {
         return;
     };
     e2e_trace(format!("flip: held, {} words", step.words));
@@ -4044,7 +4048,8 @@ unsafe fn flip_rest_of_run() {
         STATE.with(|s| s.borrow_mut().recent.clear());
         return;
     }
-    STATE.with(|s| s.borrow_mut().recent.commit_rest(convert_shown));
+    let conv = shown_converter();
+    STATE.with(|s| s.borrow_mut().recent.commit_rest(conv));
     set_undo(
         step.insert.chars().count() + 1,
         &step.restore,
@@ -4070,7 +4075,7 @@ pub fn recent_words() -> (Vec<String>, Vec<(usize, usize)>) {
 
 /// A word as it would be after a flip (the palette shows it).
 pub fn flipped(word: &str) -> String {
-    convert_shown(word)
+    shown_converter()(word)
 }
 
 /// The palette's "flip these": flip the recent words at `picked` (oldest
@@ -4081,7 +4086,8 @@ pub fn flipped(word: &str) -> String {
 pub unsafe fn flip_picked(picked: &[usize]) {
     use righttype::i18n::{tr, trf, T};
     let same_window = STATE.with(|s| s.borrow().last_hwnd) == GetForegroundWindow().0 as isize;
-    let step = STATE.with(|s| s.borrow().recent.flip_picked(picked, convert_shown));
+    let conv = shown_converter();
+    let step = STATE.with(|s| s.borrow().recent.flip_picked(picked, conv));
     let Some(step) = step.filter(|_| same_window) else {
         crate::overlay::show(tr(T::ToastNothingToFlip));
         return;
@@ -4122,14 +4128,28 @@ pub unsafe fn flip_picked(picked: &[usize]) {
     ));
 }
 
+/// The layout the focused window is typing in, as the conversion layer names it.
+unsafe fn current_layout_id() -> Option<LayoutId> {
+    policy::flip_layout_id(layout_id(effective_layout()))
+}
+
 /// Flip a word as the app shows it. With CapsLock on, English on screen is in
 /// the other case from its keys (`L;YLFU` is สวัสดี), and English put back
 /// is shown that way too. CapsLock clears the recent words, so its state now
 /// is the one they were typed with.
-fn convert_shown(word: &str) -> String {
+fn convert_shown(word: &str, layout: Option<LayoutId>) -> String {
     let caps = unsafe { caps_on() };
     let keys = policy::shown_with_caps(word, caps);
-    policy::shown_with_caps(&auto_convert(&keys), caps)
+    policy::shown_with_caps(&auto_convert_with_layout(&keys, layout), caps)
+}
+
+/// [`convert_shown`] for the layout in use now. Take it *before* borrowing
+/// the recent words: finding the layout reads `STATE`, which they are part
+/// of, so asking from inside their callback panics ("already mutably
+/// borrowed"), as the e2e run showed.
+fn shown_converter() -> impl Fn(&str) -> String + Copy {
+    let layout = unsafe { current_layout_id() };
+    move |word| convert_shown(word, layout)
 }
 
 /// Manual: flip the layout of the word currently in the buffer, in place. A no-op
@@ -4147,7 +4167,8 @@ unsafe fn convert_last_word() {
     let backspaces = word.chars().count();
     // The buffer keeps the keys as if CapsLock were off; the app shows them
     // with it.
-    let mut converted = auto_convert(&word);
+    let layout = current_layout_id();
+    let mut converted = auto_convert_with_layout(&word, layout);
     let changed = converted != word;
     if changed {
         let mut shown = policy::shown_with_caps(&converted, caps_on());
@@ -4671,8 +4692,21 @@ unsafe fn foreground_layout() -> HKL {
 
 #[cfg(test)]
 mod tests {
-    use super::{Mode, OwnedRun, STATE};
+    use super::{shown_converter, Mode, OwnedRun, STATE};
     use righttype::detect::{Confidence, Detection, Evidence};
+
+    /// The recent words call the converter while `STATE` is borrowed for
+    /// writing. It must not read `STATE` itself: it did, and the app died with
+    /// "already mutably borrowed" (the e2e run on PR #26).
+    #[test]
+    fn the_flip_converter_does_not_touch_state_while_it_is_borrowed() {
+        let convert = shown_converter();
+        STATE.with(|s| {
+            let _held = s.borrow_mut();
+            let _ = convert("l;ylfu");
+            let _ = convert(".");
+        });
+    }
 
     #[test]
     fn mode_cycle_is_manual_auto_suggest() {

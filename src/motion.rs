@@ -6,11 +6,16 @@
 //! and can slip) only skips a frame instead of slowing the whole animation.
 
 /// How long the pill takes to appear.
-pub const ENTER_MS: u32 = 140;
+pub const ENTER_MS: u32 = 180;
 /// How long it takes to fade away.
-pub const EXIT_MS: u32 = 220;
+pub const EXIT_MS: u32 = 200;
 /// How far below its place it starts (96-DPI pixels).
 pub const RISE_PX: f32 = 4.0;
+/// How far to the right of its place a corner pill starts (96-DPI pixels).
+pub const SLIDE_PX: f32 = 16.0;
+/// How long a fade takes for someone who turned animation off in Windows:
+/// opacity only, no movement.
+pub const CALM_MS: u32 = 90;
 
 /// Where in its life the pill is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -20,37 +25,52 @@ pub enum Phase {
     Exit,
 }
 
-/// One frame: opacity (0–255) and how far below its resting place the pill
-/// is drawn (96-DPI pixels), `elapsed_ms` into `phase`. `done` is true when
-/// the phase is over.
+/// One frame: opacity (0–255), how far below its resting place the pill is
+/// drawn and how far to the right of it (96-DPI pixels), `elapsed_ms` into
+/// `phase`. `done` is true when the phase is over.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Frame {
     pub alpha: u8,
     pub drop_px: f32,
+    pub slide_px: f32,
     pub done: bool,
 }
 
 pub fn frame(phase: Phase, elapsed_ms: u32) -> Frame {
+    frame_for(phase, elapsed_ms, false)
+}
+
+/// [`frame`], or with `calm` the version for reduced motion: only the opacity
+/// changes, and quickly.
+pub fn frame_for(phase: Phase, elapsed_ms: u32, calm: bool) -> Frame {
     match phase {
         Phase::Enter => {
-            let t = progress(elapsed_ms, ENTER_MS);
+            let t = progress(elapsed_ms, if calm { CALM_MS } else { ENTER_MS });
             let e = ease_out_cubic(t);
+            let (rise, slide) = if calm {
+                (0.0, 0.0)
+            } else {
+                (RISE_PX, SLIDE_PX)
+            };
             Frame {
                 alpha: (255.0 * e).round() as u8,
-                drop_px: RISE_PX * (1.0 - e),
+                drop_px: rise * (1.0 - e),
+                slide_px: slide * (1.0 - e),
                 done: t >= 1.0,
             }
         }
         Phase::Hold => Frame {
             alpha: 255,
             drop_px: 0.0,
+            slide_px: 0.0,
             done: false,
         },
         Phase::Exit => {
-            let t = progress(elapsed_ms, EXIT_MS);
+            let t = progress(elapsed_ms, if calm { CALM_MS } else { EXIT_MS });
             Frame {
                 alpha: (255.0 * (1.0 - ease_in_quad(t))).round() as u8,
                 drop_px: 0.0,
+                slide_px: 0.0,
                 done: t >= 1.0,
             }
         }
@@ -99,6 +119,31 @@ mod tests {
         assert!(frame(Phase::Exit, EXIT_MS * 3 / 4).alpha < 130);
         let gone = frame(Phase::Exit, EXIT_MS + 50);
         assert_eq!((gone.alpha, gone.done), (0, true));
+    }
+
+    #[test]
+    fn a_corner_pill_slides_in_from_the_right_and_settles() {
+        let start = frame(Phase::Enter, 0);
+        assert_eq!(start.slide_px, SLIDE_PX);
+        let mut last = SLIDE_PX;
+        for ms in 0..=ENTER_MS {
+            let s = frame(Phase::Enter, ms).slide_px;
+            assert!(s <= last, "never moves back out");
+            last = s;
+        }
+        assert_eq!(last, 0.0);
+        assert_eq!(frame(Phase::Hold, 0).slide_px, 0.0);
+    }
+
+    #[test]
+    fn reduced_motion_only_fades_and_is_quick() {
+        let start = frame_for(Phase::Enter, 0, true);
+        assert_eq!((start.alpha, start.drop_px, start.slide_px), (0, 0.0, 0.0));
+        let mid = frame_for(Phase::Enter, CALM_MS / 2, true);
+        assert_eq!((mid.drop_px, mid.slide_px), (0.0, 0.0));
+        assert!(frame_for(Phase::Enter, CALM_MS, true).done);
+        assert!(frame_for(Phase::Exit, CALM_MS, true).done);
+        const _: () = assert!(CALM_MS < ENTER_MS && CALM_MS < EXIT_MS);
     }
 
     #[test]

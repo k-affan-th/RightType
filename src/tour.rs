@@ -106,12 +106,7 @@ const FIXING: &[Step] = &[
 const YOURS: &[Step] = &[
     Step {
         page: Some(T::NavLearned),
-        spot: Spot::Controls(&[
-            T::BtnImport,
-            T::BtnExport,
-            T::BtnClearAll,
-            T::BtnSaveLearned,
-        ]),
+        spot: Spot::Controls(&[T::BtnAddWord, T::BtnImport, T::BtnExport, T::BtnClearAll]),
         title: T::TourB1Title,
         body: T::TourB1Body,
     },

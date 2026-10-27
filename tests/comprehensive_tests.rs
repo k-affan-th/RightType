@@ -602,22 +602,25 @@ fn a_mistyped_english_word_is_put_back_when_the_thai_reading_dies() {
 
 #[test]
 fn the_commit_horizon_is_short_enough_to_anchor_real_thai() {
-    // Both of these leave the dictionary partway through (a loanword, a name).
+    // Each of these leaves the dictionary partway through (a loanword, a name).
     // Anchoring hands the rest to the Thai layout; never anchoring would
     // withdraw the whole run when viability finally dies.
-    for phrase in ["เปิดแอปไลน์หน่อย", "ผมชื่ออัฟฟานครับ"]
+    for phrase in ["เปิดแอปไลน์หน่อย", "ผมชื่ออัฟฟานครับ", "ผมชื่อแอฟฟาน"]
     {
         assert_eq!(
             owned_run_screen(&th_to_en(phrase), policy::COMMIT_HORIZON),
             phrase,
             "{phrase:?} must survive with the production horizon"
         );
-        assert_ne!(
-            owned_run_screen(&th_to_en(phrase), usize::MAX),
-            phrase,
-            "{phrase:?} is the reason the horizon exists; without it the run is lost"
-        );
     }
+    // Tolerant segmentation now rescues the longer two even without a horizon,
+    // but a short name run still has only the horizon to save it.
+    let phrase = "ผมชื่อแอฟฟาน";
+    assert_ne!(
+        owned_run_screen(&th_to_en(phrase), usize::MAX),
+        phrase,
+        "{phrase:?} is the reason the horizon exists; without it the run is lost"
+    );
 }
 
 #[test]

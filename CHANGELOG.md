@@ -2,7 +2,40 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.6.3] — 2026-10-28
+
+### Fixed
+
+- Dual-language symbols (`.` `?` `"`): the manual flip (Shift+Backspace) now
+  reads them according to the active keyboard layout. On Thai they give `"` `M` `W`;
+  on English they give `ใ` `ฦ` `.`.
+- Long Thai sentences typed on US QWERTY (e.g. sentences with uncommon names or
+  out-of-dictionary words) are accurately recognized and converted when segments
+  match known words.
+
+### Changed
+
+- The Learned words page now looks and works like Snippets and Apps: a table
+  of words with their keyboard, a box and Add button, Remove (or Delete), and
+  nothing to save. It used to be a plain text box with a Save button.
+- Messages in the pill at the bottom right now have an icon and colour for what
+  happened (done, undone, info, check, problem), a short title with the hint
+  under it, and stay as long as they take to read; the pointer on one keeps it
+  there, and a click opens the new Recent messages page. They slide in from the
+  right (a plain fade when Windows animation is off).
+- The pill is flat (no lit edge round it) and its corners are concentric with the
+  icon: the corner radius is the icon's radius plus the gap kept round it, the
+  same for one line and for several. High Contrast keeps its outline.
+- The pill's rounded corners and its icon disc are drawn smooth (per-pixel
+  alpha) instead of stepped, and it fades with the same blend.
+- Settings has a Recent messages page: the last 50 pill messages, kept in memory
+  only and forgotten when RightType closes, with Clear all and a switch to
+  stop remembering.
+- The pill at the bottom right no longer runs a long message out of its
+  rounded ends: text that does not fit one line wraps (up to four lines) inside
+  a rounded rectangle.
+- Fixed the `KFCvijkp,kd` example in a code comment (it should read
+  `KFCvijvp,kd`); the behaviour was already right.
 
 ## [2.6.2] — 2026-10-27
 

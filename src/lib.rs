@@ -57,6 +57,7 @@ pub mod macros;
 pub mod mathsimple;
 pub mod motion;
 pub mod naturalmath;
+pub mod notice;
 pub mod per_app;
 pub mod policy;
 pub mod predict;

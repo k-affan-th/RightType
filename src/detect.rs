@@ -192,6 +192,61 @@ pub fn detect(word: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection>
     None
 }
 
+/// Check if a long token typed on US QWERTY converts to Thai with high confidence
+/// by evaluating dictionary coverage across its segments (tolerant segmentation).
+pub fn is_tolerant_thai_segmentation(
+    word: &str,
+    converted: &str,
+    en: &Dictionary,
+    th: &Dictionary,
+) -> bool {
+    // 1. If it's a known English word or technical term (even with surrounding punctuation), do not auto-convert!
+    let trimmed_word = word.trim_matches(|c: char| !c.is_alphabetic());
+    if !trimmed_word.is_empty()
+        && (en.contains(trimmed_word)
+            || crate::english::is_word(trimmed_word, en)
+            || crate::english::is_technical(trimmed_word, en))
+    {
+        return false;
+    }
+
+    let segs = segment::segment(converted, th);
+    if segs.is_empty() {
+        return false;
+    }
+    let total_chars = converted.chars().count();
+    if total_chars < 6 {
+        return false;
+    }
+
+    let known_chars: usize = segs
+        .iter()
+        .filter(|s| s.known)
+        .map(|s| s.text.chars().count())
+        .sum();
+    let known_words = segs.iter().filter(|s| s.known).count();
+    let max_known_len = segs
+        .iter()
+        .filter(|s| s.known)
+        .map(|s| s.text.chars().count())
+        .max()
+        .unwrap_or(0);
+    let ratio = known_chars as f64 / total_chars as f64;
+
+    // Rule:
+    // 1. At least 2 known Thai words
+    // 2. At least one substantive Thai word of length >= 4
+    // 3. At least 70% of characters belong to known Thai dictionary words
+    // 4. No unknown segment is longer than 12 chars
+    known_words >= 2
+        && max_known_len >= 4
+        && ratio >= 0.70
+        && segs
+            .iter()
+            .filter(|s| !s.known)
+            .all(|s| s.text.chars().count() <= 12)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,5 +320,21 @@ mod tests {
         let en = Dictionary::from_words([] as [&str; 0]);
         let th = Dictionary::from_words([converted.as_str()]);
         assert_eq!(detect(raw, &en, &th).unwrap().corrected, converted);
+    }
+    #[test]
+    fn long_thai_sentence_with_proper_noun_is_detected() {
+        let en = crate::dict::english();
+        let th = crate::dict::thai();
+        let typed = th_to_en("ผมชื่อแอฟฟาน");
+        let converted = en_to_th(&typed);
+        assert!(is_tolerant_thai_segmentation(&typed, &converted, en, th));
+    }
+
+    #[test]
+    fn english_words_and_code_not_detected_as_thai() {
+        let en = crate::dict::english();
+        let th = crate::dict::thai();
+        assert!(detect("development", en, th).is_none());
+        assert!(detect("calculateTotalPrice", en, th).is_none());
     }
 }

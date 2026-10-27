@@ -68,6 +68,24 @@ pub fn supported_layout_id(hkl: u32) -> Option<InputLayout> {
     None
 }
 
+/// The layout a manual flip should read ambiguous symbols as. Exact where the
+/// keyboard is one RightType reads keys with ([`supported_layout_id`]); for any
+/// other Thai or English keyboard (a handle Windows reports differently) the
+/// language alone decides, so `.` is still `"` on a Thai keyboard and `ใ` on an
+/// English one rather than silently falling back to English.
+pub fn flip_layout_id(hkl: u32) -> Option<crate::layout::LayoutId> {
+    use crate::layout::LayoutId;
+    match supported_layout_id(hkl) {
+        Some(InputLayout::UsQwerty) => Some(LayoutId::QwertyEn),
+        Some(InputLayout::ThaiKedmanee) => Some(LayoutId::Kedmanee),
+        None => match (hkl & 0xFFFF) & 0x3FF {
+            0x1E => Some(LayoutId::Kedmanee),
+            0x09 => Some(LayoutId::QwertyEn),
+            _ => None,
+        },
+    }
+}
+
 /// Web addresses, email addresses and numbers typed with the Thai keyboard
 /// on are put back (on by default; the typist can turn it off).
 static FIXES_ADDRESSES: AtomicBool = AtomicBool::new(true);
@@ -200,6 +218,7 @@ pub fn detect_token(
                 // `desof`, de + sof).
                 .filter(|d| !english::is_affixed(token, en) || th.contains(&d.corrected))
                 .or_else(|| us_layout_mixed_token(token, en, th))
+                .or_else(|| us_layout_tolerant_sentence(token, en, th))
         }
         InputLayout::ThaiKedmanee => {
             if !has_thai || has_latin {
@@ -757,9 +776,24 @@ fn thai_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Opt
     None
 }
 
+/// A long Thai run typed on the US layout that segments into mostly known words
+/// (names and loanwords included): `ผมชื่อแอฟฟาน`.
+fn us_layout_tolerant_sentence(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
+    let converted = en_to_th(token);
+    if detect::is_tolerant_thai_segmentation(token, &converted, en, th) {
+        Some(Detection {
+            corrected: converted,
+            confidence: Confidence::High,
+            evidence: Evidence::FullSegmentation,
+        })
+    } else {
+        None
+    }
+}
+
 /// A Thai word and an English word typed together without a space while on
 /// the US layout: `dboKFC` → `กินKFC`, `lj'report` → `ส่งreport`,
-/// `KFCvijkp,kd` → `KFCอร่อยมาก`, `APIit[[` → `APIระบบ`.
+/// `KFCvijvp,kd` → `KFCอร่อยมาก`, `APIit[[` → `APIระบบ`.
 fn us_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
     let token = token.trim();
     let ascii_core = token.trim_matches(|c: char| c.is_ascii_punctuation());
@@ -799,7 +833,7 @@ fn us_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Optio
                 });
             }
         }
-        // English prefix + wrong-layout Thai tail (`KFCvijkp,kd`, `APIit[[`, `reportli6xz]`).
+        // English prefix + wrong-layout Thai tail (`KFCvijvp,kd`, `APIit[[`, `reportli6xz]`).
         let thai_tail = en_to_th(tail);
         if is_well_formed_thai_chunk(&thai_tail, th) && !en.contains(&tail.to_ascii_lowercase()) {
             let is_acro = head.len() >= 3
@@ -1562,5 +1596,25 @@ mod tests {
             on_us(&format!("report{}", crate::layout::th_to_en("สรุปผล"))).as_deref(),
             Some("reportสรุปผล")
         );
+    }
+    #[test]
+    fn us_layout_tolerant_sentence_detects_proper_noun_sentences() {
+        let (en, th) = (crate::dict::english(), crate::dict::thai());
+        let typed = crate::layout::th_to_en("ผมชื่อแอฟฟาน");
+        let d = detect_token(&typed, InputLayout::UsQwerty, en, th)
+            .expect("detect token should succeed");
+        assert_eq!(d.corrected, "ผมชื่อแอฟฟาน");
+    }
+    #[test]
+    fn flip_layout_follows_the_language_when_the_handle_is_unusual() {
+        use crate::layout::LayoutId;
+        assert_eq!(flip_layout_id(0x041E_041E), Some(LayoutId::Kedmanee));
+        assert_eq!(flip_layout_id(0x0409_0409), Some(LayoutId::QwertyEn));
+        // Same languages under handles the exact check does not know.
+        assert_eq!(flip_layout_id(0xE001_041E), Some(LayoutId::Kedmanee));
+        assert_eq!(flip_layout_id(0xE001_0409), Some(LayoutId::QwertyEn));
+        assert_eq!(flip_layout_id(0x0809_0809), Some(LayoutId::QwertyEn));
+        // Other languages stay out.
+        assert_eq!(flip_layout_id(0x0407_0407), None);
     }
 }
