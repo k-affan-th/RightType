@@ -29,9 +29,9 @@ jobs:
     - name: Whitespace
       run: git diff --check $(git hash-object -t tree /dev/null) HEAD
     - name: Clippy
-      run: cargo clippy --all-targets -- -D warnings
+      run: cargo clippy --features text-tool --all-targets -- -D warnings
     - name: Test
-      run: cargo test --all-targets
+      run: cargo test --features text-tool --all-targets
     - name: Latency gate
       run: cargo run --release --example policy_latency
     # RightType 2.0 quality gate: no correctly typed dictionary word, phrase or
@@ -40,6 +40,23 @@ jobs:
       run: cargo run --release --example false_positive_audit -- --check
     - name: Typing benchmark
       run: cargo run --release --example typing_benchmark -- --check
+
+  macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Build native Fix Text preview
+      run: bash macos/build.sh
+    - name: Test bundled Swift-to-Rust bridge
+      run: dist/macos/RightType.app/Contents/MacOS/RightType --self-test
+    - name: Package development preview
+      run: ditto -c -k --keepParent dist/macos/RightType.app dist/macos/RightType-macos-preview.zip
+    - uses: actions/upload-artifact@v4
+      with:
+        name: RightType-macos-preview-${{ github.sha }}
+        path: dist/macos/RightType-macos-preview.zip
+        retention-days: 14
 
   # The Windows integration layer (hook, inject, tray, ...). It only compiles
   # on Windows, so the Linux job above never sees it.
