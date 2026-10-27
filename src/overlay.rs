@@ -22,10 +22,10 @@ use std::sync::Mutex;
 use native_windows_gui as nwg;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect,
-    FrameRect, GetDC, InvalidateRect, ReleaseDC, SelectObject, SetBkMode, SetTextColor,
-    SetWindowRgn, DT_CENTER, DT_END_ELLIPSIS, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK,
-    HDC, HGDIOBJ, HMONITOR, PAINTSTRUCT, TRANSPARENT,
+    BeginPaint, CreateEllipticRgn, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, DrawTextW,
+    EndPaint, FillRect, FillRgn, FrameRect, GetDC, InvalidateRect, ReleaseDC, SelectObject,
+    SetBkMode, SetTextColor, SetWindowRgn, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX,
+    DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK, HDC, HGDIOBJ, HMONITOR, PAINTSTRUCT, TRANSPARENT,
 };
 use windows::Win32::Graphics::Gdi::{
     MonitorFromPoint, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
@@ -38,8 +38,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use zeroize::Zeroize;
 
+use crate::icons;
 use crate::ui::{px, px_at};
 use righttype::motion;
+use righttype::notice::{self, Kind};
 
 const ANIM_TIMER_ID: usize = 9;
 const SHOW_MS_BASE: u32 = 900;
@@ -53,6 +55,8 @@ const MARGIN: i32 = 12;
 const GAP: i32 = 6;
 const FONT_SIZE: i32 = 15;
 const FONT_WEIGHT: i32 = 600;
+/// The detail line under a title.
+const DETAIL_SIZE: i32 = 13;
 const WM_PAINT: u32 = 0x000F;
 const WM_ERASEBKGND: u32 = 0x0014;
 const WM_TIMER: u32 = 0x0113;
@@ -123,6 +127,7 @@ struct Toast {
 thread_local! {
     static TOAST: RefCell<Option<Toast>> = const { RefCell::new(None) };
     static TEXT: RefCell<String> = const { RefCell::new(String::new()) };
+    static RICH: RefCell<Option<Rich>> = const { RefCell::new(None) };
     static ANIM: std::cell::Cell<Option<Anim>> = const { std::cell::Cell::new(None) };
 }
 
@@ -390,7 +395,6 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
     });
     // Width grows with the message (suggestion previews are longer than the
     // original mode labels) but stays a compact pill.
-    let units: Vec<u16> = text.encode_utf16().collect();
     // Measured, not estimated: Thai tone marks and vowels take no width.
     let monitor = match anchor {
         // (Caret was resolved above.)
@@ -421,20 +425,32 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
         crate::ui::text_width_at(text, FONT_SIZE, FONT_WEIGHT, dpi) + px_at(2 * PAD_X, dpi);
     // One line when it fits: the full pill. Longer text wraps inside a
     // narrower, taller rounded rectangle instead of running out of a pill.
-    let (w, h, corner, wrapped) = if one_line <= max_w {
-        let h = px_at(H, dpi);
-        (one_line.max(min_w), h, h, false)
+    let rich = (style == Style::Pill).then(|| {
+        let n = notice::compose(text);
+        notice::record(&n);
+        n
+    });
+    let (w, h, corner, wrapped) = if let Some(n) = &rich {
+        let (w, h, corner, layout) = rich_layout(n, min_w, max_w, dpi);
+        RICH.with(|r| *r.borrow_mut() = Some(layout));
+        (w, h, corner, false)
     } else {
-        let inner = max_w - px_at(2 * PAD_X, dpi);
-        let (text_h, line_h) = wrapped_height(text, inner, dpi);
-        let text_h = text_h.min(line_h * MAX_LINES);
-        let h = (text_h + px_at(2 * PAD_Y, dpi)).max(px_at(H, dpi));
-        (max_w, h, px_at(WRAP_CORNER, dpi).min(h), true)
+        RICH.with(|r| *r.borrow_mut() = None);
+        if one_line <= max_w {
+            let h = px_at(H, dpi);
+            (one_line.max(min_w), h, h, false)
+        } else {
+            let inner = max_w - px_at(2 * PAD_X, dpi);
+            let (text_h, line_h) = wrapped_height(text, inner, FONT_SIZE, FONT_WEIGHT, dpi);
+            let text_h = text_h.min(line_h * MAX_LINES);
+            let h = (text_h + px_at(2 * PAD_Y, dpi)).max(px_at(H, dpi));
+            (max_w, h, px_at(WRAP_CORNER, dpi).min(h), true)
+        }
     };
     WRAPPED.store(wrapped, Ordering::Relaxed);
     let (x, y) = place(monitor, anchor, w, h, dpi);
     let hold = match style {
-        Style::Pill => (SHOW_MS_BASE + units.len() as u32 * 18).min(2400),
+        Style::Pill => rich.as_ref().map_or(SHOW_MS_BASE, notice::hold_ms),
         Style::Badge => BADGE_MS,
         Style::Offer => OFFER_MS,
     };
@@ -475,9 +491,104 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
     let _ = InvalidateRect(hwnd, None, true);
 }
 
+/// Where everything sits in a message pill (device pixels, relative to the
+/// pill's top-left), and what to draw there.
+struct Rich {
+    kind: Kind,
+    title: String,
+    detail: Option<String>,
+    icon: RECT,
+    title_rc: RECT,
+    detail_rc: RECT,
+}
+
+impl Rich {
+    fn wipe(&mut self) {
+        self.title.zeroize();
+        if let Some(d) = self.detail.as_mut() {
+            d.zeroize();
+        }
+    }
+}
+
+/// Lay out a message: an icon disc, a title, and under it the detail. One
+/// short line is a full pill; anything taller is a rounded rectangle. Returns
+/// width, height, corner diameter and the layout.
+unsafe fn rich_layout(
+    n: &notice::Notice,
+    min_w: i32,
+    max_w: i32,
+    dpi: u32,
+) -> (i32, i32, i32, Rich) {
+    let pad_l = px_at(8, dpi);
+    let icon_d = px_at(24, dpi);
+    let gap = px_at(10, dpi);
+    let pad_r = px_at(16, dpi);
+    let pad_y = px_at(7, dpi);
+    let line_gap = px_at(2, dpi);
+    let min_h = px_at(H, dpi);
+    let text_max = (max_w - pad_l - icon_d - gap - pad_r).max(px_at(80, dpi));
+    let title_w = crate::ui::text_width_at(&n.title, FONT_SIZE, FONT_WEIGHT, dpi);
+    let detail_w = n
+        .detail
+        .as_deref()
+        .map_or(0, |d| crate::ui::text_width_at(d, DETAIL_SIZE, 400, dpi));
+    let text_w = title_w.max(detail_w).min(text_max);
+    let w = (pad_l + icon_d + gap + text_w + pad_r).max(min_w);
+
+    let (title_all, title_line) = wrapped_height(&n.title, text_w, FONT_SIZE, FONT_WEIGHT, dpi);
+    let title_h = title_all.min(title_line * 2);
+    let detail_h = n.detail.as_deref().map_or(0, |d| {
+        let (all, line) = wrapped_height(d, text_w, DETAIL_SIZE, 400, dpi);
+        all.min(line * 2)
+    });
+    let single = detail_h == 0 && title_h <= title_line;
+    let block = title_h + if detail_h > 0 { line_gap + detail_h } else { 0 };
+    let h = (block + 2 * pad_y).max(min_h);
+    let corner = if single {
+        h
+    } else {
+        px_at(WRAP_CORNER, dpi).min(h)
+    };
+    let text_left = pad_l + icon_d + gap;
+    let (title_top, icon_top) = if single {
+        ((h - title_h) / 2, (h - icon_d) / 2)
+    } else {
+        (
+            pad_y,
+            (pad_y + (title_line - icon_d) / 2).max(px_at(5, dpi)),
+        )
+    };
+    let rect = |l: i32, t: i32, r: i32, b: i32| RECT {
+        left: l,
+        top: t,
+        right: r,
+        bottom: b,
+    };
+    let rich = Rich {
+        kind: n.kind,
+        title: n.title.clone(),
+        detail: n.detail.clone(),
+        icon: rect(pad_l, icon_top, pad_l + icon_d, icon_top + icon_d),
+        title_rc: rect(
+            text_left,
+            title_top,
+            text_left + text_w,
+            title_top + title_h,
+        ),
+        detail_rc: rect(
+            text_left,
+            title_top + title_h + line_gap,
+            text_left + text_w,
+            title_top + title_h + line_gap + detail_h,
+        ),
+    };
+    (w, h, corner, rich)
+}
+
 /// Height `text` takes wrapped to `inner` device pixels, and one line's height.
-unsafe fn wrapped_height(text: &str, inner: i32, dpi: u32) -> (i32, i32) {
-    let font = crate::ui::make_font_at(FONT_SIZE, FONT_WEIGHT, dpi);
+unsafe fn wrapped_height(text: &str, inner: i32, size: i32, weight: i32, dpi: u32) -> (i32, i32) {
+    let font = crate::ui::make_font_at(size, weight, dpi);
     let hdc = GetDC(None);
     let all = crate::ui::measure(hdc, text, inner, font);
     let one = crate::ui::measure(hdc, "A", inner, font).max(1);
@@ -537,18 +648,100 @@ unsafe fn paint(hwnd: HWND) {
     SetTextColor(hdc, COLORREF(ink));
     let font = crate::ui::make_font_at(FONT_SIZE, FONT_WEIGHT, DPI.load(Ordering::Relaxed));
     let old = SelectObject(hdc, HGDIOBJ(font.0));
-    if WRAPPED.load(Ordering::Relaxed) {
+    let drew_rich = RICH.with(|r| match r.borrow().as_ref() {
+        Some(rich) => {
+            draw_rich(hdc, rich, ink, crate::ui::high_contrast());
+            true
+        }
+        None => false,
+    });
+    if !drew_rich && WRAPPED.load(Ordering::Relaxed) {
         let dpi = DPI.load(Ordering::Relaxed);
         rc.left += px_at(PAD_X, dpi);
         rc.right -= px_at(PAD_X, dpi);
         rc.top += px_at(PAD_Y, dpi);
         rc.bottom -= px_at(PAD_Y, dpi);
     }
-    TEXT.with(|t| draw_centered(hdc, &t.borrow(), &mut rc));
+    if !drew_rich {
+        TEXT.with(|t| draw_centered(hdc, &t.borrow(), &mut rc));
+    }
     SelectObject(hdc, old);
     let _ = DeleteObject(HGDIOBJ(font.0));
 
     let _ = EndPaint(hwnd, &ps);
+}
+
+/// The icon disc and glyph colours of a kind, as COLORREFs: the disc fill and
+/// the glyph on it.
+fn kind_colours(kind: Kind) -> (u32, u32) {
+    match kind {
+        Kind::Done => (0x003E_6B2F, 0x00E0_F5D9),
+        Kind::Undo => (0x0014_5A7A, 0x00B7_E9FB),
+        Kind::Info => (0x0080_4D25, 0x00FB_E6D6),
+        Kind::Attention => (0x0016_3A8A, 0x00CB_DCFD),
+        Kind::Problem => (0x0024_248A, 0x00D3_D3FB),
+    }
+}
+
+fn kind_glyph(kind: Kind) -> char {
+    match kind {
+        Kind::Done => icons::CHECK,
+        Kind::Undo => icons::UNDO,
+        Kind::Info => icons::INFO,
+        Kind::Attention => icons::WARNING,
+        Kind::Problem => icons::ERROR,
+    }
+}
+
+/// Draw a message pill's icon, title and detail on the dark pill.
+unsafe fn draw_rich(hdc: HDC, rich: &Rich, ink: u32, high_contrast: bool) {
+    let dpi = DPI.load(Ordering::Relaxed);
+    let (disc, glyph_ink) = if high_contrast {
+        (None, ink)
+    } else {
+        let (d, g) = kind_colours(rich.kind);
+        (Some(d), g)
+    };
+    let i = rich.icon;
+    if let Some(disc) = disc {
+        let rgn = CreateEllipticRgn(i.left, i.top, i.right + 1, i.bottom + 1);
+        let brush = CreateSolidBrush(COLORREF(disc));
+        let _ = FillRgn(hdc, rgn, brush);
+        let _ = DeleteObject(HGDIOBJ(brush.0));
+        let _ = DeleteObject(HGDIOBJ(rgn.0));
+    }
+    if let Some(font) = crate::ui::make_icon_font(13) {
+        let old = SelectObject(hdc, HGDIOBJ(font.0));
+        SetTextColor(hdc, COLORREF(glyph_ink));
+        let mut glyph: Vec<u16> = kind_glyph(rich.kind).to_string().encode_utf16().collect();
+        let mut rc = i;
+        DrawTextW(
+            hdc,
+            &mut glyph,
+            &mut rc,
+            DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
+        );
+        SelectObject(hdc, old);
+        let _ = DeleteObject(HGDIOBJ(font.0));
+    }
+    let flags = DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS | DT_NOPREFIX;
+    let draw = |text: &str, size: i32, weight: i32, colour: u32, mut rc: RECT| {
+        let font = crate::ui::make_font_at(size, weight, dpi);
+        let old = SelectObject(hdc, HGDIOBJ(font.0));
+        SetTextColor(hdc, COLORREF(colour));
+        let mut units: Vec<u16> = text.encode_utf16().collect();
+        DrawTextW(hdc, &mut units, &mut rc, flags);
+        units.zeroize();
+        SelectObject(hdc, old);
+        let _ = DeleteObject(HGDIOBJ(font.0));
+    };
+    if !rich.title.is_empty() {
+        draw(&rich.title, FONT_SIZE, FONT_WEIGHT, ink, rich.title_rc);
+    }
+    if let Some(detail) = rich.detail.as_deref() {
+        let dim = if high_contrast { ink } else { 0x00C0_B9B9 };
+        draw(detail, DETAIL_SIZE, 400, dim, rich.detail_rc);
+    }
 }
 
 /// Draw `text` centred in `rc`.
@@ -613,6 +806,12 @@ unsafe fn hide(hwnd: HWND) {
     let _ = ShowWindow(hwnd, SW_HIDE);
     // A suggestion preview is typed content: do not keep it past its display.
     TEXT.with(|t| t.borrow_mut().zeroize());
+    RICH.with(|r| {
+        if let Some(rich) = r.borrow_mut().as_mut() {
+            rich.wipe();
+        }
+        *r.borrow_mut() = None;
+    });
 }
 
 #[cfg(test)]
