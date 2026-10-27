@@ -32,7 +32,7 @@ use zeroize::Zeroize;
 use righttype::buffer::{Key, WordBuffer};
 use righttype::diag::{self, Shape};
 use righttype::hotkeys::{Action, Chord, Hotkeys};
-use righttype::layout::auto_convert;
+use righttype::layout::{auto_convert, auto_convert_with_layout, LayoutId};
 use righttype::per_app::AppMode;
 use righttype::recent::Recent;
 use righttype::render;
@@ -4126,10 +4126,18 @@ pub unsafe fn flip_picked(picked: &[usize]) {
 /// the other case from its keys (`L;YLFU` is สวัสดี), and English put back
 /// is shown that way too. CapsLock clears the recent words, so its state now
 /// is the one they were typed with.
+unsafe fn current_layout_id() -> Option<LayoutId> {
+    policy::supported_layout_id(layout_id(effective_layout())).map(|l| match l {
+        policy::InputLayout::UsQwerty => LayoutId::QwertyEn,
+        policy::InputLayout::ThaiKedmanee => LayoutId::Kedmanee,
+    })
+}
+
 fn convert_shown(word: &str) -> String {
     let caps = unsafe { caps_on() };
     let keys = policy::shown_with_caps(word, caps);
-    policy::shown_with_caps(&auto_convert(&keys), caps)
+    let layout = unsafe { current_layout_id() };
+    policy::shown_with_caps(&auto_convert_with_layout(&keys, layout), caps)
 }
 
 /// Manual: flip the layout of the word currently in the buffer, in place. A no-op
@@ -4147,7 +4155,8 @@ unsafe fn convert_last_word() {
     let backspaces = word.chars().count();
     // The buffer keeps the keys as if CapsLock were off; the app shows them
     // with it.
-    let mut converted = auto_convert(&word);
+    let layout = current_layout_id();
+    let mut converted = auto_convert_with_layout(&word, layout);
     let changed = converted != word;
     if changed {
         let mut shown = policy::shown_with_caps(&converted, caps_on());

@@ -38,6 +38,16 @@ pub enum LayoutId {
     Manoonchai,
 }
 
+impl LayoutId {
+    pub fn is_thai(self) -> bool {
+        matches!(self, LayoutId::Kedmanee | LayoutId::Pattachote | LayoutId::Manoonchai)
+    }
+
+    pub fn is_english(self) -> bool {
+        matches!(self, LayoutId::QwertyEn | LayoutId::QwertyUk)
+    }
+}
+
 /// Which Thai layout the typist uses (a setting: Windows does not say which
 /// Thai layout a window has in a way the hook can read cheaply).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -46,6 +56,7 @@ pub enum ThaiVariant {
     Pattachote,
     Manoonchai,
 }
+
 
 /// Which English layout is active (read from the window's keyboard layout).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -253,15 +264,34 @@ mod digit_tests {
     }
 }
 
-pub fn auto_convert(input: &str) -> String {
-    let has_thai = input
-        .chars()
-        .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
-    if has_thai {
-        th_to_en(input)
-    } else {
-        en_to_th(input)
+pub fn auto_convert_with_layout(input: &str, layout: Option<LayoutId>) -> String {
+    let has_thai = input.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+    let has_latin = input.chars().any(|c| c.is_ascii_alphabetic());
+
+    // When the input has clear script identity:
+    if has_thai && !has_latin {
+        return th_to_en(input);
     }
+    if has_latin && !has_thai {
+        return en_to_th(input);
+    }
+
+    // For ambiguous / symbol-only tokens, use the known layout if available:
+    match layout {
+        Some(l) if l.is_thai() => th_to_en(input),
+        Some(l) if l.is_english() => en_to_th(input),
+        _ => {
+            if has_thai {
+                th_to_en(input)
+            } else {
+                en_to_th(input)
+            }
+        }
+    }
+}
+
+pub fn auto_convert(input: &str) -> String {
+    auto_convert_with_layout(input, None)
 }
 
 #[cfg(test)]
@@ -317,5 +347,15 @@ mod tests {
         assert_eq!(auto_convert("แนพพำแะ"), "correct");
         // Works on a whole run with no internal spaces (the no-space-Thai case).
         assert_eq!(auto_convert("l;ylfud[yp"), en_to_th("l;ylfud[yp"));
+    }
+
+    #[test]
+    fn dual_language_symbols_convert_according_to_active_layout() {
+        assert_eq!(auto_convert_with_layout(".", Some(LayoutId::Kedmanee)), "\"");
+        assert_eq!(auto_convert_with_layout(".", Some(LayoutId::QwertyEn)), "ใ");
+        assert_eq!(auto_convert_with_layout("?", Some(LayoutId::Kedmanee)), "M");
+        assert_eq!(auto_convert_with_layout("?", Some(LayoutId::QwertyEn)), "ฦ");
+        assert_eq!(auto_convert_with_layout("\"", Some(LayoutId::Kedmanee)), "W");
+        assert_eq!(auto_convert_with_layout("\"", Some(LayoutId::QwertyEn)), ".");
     }
 }
