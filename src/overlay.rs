@@ -95,7 +95,10 @@ const PAD_Y: i32 = 9;
 /// Most lines a wrapped pill shows; the rest is cut with an ellipsis.
 const MAX_LINES: i32 = 4;
 /// Corner diameter of a wrapped pill: a full pill only suits one line.
-const WRAP_CORNER: i32 = 24;
+const WRAP_CORNER: i32 = 34;
+/// The space round the icon disc (96 dpi pixels), and so what the corner
+/// radius is made of: the radius is the disc's 12 plus this.
+const INSET: i32 = 5;
 const BADGE_MIN_W: i32 = 44;
 const BADGE_MS: u32 = 450;
 /// How long an offer for Tab is shown, and can be taken.
@@ -595,11 +598,15 @@ unsafe fn rich_layout(
     max_w: i32,
     dpi: u32,
 ) -> (i32, i32, i32, Rich) {
-    let pad_l = px_at(8, dpi);
+    // Corners are concentric with the icon: the pill's corner radius is the
+    // icon's radius plus the gap kept round it, and that gap is the same above
+    // and to the left of the icon, so the corner arc and the disc share a
+    // centre in a pill of one line and of several alike.
+    let inset = px_at(INSET, dpi);
+    let pad_l = inset;
     let icon_d = px_at(24, dpi);
     let gap = px_at(10, dpi);
     let pad_r = px_at(16, dpi);
-    let pad_y = px_at(7, dpi);
     let line_gap = px_at(2, dpi);
     let min_h = px_at(H, dpi);
     let text_max = (max_w - pad_l - icon_d - gap - pad_r).max(px_at(80, dpi));
@@ -619,20 +626,16 @@ unsafe fn rich_layout(
     });
     let single = detail_h == 0 && title_h <= title_line;
     let block = title_h + if detail_h > 0 { line_gap + detail_h } else { 0 };
-    let h = (block + 2 * pad_y).max(min_h);
-    let corner = if single {
-        h
-    } else {
-        px_at(WRAP_CORNER, dpi).min(h)
-    };
+    // The text's first line sits level with the icon's centre; the same space
+    // is kept under the last line.
+    let text_top = inset + ((icon_d - title_line) / 2).max(0);
+    let h = (block + 2 * text_top).max(min_h);
+    let corner = px_at(WRAP_CORNER, dpi).min(h);
     let text_left = pad_l + icon_d + gap;
     let (title_top, icon_top) = if single {
         ((h - title_h) / 2, (h - icon_d) / 2)
     } else {
-        (
-            pad_y,
-            (pad_y + (title_line - icon_d) / 2).max(px_at(5, dpi)),
-        )
+        (text_top, inset)
     };
     let rect = |l: i32, t: i32, r: i32, b: i32| RECT {
         left: l,
@@ -714,9 +717,13 @@ unsafe fn paint(hwnd: HWND) {
     let brush = CreateSolidBrush(COLORREF(fill));
     FillRect(hdc, &rc, brush);
     let _ = DeleteObject(HGDIOBJ(brush.0));
-    let border = CreateSolidBrush(COLORREF(edge));
-    FrameRect(hdc, &rc, border);
-    let _ = DeleteObject(HGDIOBJ(border.0));
+    // Flat: no lit edge round the pill. Only High Contrast draws one, as the
+    // theme asks, since there the fill alone would not show where it ends.
+    if crate::ui::high_contrast() {
+        let border = CreateSolidBrush(COLORREF(edge));
+        FrameRect(hdc, &rc, border);
+        let _ = DeleteObject(HGDIOBJ(border.0));
+    }
 
     // White, centred text in the interface typeface.
     SetBkMode(hdc, TRANSPARENT);

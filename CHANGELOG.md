@@ -14,6 +14,9 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   under it, and stay as long as they take to read; the pointer on one keeps it
   there, and a click opens the new Recent messages page. They slide in from the
   right (a plain fade when Windows animation is off).
+- The pill is flat (no lit edge round it) and its corners are concentric with the
+  icon: the corner radius is the icon's radius plus the gap kept round it, the
+  same for one line and for several. High Contrast keeps its outline.
 - Settings has a Recent messages page: the last 50 pill messages, kept in memory
   only and forgotten when RightType closes, with Clear all and a switch to
   stop remembering.
