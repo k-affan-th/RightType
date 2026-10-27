@@ -775,7 +775,7 @@ fn us_layout_tolerant_sentence(token: &str, en: &Dictionary, th: &Dictionary) ->
 
 /// A Thai word and an English word typed together without a space while on
 /// the US layout: `dboKFC` → `กินKFC`, `lj'report` → `ส่งreport`,
-/// `KFCvijkp,kd` → `KFCอร่อยมาก`, `APIit[[` → `APIระบบ`.
+/// `KFCvijvp,kd` → `KFCอร่อยมาก`, `APIit[[` → `APIระบบ`.
 fn us_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
     let token = token.trim();
     let ascii_core = token.trim_matches(|c: char| c.is_ascii_punctuation());
@@ -815,7 +815,7 @@ fn us_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Optio
                 });
             }
         }
-        // English prefix + wrong-layout Thai tail (`KFCvijkp,kd`, `APIit[[`, `reportli6xz]`).
+        // English prefix + wrong-layout Thai tail (`KFCvijvp,kd`, `APIit[[`, `reportli6xz]`).
         let thai_tail = en_to_th(tail);
         if is_well_formed_thai_chunk(&thai_tail, th) && !en.contains(&tail.to_ascii_lowercase()) {
             let is_acro = head.len() >= 3
