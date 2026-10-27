@@ -758,9 +758,8 @@ fn thai_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Opt
     None
 }
 
-/// A Thai word and an English word typed together without a space while on
-/// the US layout: `dboKFC` → `กินKFC`, `lj'report` → `ส่งreport`,
-/// `KFCvijkp,kd` → `KFCอร่อยมาก`, `APIit[[` → `APIระบบ`.
+/// A long Thai run typed on the US layout that segments into mostly known words
+/// (names and loanwords included): `ผมชื่อแอฟฟาน`.
 fn us_layout_tolerant_sentence(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
     let converted = en_to_th(token);
     if detect::is_tolerant_thai_segmentation(token, &converted, en, th) {
@@ -774,6 +773,9 @@ fn us_layout_tolerant_sentence(token: &str, en: &Dictionary, th: &Dictionary) ->
     }
 }
 
+/// A Thai word and an English word typed together without a space while on
+/// the US layout: `dboKFC` → `กินKFC`, `lj'report` → `ส่งreport`,
+/// `KFCvijkp,kd` → `KFCอร่อยมาก`, `APIit[[` → `APIระบบ`.
 fn us_layout_mixed_token(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
     let token = token.trim();
     let ascii_core = token.trim_matches(|c: char| c.is_ascii_punctuation());
@@ -1581,7 +1583,8 @@ mod tests {
     fn us_layout_tolerant_sentence_detects_proper_noun_sentences() {
         let (en, th) = (crate::dict::english(), crate::dict::thai());
         let typed = crate::layout::th_to_en("ผมชื่อแอฟฟาน");
-        let d = detect_token(&typed, InputLayout::UsQwerty, en, th).expect("detect token should succeed");
+        let d = detect_token(&typed, InputLayout::UsQwerty, en, th)
+            .expect("detect token should succeed");
         assert_eq!(d.corrected, "ผมชื่อแอฟฟาน");
     }
 }

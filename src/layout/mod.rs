@@ -40,7 +40,10 @@ pub enum LayoutId {
 
 impl LayoutId {
     pub fn is_thai(self) -> bool {
-        matches!(self, LayoutId::Kedmanee | LayoutId::Pattachote | LayoutId::Manoonchai)
+        matches!(
+            self,
+            LayoutId::Kedmanee | LayoutId::Pattachote | LayoutId::Manoonchai
+        )
     }
 
     pub fn is_english(self) -> bool {
@@ -56,7 +59,6 @@ pub enum ThaiVariant {
     Pattachote,
     Manoonchai,
 }
-
 
 /// Which English layout is active (read from the window's keyboard layout).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -265,7 +267,9 @@ mod digit_tests {
 }
 
 pub fn auto_convert_with_layout(input: &str, layout: Option<LayoutId>) -> String {
-    let has_thai = input.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+    let has_thai = input
+        .chars()
+        .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
     let has_latin = input.chars().any(|c| c.is_ascii_alphabetic());
 
     // When the input has clear script identity:
@@ -351,11 +355,20 @@ mod tests {
 
     #[test]
     fn dual_language_symbols_convert_according_to_active_layout() {
-        assert_eq!(auto_convert_with_layout(".", Some(LayoutId::Kedmanee)), "\"");
+        assert_eq!(
+            auto_convert_with_layout(".", Some(LayoutId::Kedmanee)),
+            "\""
+        );
         assert_eq!(auto_convert_with_layout(".", Some(LayoutId::QwertyEn)), "ใ");
         assert_eq!(auto_convert_with_layout("?", Some(LayoutId::Kedmanee)), "M");
         assert_eq!(auto_convert_with_layout("?", Some(LayoutId::QwertyEn)), "ฦ");
-        assert_eq!(auto_convert_with_layout("\"", Some(LayoutId::Kedmanee)), "W");
-        assert_eq!(auto_convert_with_layout("\"", Some(LayoutId::QwertyEn)), ".");
+        assert_eq!(
+            auto_convert_with_layout("\"", Some(LayoutId::Kedmanee)),
+            "W"
+        );
+        assert_eq!(
+            auto_convert_with_layout("\"", Some(LayoutId::QwertyEn)),
+            "."
+        );
     }
 }

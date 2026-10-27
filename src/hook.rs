@@ -32,7 +32,7 @@ use zeroize::Zeroize;
 use righttype::buffer::{Key, WordBuffer};
 use righttype::diag::{self, Shape};
 use righttype::hotkeys::{Action, Chord, Hotkeys};
-use righttype::layout::{auto_convert, auto_convert_with_layout, LayoutId};
+use righttype::layout::{auto_convert_with_layout, LayoutId};
 use righttype::per_app::AppMode;
 use righttype::recent::Recent;
 use righttype::render;
@@ -4122,10 +4122,7 @@ pub unsafe fn flip_picked(picked: &[usize]) {
     ));
 }
 
-/// Flip a word as the app shows it. With CapsLock on, English on screen is in
-/// the other case from its keys (`L;YLFU` is สวัสดี), and English put back
-/// is shown that way too. CapsLock clears the recent words, so its state now
-/// is the one they were typed with.
+/// The layout the focused window is typing in, as the conversion layer names it.
 unsafe fn current_layout_id() -> Option<LayoutId> {
     policy::supported_layout_id(layout_id(effective_layout())).map(|l| match l {
         policy::InputLayout::UsQwerty => LayoutId::QwertyEn,
@@ -4133,6 +4130,10 @@ unsafe fn current_layout_id() -> Option<LayoutId> {
     })
 }
 
+/// Flip a word as the app shows it. With CapsLock on, English on screen is in
+/// the other case from its keys (`L;YLFU` is สวัสดี), and English put back
+/// is shown that way too. CapsLock clears the recent words, so its state now
+/// is the one they were typed with.
 fn convert_shown(word: &str) -> String {
     let caps = unsafe { caps_on() };
     let keys = policy::shown_with_caps(word, caps);

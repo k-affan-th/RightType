@@ -219,7 +219,11 @@ pub fn is_tolerant_thai_segmentation(
         return false;
     }
 
-    let known_chars: usize = segs.iter().filter(|s| s.known).map(|s| s.text.chars().count()).sum();
+    let known_chars: usize = segs
+        .iter()
+        .filter(|s| s.known)
+        .map(|s| s.text.chars().count())
+        .sum();
     let known_words = segs.iter().filter(|s| s.known).count();
     let max_known_len = segs
         .iter()
@@ -237,7 +241,10 @@ pub fn is_tolerant_thai_segmentation(
     known_words >= 2
         && max_known_len >= 4
         && ratio >= 0.70
-        && segs.iter().filter(|s| !s.known).all(|s| s.text.chars().count() <= 12)
+        && segs
+            .iter()
+            .filter(|s| !s.known)
+            .all(|s| s.text.chars().count() <= 12)
 }
 
 #[cfg(test)]
