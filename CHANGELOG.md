@@ -9,6 +9,14 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 - The Learned words page now looks and works like Snippets and Apps: a table
   of words with their keyboard, a box and Add button, Remove (or Delete), and
   nothing to save. It used to be a plain text box with a Save button.
+- Messages in the pill at the bottom right now have an icon and colour for what
+  happened (done, undone, info, check, problem), a short title with the hint
+  under it, and stay as long as they take to read; the pointer on one keeps it
+  there, and a click opens the new Recent messages page. They slide in from the
+  right (a plain fade when Windows animation is off).
+- Settings has a Recent messages page: the last 50 pill messages, kept in memory
+  only and forgotten when RightType closes, with Clear all and a switch to
+  stop remembering.
 - The pill at the bottom right no longer runs a long message out of its
   rounded ends: text that does not fit one line wraps (up to four lines) inside
   a rounded rectangle.

@@ -60,6 +60,7 @@ const DETAIL_SIZE: i32 = 13;
 const WM_PAINT: u32 = 0x000F;
 const WM_ERASEBKGND: u32 = 0x0014;
 const WM_TIMER: u32 = 0x0113;
+const WM_LBUTTONUP: u32 = 0x0202;
 const WM_SHOW_TOAST: u32 = 0x8000 + 0x525;
 const WM_HIDE_TOAST: u32 = 0x8000 + 0x526;
 
@@ -141,6 +142,10 @@ struct Anim {
     x: i32,
     y: i32,
     dpi: u32,
+    /// Slides in from the right (a corner pill) rather than rising.
+    slide: bool,
+    /// Windows has animation turned off: fade only.
+    calm: bool,
 }
 
 /// Record the calling thread as the one that owns the overlay window. Call once
@@ -209,6 +214,14 @@ fn ensure_created() -> bool {
             }
             WM_TIMER if w == ANIM_TIMER_ID => {
                 unsafe { tick(hwnd) };
+                Some(0)
+            }
+            WM_LBUTTONUP => {
+                // A click on a message opens the list of recent ones.
+                if RICH.with(|r| r.borrow().is_some()) {
+                    unsafe { dismiss_on_ui(hwnd) };
+                    crate::settings::open_activity();
+                }
                 Some(0)
             }
             WM_HIDE_TOAST => {
@@ -334,6 +347,36 @@ unsafe fn dismiss_on_ui(hwnd: HWND) {
     hide(hwnd);
 }
 
+/// Whether Windows plays client-area animation (off under "Show animations"
+/// switched off, or in remote sessions).
+fn client_animation_on() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    };
+    let mut on: i32 = 1;
+    let ok = unsafe {
+        SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION,
+            0,
+            Some(&mut on as *mut i32 as *mut c_void),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+    };
+    ok.is_err() || on != 0
+}
+
+/// Whether the mouse pointer is over the pill.
+unsafe fn pointer_on(hwnd: HWND) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect};
+    let (mut p, mut r) = (POINT::default(), RECT::default());
+    GetCursorPos(&mut p).is_ok()
+        && GetWindowRect(hwnd, &mut r).is_ok()
+        && p.x >= r.left
+        && p.x < r.right
+        && p.y >= r.top
+        && p.y < r.bottom
+}
+
 /// One animation frame.
 unsafe fn tick(hwnd: HWND) {
     let Some(mut a) = ANIM.with(|c| c.get()) else {
@@ -341,6 +384,26 @@ unsafe fn tick(hwnd: HWND) {
         return;
     };
     let elapsed = a.since.elapsed().as_millis().min(u32::MAX as u128) as u32;
+    // The pointer on the pill keeps it there (and brings it back if it was
+    // already leaving): a message takes as long to read as it takes.
+    if a.phase != motion::Phase::Enter && pointer_on(hwnd) {
+        if a.phase == motion::Phase::Exit {
+            let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA);
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                a.x,
+                a.y,
+                0,
+                0,
+                SWP_NOACTIVATE | SWP_NOSIZE,
+            );
+        }
+        a.phase = motion::Phase::Hold;
+        a.since = std::time::Instant::now();
+        ANIM.with(|c| c.set(Some(a)));
+        return;
+    }
     if a.phase == motion::Phase::Hold {
         if elapsed >= a.hold_ms {
             a.phase = motion::Phase::Exit;
@@ -349,13 +412,18 @@ unsafe fn tick(hwnd: HWND) {
         }
         return;
     }
-    let f = motion::frame(a.phase, elapsed);
+    let f = motion::frame_for(a.phase, elapsed, a.calm);
     let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), f.alpha, LWA_ALPHA);
     let drop = (f.drop_px * a.dpi as f32 / 96.0).round() as i32;
+    let slide = if a.slide {
+        (f.slide_px * a.dpi as f32 / 96.0).round() as i32
+    } else {
+        0
+    };
     let _ = SetWindowPos(
         hwnd,
         HWND_TOPMOST,
-        a.x,
+        a.x + slide,
         a.y + drop,
         0,
         0,
@@ -471,14 +539,21 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
         x,
         y,
         dpi,
+        slide: matches!(anchor, Anchor::Corner),
+        calm: !client_animation_on(),
     };
-    let first = motion::frame(anim.phase, 0);
+    let first = motion::frame_for(anim.phase, 0, anim.calm);
     let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), first.alpha, LWA_ALPHA);
     let drop = (first.drop_px * dpi as f32 / 96.0).round() as i32;
+    let slide = if anim.slide {
+        (first.slide_px * dpi as f32 / 96.0).round() as i32
+    } else {
+        0
+    };
     let _ = SetWindowPos(
         hwnd,
         HWND_TOPMOST,
-        x,
+        x + slide,
         y + drop,
         w,
         h,

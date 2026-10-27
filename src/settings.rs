@@ -389,6 +389,11 @@ pub fn open_page(page: u8) {
     open_on(page.clamp(PAGE_GENERAL, PAGE_ACTIVITY));
 }
 
+/// Open on the Recent messages page (a click on a pill).
+pub fn open_activity() {
+    open_on(PAGE_ACTIVITY);
+}
+
 fn open_on(page: u8) {
     let existing = OPEN.load(Ordering::Acquire);
     if existing != 0 {
