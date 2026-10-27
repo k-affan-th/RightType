@@ -23,8 +23,9 @@ use native_windows_gui as nwg;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect,
-    FrameRect, InvalidateRect, SelectObject, SetBkMode, SetTextColor, SetWindowRgn, DT_CENTER,
-    DT_SINGLELINE, DT_VCENTER, HDC, HGDIOBJ, HMONITOR, PAINTSTRUCT, TRANSPARENT,
+    FrameRect, GetDC, InvalidateRect, ReleaseDC, SelectObject, SetBkMode, SetTextColor,
+    SetWindowRgn, DT_CENTER, DT_END_ELLIPSIS, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK,
+    HDC, HGDIOBJ, HMONITOR, PAINTSTRUCT, TRANSPARENT,
 };
 use windows::Win32::Graphics::Gdi::{
     MonitorFromPoint, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
@@ -65,6 +66,8 @@ static PENDING: Mutex<Option<(String, Anchor, Style)>> = Mutex::new(None);
 static STYLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// The DPI of the monitor the pill is on, for painting.
 static DPI: AtomicU32 = AtomicU32::new(96);
+/// Whether the text is wrapped onto several lines (it did not fit one).
+static WRAPPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// How the pill looks and how long it stays.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,6 +82,15 @@ enum Style {
     Offer,
 }
 
+/// Widest the pill gets before its text wraps onto more lines (96 dpi pixels).
+const MAX_W: i32 = 360;
+/// Side and top/bottom padding of a wrapped pill.
+const PAD_X: i32 = 16;
+const PAD_Y: i32 = 9;
+/// Most lines a wrapped pill shows; the rest is cut with an ellipsis.
+const MAX_LINES: i32 = 4;
+/// Corner diameter of a wrapped pill: a full pill only suits one line.
+const WRAP_CORNER: i32 = 24;
 const BADGE_MIN_W: i32 = 44;
 const BADGE_MS: u32 = 450;
 /// How long an offer for Tab is shown, and can be taken.
@@ -395,18 +407,31 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
     };
     let dpi = crate::ui::monitor_dpi(monitor);
     DPI.store(dpi, Ordering::Relaxed);
-    let w = (crate::ui::text_width_at(text, FONT_SIZE, FONT_WEIGHT, dpi) + px_at(32, dpi)).clamp(
-        px_at(
-            if style == Style::Badge {
-                BADGE_MIN_W
-            } else {
-                W
-            },
-            dpi,
-        ),
-        px_at(520, dpi),
+    let min_w = px_at(
+        if style == Style::Badge {
+            BADGE_MIN_W
+        } else {
+            W
+        },
+        dpi,
     );
-    let h = px_at(H, dpi);
+    let wa = crate::ui::work_area(monitor);
+    let max_w = px_at(MAX_W, dpi).min((wa.right - wa.left - 2 * px_at(MARGIN, dpi)).max(min_w));
+    let one_line =
+        crate::ui::text_width_at(text, FONT_SIZE, FONT_WEIGHT, dpi) + px_at(2 * PAD_X, dpi);
+    // One line when it fits: the full pill. Longer text wraps inside a
+    // narrower, taller rounded rectangle instead of running out of a pill.
+    let (w, h, corner, wrapped) = if one_line <= max_w {
+        let h = px_at(H, dpi);
+        (one_line.max(min_w), h, h, false)
+    } else {
+        let inner = max_w - px_at(2 * PAD_X, dpi);
+        let (text_h, line_h) = wrapped_height(text, inner, dpi);
+        let text_h = text_h.min(line_h * MAX_LINES);
+        let h = (text_h + px_at(2 * PAD_Y, dpi)).max(px_at(H, dpi));
+        (max_w, h, px_at(WRAP_CORNER, dpi).min(h), true)
+    };
+    WRAPPED.store(wrapped, Ordering::Relaxed);
     let (x, y) = place(monitor, anchor, w, h, dpi);
     let hold = match style {
         Style::Pill => (SHOW_MS_BASE + units.len() as u32 * 18).min(2400),
@@ -443,11 +468,22 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
         h,
         SWP_NOACTIVATE | SWP_SHOWWINDOW,
     );
-    let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, h, h);
+    let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, corner, corner);
     SetWindowRgn(hwnd, rgn, true);
     ANIM.with(|c| c.set(Some(anim)));
     SetTimer(hwnd, ANIM_TIMER_ID, FRAME_MS, None);
     let _ = InvalidateRect(hwnd, None, true);
+}
+
+/// Height `text` takes wrapped to `inner` device pixels, and one line's height.
+unsafe fn wrapped_height(text: &str, inner: i32, dpi: u32) -> (i32, i32) {
+    let font = crate::ui::make_font_at(FONT_SIZE, FONT_WEIGHT, dpi);
+    let hdc = GetDC(None);
+    let all = crate::ui::measure(hdc, text, inner, font);
+    let one = crate::ui::measure(hdc, "A", inner, font).max(1);
+    ReleaseDC(None, hdc);
+    let _ = DeleteObject(HGDIOBJ(font.0));
+    (all, one)
 }
 
 /// Top-left of a `w`×`h` pill for `anchor`, inside `monitor`'s work area (so
@@ -501,6 +537,13 @@ unsafe fn paint(hwnd: HWND) {
     SetTextColor(hdc, COLORREF(ink));
     let font = crate::ui::make_font_at(FONT_SIZE, FONT_WEIGHT, DPI.load(Ordering::Relaxed));
     let old = SelectObject(hdc, HGDIOBJ(font.0));
+    if WRAPPED.load(Ordering::Relaxed) {
+        let dpi = DPI.load(Ordering::Relaxed);
+        rc.left += px_at(PAD_X, dpi);
+        rc.right -= px_at(PAD_X, dpi);
+        rc.top += px_at(PAD_Y, dpi);
+        rc.bottom -= px_at(PAD_Y, dpi);
+    }
     TEXT.with(|t| draw_centered(hdc, &t.borrow(), &mut rc));
     SelectObject(hdc, old);
     let _ = DeleteObject(HGDIOBJ(font.0));
@@ -519,7 +562,12 @@ unsafe fn draw_centered(hdc: HDC, text: &str, rc: &mut RECT) {
         return;
     }
     let mut units: Vec<u16> = text.encode_utf16().collect();
-    DrawTextW(hdc, &mut units, rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    let flags = if WRAPPED.load(Ordering::Relaxed) {
+        DT_CENTER | DT_WORDBREAK | DT_END_ELLIPSIS | DT_NOPREFIX
+    } else {
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE
+    };
+    DrawTextW(hdc, &mut units, rc, flags);
     units.zeroize();
 }
 
