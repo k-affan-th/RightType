@@ -20,21 +20,22 @@ use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use native_windows_gui as nwg;
-use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, POINT, RECT, WPARAM};
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, POINT, RECT, SIZE, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateEllipticRgn, CreateRoundRectRgn, CreateSolidBrush, DeleteObject, DrawTextW,
-    EndPaint, FillRect, FillRgn, FrameRect, GetDC, InvalidateRect, ReleaseDC, SelectObject,
-    SetBkMode, SetTextColor, SetWindowRgn, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX,
-    DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK, HDC, HGDIOBJ, HMONITOR, PAINTSTRUCT, TRANSPARENT,
+    BeginPaint, CreateCompatibleDC, CreateDIBSection, CreateSolidBrush, DeleteDC, DeleteObject,
+    DrawTextW, EndPaint, FillRect, FrameRect, GdiFlush, GetDC, ReleaseDC, SelectObject, SetBkMode,
+    SetTextColor, AC_SRC_ALPHA, AC_SRC_OVER, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION,
+    DIB_RGB_COLORS, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER,
+    DT_WORDBREAK, HBITMAP, HDC, HGDIOBJ, HMONITOR, PAINTSTRUCT, TRANSPARENT,
 };
 use windows::Win32::Graphics::Gdi::{
     MonitorFromPoint, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
 };
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClientRect, GetForegroundWindow, KillTimer, PostMessageW, SetLayeredWindowAttributes,
-    SetTimer, SetWindowPos, ShowWindow, HWND_TOPMOST, LWA_ALPHA, SWP_NOACTIVATE, SWP_NOSIZE,
-    SWP_SHOWWINDOW, SW_HIDE,
+    GetForegroundWindow, KillTimer, PostMessageW, SetTimer, SetWindowPos, ShowWindow,
+    UpdateLayeredWindow, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    SW_HIDE, ULW_ALPHA,
 };
 use zeroize::Zeroize;
 
@@ -132,6 +133,7 @@ thread_local! {
     static TOAST: RefCell<Option<Toast>> = const { RefCell::new(None) };
     static TEXT: RefCell<String> = const { RefCell::new(String::new()) };
     static RICH: RefCell<Option<Rich>> = const { RefCell::new(None) };
+    static SURFACE: RefCell<Option<Surface>> = const { RefCell::new(None) };
     static ANIM: std::cell::Cell<Option<Anim>> = const { std::cell::Cell::new(None) };
 }
 
@@ -184,8 +186,6 @@ fn ensure_created() -> bool {
         TOAST_HWND.store(h as isize, Ordering::Release);
         UI_THREAD_ID.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
         unsafe {
-            // Layered window: enables per-pixel alpha for the fade-out.
-            let _ = SetLayeredWindowAttributes(HWND(h as _), COLORREF(0), 255_u8, LWA_ALPHA);
             // Not in screen sharing, recordings or screenshots (Windows 10
             // 2004 and later): a Suggest hint or preview is typed content,
             // and the tags are noise on someone else's screen. The typist
@@ -200,9 +200,6 @@ fn ensure_created() -> bool {
                     windows::Win32::UI::WindowsAndMessaging::WDA_EXCLUDEFROMCAPTURE,
                 );
             }
-            // Rounded "pill" corners.
-            let rgn = CreateRoundRectRgn(0, 0, px(W) + 1, px(H) + 1, px(H), px(H));
-            SetWindowRgn(HWND(h as _), rgn, true);
         }
     }
 
@@ -391,16 +388,7 @@ unsafe fn tick(hwnd: HWND) {
     // already leaving): a message takes as long to read as it takes.
     if a.phase != motion::Phase::Enter && pointer_on(hwnd) {
         if a.phase == motion::Phase::Exit {
-            let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA);
-            let _ = SetWindowPos(
-                hwnd,
-                HWND_TOPMOST,
-                a.x,
-                a.y,
-                0,
-                0,
-                SWP_NOACTIVATE | SWP_NOSIZE,
-            );
+            present(hwnd, a.x, a.y, 255);
         }
         a.phase = motion::Phase::Hold;
         a.since = std::time::Instant::now();
@@ -416,22 +404,13 @@ unsafe fn tick(hwnd: HWND) {
         return;
     }
     let f = motion::frame_for(a.phase, elapsed, a.calm);
-    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), f.alpha, LWA_ALPHA);
     let drop = (f.drop_px * a.dpi as f32 / 96.0).round() as i32;
     let slide = if a.slide {
         (f.slide_px * a.dpi as f32 / 96.0).round() as i32
     } else {
         0
     };
-    let _ = SetWindowPos(
-        hwnd,
-        HWND_TOPMOST,
-        a.x + slide,
-        a.y + drop,
-        0,
-        0,
-        SWP_NOACTIVATE | SWP_NOSIZE,
-    );
+    present(hwnd, a.x + slide, a.y + drop, f.alpha);
     if f.done {
         match a.phase {
             motion::Phase::Enter => {
@@ -546,27 +525,31 @@ unsafe fn show_on_ui(hwnd: HWND, text: &str, anchor: Anchor, style: Style) {
         calm: !client_animation_on(),
     };
     let first = motion::frame_for(anim.phase, 0, anim.calm);
-    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), first.alpha, LWA_ALPHA);
     let drop = (first.drop_px * dpi as f32 / 96.0).round() as i32;
     let slide = if anim.slide {
         (first.slide_px * dpi as f32 / 96.0).round() as i32
     } else {
         0
     };
+    let surface = build_surface(w, h, corner);
+    SURFACE.with(|s| {
+        if let Some(old) = s.borrow_mut().take() {
+            old.free();
+        }
+        *s.borrow_mut() = surface;
+    });
+    present(hwnd, x + slide, y + drop, first.alpha);
     let _ = SetWindowPos(
         hwnd,
         HWND_TOPMOST,
-        x + slide,
-        y + drop,
-        w,
-        h,
-        SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
     );
-    let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, corner, corner);
-    SetWindowRgn(hwnd, rgn, true);
     ANIM.with(|c| c.set(Some(anim)));
     SetTimer(hwnd, ANIM_TIMER_ID, FRAME_MS, None);
-    let _ = InvalidateRect(hwnd, None, true);
 }
 
 /// Where everything sits in a message pill (device pixels, relative to the
@@ -699,12 +682,14 @@ fn place(monitor: HMONITOR, anchor: Anchor, w: i32, h: i32, dpi: u32) -> (i32, i
     )
 }
 
-unsafe fn paint(hwnd: HWND) {
-    let mut ps = PAINTSTRUCT::default();
-    let hdc = BeginPaint(hwnd, &mut ps);
-
-    let mut rc = RECT::default();
-    let _ = GetClientRect(hwnd, &mut rc);
+/// Draw the whole pill, `w`×`h`, opaque, into `hdc`.
+unsafe fn render(hdc: HDC, w: i32, h: i32, bits: *mut u8) {
+    let mut rc = RECT {
+        left: 0,
+        top: 0,
+        right: w,
+        bottom: h,
+    };
 
     // Dark pill; the TH / EN / CAPS tags each in a colour of their own, so
     // the language reads at a glance (COLORREF is 0x00BBGGRR).
@@ -723,6 +708,18 @@ unsafe fn paint(hwnd: HWND) {
         let border = CreateSolidBrush(COLORREF(edge));
         FrameRect(hdc, &rc, border);
         let _ = DeleteObject(HGDIOBJ(border.0));
+    }
+
+    // The icon disc goes straight into the pixels, smooth at its edge; the
+    // glyph and text are drawn over it.
+    if !crate::ui::high_contrast() {
+        RICH.with(|r| {
+            if let Some(rich) = r.borrow().as_ref() {
+                let _ = GdiFlush();
+                let px = std::slice::from_raw_parts_mut(bits, (w * h * 4) as usize);
+                blend_disc(px, w, h, rich.icon, kind_colours(rich.kind).0);
+            }
+        });
     }
 
     // White, centred text in the interface typeface.
@@ -749,7 +746,164 @@ unsafe fn paint(hwnd: HWND) {
     }
     SelectObject(hdc, old);
     let _ = DeleteObject(HGDIOBJ(font.0));
+}
 
+/// The pill as pixels, ready to hand to Windows: 32 bits per pixel, the
+/// colour already multiplied by the alpha, which is 255 inside the pill and
+/// falls off over the last pixel of each rounded corner. Windows blends it
+/// onto the screen itself, so the corners are smooth instead of stepped, and
+/// the fade is one more factor in that blend.
+struct Surface {
+    dc: HDC,
+    bmp: HBITMAP,
+    old: HGDIOBJ,
+    w: i32,
+    h: i32,
+}
+
+impl Surface {
+    unsafe fn free(self) {
+        SelectObject(self.dc, self.old);
+        let _ = DeleteObject(HGDIOBJ(self.bmp.0));
+        let _ = DeleteDC(self.dc);
+    }
+}
+
+/// How much of the pixel at (`x`, `y`) of a `w`×`h` rounded rectangle with
+/// corner radius `r` is inside it, 0 to 1: the pixel's centre against the
+/// corner arc, with a one-pixel ramp across the edge.
+fn coverage(x: i32, y: i32, w: i32, h: i32, r: f32) -> f32 {
+    let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+    let cx = if fx < r {
+        r
+    } else if fx > w as f32 - r {
+        w as f32 - r
+    } else {
+        return 1.0;
+    };
+    let cy = if fy < r {
+        r
+    } else if fy > h as f32 - r {
+        h as f32 - r
+    } else {
+        return 1.0;
+    };
+    let d = ((fx - cx).powi(2) + (fy - cy).powi(2)).sqrt();
+    (r - d + 0.5).clamp(0.0, 1.0)
+}
+
+/// Paint a disc filling `icon` (a square) into `px` (BGRA, `w`×`h`) in
+/// `colour` (a COLORREF), blending the edge pixels by how much of each the
+/// disc covers.
+fn blend_disc(px: &mut [u8], w: i32, h: i32, icon: RECT, colour: u32) {
+    let r = (icon.right - icon.left) as f32 / 2.0;
+    let (cx, cy) = (icon.left as f32 + r, icon.top as f32 + r);
+    let to = [
+        ((colour >> 16) & 0xFF) as f32, // blue
+        ((colour >> 8) & 0xFF) as f32,  // green
+        (colour & 0xFF) as f32,         // red
+    ];
+    for y in (icon.top - 1).max(0)..(icon.bottom + 1).min(h) {
+        for x in (icon.left - 1).max(0)..(icon.right + 1).min(w) {
+            let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
+            let c = (r - d + 0.5).clamp(0.0, 1.0);
+            if c > 0.0 {
+                let i = ((y * w + x) * 4) as usize;
+                for (k, target) in to.iter().enumerate() {
+                    let from = px[i + k] as f32;
+                    px[i + k] = (from + (target - from) * c).round() as u8;
+                }
+            }
+        }
+    }
+}
+
+/// Give every pixel of `px` (BGRA, `w`×`h`, drawn opaque) its alpha from
+/// [`coverage`] and premultiply its colour by it.
+fn round_corners(px: &mut [u8], w: i32, h: i32, corner: i32) {
+    let r = corner as f32 / 2.0;
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let a = (coverage(x, y, w, h, r) * 255.0).round() as u32;
+            for c in &mut px[i..i + 3] {
+                *c = (*c as u32 * a / 255) as u8;
+            }
+            px[i + 3] = a as u8;
+        }
+    }
+}
+
+/// Draw the pill into a new surface of `w`×`h` with corner diameter `corner`.
+unsafe fn build_surface(w: i32, h: i32, corner: i32) -> Option<Surface> {
+    let screen = GetDC(None);
+    let dc = CreateCompatibleDC(screen);
+    ReleaseDC(None, screen);
+    let info = BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: w,
+            biHeight: -h, // top-down
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut bits: *mut c_void = std::ptr::null_mut();
+    let bmp = match CreateDIBSection(dc, &info, DIB_RGB_COLORS, &mut bits, None, 0) {
+        Ok(bmp) if !bits.is_null() => bmp,
+        _ => {
+            let _ = DeleteDC(dc);
+            return None;
+        }
+    };
+    let old = SelectObject(dc, HGDIOBJ(bmp.0));
+    render(dc, w, h, bits as *mut u8);
+    round_corners(
+        std::slice::from_raw_parts_mut(bits as *mut u8, (w * h * 4) as usize),
+        w,
+        h,
+        corner,
+    );
+    Some(Surface { dc, bmp, old, w, h })
+}
+
+/// Put the surface on screen with its top-left at (`x`, `y`), `alpha` (0–255)
+/// as its overall opacity.
+unsafe fn present(hwnd: HWND, x: i32, y: i32, alpha: u8) {
+    SURFACE.with(|s| {
+        if let Some(s) = s.borrow().as_ref() {
+            let at = POINT { x, y };
+            let size = SIZE { cx: s.w, cy: s.h };
+            let from = POINT { x: 0, y: 0 };
+            let blend = BLENDFUNCTION {
+                BlendOp: AC_SRC_OVER as u8,
+                BlendFlags: 0,
+                SourceConstantAlpha: alpha,
+                AlphaFormat: AC_SRC_ALPHA as u8,
+            };
+            let _ = UpdateLayeredWindow(
+                hwnd,
+                HDC::default(),
+                Some(&at),
+                Some(&size),
+                s.dc,
+                Some(&from),
+                COLORREF(0),
+                Some(&blend),
+                ULW_ALPHA,
+            );
+        }
+    });
+}
+
+/// Windows asks for a paint now and then; the pill is drawn by [`present`],
+/// so there is nothing to do but say it was seen.
+unsafe fn paint(hwnd: HWND) {
+    let mut ps = PAINTSTRUCT::default();
+    BeginPaint(hwnd, &mut ps);
     let _ = EndPaint(hwnd, &ps);
 }
 
@@ -778,20 +932,12 @@ fn kind_glyph(kind: Kind) -> char {
 /// Draw a message pill's icon, title and detail on the dark pill.
 unsafe fn draw_rich(hdc: HDC, rich: &Rich, ink: u32, high_contrast: bool) {
     let dpi = DPI.load(Ordering::Relaxed);
-    let (disc, glyph_ink) = if high_contrast {
-        (None, ink)
+    let glyph_ink = if high_contrast {
+        ink
     } else {
-        let (d, g) = kind_colours(rich.kind);
-        (Some(d), g)
+        kind_colours(rich.kind).1
     };
     let i = rich.icon;
-    if let Some(disc) = disc {
-        let rgn = CreateEllipticRgn(i.left, i.top, i.right + 1, i.bottom + 1);
-        let brush = CreateSolidBrush(COLORREF(disc));
-        let _ = FillRgn(hdc, rgn, brush);
-        let _ = DeleteObject(HGDIOBJ(brush.0));
-        let _ = DeleteObject(HGDIOBJ(rgn.0));
-    }
     if let Some(font) = crate::ui::make_icon_font(13) {
         let old = SelectObject(hdc, HGDIOBJ(font.0));
         SetTextColor(hdc, COLORREF(glyph_ink));
@@ -884,8 +1030,12 @@ fn contrast_colours(badge: bool) -> (u32, u32, u32) {
 unsafe fn hide(hwnd: HWND) {
     let _ = KillTimer(hwnd, ANIM_TIMER_ID);
     ANIM.with(|c| c.set(None));
-    let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255_u8, LWA_ALPHA);
     let _ = ShowWindow(hwnd, SW_HIDE);
+    SURFACE.with(|s| {
+        if let Some(old) = s.borrow_mut().take() {
+            old.free();
+        }
+    });
     // A suggestion preview is typed content: do not keep it past its display.
     TEXT.with(|t| t.borrow_mut().zeroize());
     RICH.with(|r| {
@@ -899,6 +1049,65 @@ unsafe fn hide(hwnd: HWND) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn corners_are_smooth_and_the_middle_is_solid() {
+        // A one-line pill: 120×34, radius 17.
+        let (w, h, r) = (120, 34, 17.0);
+        assert_eq!(coverage(0, 0, w, h, r), 0.0, "the corner pixel is outside");
+        assert_eq!(coverage(60, 17, w, h, r), 1.0, "the middle is inside");
+        assert_eq!(coverage(60, 0, w, h, r), 1.0, "the straight edge is whole");
+        assert_eq!(coverage(17, 17, w, h, r), 1.0, "the arc's centre");
+        // On the arc itself the pixel is part covered: neither 0 nor 1.
+        let edge: Vec<f32> = (0..17).map(|i| coverage(i, 3, w, h, r)).collect();
+        assert!(
+            edge.iter().any(|&c| c > 0.05 && c < 0.95),
+            "an anti-aliased ramp, not a step: {edge:?}"
+        );
+        // Both ends and both rows agree.
+        assert_eq!(coverage(0, 0, w, h, r), coverage(w - 1, h - 1, w, h, r));
+        assert_eq!(coverage(2, 5, w, h, r), coverage(w - 3, h - 6, w, h, r));
+    }
+
+    #[test]
+    fn a_disc_is_smooth_at_its_edge_and_solid_inside() {
+        let (w, h) = (30, 30);
+        let mut px = vec![40u8; (w * h * 4) as usize];
+        let icon = RECT {
+            left: 3,
+            top: 3,
+            right: 27,
+            bottom: 27,
+        };
+        // COLORREF 0x00BBGGRR: red 200, green 100, blue 50.
+        blend_disc(&mut px, w, h, icon, 0x0032_64C8);
+        let at = |x: i32, y: i32| {
+            let i = ((y * w + x) * 4) as usize;
+            [px[i], px[i + 1], px[i + 2]]
+        };
+        assert_eq!(at(15, 15), [50, 100, 200], "inside is the colour, as BGR");
+        assert_eq!(at(0, 0), [40, 40, 40], "outside is untouched");
+        let ramp = (3..15).map(|x| at(x, 6)).any(|p| p[2] > 40 && p[2] < 200);
+        assert!(ramp, "a part-covered pixel on the arc");
+    }
+
+    #[test]
+    fn rounding_premultiplies_and_leaves_the_inside_untouched() {
+        let (w, h) = (40, 34);
+        let mut px = vec![200u8; (w * h * 4) as usize];
+        round_corners(&mut px, w, h, 34);
+        let at = |x: i32, y: i32| {
+            let i = ((y * w + x) * 4) as usize;
+            [px[i], px[i + 1], px[i + 2], px[i + 3]]
+        };
+        assert_eq!(at(20, 17), [200, 200, 200, 255], "inside is opaque");
+        assert_eq!(at(0, 0), [0, 0, 0, 0], "outside is clear");
+        let edge = (0..17)
+            .map(|x| at(x, 4))
+            .find(|p| p[3] > 0 && p[3] < 255)
+            .expect("a part-covered pixel on the arc");
+        assert_eq!(edge[0] as u32, 200 * edge[3] as u32 / 255, "premultiplied");
+    }
     use windows::Win32::Graphics::Gdi::{CreateCompatibleDC, DeleteDC};
 
     /// The pill can be painted after its text was wiped (`hide` clears it

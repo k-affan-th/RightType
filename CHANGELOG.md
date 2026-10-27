@@ -17,6 +17,8 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 - The pill is flat (no lit edge round it) and its corners are concentric with the
   icon: the corner radius is the icon's radius plus the gap kept round it, the
   same for one line and for several. High Contrast keeps its outline.
+- The pill's rounded corners and its icon disc are drawn smooth (per-pixel
+  alpha) instead of stepped, and it fades with the same blend.
 - Settings has a Recent messages page: the last 50 pill messages, kept in memory
   only and forgotten when RightType closes, with Clear all and a switch to
   stop remembering.
