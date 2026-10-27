@@ -13,3 +13,17 @@
 - RED: added tests in src/detect.rs for long Thai sentences with proper names on QWERTY; verified failure.
 - GREEN: implemented is_tolerant_thai_segmentation in src/detect.rs with multi-word coverage (>=70% chars, >=2 words, max 12 unknown chars) guarded by English word/tech-term checks.
 - Verification: all detect unit tests passed.
+
+## Task 3: Quality Gate, Benchmark & Regression Audit
+- ench_issues:
+  - Benchmark 1 (Dual Symbols): 11/11 (100.0%) Thai->EN and 11/11 (100.0%) EN->Thai.
+  - Benchmark 2 (Long Sentences): 31/32 (96.9%) recall on QWERTY without space.
+  - Benchmark 3 (Safety): 0 false positives on code snippets and English dictionary words.
+- alse_positive_audit --check:
+  - 121,928 Thai dictionary words changed on Thai layout: 0
+  - 200,000 Thai phrases changed on Thai layout: 0
+  - 624,652 English dictionary words changed on English layout: 0
+  - 750,043 Numbers, dates, and symbols changed on English layout: 0
+  - UK English keyboard changed: 0
+  - Quality Gate: PASS
+- cargo test --lib: 263 passed, 0 failed.
