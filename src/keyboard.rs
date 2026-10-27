@@ -184,7 +184,7 @@ pub fn index_of(scan: u16, extended: bool) -> Option<usize> {
     // Windows reports a few keys differently from the scan code tables:
     // Pause comes as 0x45 without the flag and NumLock as 0x45 with it
     // (both as drawn here), and Right Shift sometimes carries the flag.
-    let extended = extended && !(scan == 0x36);
+    let extended = extended && scan != 0x36;
     KEYS.iter()
         .position(|k| k.scan == scan && k.extended == extended)
 }
