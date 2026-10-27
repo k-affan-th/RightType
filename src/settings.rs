@@ -1184,11 +1184,11 @@ fn open_on(page: u8) {
     );
     let activity_table = s.table(
         &[
-            (tr(T::ColWhen), 64),
-            (tr(T::ColKind), 96),
-            (tr(T::ColMessage), 320),
+            (tr(T::ColWhen), 56),
+            (tr(T::ColKind), 84),
+            (tr(T::ColMessage), 340),
         ],
-        (X0, 102, CW, 288),
+        (X0, 108, CW, 282),
         m,
     );
     let activity_clear = s.button_icon(

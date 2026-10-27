@@ -454,7 +454,7 @@ texts! {
     BrandTagline => "Type in the right layout automatically", "พิมพ์ถูกแป้น ไม่ต้องสลับเอง";
     NavLearned => "Learned words", "คำที่จำไว้";
     NavActivity => "Recent messages", "ข้อความล่าสุด";
-    ActivityIntro => "What the pill at the bottom right said lately, newest first. Kept in memory only and forgotten when RightType closes.", "สิ่งที่ pill มุมขวาล่างแจ้งล่าสุด เรียงใหม่สุดก่อน เก็บในหน่วยความจำเท่านั้น และลืมเมื่อปิด RightType";
+    ActivityIntro => "What the pill said lately, newest first. Kept in memory only, forgotten when RightType closes.", "สิ่งที่ pill แจ้งล่าสุด เรียงใหม่สุดก่อน เก็บในหน่วยความจำเท่านั้น ลืมเมื่อปิด RightType";
     ActivityEmpty => "No messages yet.", "ยังไม่มีข้อความ";
     ActivityCleared => "Cleared.", "ล้างแล้ว";
     ColWhen => "Time", "เวลา";

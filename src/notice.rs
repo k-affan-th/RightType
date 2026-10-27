@@ -101,12 +101,28 @@ pub fn split(text: &str) -> (String, Option<String>) {
                 .then(|| text.find(": ").map(|i| (i, 2)))
                 .flatten()
         });
-    match cut {
+    let (title, detail) = match cut {
         Some((i, len)) if i > 0 && i + len < text.len() => {
             (text[..i].to_string(), Some(text[i + len..].to_string()))
         }
         _ => (text.to_string(), None),
+    };
+    // A title that is still long reads better cut at its colon, the rest
+    // joining the detail: "Not sent" over "it looks typed on the wrong keyboard".
+    if title.chars().count() > TITLE_SOFT_MAX {
+        if let Some(i) = title.find(": ").filter(|&i| i > 0) {
+            let head = title[..i].to_string();
+            let tail = title[i + 2..].trim();
+            let detail = match detail {
+                Some(d) if !tail.is_empty() => Some(format!("{tail} · {d}")),
+                Some(d) => Some(d),
+                None if !tail.is_empty() => Some(tail.to_string()),
+                None => None,
+            };
+            return (head, detail);
+        }
     }
+    (title, detail)
 }
 
 /// The kind of the interface string `text` was made from. A message that is
@@ -407,6 +423,21 @@ mod tests {
         // A long message with no separator is cut at its colon.
         let long = "Code mode: only what is clearly a slip, never names";
         assert_eq!(split(long).0, "Code mode");
+        // A long title is cut at its colon and the rest joins the detail.
+        assert_eq!(
+            split("Not sent: it looks typed on the wrong keyboard · Enter sends it anyway"),
+            (
+                "Not sent".into(),
+                Some("it looks typed on the wrong keyboard · Enter sends it anyway".into())
+            )
+        );
+        assert_eq!(
+            split("Code mode: only what is clearly a slip — never names"),
+            (
+                "Code mode".into(),
+                Some("only what is clearly a slip · never names".into())
+            )
+        );
         // A short one with a colon stays whole.
         assert_eq!(split("Spelling: a → b").1, None);
         // Nothing to cut off at either end.

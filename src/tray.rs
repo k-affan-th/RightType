@@ -487,6 +487,42 @@ pub fn run() {
             "settings-keyboard" => settings::open_page(7),
             "settings-tools" => settings::open_page(8),
             "settings-sponsor" => settings::open_page(9),
+            "settings-activity" => settings::open_page(10),
+            // One pill kept on screen, to look at: pill-done, -undo, -info,
+            // -long, -attention, -problem.
+            pill if pill.starts_with("pill-") => {
+                use righttype::i18n::{trf, T};
+                let text = match &pill[5..] {
+                    "undo" => trf(T::ToastSpellingKept, &[("word", "kubernetes")]),
+                    "info" => trf(T::ToastAppMode, &[("mode", "Auto"), ("app", "Chrome")]),
+                    "long" => trf(T::ToastModeCode, &[]),
+                    "attention" => trf(T::ToastEnterHeld, &[]),
+                    "problem" => trf(T::ToastHookLost, &[]),
+                    _ => trf(T::ToastFixedWords, &[("n", "3")]),
+                };
+                // The first call is on this (the UI) thread, which creates
+                // the pill's window; the thread then keeps it on screen.
+                overlay::show(&text);
+                std::thread::spawn(move || loop {
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    overlay::show(&text);
+                });
+            }
+            // Several different messages, then the Recent messages page.
+            "activity-demo" => {
+                use righttype::i18n::{trf, T};
+                for text in [
+                    trf(T::ToastModeAuto, &[]),
+                    trf(T::ToastFixedWords, &[("n", "3")]),
+                    trf(T::ToastSpellingKept, &[("word", "kubernetes")]),
+                    trf(T::ToastEnterHeld, &[]),
+                    trf(T::ToastHookLost, &[]),
+                    trf(T::ToastHookBack, &[]),
+                ] {
+                    overlay::show(&text);
+                }
+                settings::open_page(10);
+            }
             // tour-a ... tour-d, optionally ":<step>" (counting from 1)
             tour if tour.starts_with("tour-") => {
                 let (name, step) = tour[5..].split_once(':').unwrap_or((&tour[5..], "1"));
