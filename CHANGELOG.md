@@ -2,7 +2,16 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.6.3] — 2026-10-28
+
+### Fixed
+
+- Dual-language symbols (`.` `?` `"`): the manual flip (Shift+Backspace) now
+  reads them according to the active keyboard layout. On Thai they give `"` `M` `W`;
+  on English they give `ใ` `ฦ` `.`.
+- Long Thai sentences typed on US QWERTY (e.g. sentences with uncommon names or
+  out-of-dictionary words) are accurately recognized and converted when segments
+  match known words.
 
 ### Changed
 

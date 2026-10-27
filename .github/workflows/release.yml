@@ -11,6 +11,11 @@ on:
   push:
     tags: [ "v*" ]
   workflow_dispatch:
+    inputs:
+      submit_winget:
+        description: 'Auto submit package manifest to winget-pkgs'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -99,19 +104,31 @@ jobs:
     # and `winget upgrade` pick up this version. Needs a WINGET_TOKEN secret
     # (a GitHub token that can fork and open PRs); without one, submit the
     # attached winget-manifests zip by hand (see packaging/winget.ps1).
-    - name: Check for a winget token
+    - name: Check for winget submission
       id: winget
       shell: pwsh
       env:
         WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        INPUT_SUBMIT: ${{ inputs.submit_winget }}
       run: |
-        "submit=$(-not [string]::IsNullOrEmpty($env:WINGET_TOKEN))".ToLower() >> $env:GITHUB_OUTPUT
+        $tokenPresent = -not [string]::IsNullOrEmpty($env:WINGET_TOKEN)
+        $flagEnabled = if ([string]::IsNullOrEmpty($env:INPUT_SUBMIT)) { $true } else { [bool]::Parse($env:INPUT_SUBMIT) }
+        $shouldSubmit = $tokenPresent -and $flagEnabled
+        "submit=$($shouldSubmit.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+        if (-not $tokenPresent) {
+          Write-Host "WINGET_TOKEN secret is not set. Skipping winget submission (manual zip attached)."
+        } elseif (-not $flagEnabled) {
+          Write-Host "submit_winget flag is disabled. Skipping winget submission."
+        } else {
+          Write-Host "WINGET_TOKEN present and flag enabled. Will submit to winget."
+        }
 
     - name: Submit to winget
       if: steps.winget.outputs.submit == 'true'
       shell: pwsh
       env:
         WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        INPUT_SUBMIT: ${{ inputs.submit_winget }}
       run: |
         $ver = "${{ steps.version.outputs.version }}"
         Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
