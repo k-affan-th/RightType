@@ -30,6 +30,11 @@ foreach ($path in $regPaths) {
     }
 }
 
+if (-not $uninstaller) {
+    $fallback = Join-Path $env:LOCALAPPDATA "Programs\RightType\unins000.exe"
+    if (Test-Path $fallback) { $uninstaller = $fallback }
+}
+
 if ($uninstaller -and (Test-Path $uninstaller)) {
     $proc = Start-Process -FilePath $uninstaller -ArgumentList $silentArgs -Wait -PassThru
     if ($proc.ExitCode -ne 0) {

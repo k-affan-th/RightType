@@ -23,7 +23,13 @@ $root = Split-Path $PSScriptRoot -Parent
 if ($Setup -and -not $SetupX64) { $SetupX64 = $Setup }
 if (-not $SetupX64) { $SetupX64 = Join-Path $root "dist/RightType-$Version-setup.exe" }
 if (-not $SetupArm64) { $SetupArm64 = Join-Path $root "dist/RightType-$Version-arm64-setup.exe" }
-if (-not $Out) { $Out = Join-Path $root "dist/winget" }
+if (-not $Out) {
+    $Out = Join-Path $root "dist/winget"
+} else {
+    if (-not [System.IO.Path]::IsPathRooted($Out)) {
+        $Out = [System.IO.Path]::GetFullPath((Join-Path $PWD $Out))
+    }
+}
 
 $id = "k-affan-th.RightType"
 $repo = "https://github.com/k-affan-th/RightType"

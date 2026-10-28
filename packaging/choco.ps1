@@ -19,7 +19,7 @@
 param(
     [Parameter(Mandatory)][string]$Version,
     [string]$SetupX64,
-    [string]$SetupArm64,
+    [string]$SetupArm64, # Reserved for future Chocolatey ARM64 support
     [string]$Setup, # Backwards compatibility alias for SetupX64
     [string]$Out
 )

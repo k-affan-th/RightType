@@ -22,7 +22,13 @@ $root = Split-Path $PSScriptRoot -Parent
 if ($Zip -and -not $ZipX64) { $ZipX64 = $Zip }
 if (-not $ZipX64) { $ZipX64 = Join-Path $root "dist/RightType-$Version-x64.zip" }
 if (-not $ZipArm64) { $ZipArm64 = Join-Path $root "dist/RightType-$Version-arm64.zip" }
-if (-not $Out) { $Out = Join-Path $root "dist/scoop" }
+if (-not $Out) {
+    $Out = Join-Path $root "dist/scoop"
+} else {
+    if (-not [System.IO.Path]::IsPathRooted($Out)) {
+        $Out = [System.IO.Path]::GetFullPath((Join-Path $PWD $Out))
+    }
+}
 
 $repo = "https://github.com/k-affan-th/RightType"
 $x64ZipName = "RightType-$Version-x64.zip"

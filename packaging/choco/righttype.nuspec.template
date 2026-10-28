@@ -7,6 +7,7 @@
     <authors>k-affan-th</authors>
     <owners>k-affan-th</owners>
     <projectUrl>https://github.com/k-affan-th/RightType</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/k-affan-th/RightType/main/assets/icon.png</iconUrl>
     <packageSourceUrl>https://github.com/k-affan-th/RightType/tree/main/packaging/choco</packageSourceUrl>
     <projectSourceUrl>https://github.com/k-affan-th/RightType</projectSourceUrl>
     <docsUrl>https://github.com/k-affan-th/RightType#readme</docsUrl>

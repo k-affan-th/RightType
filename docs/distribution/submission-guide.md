@@ -157,7 +157,7 @@ For RightType, the target path is:
 New-Item -ItemType Directory -Force -Path manifests/k/k-affan-th/RightType/2.6.3
 
 # Copy the 3 YAML files from RightType repository:
-Copy-Item -Path "D:\GitHub\RightType\dist\winget\2.6.3\*" -Destination "manifests\k\k-affan-th\RightType\2.6.3\"
+Copy-Item -Path "<path-to-RightType>\dist\winget\2.6.3\*" -Destination "manifests\k\k-affan-th\RightType\2.6.3\"
 ```
 
 Confirm that the folder contains:
