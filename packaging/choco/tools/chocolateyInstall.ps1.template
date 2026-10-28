@@ -1,0 +1,17 @@
+$ErrorActionPreference = 'Stop'
+
+$packageArgs = @{
+  packageName    = 'righttype'
+  fileType       = 'exe'
+  url            = 'https://github.com/k-affan-th/RightType/releases/download/v__VERSION__/RightType-__VERSION__-setup.exe'
+  url64bit       = 'https://github.com/k-affan-th/RightType/releases/download/v__VERSION__/RightType-__VERSION__-setup.exe'
+  checksum       = '__SHA256_X64__'
+  checksumType   = 'sha256'
+  checksum64     = '__SHA256_X64__'
+  checksumType64 = 'sha256'
+  silentArgs     = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-'
+  validExitCodes = @(0)
+  softwareName   = 'RightType*'
+}
+
+Install-ChocolateyPackage @packageArgs

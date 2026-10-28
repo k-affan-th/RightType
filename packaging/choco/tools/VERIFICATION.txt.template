@@ -1,0 +1,21 @@
+VERIFICATION
+Verification is intended to assist the Chocolatey moderators and community
+in verifying that this package's contents are trustworthy.
+
+The installer has been downloaded from the official GitHub Release page:
+https://github.com/k-affan-th/RightType/releases/tag/v__VERSION__
+
+Download URL:
+https://github.com/k-affan-th/RightType/releases/download/v__VERSION__/RightType-__VERSION__-setup.exe
+
+Checksum Verification:
+The official SHA-256 checksums are published in the release assets:
+https://github.com/k-affan-th/RightType/releases/download/v__VERSION__/SHA256.txt
+
+Expected SHA-256 Checksum:
+RightType-__VERSION__-setup.exe: __SHA256_X64__
+
+To verify the checksum of the downloaded file using PowerShell:
+    Get-FileHash -Algorithm SHA256 .\RightType-__VERSION__-setup.exe
+Or using certutil:
+    certutil -hashfile RightType-__VERSION__-setup.exe SHA256

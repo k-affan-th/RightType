@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>righttype</id>
+    <version>__VERSION__</version>
+    <title>RightType</title>
+    <authors>k-affan-th</authors>
+    <owners>k-affan-th</owners>
+    <projectUrl>https://github.com/k-affan-th/RightType</projectUrl>
+    <packageSourceUrl>https://github.com/k-affan-th/RightType/tree/main/packaging/choco</packageSourceUrl>
+    <projectSourceUrl>https://github.com/k-affan-th/RightType</projectSourceUrl>
+    <docsUrl>https://github.com/k-affan-th/RightType#readme</docsUrl>
+    <bugTrackerUrl>https://github.com/k-affan-th/RightType/issues</bugTrackerUrl>
+    <licenseUrl>https://github.com/k-affan-th/RightType/blob/main/LICENSE-MIT</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <releaseNotes>https://github.com/k-affan-th/RightType/releases/tag/v__VERSION__</releaseNotes>
+    <tags>thai keyboard typing layout rightlang auto-switch text-processing</tags>
+    <summary>Fixes Thai/English text typed in the wrong keyboard layout without retyping</summary>
+    <description>RightType fixes text typed in the wrong keyboard layout (Thai Kedmanee or Pattachote while English is active, or the other way round) automatically as you type, or on a hotkey. It never goes online and never writes what you type to disk.</description>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
