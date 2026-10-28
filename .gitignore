@@ -12,3 +12,8 @@ e2e/probe_err.txt
 /dist/
 # Local E2E run output
 e2e/*.log
+
+# Local studio tools and generated dither assets
+docs/poster/reel_generator.html
+docs/poster/logo_studio.html
+docs/poster/*_dither.png

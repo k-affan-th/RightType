@@ -220,3 +220,8 @@ pwsh -File packaging\build_release.ps1       # installer + zip + SHA256.txt ล�
 ## License
 
 MIT หรือ Apache-2.0 ตามที่คุณเลือก — ดู [LICENSE-MIT](LICENSE-MIT) และ [LICENSE-APACHE](LICENSE-APACHE)
+
+
+## Code Signing
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
