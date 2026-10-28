@@ -48,6 +48,9 @@ const PAGE_SNIPPETS: u8 = 6;
 const PAGE_KEYBOARD: u8 = 7;
 const PAGE_TOOLS: u8 = 8;
 const PAGE_SPONSOR: u8 = 9;
+/// Width of the box a word is typed in on the Learned words page; the Add
+/// button follows it and the Remove button sits at the right edge.
+const LEARNED_WORD_W: i32 = 240;
 const PAGE_ACTIVITY: u8 = 10;
 /// Sidebar entries, top to bottom, and their pages.
 const NAV: [(T, u8, char); 10] = [
@@ -1089,12 +1092,12 @@ fn open_on(page: u8) {
         p.bg,
         l,
     );
-    let learned_word = s.line_edit("", (X0 + 4, 334, 306, 24), l);
+    let learned_word = s.line_edit("", (X0 + 4, 334, LEARNED_WORD_W, 24), l);
     let learned_add = s.button_icon(
         tr(T::BtnAddWord),
         icons::ADD,
         true,
-        (X0 + 318, 330, 92, 34),
+        (X0 + LEARNED_WORD_W + 18, 330, 108, 34),
         p.bg,
         l,
     );
@@ -3081,8 +3084,13 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             }
         }
         PAGE_LEARNED => {
-            field(g, rect(X0, 142, CW, 268));
-            card(g, rect(X0, 572, CW, 72));
+            // The word box (its frame is drawn here) and the sync row's card,
+            // where the controls of this page are put.
+            field(g, rect(X0, 330, LEARNED_WORD_W + 8, 32));
+            card(g, rect(X0, 516, CW, 72));
+        }
+        PAGE_ACTIVITY => {
+            card(g, rect(X0, 448, CW, 72));
         }
         PAGE_SNIPPETS => {
             field(g, rect(X0, 344, 150, 32));

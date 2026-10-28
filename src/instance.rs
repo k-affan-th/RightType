@@ -119,6 +119,12 @@ fn own_path() -> String {
 
 /// Decide whether this launch runs, settling any RightType already running.
 pub fn claim() -> Start {
+    // Debug builds only: RIGHTTYPE_PREVIEW runs alongside another RightType
+    // (see `crate::tray`: it also leaves the keyboard alone), to look at a
+    // window without closing the one in use.
+    if cfg!(debug_assertions) && std::env::var_os("RIGHTTYPE_PREVIEW").is_some() {
+        return Start::Run { replaced: None };
+    }
     unsafe {
         let Ok(mutex) = CreateMutexW(None, false, RUNNING) else {
             // Cannot tell: run, as before 2.1.
