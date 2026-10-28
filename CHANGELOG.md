@@ -2,6 +2,15 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Settings, Learned words: the Add and Remove buttons no longer overlap, and the
+  page no longer draws a dark band under the table and an empty card under the
+  sync switch (they were drawn where the old text box and rows used to be).
+  Recent messages gets the same card round its switch as the other pages.
+
 ## [2.6.3] — 2026-10-28
 
 ### Fixed
