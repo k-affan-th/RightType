@@ -28,7 +28,6 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 if ($Setup -and -not $SetupX64) { $SetupX64 = $Setup }
 if (-not $SetupX64) { $SetupX64 = Join-Path $root "dist/RightType-$Version-setup.exe" }
-if (-not $SetupArm64) { $SetupArm64 = Join-Path $root "dist/RightType-$Version-arm64-setup.exe" }
 if (-not $Out) {
     $Out = Join-Path $root "dist/choco"
 } else {
@@ -39,7 +38,6 @@ if (-not $Out) {
 
 $repo = "https://github.com/k-affan-th/RightType"
 $x64Name = "RightType-$Version-setup.exe"
-$arm64Name = "RightType-$Version-arm64-setup.exe"
 
 function Get-HashFromText([string]$content, [string]$filename) {
     if ([string]::IsNullOrWhiteSpace($content)) { return $null }
@@ -57,33 +55,27 @@ function Get-HashFromText([string]$content, [string]$filename) {
 }
 
 $shaX64 = $null
-$shaArm64 = $null
 
 # Tier 1: Local installer files
 if ($SetupX64 -and (Test-Path $SetupX64)) {
     $shaX64 = (Get-FileHash $SetupX64 -Algorithm SHA256).Hash.ToUpper()
 }
-if ($SetupArm64 -and (Test-Path $SetupArm64)) {
-    $shaArm64 = (Get-FileHash $SetupArm64 -Algorithm SHA256).Hash.ToUpper()
-}
 
 # Tier 2: dist/SHA256.txt
-if (-not $shaX64 -or -not $shaArm64) {
+if (-not $shaX64) {
     $localShaFile = Join-Path $root "dist/SHA256.txt"
     if (Test-Path $localShaFile) {
         $shaText = Get-Content $localShaFile -Raw -Encoding utf8
-        if (-not $shaX64) { $shaX64 = Get-HashFromText $shaText $x64Name }
-        if (-not $shaArm64) { $shaArm64 = Get-HashFromText $shaText $arm64Name }
+        $shaX64 = Get-HashFromText $shaText $x64Name
     }
 }
 
 # Tier 3: Remote GitHub release SHA256.txt
-if (-not $shaX64 -or -not $shaArm64) {
+if (-not $shaX64) {
     $remoteUrl = "$repo/releases/download/v$Version/SHA256.txt"
     try {
         $remoteShaText = (Invoke-RestMethod -Uri $remoteUrl -Method Get)
-        if (-not $shaX64) { $shaX64 = Get-HashFromText $remoteShaText $x64Name }
-        if (-not $shaArm64) { $shaArm64 = Get-HashFromText $remoteShaText $arm64Name }
+        $shaX64 = Get-HashFromText $remoteShaText $x64Name
     } catch {
         Write-Warning "Could not fetch remote SHA256.txt from $remoteUrl`: $_"
     }
