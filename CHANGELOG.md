@@ -6,6 +6,13 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 
+- The list at the text cursor (Shift twice), the app's shortcut list and the list
+  for a held key now close when you click anywhere outside them. They never take
+  the keyboard focus, so a click elsewhere in the same window used to leave one
+  open, still taking digits, arrows and Enter that were meant for the app.
+- The list at the text cursor no longer runs off the bottom of the screen the
+  first time it opens low on the screen: it is placed again (below the cursor,
+  or above it when there is no room) when its rows arrive and make it taller.
 - Settings, Learned words: the Add and Remove buttons no longer overlap, and the
   page no longer draws a dark band under the table and an empty card under the
   sync switch (they were drawn where the old text box and rows used to be).

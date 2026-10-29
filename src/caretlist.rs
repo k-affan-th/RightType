@@ -105,6 +105,12 @@ struct State {
     fade: Option<(motion::Phase, std::time::Instant)>,
     /// Where the window rests (screen pixels).
     rest_y: i32,
+    /// The text cursor's top and bottom, the top to use without one, and the
+    /// work area's top and bottom: for placing the list again when its rows
+    /// make it taller.
+    caret_span: Option<(i32, i32)>,
+    fallback_top: i32,
+    work: (i32, i32),
 }
 
 impl State {
@@ -286,12 +292,9 @@ fn open() {
     unsafe {
         let mut wr = RECT::default();
         let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(target, &mut wr);
-        let (x, y) = match caret {
-            Some(c) => (c.left, c.bottom + ui::px(4)),
-            None => (
-                wr.left + ((wr.right - wr.left) - ui::px(W)) / 2,
-                wr.top + ui::px(80),
-            ),
+        let x = match caret {
+            Some(c) => c.left,
+            None => wr.left + ((wr.right - wr.left) - ui::px(W)) / 2,
         };
         // Kept on the screen the caret is on.
         let monitor = match caret {
@@ -310,14 +313,16 @@ fn open() {
         let wa = ui::work_area(monitor);
         let h = height(0);
         let x = x.clamp(wa.left, (wa.right - ui::px(W)).max(wa.left));
-        let y = if y + h > wa.bottom {
-            caret.map_or(wa.bottom - h, |c| (c.top - h - ui::px(4)).max(wa.top))
-        } else {
-            y.max(wa.top)
-        };
+        let caret_span = caret.map(|c| (c.top, c.bottom));
+        let fallback_top = wr.top + ui::px(80);
+        let work = (wa.top, wa.bottom);
+        let y = righttype::summon::pane_top(caret_span, fallback_top, h, ui::px(4), work);
         STATE.with(|s| {
             let mut s = s.borrow_mut();
             s.rest_y = y;
+            s.caret_span = caret_span;
+            s.fallback_top = fallback_top;
+            s.work = work;
             s.fade = Some((motion::Phase::Enter, std::time::Instant::now()));
         });
         let first = motion::frame(motion::Phase::Enter, 0);
@@ -431,6 +436,27 @@ pub fn pin_start() -> bool {
 fn height(rows: usize) -> i32 {
     let rows = rows.max(1) as i32;
     ui::px(SEARCH_H + rows * ROW_H + FOOT_H + PAD)
+}
+
+/// A mouse click at screen point (`x`, `y`): outside the list it puts it
+/// away. The list never takes the focus, so clicking elsewhere in the same
+/// window does not close it by itself, and until it closes it takes the
+/// digits, arrows and Enter that were meant for the app.
+pub fn click_at(x: i32, y: i32) {
+    let open = OPEN.load(Ordering::Acquire);
+    if open == 0 {
+        return;
+    }
+    let mut r = RECT::default();
+    let pane = unsafe {
+        windows::Win32::UI::WindowsAndMessaging::GetWindowRect(HWND(open as *mut _), &mut r)
+    }
+    .ok()
+    .map(|()| (r.left, r.top, r.right, r.bottom));
+    if righttype::summon::click_closes(pane, x, y) {
+        crate::hook::trace_note("caret list: a click elsewhere closed it");
+        close();
+    }
 }
 
 fn close() {
@@ -749,16 +775,25 @@ fn rows_arrived() {
     });
     unsafe {
         let h = HWND(hwnd as *mut _);
-        let _ = SetWindowPos(
-            h,
-            HWND_TOPMOST,
-            0,
-            0,
-            ui::px(W),
-            height_now(),
-            SWP_NOACTIVATE | windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE,
-        );
-        round(h, height_now());
+        // The rows make the list taller than it was when it opened: place it
+        // again for the new height, so it does not run off the screen.
+        let height = height_now();
+        let (x, y) = STATE.with(|s| {
+            let mut s = s.borrow_mut();
+            let y = righttype::summon::pane_top(
+                s.caret_span,
+                s.fallback_top,
+                height,
+                ui::px(4),
+                s.work,
+            );
+            s.rest_y = y;
+            let mut wr = RECT::default();
+            let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(h, &mut wr);
+            (wr.left, y)
+        });
+        let _ = SetWindowPos(h, HWND_TOPMOST, x, y, ui::px(W), height, SWP_NOACTIVATE);
+        round(h, height);
         ui::redraw_all(h);
     }
     if pick_now {

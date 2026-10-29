@@ -53,8 +53,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetAncestor, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId,
     PostMessageW, SetWindowsHookExW, UnhookWindowsHookEx, GA_ROOT, GUITHREADINFO, HC_ACTION, HHOOK,
-    KBDLLHOOKSTRUCT, LLKHF_INJECTED, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_INPUTLANGCHANGEREQUEST,
-    WM_KEYDOWN, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_XBUTTONDOWN,
+    KBDLLHOOKSTRUCT, LLKHF_INJECTED, MSLLHOOKSTRUCT, WH_KEYBOARD_LL, WH_MOUSE_LL,
+    WM_INPUTLANGCHANGEREQUEST, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_RBUTTONDOWN,
+    WM_SYSKEYDOWN, WM_XBUTTONDOWN,
 };
 
 use crate::{inject, manual, safety};
@@ -1512,6 +1513,18 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
         )
     {
         caret_may_have_moved();
+        // A click anywhere else puts away the panes that do not take the
+        // focus: the list at the text cursor, the app's shortcuts, the list
+        // for a held key.
+        let at = &*(lparam.0 as *const MSLLHOOKSTRUCT);
+        crate::caretlist::click_at(at.pt.x, at.pt.y);
+        crate::sheet::click_at(at.pt.x, at.pt.y);
+        if PICK
+            .with(|p| p.try_borrow_mut().ok().and_then(|mut p| p.take()))
+            .is_some()
+        {
+            crate::overlay::dismiss();
+        }
     }
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
 }
