@@ -666,7 +666,15 @@ pub fn run() {
     })
     .ok();
     // The hook lives on this (message-pumping) thread.
-    if let Err(e) = unsafe { hook::install() } {
+    // Debug preview (RIGHTTYPE_PREVIEW): no keyboard hook, so a second copy
+    // never touches what is typed.
+    let preview = cfg!(debug_assertions) && std::env::var_os("RIGHTTYPE_PREVIEW").is_some();
+    let installed = if preview {
+        Ok(())
+    } else {
+        unsafe { hook::install() }
+    };
+    if let Err(e) = installed {
         nwg::modal_error_message(
             &ui.window.handle,
             "RightType",
