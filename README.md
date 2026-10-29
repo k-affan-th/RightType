@@ -217,6 +217,16 @@ pwsh -File packaging\build_release.ps1       # installer + zip + SHA256.txt ล�
 ติดตั้งแบบอื่น (Windows on ARM, portable zip, ตรวจ SHA256, ถอนการติดตั้ง):
 [Install ในคู่มือฉบับเต็ม](docs/GUIDE.md#install-no-building-needed)
 
+## สนับสนุน
+
+RightType ฟรีและเปิดซอร์ส ทุกฟีเจอร์ใช้งานฟรี 100% หากช่วยให้งานคุณสะดวกขึ้น ร่วมสนับสนุนค่ากาแฟได้ตามสะดวก
+หรือร่วมพัฒนาได้ที่ [GitHub](https://github.com/k-affan-th/RightType)
+
+| PromptPay | Lightning | Bitcoin |
+| :---: | :---: | :---: |
+| <img src="docs/img/qr-promptpay.svg" width="180" alt="PromptPay QR"> | <img src="docs/img/qr-lightning.svg" width="180" alt="Lightning QR"> | <img src="docs/img/qr-bitcoin.svg" width="180" alt="Bitcoin QR"> |
+| `004-666-008749073` (e-Wallet) · สแกนด้วยแอปธนาคารไทย | `yawninggrass92@walletofsatoshi.com` | `bc1qdac8h7hl57x3kv8x8xpz6zg0fgw6zvp7uld3a6` |
+
 ## License
 
 MIT หรือ Apache-2.0 ตามที่คุณเลือก — ดู [LICENSE-MIT](LICENSE-MIT) และ [LICENSE-APACHE](LICENSE-APACHE)
