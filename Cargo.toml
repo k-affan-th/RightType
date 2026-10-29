@@ -2,6 +2,7 @@
 name = "righttype"
 version = "2.6.3"
 edition = "2021"
+default-run = "righttype"
 rust-version = "1.75"
 description = "Fix wrong-keyboard-layout Thai/English typing — a modern, safe Rust successor to RightLang"
 license = "MIT OR Apache-2.0"
@@ -20,6 +21,12 @@ path = "src/lib.rs"
 name = "righttype"
 path = "src/main.rs"
 
+# Explicit text repair for the native Mac preview; no keyboard capture.
+[[bin]]
+name = "righttype-text"
+path = "src/bin/righttype-text.rs"
+required-features = ["text-tool"]
+
 [dependencies]
 zeroize = "1"
 
@@ -29,6 +36,7 @@ zeroize = "1"
 # `--features winos`.
 [features]
 default = []
+text-tool = []
 winos = [
     "dep:crossbeam-channel",
     "dep:once_cell",

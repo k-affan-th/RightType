@@ -3,6 +3,10 @@
 > เอกสารนี้เป็น **source of truth สำหรับการลงมือทำงานปัจจุบัน**
 > ส่วน [PLAN.md](archive/PLAN.md) เก็บ vision, architecture และประวัติการวางแผนระยะยาว
 
+macOS contribution work is tracked separately in [PLAN_MACOS.md](PLAN_MACOS.md).
+Its first milestone is a native Fix Text preview; global Mac keyboard correction
+remains future work and is not part of the Windows release scope below.
+
 ## Current control panel
 
 | Field | Value |

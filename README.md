@@ -184,6 +184,11 @@ Macro ใส่ขั้นตอนได้ เช่น `{กด Ctrl+B}`, `{
 
 ## สำหรับนักพัฒนา
 
+**macOS development preview:** a native Fix Text window now reuses the Rust core.
+See [build and usage instructions](macos/README.md) and the staged
+[macOS contribution plan](docs/PLAN_MACOS.md). Global keyboard correction is not
+implemented in this preview; the Windows application remains the full release.
+
 > RightType เขียนด้วย Rust แยกตรรกะหลักที่ไม่พึ่ง OS ออกจากชั้นเชื่อมต่อ Windows
 
 ```sh
