@@ -10,6 +10,11 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   page no longer draws a dark band under the table and an empty card under the
   sync switch (they were drawn where the old text box and rows used to be).
   Recent messages gets the same card round its switch as the other pages.
+- Settings: buttons follow one placement rule. Buttons that add or open things
+  sit on the left under a list and the ones that take things away (Remove, Clear
+  all) on the right; the accent button follows its input. Learned words and
+  Snippets are laid out that way, and the folder buttons on Learned words are in
+  their own card.
 
 ## [2.6.3] — 2026-10-28
 

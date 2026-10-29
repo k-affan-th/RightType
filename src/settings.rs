@@ -39,6 +39,14 @@ const CW: i32 = 504;
 /// their frame they end before the Add / save button.
 const SNIP_SCOPE_WIDTHS: [i32; 4] = [68, 84, 62, 68];
 
+// Where buttons go, on every page:
+// - a button that acts on one row or card sits at that card's right edge;
+// - buttons that act on a list sit in one row under it: the ones that add or
+//   open things on the left, the ones that take things away on the right
+//   (Remove, then Clear all, last at the edge);
+// - the one accent button belongs to an input and sits right after it;
+// - a button on a section's heading line is right-aligned (Check again);
+// - every button is 34 high, and buttons in one row are of one family of widths.
 const PAGE_GENERAL: u8 = 1;
 const PAGE_HOTKEYS: u8 = 2;
 const PAGE_LEARNED: u8 = 3;
@@ -1097,7 +1105,7 @@ fn open_on(page: u8) {
         tr(T::BtnAddWord),
         icons::ADD,
         true,
-        (X0 + LEARNED_WORD_W + 18, 330, 108, 34),
+        (X0 + LEARNED_WORD_W + 16, 330, 100, 34),
         p.bg,
         l,
     );
@@ -1105,7 +1113,7 @@ fn open_on(page: u8) {
         tr(T::BtnRemoveApp),
         icons::REMOVE,
         false,
-        (X0 + CW - 120, 330, 120, 34),
+        (X0 + CW - 128 - 8 - 112, 404, 112, 34),
         p.bg,
         l,
     );
@@ -1130,16 +1138,22 @@ fn open_on(page: u8) {
         tr(T::BtnClearAll),
         icons::REMOVE,
         false,
-        (X0 + CW - 136, 404, 136, 34),
+        (X0 + CW - 128, 404, 128, 34),
         p.bg,
         l,
     );
-    let folder_label = s.label("", TextStyle::Small, (X0, 462, CW - 290, 40), p.bg, l);
+    let folder_label = s.label(
+        "",
+        TextStyle::Small,
+        (X0 + 16, 466, CW - 340, 36),
+        p.surface,
+        l,
+    );
     let sync_folder = s.button_icon(
         tr(T::BtnSyncFolder),
         icons::FOLDER,
         false,
-        (X0 + CW - 284, 456, 150, 34),
+        (X0 + CW - 16 - 126 - 8 - 150, 463, 150, 34),
         p.bg,
         l,
     );
@@ -1147,7 +1161,7 @@ fn open_on(page: u8) {
         tr(T::BtnThisPc),
         icons::APPS,
         false,
-        (X0 + CW - 126, 456, 126, 34),
+        (X0 + CW - 16 - 126, 463, 126, 34),
         p.bg,
         l,
     );
@@ -1155,14 +1169,14 @@ fn open_on(page: u8) {
         tr(T::RowSyncSettings),
         tr(T::SubSyncSettingsShort),
         icons::FOLDER,
-        (X0 + 4, 520, CW - 8, 64),
+        (X0 + 4, 528, CW - 8, 64),
         p.surface,
         l,
     );
     s.info_after(
         tr(T::InfoMore),
         tr(T::SubSyncSettings),
-        (X0 + 4, 520, CW - 8, 64),
+        (X0 + 4, 528, CW - 8, 64),
         true,
         tr(T::RowSyncSettings),
         p.surface,
@@ -1281,7 +1295,7 @@ fn open_on(page: u8) {
         tr(T::BtnSaveSnippet),
         icons::SAVE,
         true,
-        (X0 + CW - 206, 424, 106, 34),
+        (X0, 472, 130, 34),
         p.bg,
         n,
     );
@@ -1289,15 +1303,15 @@ fn open_on(page: u8) {
         tr(T::BtnRemoveApp),
         icons::REMOVE,
         false,
-        (X0 + CW - 94, 424, 94, 34),
+        (X0 + CW - 110, 472, 110, 34),
         p.bg,
         n,
     );
-    let snip_status = s.label("", TextStyle::Small, (X0, 466, CW, 22), p.bg, n);
+    let snip_status = s.label("", TextStyle::Small, (X0, 514, CW, 22), p.bg, n);
     s.label(
         tr(T::SnippetsNote),
         TextStyle::Small,
-        (X0, 492, CW, 110),
+        (X0, 540, CW, 110),
         p.bg,
         n,
     );
@@ -3087,7 +3101,8 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             // The word box (its frame is drawn here) and the sync row's card,
             // where the controls of this page are put.
             field(g, rect(X0, 330, LEARNED_WORD_W + 8, 32));
-            card(g, rect(X0, 516, CW, 72));
+            card(g, rect(X0, 448, CW, 64));
+            card(g, rect(X0, 524, CW, 72));
         }
         PAGE_ACTIVITY => {
             card(g, rect(X0, 448, CW, 72));
