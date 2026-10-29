@@ -38,6 +38,7 @@ impl Query {
         let mut variants = vec![typed.to_lowercase()];
         if !typed.is_empty() {
             let thai = typed.chars().any(is_thai);
+            let english = layout::english_table();
             for v in [
                 ThaiVariant::Kedmanee,
                 ThaiVariant::Pattachote,
@@ -49,10 +50,14 @@ impl Query {
                 let other: String = typed
                     .chars()
                     .map(|c| {
+                        // Through the physical key, so what was typed on
+                        // Dvorak or Colemak is read as the keys it came from.
                         if thai {
-                            table.key_of(c).unwrap_or(c)
+                            let key = table.key_of(c).unwrap_or(c);
+                            english.char_of(key).unwrap_or(key)
                         } else {
-                            table.char_of(c).unwrap_or(c)
+                            let key = english.key_of(c).unwrap_or(c);
+                            table.char_of(key).unwrap_or(key)
                         }
                     })
                     .collect::<String>()

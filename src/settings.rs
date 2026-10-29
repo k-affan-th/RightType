@@ -290,9 +290,7 @@ struct Ids {
     key_buttons: Vec<u16>,
     keys_status: u16,
     keys_reset: u16,
-    kedmanee: u16,
-    pattachote: u16,
-    manoonchai: u16,
+    kb_detected: u16,
     kb_addresses: u16,
     kb_complete: u16,
     kb_grave: u16,
@@ -707,15 +705,17 @@ fn open_on(page: u8) {
         p.bg,
         k,
     );
-    let kb_seg_w = (CW - 32 - 8) / 3;
-    let kb_seg = |i: i32| (X0 + 20 + i * kb_seg_w, KB_PICK_Y + 16, kb_seg_w, 40);
-    let kedmanee = s.segment("Kedmanee", true, kb_seg(0), p.inset, k);
-    let pattachote = s.segment("Pattachote", false, kb_seg(1), p.inset, k);
-    let manoonchai = s.segment("Manoonchai", false, kb_seg(2), p.inset, k);
+    let kb_detected = s.label(
+        &detected_keyboards_line(),
+        TextStyle::Body,
+        (X0 + 20, KB_PICK_Y + 16, CW - 40, 24),
+        p.surface,
+        k,
+    );
     s.label(
         tr(T::NoteKeyboards),
         TextStyle::Dim,
-        (X0 + 20, KB_PICK_Y + 66, CW - 40, 22),
+        (X0 + 20, KB_PICK_Y + 44, CW - 40, 52),
         p.surface,
         k,
     );
@@ -1711,9 +1711,7 @@ fn open_on(page: u8) {
         key_buttons,
         keys_status,
         keys_reset,
-        kedmanee,
-        pattachote,
-        manoonchai,
+        kb_detected,
         kb_addresses,
         kb_complete,
         kb_grave,
@@ -1839,6 +1837,27 @@ fn open_on(page: u8) {
 }
 
 /// Reflect the running state in every control.
+/// "Detected: Thai Kedmanee · English Dvorak": the keyboards the tables in
+/// use come from, found from the keyboard being typed on.
+fn detected_keyboards_line() -> String {
+    use righttype::layout::{english_variant, thai_variant, EnglishVariant, ThaiVariant};
+    let thai = match thai_variant() {
+        ThaiVariant::Kedmanee => T::KbKedmanee,
+        ThaiVariant::Pattachote => T::KbPattachote,
+        ThaiVariant::Manoonchai => T::KbManoonchai,
+    };
+    let english = match english_variant() {
+        EnglishVariant::Us => T::KbUs,
+        EnglishVariant::Uk => T::KbUk,
+        EnglishVariant::Dvorak => T::KbDvorak,
+        EnglishVariant::Colemak => T::KbColemak,
+    };
+    trf(
+        T::KbDetected,
+        &[("thai", tr(thai)), ("english", tr(english))],
+    )
+}
+
 fn sync(win: &SettingsWindow) {
     let s = &win.surface;
     let ids = &win.ids;
@@ -1869,19 +1888,7 @@ fn sync(win: &SettingsWindow) {
         config::RESTART_AFTER_CRASH.load(Ordering::Relaxed),
     );
     sync_app_choice(win);
-    let variant = righttype::layout::thai_variant();
-    s.set_checked(
-        ids.kedmanee,
-        variant == righttype::layout::ThaiVariant::Kedmanee,
-    );
-    s.set_checked(
-        ids.pattachote,
-        variant == righttype::layout::ThaiVariant::Pattachote,
-    );
-    s.set_checked(
-        ids.manoonchai,
-        variant == righttype::layout::ThaiVariant::Manoonchai,
-    );
+    s.set_text(ids.kb_detected, &detected_keyboards_line());
     s.set_checked(ids.kb_addresses, righttype::policy::fixes_addresses());
     s.set_checked(ids.kb_complete, hook::completes_thai());
     s.set_checked(ids.kb_grave, hook::grave_types());
@@ -2086,15 +2093,6 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
             ids.keys_status,
             &trf(T::HkPress, &[("v", tr(action_label(action)))]),
         );
-    } else if id == ids.kedmanee || id == ids.pattachote || id == ids.manoonchai {
-        righttype::layout::set_thai_variant(if id == ids.pattachote {
-            righttype::layout::ThaiVariant::Pattachote
-        } else if id == ids.manoonchai {
-            righttype::layout::ThaiVariant::Manoonchai
-        } else {
-            righttype::layout::ThaiVariant::Kedmanee
-        });
-        config::persist();
     } else if id == ids.tools_clean {
         crate::clean::request_open(crate::clean::Mode::Clean);
     } else if id == ids.tools_test {
@@ -3127,7 +3125,6 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             // The page scrolls: everything moves up by the scroll.
             let dy = ui::page_scroll();
             card(g, rect(X0, KB_PICK_Y - dy, CW, 100));
-            track(g, rect(X0 + 16, KB_PICK_Y + 12 - dy, CW - 32, 48));
             card(g, rect(X0, KB_TYPING_Y - dy, CW, 7 * KB_ROW_H + 8));
             for i in 1..7 {
                 divider(hdc, X0 + 16, KB_TYPING_Y + i * KB_ROW_H + 2 - dy, CW - 32);

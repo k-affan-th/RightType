@@ -11,13 +11,19 @@
 //! same key produces. Characters with no mapping (spaces, already-correct
 //! punctuation) pass through unchanged.
 
+mod colemak;
+mod dvorak;
 mod kedmanee;
 mod manoonchai;
 mod pattachote;
+mod permuted;
 mod qwerty;
+pub mod registry;
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
+pub use colemak::ColemakEn;
+pub use dvorak::DvorakEn;
 pub use kedmanee::Kedmanee;
 pub use manoonchai::Manoonchai;
 pub use pattachote::Pattachote;
@@ -30,6 +36,10 @@ pub enum LayoutId {
     QwertyEn,
     /// UK English QWERTY.
     QwertyUk,
+    /// US Dvorak.
+    DvorakEn,
+    /// Colemak.
+    ColemakEn,
     /// Thai Kedmanee (TIS-820.2538) mapped onto a US physical keyboard.
     Kedmanee,
     /// Thai Pattachote mapped onto a US physical keyboard.
@@ -46,8 +56,32 @@ impl LayoutId {
         )
     }
 
+    /// The Thai table this is, if it is one.
+    pub fn thai_variant(self) -> Option<ThaiVariant> {
+        match self {
+            LayoutId::Kedmanee => Some(ThaiVariant::Kedmanee),
+            LayoutId::Pattachote => Some(ThaiVariant::Pattachote),
+            LayoutId::Manoonchai => Some(ThaiVariant::Manoonchai),
+            _ => None,
+        }
+    }
+
+    /// The English table this is, if it is one.
+    pub fn english_variant(self) -> Option<EnglishVariant> {
+        match self {
+            LayoutId::QwertyEn => Some(EnglishVariant::Us),
+            LayoutId::QwertyUk => Some(EnglishVariant::Uk),
+            LayoutId::DvorakEn => Some(EnglishVariant::Dvorak),
+            LayoutId::ColemakEn => Some(EnglishVariant::Colemak),
+            _ => None,
+        }
+    }
+
     pub fn is_english(self) -> bool {
-        matches!(self, LayoutId::QwertyEn | LayoutId::QwertyUk)
+        matches!(
+            self,
+            LayoutId::QwertyEn | LayoutId::QwertyUk | LayoutId::DvorakEn | LayoutId::ColemakEn
+        )
     }
 }
 
@@ -65,6 +99,8 @@ pub enum ThaiVariant {
 pub enum EnglishVariant {
     Us,
     Uk,
+    Dvorak,
+    Colemak,
 }
 
 static THAI: AtomicU8 = AtomicU8::new(0);
@@ -87,10 +123,11 @@ pub fn set_english_variant(v: EnglishVariant) {
 }
 
 pub fn english_variant() -> EnglishVariant {
-    if ENGLISH.load(Ordering::Relaxed) == EnglishVariant::Uk as u8 {
-        EnglishVariant::Uk
-    } else {
-        EnglishVariant::Us
+    match ENGLISH.load(Ordering::Relaxed) {
+        v if v == EnglishVariant::Uk as u8 => EnglishVariant::Uk,
+        v if v == EnglishVariant::Dvorak as u8 => EnglishVariant::Dvorak,
+        v if v == EnglishVariant::Colemak as u8 => EnglishVariant::Colemak,
+        _ => EnglishVariant::Us,
     }
 }
 
@@ -101,6 +138,11 @@ pub fn thai_table(variant: ThaiVariant) -> &'static dyn Layout {
         ThaiVariant::Pattachote => &Pattachote,
         ThaiVariant::Manoonchai => &Manoonchai,
     }
+}
+
+/// The English table in use (whichever keyboard was seen last).
+pub fn english_table() -> &'static dyn Layout {
+    english_layout()
 }
 
 /// The US English table.
@@ -120,6 +162,8 @@ fn english_layout() -> &'static dyn Layout {
     match english_variant() {
         EnglishVariant::Us => &QwertyEn,
         EnglishVariant::Uk => &QwertyUk,
+        EnglishVariant::Dvorak => &DvorakEn,
+        EnglishVariant::Colemak => &ColemakEn,
     }
 }
 
@@ -301,6 +345,26 @@ pub fn auto_convert(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Pure on purpose: the variant globals are shared by every test in the
+    /// process, so a test that sets them would race the others.
+    #[test]
+    fn layout_ids_map_to_their_variants() {
+        for (id, v) in [
+            (LayoutId::QwertyEn, EnglishVariant::Us),
+            (LayoutId::QwertyUk, EnglishVariant::Uk),
+            (LayoutId::DvorakEn, EnglishVariant::Dvorak),
+            (LayoutId::ColemakEn, EnglishVariant::Colemak),
+        ] {
+            assert_eq!(id.english_variant(), Some(v));
+            assert!(id.is_english() && id.thai_variant().is_none());
+        }
+        assert_eq!(
+            LayoutId::Pattachote.thai_variant(),
+            Some(ThaiVariant::Pattachote)
+        );
+        assert!(LayoutId::Kedmanee.english_variant().is_none());
+    }
 
     // The four canonical RightLang examples, verified against published sources.
     #[test]
