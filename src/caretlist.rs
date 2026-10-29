@@ -433,6 +433,27 @@ fn height(rows: usize) -> i32 {
     ui::px(SEARCH_H + rows * ROW_H + FOOT_H + PAD)
 }
 
+/// A mouse click at screen point (`x`, `y`): outside the list it puts it
+/// away. The list never takes the focus, so clicking elsewhere in the same
+/// window does not close it by itself, and until it closes it takes the
+/// digits, arrows and Enter that were meant for the app.
+pub fn click_at(x: i32, y: i32) {
+    let open = OPEN.load(Ordering::Acquire);
+    if open == 0 {
+        return;
+    }
+    let mut r = RECT::default();
+    let pane = unsafe {
+        windows::Win32::UI::WindowsAndMessaging::GetWindowRect(HWND(open as *mut _), &mut r)
+    }
+    .ok()
+    .map(|()| (r.left, r.top, r.right, r.bottom));
+    if righttype::summon::click_closes(pane, x, y) {
+        crate::hook::trace_note("caret list: a click elsewhere closed it");
+        close();
+    }
+}
+
 fn close() {
     let hwnd = OPEN.swap(0, Ordering::AcqRel);
     TARGET.store(0, Ordering::Release);
