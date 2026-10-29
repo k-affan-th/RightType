@@ -66,6 +66,19 @@ const NAV: [(T, u8, char); 10] = [
 pub const BTC_LIGHTNING: &str = "yawninggrass92@walletofsatoshi.com";
 pub const BTC_MAINNET: &str = "bc1qdac8h7hl57x3kv8x8xpz6zg0fgw6zvp7uld3a6";
 
+pub const PROMPTPAY_PAYLOAD: &str =
+    "00020101021129390016A000000677010111031500466600874907353037645802TH6304797A";
+pub const PROMPTPAY_ID: &str = "004666008749073";
+pub const PROMPTPAY_DISPLAY: &str = "004-666-008749073 (e-Wallet)";
+
+pub const QR_PROMPTPAY: [u64; 33] = [
+    0x1fde8427f, 0x10543e341, 0x175344e5d, 0x17417a35d, 0x175e8585d, 0x10542e541, 0x1fd55557f,
+    0x001649000, 0x0aa17afdf, 0x1cfe85a8b, 0x05543c377, 0x14b640e3e, 0x03017a376, 0x1cfe85f13,
+    0x06135d3e6, 0x05935c720, 0x03017a57d, 0x1cfe87fb8, 0x059359557, 0x049641695, 0x03017a74b,
+    0x1cfea5b2b, 0x0613584e1, 0x04b2d1b81, 0x03f17a469, 0x1d1e85d00, 0x055a2b37f, 0x051608841,
+    0x1bf17c75d, 0x051e85d5d, 0x08f31d35d, 0x043649541, 0x0ad975d7f,
+];
+
 pub const QR_LIGHTNING: [u64; 33] = [
     0x1fc9b207f,
     0x10452fe41,
@@ -286,6 +299,8 @@ struct Ids {
     this_pc: u16,
     sync_settings: u16,
     link_github: u16,
+    sponsor_github: u16,
+    tip_pp: u16,
     tip_ln: u16,
     tip_onchain: u16,
     tip_address: u16,
@@ -1524,14 +1539,27 @@ fn open_on(page: u8) {
     s.label(
         tr(T::SponsorFreeHead),
         TextStyle::BodyStrong,
-        (X0 + 64, SP_CARD1_Y + 12, CW - 84, 22),
+        (X0 + 64, SP_CARD1_Y + 12, CW - 84 - 110, 22),
         p.surface,
         sp,
     );
     s.label(
         tr(T::SponsorFreeSub),
         TextStyle::Dim,
-        (X0 + 64, SP_CARD1_Y + 36, CW - 84, 42),
+        (X0 + 64, SP_CARD1_Y + 36, CW - 84 - 110, 42),
+        p.surface,
+        sp,
+    );
+    let sponsor_github = s.button_icon(
+        tr(T::BtnGitHub),
+        icons::OPEN_LINK,
+        false,
+        (
+            X0 + CW - 110,
+            SP_CARD1_Y + (SP_CARD1_H - 32) / 2,
+            94,
+            32,
+        ),
         p.surface,
         sp,
     );
@@ -1545,9 +1573,21 @@ fn open_on(page: u8) {
         sp,
     );
     let tip_seg_w = 88;
+    let tip_pp = s.segment(
+        "PromptPay",
+        true,
+        (
+            X0 + CW - 20 - 3 * tip_seg_w - 8,
+            SP_CARD2_Y + 12,
+            tip_seg_w,
+            28,
+        ),
+        p.inset,
+        sp,
+    );
     let tip_ln = s.segment(
         "Lightning",
-        true,
+        false,
         (
             X0 + CW - 20 - 2 * tip_seg_w - 4,
             SP_CARD2_Y + 12,
@@ -1566,14 +1606,14 @@ fn open_on(page: u8) {
     );
 
     let tip_desc = s.label(
-        tr(T::SponsorLnDesc),
+        tr(T::SponsorPpDesc),
         TextStyle::Dim,
         (X0 + 172, SP_CARD2_Y + 54, 312, 22),
         p.surface,
         sp,
     );
     let tip_address = s.label(
-        &address_lines(BTC_LIGHTNING),
+        &address_lines(PROMPTPAY_DISPLAY),
         TextStyle::SmallMiddle,
         (X0 + 180, SP_CARD2_Y + 84, 218, 34),
         p.inset,
@@ -1676,6 +1716,8 @@ fn open_on(page: u8) {
         this_pc,
         sync_settings,
         link_github,
+        sponsor_github,
+        tip_pp,
         tip_ln,
         tip_onchain,
         tip_address,
@@ -1833,42 +1875,46 @@ fn sync(win: &SettingsWindow) {
     let lang = i18n::lang();
     s.set_checked(ids.lang_en, lang == Lang::En);
     s.set_checked(ids.lang_th, lang == Lang::Th);
-    let ln = TIP_NETWORK.load(Ordering::Relaxed) == 0;
-    s.set_checked(ids.tip_ln, ln);
-    s.set_checked(ids.tip_onchain, !ln);
-    if ln {
-        s.set_text(ids.tip_address, &address_lines(BTC_LIGHTNING));
-        s.set_text(ids.tip_desc, tr(T::SponsorLnDesc));
-    } else {
-        s.set_text(ids.tip_address, &address_lines(BTC_MAINNET));
-        s.set_text(ids.tip_desc, tr(T::SponsorBtcDesc));
+    let net = TIP_NETWORK.load(Ordering::Relaxed);
+    s.set_checked(ids.tip_pp, net == 0);
+    s.set_checked(ids.tip_ln, net == 1);
+    s.set_checked(ids.tip_onchain, net == 2);
+    match net {
+        0 => {
+            s.set_text(ids.tip_address, &address_lines(PROMPTPAY_DISPLAY));
+            s.set_text(ids.tip_desc, tr(T::SponsorPpDesc));
+        }
+        1 => {
+            s.set_text(ids.tip_address, &address_lines(BTC_LIGHTNING));
+            s.set_text(ids.tip_desc, tr(T::SponsorLnDesc));
+        }
+        _ => {
+            s.set_text(ids.tip_address, &address_lines(BTC_MAINNET));
+            s.set_text(ids.tip_desc, tr(T::SponsorBtcDesc));
+        }
     }
 }
 
 fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     let ids = &win.ids;
     let s = &win.surface;
-    if id == ids.link_github {
+    if id == ids.link_github || id == ids.sponsor_github {
         open_repo_page();
         return;
     }
-    if id == ids.tip_ln {
-        TIP_NETWORK.store(0, Ordering::Relaxed);
-        sync(win);
-        ui::redraw_all(s.hwnd);
-        return;
-    }
-    if id == ids.tip_onchain {
-        TIP_NETWORK.store(1, Ordering::Relaxed);
-        sync(win);
-        ui::redraw_all(s.hwnd);
-        return;
+    for (btn, net) in [(ids.tip_pp, 0), (ids.tip_ln, 1), (ids.tip_onchain, 2)] {
+        if id == btn {
+            TIP_NETWORK.store(net, Ordering::Relaxed);
+            sync(win);
+            ui::redraw_all(s.hwnd);
+            return;
+        }
     }
     if id == ids.tip_copy || id == ids.tip_address {
-        let addr = if TIP_NETWORK.load(Ordering::Relaxed) == 0 {
-            BTC_LIGHTNING
-        } else {
-            BTC_MAINNET
+        let addr = match TIP_NETWORK.load(Ordering::Relaxed) {
+            0 => PROMPTPAY_ID,
+            1 => BTC_LIGHTNING,
+            _ => BTC_MAINNET,
         };
         unsafe {
             let _ = crate::clipboard::set_text(addr);
@@ -3122,13 +3168,16 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             card(g, rect(X0, SP_CARD2_Y, CW, SP_CARD2_H));
             track(
                 g,
-                rect(X0 + CW - 20 - 2 * 88 - 6, SP_CARD2_Y + 10, 2 * 88 + 6, 32),
+                rect(X0 + CW - 20 - 3 * 88 - 10, SP_CARD2_Y + 10, 3 * 88 + 10, 32),
             );
 
             let qr_box = rect(X0 + 20, SP_CARD2_Y + 54, 136, 136);
             g.fill_round(qr_box, ui::px(8) as f32, 0x00FFFFFF);
-            let is_ln = TIP_NETWORK.load(Ordering::Relaxed) == 0;
-            let qr_matrix = if is_ln { &QR_LIGHTNING } else { &QR_BITCOIN };
+            let qr_matrix = match TIP_NETWORK.load(Ordering::Relaxed) {
+                0 => &QR_PROMPTPAY,
+                1 => &QR_LIGHTNING,
+                _ => &QR_BITCOIN,
+            };
             draw_qr(
                 hdc,
                 ui::px(X0 + 20),
