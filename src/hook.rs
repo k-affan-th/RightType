@@ -3054,7 +3054,10 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return false;
     }
 
-    let active_layout = policy::supported_layout_id(layout_id(effective_layout()));
+    let active_layout = policy::supported_layout_id(layout_id(effective_layout())).filter(|l| {
+        *l != policy::InputLayout::UsQwerty
+            || !THAI_UNREADABLE.load(std::sync::atomic::Ordering::Relaxed)
+    });
 
     // A barcode scanner types like a US keyboard, as fast as a machine:
     // with the Thai keyboard on, `8851234567890` came out as Thai. A burst
@@ -3633,10 +3636,13 @@ unsafe fn detect_keyboards() {
     if !first {
         return;
     }
-    righttype::layout::registry::set_facts(installed_keyboards());
+    let facts = installed_keyboards();
+    righttype::layout::registry::set_facts(facts.clone());
     // The keyboard in use when RightType started (read before any of its
     // windows, such as Welcome, could take focus) counts first; then the
-    // first Thai and the first English keyboard installed.
+    // first English keyboard installed, and of the Thai keyboards the one
+    // used last (saved with the settings) rather than whichever Windows lists
+    // first.
     let active = HKL(STARTUP_LAYOUT.load(std::sync::atomic::Ordering::Relaxed) as _);
     if !active.0.is_null() {
         note_keyboard(active);
@@ -3657,14 +3663,26 @@ unsafe fn detect_keyboards() {
         }
     }
     if policy::thai_variant_of(layout_id(active)).is_none() {
-        if let Some(hkl) = installed
+        let thai: Vec<_> = installed
             .iter()
-            .find(|h| policy::thai_variant_of(layout_id(**h)).is_some())
+            .filter_map(|h| policy::thai_variant_of(layout_id(*h)))
+            .collect();
+        if let Some(v) =
+            righttype::layout::registry::prefer(&thai, righttype::layout::thai_variant())
         {
-            note_keyboard(*hkl);
+            righttype::layout::set_thai_variant(v);
         }
     }
+    let handles: Vec<u32> = installed.iter().map(|h| layout_id(*h)).collect();
+    THAI_UNREADABLE.store(
+        righttype::layout::registry::thai_unreadable(&handles, &facts),
+        std::sync::atomic::Ordering::Relaxed,
+    );
 }
+
+/// Thai keyboards are installed but none is one RightType can read: nothing
+/// is converted into Thai, since the table would be a guess.
+static THAI_UNREADABLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// The Thai and English keyboards installed, by the high word of their
 /// handle (`0xF000` + the registry's "Layout Id", or the keyboard's own
@@ -3807,7 +3825,6 @@ fn layout_id(hkl: HKL) -> u32 {
 /// Switch the foreground window to one exact layout supported by the v1 mapping
 /// tables. No-op if that layout is not installed.
 unsafe fn activate_layout(target: policy::InputLayout) {
-    let layout = target;
     // Already there, or already on its way there.
     if policy::supported_layout_id(layout_id(effective_layout())) == Some(target) {
         return;
@@ -3824,62 +3841,75 @@ unsafe fn activate_layout(target: policy::InputLayout) {
     list.sort_by_key(|h| !policy::is_preferred_layout(layout_id(*h)));
     for hkl in list.iter() {
         if policy::supported_layout_id(layout_id(*hkl)) == Some(target) {
-            let foreground = GetForegroundWindow();
-            let mut gui = GUITHREADINFO {
-                cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
-                ..Default::default()
-            };
-            let thread_id = GetWindowThreadProcessId(foreground, None);
-            let target =
-                if GetGUIThreadInfo(thread_id, &mut gui).is_ok() && !gui.hwndFocus.0.is_null() {
-                    gui.hwndFocus
-                } else {
-                    foreground
-                };
-            let _ = PostMessageW(
-                target,
-                WM_INPUTLANGCHANGEREQUEST,
-                WPARAM(0),
-                LPARAM(hkl.0 as isize),
-            );
-            // Some modern apps put focus on a custom child that does not pass
-            // the request to DefWindowProc. Also notify the top-level window;
-            // requesting the same explicit HKL twice is idempotent.
-            if target != foreground {
-                let _ = PostMessageW(
-                    foreground,
-                    WM_INPUTLANGCHANGEREQUEST,
-                    WPARAM(0),
-                    LPARAM(hkl.0 as isize),
-                );
-            }
-            let root = GetAncestor(foreground, GA_ROOT);
-            if !root.0.is_null() && root != target && root != foreground {
-                let _ = PostMessageW(
-                    root,
-                    WM_INPUTLANGCHANGEREQUEST,
-                    WPARAM(0),
-                    LPARAM(hkl.0 as isize),
-                );
-            }
-            // Record that we are waiting for this HKL to activate, and adopt it
-            // as the context's layout now: this switch is ours, so it must not
-            // read as the context change that drops the token in progress.
-            STATE.with(|s| {
-                let mut st = s.borrow_mut();
-                st.pending_hkl = Some(PendingLayout {
-                    hkl: hkl.0 as isize,
-                    since: Instant::now(),
-                });
-                st.last_hkl = hkl.0 as isize;
-            });
-            // No toast here: a layout switch happens on every ignition, which is
-            // too frequent for a message. Just a small TH/EN tag at the caret,
-            // where the eyes are (shown after this callback returns).
-            crate::caret::layout_switched(layout);
+            request_hkl(*hkl);
             return;
         }
     }
+}
+
+/// Ask the foreground window to switch to exactly this keyboard. Returns
+/// whether a switch was asked for (not when it is already there or on its way,
+/// or the keyboard is not one RightType reads).
+unsafe fn request_hkl(hkl: HKL) -> bool {
+    let Some(layout) = policy::supported_layout_id(layout_id(hkl)) else {
+        return false;
+    };
+    if effective_layout().0 == hkl.0 {
+        return false;
+    }
+    let foreground = GetForegroundWindow();
+    let mut gui = GUITHREADINFO {
+        cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+        ..Default::default()
+    };
+    let thread_id = GetWindowThreadProcessId(foreground, None);
+    let target = if GetGUIThreadInfo(thread_id, &mut gui).is_ok() && !gui.hwndFocus.0.is_null() {
+        gui.hwndFocus
+    } else {
+        foreground
+    };
+    let _ = PostMessageW(
+        target,
+        WM_INPUTLANGCHANGEREQUEST,
+        WPARAM(0),
+        LPARAM(hkl.0 as isize),
+    );
+    // Some modern apps put focus on a custom child that does not pass
+    // the request to DefWindowProc. Also notify the top-level window;
+    // requesting the same explicit HKL twice is idempotent.
+    if target != foreground {
+        let _ = PostMessageW(
+            foreground,
+            WM_INPUTLANGCHANGEREQUEST,
+            WPARAM(0),
+            LPARAM(hkl.0 as isize),
+        );
+    }
+    let root = GetAncestor(foreground, GA_ROOT);
+    if !root.0.is_null() && root != target && root != foreground {
+        let _ = PostMessageW(
+            root,
+            WM_INPUTLANGCHANGEREQUEST,
+            WPARAM(0),
+            LPARAM(hkl.0 as isize),
+        );
+    }
+    // Record that we are waiting for this HKL to activate, and adopt it
+    // as the context's layout now: this switch is ours, so it must not
+    // read as the context change that drops the token in progress.
+    STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        st.pending_hkl = Some(PendingLayout {
+            hkl: hkl.0 as isize,
+            since: Instant::now(),
+        });
+        st.last_hkl = hkl.0 as isize;
+    });
+    // No toast here: a layout switch happens on every ignition, which is
+    // too frequent for a message. Just a small TH/EN tag at the caret,
+    // where the eyes are (shown after this callback returns).
+    crate::caret::layout_switched(layout);
+    true
 }
 
 /// Accept the one context-bound, non-destructive suggestion produced at the
@@ -4599,7 +4629,7 @@ unsafe fn sync_context() {
                 at.elapsed() < SHORTCUT_SWITCH_WINDOW && *before == st.last_hkl
             });
             if let Some((_, before)) = came_with {
-                undo_switch = policy::supported_layout_id(layout_id(HKL(before as *mut _)));
+                undo_switch = Some(HKL(before as *mut _));
             }
         }
         let mut focus_changed = st.last_focus_generation != focus_generation;
@@ -4654,10 +4684,13 @@ unsafe fn sync_context() {
         }
         changed
     });
-    if let Some(layout) = undo_switch {
-        trace_note("language switch with a shortcut: undone");
-        activate_layout(layout);
-        crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastSwitchUndone));
+    if let Some(before) = undo_switch {
+        // The exact keyboard that was left, not just its language: Kedmanee
+        // to Pattachote, or US to Dvorak, is a switch within one language.
+        if request_hkl(before) {
+            trace_note("language switch with a shortcut: undone");
+            crate::overlay::show(righttype::i18n::tr(righttype::i18n::T::ToastSwitchUndone));
+        }
     }
     // Re-evaluate the (heavier) app blacklist only when the window changed.
     if window_changed {

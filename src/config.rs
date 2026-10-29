@@ -55,6 +55,11 @@ pub struct Config {
     /// Hotkeys changed from the defaults: action → `Ctrl + Alt + Space`.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub hotkeys: BTreeMap<String, String>,
+    /// The Thai keyboard last used (`kedmanee` default, `pattachote`,
+    /// `manoonchai`). Not a setting: the keyboard in use is detected; this is
+    /// only where a session starts, until a Thai keyboard has been seen.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thai_layout: Option<String>,
     /// Convert a selection by copying it (Ctrl+C) in apps that do not share
     /// it through UI Automation. Off: the copied text would enter Windows
     /// clipboard history, cloud sync to other devices and every clipboard
@@ -199,6 +204,7 @@ impl Default for Config {
             keep_notices: true,
             learned_folder: None,
             hotkeys: BTreeMap::new(),
+            thai_layout: None,
             selection_via_clipboard: false,
             capslock_switches_language: false,
             tray_shows_language: false,
@@ -325,6 +331,11 @@ pub fn apply(cfg: &Config) {
         std::sync::atomic::Ordering::Relaxed,
     );
     crate::habits::set_enabled(cfg.predict_layout);
+    righttype::layout::set_thai_variant(match cfg.thai_layout.as_deref() {
+        Some("pattachote") => righttype::layout::ThaiVariant::Pattachote,
+        Some("manoonchai") => righttype::layout::ThaiVariant::Manoonchai,
+        _ => righttype::layout::ThaiVariant::Kedmanee,
+    });
     hook::set_hotkeys(righttype::hotkeys::Hotkeys::from_config(
         cfg.hotkeys.iter().map(|(k, v)| (k.as_str(), v.as_str())),
     ));
@@ -366,6 +377,7 @@ struct Shared {
     fix_spelling: bool,
     capslock_switches_language: bool,
     language: Option<String>,
+    thai_layout: Option<String>,
     #[serde(default)]
     app_keyboards: BTreeMap<String, String>,
 }
@@ -382,6 +394,7 @@ impl Shared {
             fix_spelling: cfg.fix_spelling,
             capslock_switches_language: cfg.capslock_switches_language,
             language: cfg.language.clone(),
+            thai_layout: cfg.thai_layout.clone(),
             app_keyboards: cfg.app_keyboards.clone(),
         }
     }
@@ -396,6 +409,7 @@ impl Shared {
         cfg.fix_spelling = self.fix_spelling;
         cfg.capslock_switches_language = self.capslock_switches_language;
         cfg.language = self.language;
+        cfg.thai_layout = self.thai_layout;
         cfg.app_keyboards = self.app_keyboards;
     }
 }
@@ -593,6 +607,11 @@ fn snapshot() -> Config {
             .into_iter()
             .map(|(k, v)| (k.to_string(), v))
             .collect(),
+        thai_layout: match righttype::layout::thai_variant() {
+            righttype::layout::ThaiVariant::Kedmanee => None,
+            righttype::layout::ThaiVariant::Pattachote => Some("pattachote".to_string()),
+            righttype::layout::ThaiVariant::Manoonchai => Some("manoonchai".to_string()),
+        },
     }
 }
 
@@ -630,16 +649,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn legacy_thai_layout_is_read_and_ignored() {
+    fn last_used_thai_keyboard_round_trips() {
         let cfg: Config = toml::from_str(
             "enabled = true
 thai_layout = \"pattachote\"
 ",
         )
         .unwrap();
-        assert!(cfg.enabled);
-        let written = toml::to_string(&cfg).unwrap();
-        assert!(!written.contains("thai_layout"), "{written}");
+        assert_eq!(cfg.thai_layout.as_deref(), Some("pattachote"));
+        assert!(toml::to_string(&cfg).unwrap().contains("pattachote"));
     }
 
     #[test]

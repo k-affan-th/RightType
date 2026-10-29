@@ -84,6 +84,28 @@ pub fn classify_layout_file(language: Language, file: &str, text: &str) -> Optio
     }
 }
 
+/// Of the keyboards installed, the one to start with: `preferred` (the one
+/// last used) when it is installed, else the first.
+pub fn prefer<T: PartialEq + Copy>(installed: &[T], preferred: T) -> Option<T> {
+    installed
+        .iter()
+        .copied()
+        .find(|t| *t == preferred)
+        .or_else(|| installed.first().copied())
+}
+
+/// Whether Thai keyboards are installed but none of them is one RightType can
+/// read: converting into Thai would then go through a table that is not the
+/// typist's.
+pub fn thai_unreadable(handles: &[u32], facts: &KeyboardFacts) -> bool {
+    let thai = |h: &&u32| *h & 0x3FF == 0x1E;
+    let any = handles.iter().any(|h| *h & 0x3FF == 0x1E);
+    any && !handles
+        .iter()
+        .filter(thai)
+        .any(|h| detect_with(*h, facts).is_some())
+}
+
 /// [`detect`] against explicit facts.
 ///
 /// The low word of the handle is the language, the high word the keyboard
@@ -171,6 +193,24 @@ mod tests {
         assert_eq!(d(0x0407_0407), None);
         assert_eq!(d(0xF00F_041E), None);
         assert_eq!(d(0xF002_0409), None);
+    }
+
+    #[test]
+    fn prefer_keeps_the_one_last_used() {
+        assert_eq!(prefer(&[1, 2, 3], 2), Some(2));
+        assert_eq!(prefer(&[1, 3], 2), Some(1));
+        assert_eq!(prefer::<u8>(&[], 2), None);
+    }
+
+    #[test]
+    fn unreadable_thai_is_only_when_no_thai_keyboard_is_known() {
+        let none = KeyboardFacts::default();
+        // Only an unknown Thai keyboard: unreadable.
+        assert!(thai_unreadable(&[0xF00F_041E, 0x0409_0409], &none));
+        // The default Thai keyboard is also there: readable.
+        assert!(!thai_unreadable(&[0xF00F_041E, 0x041E_041E], &none));
+        // No Thai keyboard at all is not "unreadable".
+        assert!(!thai_unreadable(&[0x0409_0409], &none));
     }
 
     #[test]

@@ -112,8 +112,8 @@ remembered, and so is any word you *flip back* after RightType changed it
 take effect at once for every decision.
 
 **Supported keyboards.** RightType finds out which keyboard you are typing on
-from Windows itself, every time you switch; there is nothing to choose in
-Settings (Settings → Keyboard shows what it found, for example "Detected: Thai
+from Windows itself, from the keyboard you are typing on; there is nothing to
+choose in Settings (Settings → Keyboard shows what it found, for example "Detected: Thai
 Kedmanee · English Dvorak").
 
 | Language | Keyboard | How it is recognised | Limits |
@@ -121,8 +121,8 @@ Kedmanee · English Dvorak").
 | Thai | Kedmanee (with or without ShiftLock) | Windows layout `KBDTH0` / `KBDTH2` | — |
 | Thai | Pattachote (with or without ShiftLock) | `KBDTH1` / `KBDTH3` | — |
 | Thai | Manoonchai | a keyboard installed from file whose name says Manoonchai | — |
-| English | US, and any country's English on the US keyboard (Australia, New Zealand, Canada set to US, …) | `KBDUS` | — |
-| English | UK, and any country's English on the UK keyboard | `KBDUK` | — |
+| English | US keyboard, including English of other countries that uses it (Australia, New Zealand, Canada set to US, …) | `KBDUS` | — |
+| English | UK keyboard | `KBDUK` | — |
 | English | Dvorak (US) | `KBDDV` | Practice and Keyboard map windows show the US board; a lone `.` `?` `"` flipped by hand is read as on US; punctuation rules are tuned for US |
 | English | Colemak | an installed keyboard whose name says Colemak | same limits as Dvorak |
 
@@ -131,6 +131,10 @@ right-handed Dvorak, Colemak-DH and other modified Colemaks, any keyboard whose
 keys sit elsewhere than on the US or UK keyboard (German, French, Canadian
 French, Irish, …), other languages, and any Thai keyboard Windows cannot
 identify. It never guesses a table: wrong guesses would corrupt what you type.
+If Thai keyboards are installed but none of them is recognised, nothing is
+converted into Thai either. Keyboards are read when RightType starts, so one
+you add later is picked up after a restart. The Thai keyboard you used last is
+remembered for the next start.
 Both a Thai and an English keyboard can be installed in several kinds at once
 (for example Kedmanee and Pattachote); the one you are typing on is used.
 
