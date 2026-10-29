@@ -2,6 +2,15 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- The list at the text cursor (Shift twice), the app's shortcut list and the list
+  for a held key now close when you click anywhere outside them. They never take
+  the keyboard focus, so a click elsewhere in the same window used to leave one
+  open, still taking digits, arrows and Enter that were meant for the app.
+
 ## [2.6.3] — 2026-10-28
 
 ### Fixed
