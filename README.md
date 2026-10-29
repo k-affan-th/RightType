@@ -16,6 +16,7 @@
 [![Stars](https://img.shields.io/github/stars/k-affan-th/RightType?style=flat-square&labelColor=14181f&color=3f6fd1)](https://github.com/k-affan-th/RightType/stargazers)
 <br>
 ![Platform](https://img.shields.io/badge/platform-Windows-3f6fd1?style=flat-square&labelColor=14181f)
+[![macOS port](https://img.shields.io/badge/macOS-community%20port-3f6fd1?style=flat-square&labelColor=14181f)](https://github.com/lungkao/RightType-mac)
 ![Rust](https://img.shields.io/badge/rust-1.75%2B-3f6fd1?style=flat-square&labelColor=14181f&logo=rust&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-3f6fd1?style=flat-square&labelColor=14181f)
 ![Network code](https://img.shields.io/badge/network%20code-none-3f6fd1?style=flat-square&labelColor=14181f)
@@ -26,6 +27,7 @@
 [ต่างจากตัวอื่น](#ต่างจากตัวอื่นตรงไหน) ·
 [ผู้ใช้ขั้นสูง](#สำหรับผู้ใช้ขั้นสูง) ·
 [นักพัฒนา](#สำหรับนักพัฒนา) ·
+[ใช้บน Mac](#ใช้บน-mac) ·
 [คู่มือฉบับเต็ม](docs/GUIDE.md)
 
 </div>
@@ -36,6 +38,10 @@
 English is active, or the other way round) without retyping. Free, open source,
 no network code. Quick start below; power-user and developer sections further
 down; the full guide is in [docs/GUIDE.md](docs/GUIDE.md).*
+
+> **ใช้ Mac อยู่? ลองได้เลย 💙** RightType ตัวนี้ยังเป็นของ Windows แต่ระหว่างที่เรายังไม่ได้ทำฝั่ง Mac
+> คุณ [lungkao](https://github.com/lungkao) ลงแรงพอร์ตเป็นแอปเมนูบาร์ให้แล้ว ใช้ระบบแก้ภาษาตัวเดียวกันนี้
+> ไปดูและลองได้ที่ [**RightType-mac**](https://github.com/lungkao/RightType-mac) (ฝากกดดาวให้เขาด้วยนะครับ ⭐)
 
 | ตั้งค่า | แต่ละแอปตั้งโหมดได้ | Command palette |
 | --- | --- | --- |
@@ -232,6 +238,19 @@ pwsh -File packaging\build_release.ps1       # installer + zip + SHA256.txt ล�
 
 ติดตั้งแบบอื่น (Windows on ARM, portable zip, ตรวจ SHA256, ถอนการติดตั้ง):
 [Install ในคู่มือฉบับเต็ม](docs/GUIDE.md#install-no-building-needed)
+
+## ใช้บน Mac
+
+ตอนนี้ RightType ที่นี่เป็นของ Windows เท่านั้น แต่ไม่ต้องรอ: คุณ [lungkao](https://github.com/lungkao)
+เอาระบบแก้ภาษาของ RightType ไปห่อเป็นแอปเมนูบาร์สำหรับ macOS 13 ขึ้นไป (Apple Silicon และ Intel)
+ที่ [lungkao/RightType-mac](https://github.com/lungkao/RightType-mac)
+
+- เขาใช้ตรรกะแก้ภาษา พจนานุกรม และรายการคำสะกดผิดของที่นี่ (`src/` และ `assets/`) ตามที่เขียนไว้ใน README ของเขา
+  แล้วเพิ่มส่วนของ Mac เองทั้งหมด (ตัวเชื่อมกับ Swift แอปเมนูบาร์ และสคริปต์ติดตั้ง)
+- ไลเซนส์เดียวกัน (MIT หรือ Apache-2.0) และไม่มีโค้ดเชื่อมต่ออินเทอร์เน็ตเหมือนกัน
+- เป็นโปรเจกต์ของเขา แยกจากที่นี่ ถ้าเจอปัญหาหรืออยากขอฟีเจอร์ของแอป Mac แจ้งที่
+  [issues ของเขา](https://github.com/lungkao/RightType-mac/issues) จะถึงมือคนทำที่สุด
+- ถ้าใช้แล้วชอบ กดดาวที่ repo ของเขา หรือเลี้ยงกาแฟเขาได้ตามที่เขาเปิดไว้ในหน้านั้น ขอบคุณมากที่ช่วยกันต่อยอดครับ
 
 ## สนับสนุน
 
