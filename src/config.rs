@@ -55,7 +55,9 @@ pub struct Config {
     /// Hotkeys changed from the defaults: action → `Ctrl + Alt + Space`.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub hotkeys: BTreeMap<String, String>,
-    /// `kedmanee` (default) or `pattachote`.
+    /// The Thai keyboard last used (`kedmanee` default, `pattachote`,
+    /// `manoonchai`). Not a setting: the keyboard in use is detected; this is
+    /// only where a session starts, until a Thai keyboard has been seen.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thai_layout: Option<String>,
     /// Convert a selection by copying it (Ctrl+C) in apps that do not share
@@ -645,6 +647,18 @@ pub fn persist_async() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn last_used_thai_keyboard_round_trips() {
+        let cfg: Config = toml::from_str(
+            "enabled = true
+thai_layout = \"pattachote\"
+",
+        )
+        .unwrap();
+        assert_eq!(cfg.thai_layout.as_deref(), Some("pattachote"));
+        assert!(toml::to_string(&cfg).unwrap().contains("pattachote"));
+    }
 
     #[test]
     fn legacy_auto_field_migrates_without_changing_behavior() {

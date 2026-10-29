@@ -2,6 +2,45 @@
 
 All notable changes to RightType. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- English keyboards **Dvorak** and **Colemak**: words typed on the wrong
+  language are fixed in both directions, live and in Fix text. Any country's
+  English on the US or UK keyboard is recognised from its Windows layout file.
+  Limits (practice and keyboard-map windows still show the US board, punctuation
+  rules are tuned for US) are listed in the guide.
+- A table of supported keyboards in the guide and README, including which ones
+  RightType stays off for.
+
+### Changed
+
+- The Thai keyboard (Kedmanee, Pattachote, Manoonchai) is detected from the
+  keyboard in use, so Settings → Keyboard no longer asks for it; it shows what
+  was detected. The one used last is remembered for the next start. Switching
+  by shortcut between two keyboards of one language (Kedmanee and Pattachote,
+  US and Dvorak) is now undone to the exact keyboard that was left.
+
+### Fixed
+
+- The list at the text cursor (Shift twice), the app's shortcut list and the list
+  for a held key now close when you click anywhere outside them. They never take
+  the keyboard focus, so a click elsewhere in the same window used to leave one
+  open, still taking digits, arrows and Enter that were meant for the app.
+- The list at the text cursor no longer runs off the bottom of the screen the
+  first time it opens low on the screen: it is placed again (below the cursor,
+  or above it when there is no room) when its rows arrive and make it taller.
+- Settings, Learned words: the Add and Remove buttons no longer overlap, and the
+  page no longer draws a dark band under the table and an empty card under the
+  sync switch (they were drawn where the old text box and rows used to be).
+  Recent messages gets the same card round its switch as the other pages.
+- Settings: buttons follow one placement rule. Buttons that add or open things
+  sit on the left under a list and the ones that take things away (Remove, Clear
+  all) on the right; the accent button follows its input. Learned words and
+  Snippets are laid out that way, and the folder buttons on Learned words are in
+  their own card.
+
 ## [2.6.3] — 2026-10-28
 
 ### Fixed

@@ -169,6 +169,22 @@ Macro ใส่ขั้นตอนได้ เช่น `{กด Ctrl+B}`, `{
 </details>
 
 <details>
+<summary><b>แป้นพิมพ์ที่รองรับ (ตรวจให้อัตโนมัติ)</b></summary>
+
+RightType ดูจากแป้นที่ Windows ใช้อยู่ตอนนั้น ไม่ต้องตั้งค่าเอง (แป้นที่เพิ่งติดตั้งต้องเปิดโปรแกรมใหม่)
+
+| ภาษา | แป้น |
+| --- | --- |
+| ไทย | Kedmanee, Pattachote, Manoonchai |
+| อังกฤษ | US, UK (ของทุกประเทศที่ใช้แป้น US/UK), Dvorak, Colemak |
+
+Dvorak และ Colemak แก้คำที่พิมพ์ผิดภาษาได้ทั้งสองทิศ แต่หน้าฝึกพิมพ์และแผนผังแป้นยังแสดงแป้น US
+แป้นที่ไม่อยู่ในตาราง เช่น Dvorak มือซ้าย/ขวา, Colemak-DH, แป้นเยอรมัน/ฝรั่งเศส RightType จะหยุดทำงานตอนใช้แป้นนั้น
+เพราะไม่เดา (เดาผิดคือพิมพ์เสีย) ตารางเต็มอยู่ใน [คู่มือ](docs/GUIDE.md)
+
+</details>
+
+<details>
 <summary><b>เครื่องมือคีย์บอร์ด</b></summary>
 
 ฝึกพิมพ์ Kedmanee / Pattachote / Manoonchai (รอบ 60 วินาที และเกมคำตก), ทดสอบปุ่ม, ตรวจปุ่มค้าง / Sticky Keys,
@@ -216,6 +232,16 @@ pwsh -File packaging\build_release.ps1       # installer + zip + SHA256.txt ล�
 
 ติดตั้งแบบอื่น (Windows on ARM, portable zip, ตรวจ SHA256, ถอนการติดตั้ง):
 [Install ในคู่มือฉบับเต็ม](docs/GUIDE.md#install-no-building-needed)
+
+## สนับสนุน
+
+RightType ฟรีและเปิดซอร์ส ทุกฟีเจอร์ใช้งานฟรี 100% หากช่วยให้งานคุณสะดวกขึ้น ร่วมสนับสนุนค่ากาแฟได้ตามสะดวก
+หรือร่วมพัฒนาได้ที่ [GitHub](https://github.com/k-affan-th/RightType)
+
+| PromptPay | Lightning | Bitcoin |
+| :---: | :---: | :---: |
+| <img src="docs/img/qr-promptpay.svg" width="180" alt="PromptPay QR"> | <img src="docs/img/qr-lightning.svg" width="180" alt="Lightning QR"> | <img src="docs/img/qr-bitcoin.svg" width="180" alt="Bitcoin QR"> |
+| `004-666-008749073` (e-Wallet) · สแกนด้วยแอปธนาคารไทย | `yawninggrass92@walletofsatoshi.com` | `bc1qdac8h7hl57x3kv8x8xpz6zg0fgw6zvp7uld3a6` |
 
 ## License
 

@@ -111,11 +111,34 @@ remembered, and so is any word you *flip back* after RightType changed it
 (`Shift`+`Backspace` or Undo), immediately and in either language. Learned words
 take effect at once for every decision.
 
-Supported keyboards: Thai **Kedmanee** (default), **Pattachote** or
-**Manoonchai** (Settings → Keyboard), with English on the **US** or **UK** keyboard — English
-of any country typed on either (Australia, New Zealand, Canada set to US, …),
-found automatically. Dvorak and other layouts are left alone: RightType stays off
-while one is active. Hotkeys can be changed in Settings → Hotkeys, and each app
+**Supported keyboards.** RightType finds out which keyboard you are typing on
+from Windows itself, from the keyboard you are typing on; there is nothing to
+choose in Settings (Settings → Keyboard shows what it found, for example "Detected: Thai
+Kedmanee · English Dvorak").
+
+| Language | Keyboard | How it is recognised | Limits |
+| --- | --- | --- | --- |
+| Thai | Kedmanee (with or without ShiftLock) | Windows layout `KBDTH0` / `KBDTH2` | — |
+| Thai | Pattachote (with or without ShiftLock) | `KBDTH1` / `KBDTH3` | — |
+| Thai | Manoonchai | a keyboard installed from file whose name says Manoonchai | — |
+| English | US keyboard, including English of other countries that uses it (Australia, New Zealand, Canada set to US, …) | `KBDUS` | — |
+| English | UK keyboard | `KBDUK` | — |
+| English | Dvorak (US) | `KBDDV` | Practice and Keyboard map windows show the US board; a lone `.` `?` `"` flipped by hand is read as on US; punctuation rules are tuned for US |
+| English | Colemak | an installed keyboard whose name says Colemak | same limits as Dvorak |
+
+**Not supported, and RightType stays off while one is active:** left- and
+right-handed Dvorak, Colemak-DH and other modified Colemaks, any keyboard whose
+keys sit elsewhere than on the US or UK keyboard (German, French, Canadian
+French, Irish, …), other languages, and any Thai keyboard Windows cannot
+identify. It never guesses a table: wrong guesses would corrupt what you type.
+If Thai keyboards are installed but none of them is recognised, nothing is
+converted into Thai either. Keyboards are read when RightType starts, so one
+you add later is picked up after a restart. The Thai keyboard you used last is
+remembered for the next start.
+Both a Thai and an English keyboard can be installed in several kinds at once
+(for example Kedmanee and Pattachote); the one you are typing on is used.
+
+Hotkeys can be changed in Settings → Hotkeys, and each app
 can have its own mode (Settings → Apps).
 
 **At the text cursor** (2.4):
@@ -284,7 +307,14 @@ The crate is split into an OS-free **core** (`layout`, `secret`, `dict`, `detect
 `segment`, `buffer` — exhaustively unit-tested) and a Windows **integration layer**
 behind the `winos` feature (`hook`, `inject`, `manual`, `safety`, `focus`, `session`,
 `tray`, `toast`, `config`, `startup`, `learn`). Keeping the core OS-free makes it
-testable anywhere and a future macOS backend additive. See the long-term
+testable anywhere and a future macOS backend additive.
+
+**Adding a language.** `layout::registry` decides which language and table a
+keyboard handle is: add its rule in `detect_with` and its layout-file names in
+`classify_layout_file`, add the tables under `src/layout/`, a dictionary under
+`assets/`, and tests. `policy::InputLayout` is still two-valued (Thai, English),
+so converting between three languages needs that type replaced first; see the
+follow-up in `docs/superpowers/specs/2026-10-29-keyboard-detection-design.md`. See the long-term
 [`docs/archive/PLAN.md`](archive/PLAN.md) and the current
 [`docs/DYNAMIC_PLAN.md`](DYNAMIC_PLAN.md) for active decisions, evidence, and
 the next implementation step. What comes next is planned there as
