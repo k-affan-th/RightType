@@ -316,6 +316,19 @@ fn finish(win: &Rc<Welcome>, first_run: bool, tour: bool) {
         // Save what the welcome window set up (a fresh install starts in Auto).
         config::persist();
     }
+    // Without the tour, the window flies into the tray icon and, as it lands,
+    // a pill says RightType is running. The window is photographed first, so
+    // closing it below cannot interrupt the flight.
+    if first_run && !tour {
+        if let Some(h) = win.window.handle.hwnd() {
+            // The pill is made by the UI thread: the flight runs on its own.
+            crate::dock::fly_to_tray(windows::Win32::Foundation::HWND(h as _), || {
+                crate::tray::on_ui(crate::tray::UI_WELCOME_DONE)
+            });
+            close(win);
+            return;
+        }
+    }
     close(win);
     if first_run {
         if tour {

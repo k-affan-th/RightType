@@ -81,6 +81,77 @@ fn progress(elapsed_ms: u32, total_ms: u32) -> f32 {
     (elapsed_ms as f32 / total_ms as f32).clamp(0.0, 1.0)
 }
 
+/// The welcome window lifts a hair, then flies into the tray icon.
+pub const DOCK_LIFT_MS: u32 = 110;
+pub const DOCK_FLY_MS: u32 = 380;
+pub const DOCK_MS: u32 = DOCK_LIFT_MS + DOCK_FLY_MS;
+/// How much bigger the window gets while it gathers itself to leave.
+const DOCK_LIFT_SCALE: f32 = 0.025;
+/// How small it is when it arrives (a fraction of its size).
+const DOCK_END_SCALE: f32 = 0.05;
+
+/// One frame of the flight: how far along the way to the tray the window's
+/// centre is, per axis (0 = where it was, 1 = at the tray), its size as a
+/// fraction of the original, and its opacity.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Dock {
+    pub x: f32,
+    pub y: f32,
+    pub scale: f32,
+    pub alpha: u8,
+    pub done: bool,
+}
+
+/// The flight, `elapsed_ms` after it began. The sideways and the downward
+/// moves are eased differently, so the path curves like a thing being drawn
+/// in rather than sliding along a ruler; it picks up speed as it goes (ease-in)
+/// and fades only over the last part. With `calm` (animation turned off in
+/// Windows) it does not move at all: it just fades, quickly.
+pub fn dock(elapsed_ms: u32, calm: bool) -> Dock {
+    if calm {
+        let t = progress(elapsed_ms, CALM_MS);
+        return Dock {
+            x: 0.0,
+            y: 0.0,
+            scale: 1.0,
+            alpha: (255.0 * (1.0 - ease_in_quad(t))).round() as u8,
+            done: t >= 1.0,
+        };
+    }
+    if elapsed_ms < DOCK_LIFT_MS {
+        let e = ease_out_cubic(progress(elapsed_ms, DOCK_LIFT_MS));
+        return Dock {
+            x: 0.0,
+            y: 0.0,
+            scale: 1.0 + DOCK_LIFT_SCALE * e,
+            alpha: 255,
+            done: false,
+        };
+    }
+    let t = progress(elapsed_ms - DOCK_LIFT_MS, DOCK_FLY_MS);
+    let fade = ((t - 0.6) / 0.4).clamp(0.0, 1.0);
+    Dock {
+        x: ease_in_out_quad(t),
+        y: ease_in_cubic(t),
+        scale: (1.0 + DOCK_LIFT_SCALE)
+            + ((DOCK_END_SCALE - (1.0 + DOCK_LIFT_SCALE)) * ease_in_quad(t)),
+        alpha: (255.0 * (1.0 - ease_in_quad(fade))).round() as u8,
+        done: t >= 1.0,
+    }
+}
+
+fn ease_in_cubic(t: f32) -> f32 {
+    t * t * t
+}
+
+fn ease_in_out_quad(t: f32) -> f32 {
+    if t < 0.5 {
+        2.0 * t * t
+    } else {
+        1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
+    }
+}
+
 /// How long a selection takes to slide to the next row.
 pub const SLIDE_MS: u32 = 110;
 
@@ -167,5 +238,45 @@ mod tests {
             assert!(a <= last);
             last = a;
         }
+    }
+
+    #[test]
+    fn the_window_gathers_itself_then_flies_in_and_vanishes() {
+        // It starts where it was, a hair larger once lifted.
+        let first = dock(0, false);
+        assert_eq!(
+            (first.x, first.y, first.alpha, first.done),
+            (0.0, 0.0, 255, false)
+        );
+        let lifted = dock(DOCK_LIFT_MS, false);
+        assert!(lifted.scale > 1.0 && lifted.alpha == 255);
+        // Then it arrives, tiny and gone.
+        let end = dock(DOCK_MS, false);
+        assert_eq!((end.x, end.y, end.alpha, end.done), (1.0, 1.0, 0, true));
+        assert!(end.scale < 0.1);
+        // It never turns back and only ever gets smaller on the way.
+        let (mut px, mut py, mut ps) = (0.0f32, 0.0f32, f32::MAX);
+        for ms in DOCK_LIFT_MS..=DOCK_MS {
+            let f = dock(ms, false);
+            assert!(f.x >= px && f.y >= py, "keeps heading for the tray");
+            assert!(f.scale <= ps, "keeps shrinking");
+            (px, py, ps) = (f.x, f.y, f.scale);
+        }
+        // The sideways and downward moves differ: the path curves.
+        let mid = dock(DOCK_LIFT_MS + DOCK_FLY_MS / 2, false);
+        assert!((mid.x - mid.y).abs() > 0.2);
+        // It is still fully visible well into the flight.
+        assert_eq!(dock(DOCK_LIFT_MS + DOCK_FLY_MS / 2, false).alpha, 255);
+    }
+
+    #[test]
+    fn with_animation_off_the_flight_is_only_a_quick_fade() {
+        for ms in 0..=CALM_MS + 10 {
+            let f = dock(ms, true);
+            assert_eq!((f.x, f.y, f.scale), (0.0, 0.0, 1.0));
+        }
+        assert_eq!(dock(0, true).alpha, 255);
+        let gone = dock(CALM_MS, true);
+        assert_eq!((gone.alpha, gone.done), (0, true));
     }
 }

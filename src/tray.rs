@@ -646,6 +646,7 @@ pub fn run() {
             match w {
                 UI_REVIEW => crate::palette::open_review(),
                 UI_FIX_WINDOW => crate::fixer::open(),
+                UI_WELCOME_DONE => overlay::show(tr(T::WelcomeInTray)),
                 _ => {}
             }
         }
@@ -717,7 +718,14 @@ const WM_ON_UI: u32 = 0x8000 + 0x580;
 pub const UI_REVIEW: usize = 1;
 /// Open the Fix text window.
 pub const UI_FIX_WINDOW: usize = 2;
+/// Say RightType is running (the welcome window has just flown into the tray).
+pub const UI_WELCOME_DONE: usize = 3;
 static TRAY_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/// The tray window's handle (0 before the tray is up), for finding its icon.
+pub fn tray_hwnd() -> isize {
+    TRAY_HWND.load(std::sync::atomic::Ordering::Acquire)
+}
 
 /// Ask the tray window's thread to do `what` (a `UI_` value), from any thread.
 pub fn on_ui(what: usize) {

@@ -667,7 +667,7 @@ texts! {
     WelcomeMode => "Current mode: {mode}. Switch anytime with Ctrl+CapsLock.", "โหมดตอนนี้: {mode} สลับได้ทุกเมื่อด้วย Ctrl+CapsLock";
     BtnGetStarted => "Get started", "เริ่มใช้งาน";
     BtnWelcomeTour => "Show me around (1 min)", "พาดูรอบๆ (1 นาที)";
-    WelcomeInTray => "RightType is running in the tray (the ^ by the clock). Right-click its icon for the tour, Settings and help.", "RightType ทำงานอยู่ที่ถาดระบบ (ลูกศร ^ ข้างนาฬิกา) คลิกขวาที่ไอคอนเพื่อดูทัวร์ ตั้งค่า และวิธีใช้";
+    WelcomeInTray => "RightType is running — start typing. Right-click its icon for the tour and Settings.", "RightType ทำงานอยู่ พิมพ์ได้เลย คลิกขวาที่ไอคอนเพื่อดูทัวร์และตั้งค่า";
     TourTitle => "RightType tour", "ทัวร์ RightType";
     TourStepOf => "{n} of {total}", "{n} จาก {total}";
     BtnTourNext => "Next", "ถัดไป";

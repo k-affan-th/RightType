@@ -29,12 +29,13 @@ mod config;
 #[cfg(feature = "winos")]
 mod data_dir;
 #[cfg(feature = "winos")]
+mod dock;
+#[cfg(feature = "winos")]
 mod fixer;
 #[cfg(feature = "winos")]
 mod focus;
 #[cfg(feature = "winos")]
 mod habits;
-#[cfg(feature = "winos")]
 mod health;
 #[cfg(feature = "winos")]
 mod hook;
