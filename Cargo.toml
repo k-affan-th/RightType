@@ -82,6 +82,9 @@ features = [
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Kernel",
     "Win32_Security",
+    "Win32_Storage_Packaging_Appx",
+    "ApplicationModel",
+    "Foundation",
 ]
 
 [build-dependencies]
