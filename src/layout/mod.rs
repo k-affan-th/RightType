@@ -18,6 +18,7 @@ mod manoonchai;
 mod pattachote;
 mod permuted;
 mod qwerty;
+pub mod registry;
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -53,6 +54,27 @@ impl LayoutId {
             self,
             LayoutId::Kedmanee | LayoutId::Pattachote | LayoutId::Manoonchai
         )
+    }
+
+    /// The Thai table this is, if it is one.
+    pub fn thai_variant(self) -> Option<ThaiVariant> {
+        match self {
+            LayoutId::Kedmanee => Some(ThaiVariant::Kedmanee),
+            LayoutId::Pattachote => Some(ThaiVariant::Pattachote),
+            LayoutId::Manoonchai => Some(ThaiVariant::Manoonchai),
+            _ => None,
+        }
+    }
+
+    /// The English table this is, if it is one.
+    pub fn english_variant(self) -> Option<EnglishVariant> {
+        match self {
+            LayoutId::QwertyEn => Some(EnglishVariant::Us),
+            LayoutId::QwertyUk => Some(EnglishVariant::Uk),
+            LayoutId::DvorakEn => Some(EnglishVariant::Dvorak),
+            LayoutId::ColemakEn => Some(EnglishVariant::Colemak),
+            _ => None,
+        }
     }
 
     pub fn is_english(self) -> bool {
