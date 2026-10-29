@@ -254,7 +254,7 @@ The required directory structure is:
 scoop-bucket/
 ├── .github/
 │   └── workflows/
-│       └── excava.yml       # Automated version check & update workflow
+│       └── excavator.yml       # Automated version check & update workflow
 ├── bucket/
 │   └── righttype.json       # Generated Scoop manifest
 └── README.md
@@ -324,25 +324,28 @@ The `righttype.json` manifest includes built-in automation directives:
 }
 ```
 
-To enable fully automated version updates whenever a new GitHub release is published, add an Excavator workflow to `.github/workflows/excava.yml` in `k-affan-th/scoop-bucket`:
+To enable fully automated version updates whenever a new GitHub release is published, add an Excavator workflow to `.github/workflows/excavator.yml` in `k-affan-th/scoop-bucket`:
 
 ```yaml
-name: Auto Update Manifests
+name: Excavator
 
 on:
-  schedule:
-    - cron: '0 */4 * * *' # Every 4 hours
   workflow_dispatch:
+  schedule:
+    - cron: '20 */4 * * *' # Every 4 hours
+
+permissions:
+  contents: write # lets the bot push the updated manifest
 
 jobs:
-  excavator:
+  excavate:
+    name: Excavate
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Run Excavator
-        uses: ScoopInstaller/Excavator@master
-        with:
-          upstream_branch: main
+      - name: Checkout bucket
+        uses: actions/checkout@v4
+      - name: Check for new versions
+        uses: ScoopInstaller/GithubActions@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
