@@ -4,6 +4,22 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+
+- English keyboards **Dvorak** and **Colemak**: words typed on the wrong
+  language are fixed in both directions, live and in Fix text. Any country's
+  English on the US or UK keyboard is recognised by its Windows layout file.
+  Limits (practice and keyboard-map windows still show the US board, punctuation
+  rules are tuned for US) are listed in the guide.
+- A table of supported keyboards in the guide and README, including which ones
+  RightType stays off for.
+
+### Changed
+
+- The Thai keyboard (Kedmanee, Pattachote, Manoonchai) is detected from the
+  keyboard in use, so Settings → Keyboard no longer asks for it; it shows what
+  was detected. An old `thai_layout` entry in the settings file is ignored.
+
 ### Fixed
 
 - Settings, Learned words: the Add and Remove buttons no longer overlap, and the
