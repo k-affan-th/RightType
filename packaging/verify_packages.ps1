@@ -137,7 +137,7 @@ $chocoNotes   = [System.Collections.Generic.List[string]]::new()
 # Step 0: Generation phase (unless -SkipGenerate)
 if (-not $SkipGenerate) {
     Write-Host "`n$C_BOLD$C_CYAN[generate] Generating packaging manifests for v$Version...$C_RESET"
-    
+
     $wingetGen = Join-Path $PSScriptRoot "winget.ps1"
     $scoopGen  = Join-Path $PSScriptRoot "scoop.ps1"
     $chocoGen  = Join-Path $PSScriptRoot "choco.ps1"
@@ -558,7 +558,7 @@ if ($toolsExist) {
     } else {
         Write-CheckOk "LICENSE.txt verified ($($licItem.Length) bytes)"
     }
-    
+
     $chocoNotes.Add("tools & silent args verified")
 }
 
@@ -614,11 +614,11 @@ $allPass = $true
 foreach ($row in $results) {
     if ($row.Status -ne "PASS") { $allPass = $false }
     $statusColor = if ($row.Status -eq "PASS") { "$C_GREEN" } else { "$C_RED" }
-    
+
     $chanStr = $row.Channel.PadRight($col1Width)
     $statStr = "$statusColor$($row.Status.PadRight($col2Width))$C_RESET"
     $noteStr = $row.Notes
-    
+
     Write-Host "$chanStr$statStr$noteStr"
 }
 
