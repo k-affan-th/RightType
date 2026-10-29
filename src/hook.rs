@@ -2603,7 +2603,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // (the focus worker's answer about this key's field first).
     crate::focus::settle(Duration::from_millis(60));
     sync_context();
-    note_english_variant(effective_layout());
+    note_keyboard(effective_layout());
 
     // Never run where secrets are typed: blacklisted apps, or password fields
     // (native ES_PASSWORD, or UIA-detected ones in browsers/Electron/UWP).
@@ -3600,12 +3600,15 @@ fn moves_or_edits(vk: u16) -> bool {
     .any(|k| k.0 == vk)
 }
 
-/// Remember which English keyboard (US or UK) the typist uses, from an
-/// English layout whenever one is active — Thai text converted to English
-/// then comes out in the punctuation of that keyboard.
-fn note_english_variant(hkl: HKL) {
+/// Remember which English and which Thai keyboard the typist uses, from the
+/// keyboard active now: text converted to the other language then follows
+/// that keyboard's table (its punctuation, its letters).
+fn note_keyboard(hkl: HKL) {
     if let Some(v) = policy::english_variant_of(layout_id(hkl)) {
         righttype::layout::set_english_variant(v);
+    }
+    if let Some(v) = policy::thai_variant_of(layout_id(hkl)) {
+        righttype::layout::set_thai_variant(v);
     }
 }
 
@@ -3619,10 +3622,10 @@ pub fn remember_startup_layout() {
     STARTUP_LAYOUT.store(hkl.0 as isize, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// At startup: which table each Thai keyboard follows, and the English
-/// keyboard among the installed layouts. Only once: `install` also runs on
-/// every hook reinstall (sleep, session change, hook loss), and by then the
-/// English keyboard actually used is known.
+/// At startup: which table each installed keyboard follows, and the Thai and
+/// English keyboards among the installed layouts. Only once: `install` also
+/// runs on every hook reinstall (sleep, session change, hook loss), and by
+/// then the keyboards actually used are known.
 unsafe fn detect_keyboards() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     let mut first = false;
@@ -3630,14 +3633,13 @@ unsafe fn detect_keyboards() {
     if !first {
         return;
     }
-    policy::set_thai_keyboards(thai_keyboards());
+    righttype::layout::registry::set_facts(installed_keyboards());
     // The keyboard in use when RightType started (read before any of its
-    // windows, such as Welcome, could take focus), if it is an English one;
-    // otherwise the first English keyboard installed.
+    // windows, such as Welcome, could take focus) counts first; then the
+    // first Thai and the first English keyboard installed.
     let active = HKL(STARTUP_LAYOUT.load(std::sync::atomic::Ordering::Relaxed) as _);
-    if !active.0.is_null() && policy::english_variant_of(layout_id(active)).is_some() {
-        note_english_variant(active);
-        return;
+    if !active.0.is_null() {
+        note_keyboard(active);
     }
     let count = GetKeyboardLayoutList(None);
     if count <= 0 {
@@ -3645,21 +3647,32 @@ unsafe fn detect_keyboards() {
     }
     let mut list = vec![HKL::default(); count as usize];
     let got = GetKeyboardLayoutList(Some(&mut list)).max(0) as usize;
-    if let Some(hkl) = list
-        .iter()
-        .take(got)
-        .find(|h| policy::english_variant_of(layout_id(**h)).is_some())
-    {
-        note_english_variant(*hkl);
+    let installed = &list[..got];
+    if policy::english_variant_of(layout_id(active)).is_none() {
+        if let Some(hkl) = installed
+            .iter()
+            .find(|h| policy::english_variant_of(layout_id(**h)).is_some())
+        {
+            note_keyboard(*hkl);
+        }
+    }
+    if policy::thai_variant_of(layout_id(active)).is_none() {
+        if let Some(hkl) = installed
+            .iter()
+            .find(|h| policy::thai_variant_of(layout_id(**h)).is_some())
+        {
+            note_keyboard(*hkl);
+        }
     }
 }
 
-/// Windows' Thai keyboards other than the default one, by the high word of
-/// their handle (`0xF000` + the registry's "Layout Id"), with the table each
-/// follows, told apart by the layout file: `KBDTH0`/`KBDTH2` are Kedmanee
-/// (with and without ShiftLock), `KBDTH1`/`KBDTH3` Pattachote.
-fn thai_keyboards() -> Vec<(u16, righttype::layout::ThaiVariant)> {
-    use righttype::layout::ThaiVariant;
+/// The Thai and English keyboards installed, by the high word of their
+/// handle (`0xF000` + the registry's "Layout Id", or the keyboard's own
+/// identifier), with the table each follows, told apart by the layout file
+/// (see [`righttype::layout::registry::classify_layout_file`]). A keyboard
+/// whose file cannot be read or is not known is left out: it is not guessed.
+fn installed_keyboards() -> righttype::layout::registry::KeyboardFacts {
+    use righttype::layout::registry::{classify_layout_file, KeyboardFacts, Language};
     use windows::core::PCWSTR;
     use windows::Win32::System::Registry::{RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ};
 
@@ -3686,7 +3699,7 @@ fn thai_keyboards() -> Vec<(u16, righttype::layout::ThaiVariant)> {
         Some(String::from_utf16_lossy(&buf[..len]))
     }
 
-    // Windows' own Thai keyboards, and any other installed for Thai (a
+    // Windows' own Thai keyboards, and every other keyboard installed (a
     // keyboard installed from a file, such as Manoonchai, gets an
     // identifier like `A000041E`).
     let mut klids: Vec<String> = ["0001041E", "0002041E", "0003041E"]
@@ -3694,42 +3707,46 @@ fn thai_keyboards() -> Vec<(u16, righttype::layout::ThaiVariant)> {
         .map(|k| k.to_string())
         .collect();
     for k in installed_keyboard_ids() {
-        if k.to_ascii_uppercase().ends_with("041E")
-            && !klids.iter().any(|o| o.eq_ignore_ascii_case(&k))
-        {
+        if !klids.iter().any(|o| o.eq_ignore_ascii_case(&k)) {
             klids.push(k);
         }
     }
-    let mut out = Vec::new();
+    let mut facts = KeyboardFacts::default();
     for klid in klids {
+        if klid.len() != 8 {
+            continue;
+        }
+        let language = match u32::from_str_radix(&klid[4..], 16).map(|l| l & 0x3FF) {
+            Ok(0x1E) => Language::Thai,
+            Ok(0x09) => Language::English,
+            _ => continue,
+        };
         let key = format!("SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts\\{klid}");
         let Some(file) = read(&key, "Layout File") else {
             continue;
         };
-        let file = file.to_ascii_uppercase();
-        let text = read(&key, "Layout Text")
-            .unwrap_or_default()
-            .to_ascii_uppercase();
-        let variant = if file.starts_with("KBDTH0") || file.starts_with("KBDTH2") {
-            ThaiVariant::Kedmanee
-        } else if file.starts_with("KBDTH1") || file.starts_with("KBDTH3") {
-            ThaiVariant::Pattachote
-        } else if file.contains("MANOON") || text.contains("MANOONCHAI") {
-            ThaiVariant::Manoonchai
-        } else {
+        let text = read(&key, "Layout Text").unwrap_or_default();
+        let Some(table) = classify_layout_file(language, &file, &text) else {
             continue;
+        };
+        let list = match language {
+            Language::Thai => &mut facts.thai,
+            Language::English => &mut facts.english,
         };
         if let Some(id) =
             read(&key, "Layout Id").and_then(|id| u16::from_str_radix(id.trim(), 16).ok())
         {
-            out.push((0xF000 | id, variant));
+            list.push((0xF000 | id, table));
         }
-        // The keyboard's own identifier, as some handles carry it.
+        // The keyboard's own identifier, as some handles carry it. Zero is
+        // the language's default keyboard, which needs no entry.
         if let Ok(high) = u16::from_str_radix(&klid[..4], 16) {
-            out.push((high, variant));
+            if high != 0 {
+                list.push((high, table));
+            }
         }
     }
-    out
+    facts
 }
 
 /// The keyboard identifiers (`0000041E`, `A000041E`, …) Windows lists under
