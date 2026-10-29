@@ -66,17 +66,47 @@ const NAV: [(T, u8, char); 10] = [
 pub const BTC_LIGHTNING: &str = "yawninggrass92@walletofsatoshi.com";
 pub const BTC_MAINNET: &str = "bc1qdac8h7hl57x3kv8x8xpz6zg0fgw6zvp7uld3a6";
 
+/// What QR_PROMPTPAY encodes; only tools/check_support_qr.py reads it.
+#[allow(dead_code)]
 pub const PROMPTPAY_PAYLOAD: &str =
     "00020101021129390016A000000677010111031500466600874907353037645802TH6304797A";
 pub const PROMPTPAY_ID: &str = "004666008749073";
 pub const PROMPTPAY_DISPLAY: &str = "004-666-008749073 (e-Wallet)";
 
 pub const QR_PROMPTPAY: [u64; 33] = [
-    0x1fde8427f, 0x10543e341, 0x175344e5d, 0x17417a35d, 0x175e8585d, 0x10542e541, 0x1fd55557f,
-    0x001649000, 0x0aa17afdf, 0x1cfe85a8b, 0x05543c377, 0x14b640e3e, 0x03017a376, 0x1cfe85f13,
-    0x06135d3e6, 0x05935c720, 0x03017a57d, 0x1cfe87fb8, 0x059359557, 0x049641695, 0x03017a74b,
-    0x1cfea5b2b, 0x0613584e1, 0x04b2d1b81, 0x03f17a469, 0x1d1e85d00, 0x055a2b37f, 0x051608841,
-    0x1bf17c75d, 0x051e85d5d, 0x08f31d35d, 0x043649541, 0x0ad975d7f,
+    0x1fde8427f,
+    0x10543e341,
+    0x175344e5d,
+    0x17417a35d,
+    0x175e8585d,
+    0x10542e541,
+    0x1fd55557f,
+    0x001649000,
+    0x0aa17afdf,
+    0x1cfe85a8b,
+    0x05543c377,
+    0x14b640e3e,
+    0x03017a376,
+    0x1cfe85f13,
+    0x06135d3e6,
+    0x05935c720,
+    0x03017a57d,
+    0x1cfe87fb8,
+    0x059359557,
+    0x049641695,
+    0x03017a74b,
+    0x1cfea5b2b,
+    0x0613584e1,
+    0x04b2d1b81,
+    0x03f17a469,
+    0x1d1e85d00,
+    0x055a2b37f,
+    0x051608841,
+    0x1bf17c75d,
+    0x051e85d5d,
+    0x08f31d35d,
+    0x043649541,
+    0x0ad975d7f,
 ];
 
 pub const QR_LIGHTNING: [u64; 33] = [
@@ -1554,12 +1584,7 @@ fn open_on(page: u8) {
         tr(T::BtnGitHub),
         icons::OPEN_LINK,
         false,
-        (
-            X0 + CW - 110,
-            SP_CARD1_Y + (SP_CARD1_H - 32) / 2,
-            94,
-            32,
-        ),
+        (X0 + CW - 110, SP_CARD1_Y + (SP_CARD1_H - 32) / 2, 94, 32),
         p.surface,
         sp,
     );
