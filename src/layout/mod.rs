@@ -140,6 +140,11 @@ pub fn thai_table(variant: ThaiVariant) -> &'static dyn Layout {
     }
 }
 
+/// The English table in use (whichever keyboard was seen last).
+pub fn english_table() -> &'static dyn Layout {
+    english_layout()
+}
+
 /// The US English table.
 pub fn us_table() -> &'static dyn Layout {
     &QwertyEn
@@ -339,22 +344,27 @@ pub fn auto_convert(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn english_variant_round_trips_all() {
-        let before = english_variant();
-        for v in [
-            EnglishVariant::Us,
-            EnglishVariant::Uk,
-            EnglishVariant::Dvorak,
-            EnglishVariant::Colemak,
-        ] {
-            set_english_variant(v);
-            assert_eq!(english_variant(), v);
-        }
-        set_english_variant(before);
-    }
-
     use super::*;
+
+    /// Pure on purpose: the variant globals are shared by every test in the
+    /// process, so a test that sets them would race the others.
+    #[test]
+    fn layout_ids_map_to_their_variants() {
+        for (id, v) in [
+            (LayoutId::QwertyEn, EnglishVariant::Us),
+            (LayoutId::QwertyUk, EnglishVariant::Uk),
+            (LayoutId::DvorakEn, EnglishVariant::Dvorak),
+            (LayoutId::ColemakEn, EnglishVariant::Colemak),
+        ] {
+            assert_eq!(id.english_variant(), Some(v));
+            assert!(id.is_english() && id.thai_variant().is_none());
+        }
+        assert_eq!(
+            LayoutId::Pattachote.thai_variant(),
+            Some(ThaiVariant::Pattachote)
+        );
+        assert!(LayoutId::Kedmanee.english_variant().is_none());
+    }
 
     // The four canonical RightLang examples, verified against published sources.
     #[test]
