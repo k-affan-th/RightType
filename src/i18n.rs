@@ -655,7 +655,7 @@ texts! {
     WelcomeTitle => "Welcome to RightType", "ยินดีต้อนรับสู่ RightType";
     HelpTitle => "RightType — Hotkeys", "RightType — ปุ่มลัด";
     WelcomeHeadline => "Wrong layout? Fixed — no retyping.", "พิมพ์ผิดภาษา? แก้ให้ทันที ไม่ต้องพิมพ์ใหม่";
-    WelcomeSub => "Thai Kedmanee ↔ US English, in every app. Password fields, terminals and wallets are always left alone.", "ไทยเกษมณี ↔ อังกฤษ US ใช้ได้ทุกแอป และไม่ยุ่งกับช่องรหัสผ่าน เทอร์มินัล และกระเป๋าคริปโต";
+    WelcomeSub => "Thai Kedmanee ↔ US English, in every app. Password fields, terminals and wallets are always left alone.", "ไทยเกษมณี ↔ อังกฤษ US ใช้ได้ทุกแอป เว้นช่องรหัสผ่าน เทอร์มินัล และกระเป๋าคริปโต";
     WelcomeExample => "l;ylfu  →  สวัสดี", "l;ylfu  →  สวัสดี";
     WelcomeTry => "Try it: type l;ylfu and a space on the English keyboard here", "ลองเลย: เปิดแป้นอังกฤษ แล้วพิมพ์ l;ylfu ตามด้วยเว้นวรรคในช่องนี้";
     WelcomeTryManual => "Try it: type l;ylfu on the English keyboard, then press Shift+Backspace", "ลองเลย: เปิดแป้นอังกฤษ พิมพ์ l;ylfu แล้วกด Shift+Backspace ในช่องนี้";
@@ -666,6 +666,8 @@ texts! {
     HelpHeadline => "Hotkeys", "ปุ่มลัด";
     WelcomeMode => "Current mode: {mode}. Switch anytime with Ctrl+CapsLock.", "โหมดตอนนี้: {mode} สลับได้ทุกเมื่อด้วย Ctrl+CapsLock";
     BtnGetStarted => "Get started", "เริ่มใช้งาน";
+    BtnWelcomeTour => "Show me around (1 min)", "พาดูรอบๆ (1 นาที)";
+    WelcomeInTray => "RightType is running in the tray (the ^ by the clock). Right-click its icon for the tour, Settings and help.", "RightType ทำงานอยู่ที่ถาดระบบ (ลูกศร ^ ข้างนาฬิกา) คลิกขวาที่ไอคอนเพื่อดูทัวร์ ตั้งค่า และวิธีใช้";
     TourTitle => "RightType tour", "ทัวร์ RightType";
     TourStepOf => "{n} of {total}", "{n} จาก {total}";
     BtnTourNext => "Next", "ถัดไป";

@@ -51,6 +51,8 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   shows which Thai and English keyboards Windows has installed (and what to do
   if there is no Thai keyboard), and tells you live whether the word was fixed
   or what to check when it was not.
+- The welcome window offers "Show me around" (the tour) next to "Get started",
+  and closing it any other way now says where RightType went: the tray.
 - Microsoft Store package (MSIX): run at startup uses a Windows startup task.
 
 ## [2.6.3] — 2026-10-28

@@ -51,7 +51,7 @@ fn layout(first_run: bool) -> Layout {
             example_y: Some(example_y),
             keys_y,
             rows,
-            height: keys_y + rows as i32 * ROW + 8 + 112,
+            height: keys_y + rows as i32 * ROW + 8 + 112 + 24,
         }
     } else {
         let keys_y = 84;
@@ -184,13 +184,24 @@ pub fn show(first_run: bool) {
         hook::Mode::Manual => T::ModeManual,
         hook::Mode::Code => T::ModeCode,
     });
+    // First run: the mode line gets the full width, and the buttons sit below it.
     s.label(
         &trf(T::WelcomeMode, &[("mode", mode)]),
         TextStyle::Dim,
-        (X, foot_y, CW - 170, 50),
+        (X, foot_y, if first_run { CW } else { CW - 170 }, 50),
         p.bg,
         0,
     );
+    let tour_btn = first_run.then(|| {
+        s.button_icon(
+            tr(T::BtnWelcomeTour),
+            icons::HOTKEYS,
+            true,
+            (X + CW - 214, foot_y + 56, 214, 36),
+            p.bg,
+            0,
+        )
+    });
     let start = s.button_icon(
         tr(if first_run {
             T::BtnGetStarted
@@ -202,8 +213,13 @@ pub fn show(first_run: bool) {
         } else {
             icons::CLOSE
         },
-        true,
-        (X + CW - 150, foot_y + 4, 150, 36),
+        // With a tour offered, "Get started" is the quiet choice.
+        !first_run,
+        if first_run {
+            (X + CW - 214 - 12 - 150, foot_y + 56, 150, 36)
+        } else {
+            (X + CW - 150, foot_y + 4, 150, 36)
+        },
         p.bg,
         0,
     );
@@ -225,7 +241,9 @@ pub fn show(first_run: bool) {
     win.surface.on_click(move |id| {
         let Some(win) = weak.upgrade() else { return };
         if id == start {
-            finish(&win, first_run);
+            finish(&win, first_run, false);
+        } else if Some(id) == tour_btn {
+            finish(&win, first_run, true);
         } else if Some(id) == lang_en || Some(id) == lang_th {
             let lang = if Some(id) == lang_th {
                 righttype::i18n::Lang::Th
@@ -264,7 +282,7 @@ pub fn show(first_run: bool) {
     let win_h = win.clone();
     let handler = nwg::full_bind_event_handler(&win.window.handle, move |evt, _data, handle| {
         if matches!(evt, nwg::Event::OnWindowClose) && handle == win_h.window.handle {
-            finish(&win_h, first_run);
+            finish(&win_h, first_run, false);
         } else if matches!(evt, nwg::Event::OnTimerTick) {
             let Some((edit, result)) = live else { return };
             let s = &win_h.surface;
@@ -289,14 +307,23 @@ pub fn show(first_run: bool) {
     *win.handler.borrow_mut() = Some(handler);
 }
 
-/// Close the window and record that onboarding is done.
-fn finish(win: &Rc<Welcome>, first_run: bool) {
+/// Close the window and record that onboarding is done. On a first run,
+/// either start the tour, or say where RightType went: it has no window of its
+/// own, so without a word it would look like nothing happened.
+fn finish(win: &Rc<Welcome>, first_run: bool, tour: bool) {
     if first_run {
         config::mark_onboarded();
         // Save what the welcome window set up (a fresh install starts in Auto).
         config::persist();
     }
     close(win);
+    if first_run {
+        if tour {
+            crate::tour::start(crate::tour::Chapter::ALL[0]);
+        } else {
+            crate::overlay::show(tr(T::WelcomeInTray));
+        }
+    }
 }
 
 fn close(win: &Rc<Welcome>) {
