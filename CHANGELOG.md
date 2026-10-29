@@ -41,7 +41,7 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   Snippets are laid out that way, and the folder buttons on Learned words are in
   their own card.
 
-## [2.6.4] — 2026-10-29
+## [2.6.5] — 2026-10-29
 
 ### Changed
 
