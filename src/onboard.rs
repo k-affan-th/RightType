@@ -27,6 +27,9 @@ struct Welcome {
     window: nwg::Window,
     surface: Rc<Surface>,
     handler: RefCell<Option<nwg::EventHandler>>,
+    /// First run only: polls the try-it box so the result can be shown live.
+    #[allow(deprecated)]
+    timer: RefCell<Option<nwg::Timer>>,
 }
 
 /// Vertical layout shared by the controls and the background painter.
@@ -39,9 +42,10 @@ struct Layout {
 
 fn layout(first_run: bool) -> Layout {
     if first_run {
-        let example_y = 150;
-        // Room for the practice box under the example.
-        let keys_y = example_y + 72 + 70 + 44;
+        // Language switch row, headline, sub, keyboards line, then the example.
+        let example_y = 190;
+        // Room for the practice box and its live result under the example.
+        let keys_y = example_y + 72 + 70 + 44 + 28;
         let rows = 4;
         Layout {
             example_y: Some(example_y),
@@ -65,6 +69,12 @@ fn layout(first_run: bool) -> Layout {
 /// it then records that onboarding is done.
 pub fn show(first_run: bool) {
     let started = std::time::Instant::now();
+    if first_run && hook::mode() != hook::Mode::Auto {
+        // A fresh install starts in Auto, so the try-it box below fixes the
+        // word at once. Settings and Ctrl+CapsLock change it anytime; the
+        // choice is saved when the welcome window closes.
+        hook::set_mode(hook::Mode::Auto);
+    }
     ui::refresh();
     let lay = layout(first_run);
     let mut window = nwg::Window::default();
@@ -88,15 +98,35 @@ pub fn show(first_run: bool) {
     let s = &surface;
     let p = pal();
 
+    let mut lang_en = None;
+    let mut lang_th = None;
+    let mut try_edit = None;
+    let mut try_result = None;
     if let Some(example_y) = lay.example_y {
+        // Interface language: preselected from Windows, one tap to change.
+        let th_on = righttype::i18n::lang() == righttype::i18n::Lang::Th;
+        lang_en = Some(s.button_icon("English", '\0', !th_on, (X + CW - 164, 12, 80, 32), p.bg, 0));
+        lang_th = Some(s.button_icon("ไทย", '\0', th_on, (X + CW - 80, 12, 80, 32), p.bg, 0));
         s.label(
             tr(T::WelcomeHeadline),
             TextStyle::Title,
-            (X, 26, CW, 44),
+            (X, 52, CW, 44),
             p.bg,
             0,
         );
-        s.label(tr(T::WelcomeSub), TextStyle::Dim, (X, 80, CW, 60), p.bg, 0);
+        s.label(tr(T::WelcomeSub), TextStyle::Dim, (X, 104, CW, 44), p.bg, 0);
+        let (thai, english) = crate::health::keyboard_counts();
+        let kb = format!(
+            "{} {thai} · {} {english}",
+            tr(T::HealthThai),
+            tr(T::HealthEnglish)
+        );
+        let kb_line = if thai == 0 {
+            tr(T::WelcomeNoThai).to_string()
+        } else {
+            trf(T::WelcomeKeyboards, &[("kb", &kb)])
+        };
+        s.label(&kb_line, TextStyle::Dim, (X, 148, CW, 36), p.bg, 0);
         s.label(
             tr(T::WelcomeExample),
             TextStyle::Subtitle,
@@ -108,13 +138,19 @@ pub fn show(first_run: bool) {
         // window like in any other (Auto fixes the word at the space; in
         // Manual, Shift+Backspace does).
         s.label(
-            tr(T::WelcomeTry),
+            tr(if hook::mode() == hook::Mode::Auto {
+                T::WelcomeTry
+            } else {
+                T::WelcomeTryManual
+            }),
             TextStyle::Dim,
             (X, example_y + 84, CW, 20),
             p.bg,
             0,
         );
-        s.edit("", (X, example_y + 106, CW, 34), 0);
+        try_edit = Some(s.edit("", (X, example_y + 106, CW, 34), 0));
+        // Filled in by the timer below once the word has (or has not) changed.
+        try_result = Some(s.label("", TextStyle::Dim, (X, example_y + 146, CW, 36), p.bg, 0));
         s.label(
             tr(T::HeadHotkeys),
             TextStyle::Section(icons::HOTKEYS),
@@ -177,6 +213,7 @@ pub fn show(first_run: bool) {
         window,
         surface,
         handler: RefCell::new(None),
+        timer: RefCell::new(None),
     });
     if let Some(h) = win.window.handle.hwnd() {
         crate::ui::present(windows::Win32::Foundation::HWND(h as _), "welcome", started);
@@ -186,29 +223,88 @@ pub fn show(first_run: bool) {
 
     let weak = Rc::downgrade(&win);
     win.surface.on_click(move |id| {
+        let Some(win) = weak.upgrade() else { return };
         if id == start {
-            if let Some(win) = weak.upgrade() {
-                finish(&win, first_run);
+            finish(&win, first_run);
+        } else if Some(id) == lang_en || Some(id) == lang_th {
+            let lang = if Some(id) == lang_th {
+                righttype::i18n::Lang::Th
+            } else {
+                righttype::i18n::Lang::En
+            };
+            if lang != righttype::i18n::lang() {
+                config::set_language(Some(lang));
+                config::persist();
+                // Every string changes: rebuild the window in the new language.
+                close(&win);
+                show(first_run);
             }
         }
     });
+
+    // First run: watch the try-it box so it can say, live, whether the word
+    // was fixed or what to check when it was not.
+    let live = try_edit.zip(try_result);
+    if live.is_some() {
+        #[allow(deprecated)]
+        {
+            let mut timer = nwg::Timer::default();
+            if nwg::Timer::builder()
+                .parent(&win.window)
+                .interval(300)
+                .stopped(false)
+                .build(&mut timer)
+                .is_ok()
+            {
+                *win.timer.borrow_mut() = Some(timer);
+            }
+        }
+    }
+    let seen = std::cell::RefCell::new((String::new(), 0u32));
     let win_h = win.clone();
     let handler = nwg::full_bind_event_handler(&win.window.handle, move |evt, _data, handle| {
         if matches!(evt, nwg::Event::OnWindowClose) && handle == win_h.window.handle {
             finish(&win_h, first_run);
+        } else if matches!(evt, nwg::Event::OnTimerTick) {
+            let Some((edit, result)) = live else { return };
+            let s = &win_h.surface;
+            let text = s.text_of(edit);
+            let mut seen = seen.borrow_mut();
+            seen.1 = if text == seen.0 { seen.1 + 1 } else { 0 };
+            seen.0 = text.clone();
+            let fixed = text.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+            let shown = if fixed {
+                tr(T::WelcomeTryOk)
+            } else if !text.trim().is_empty() && seen.1 >= 5 {
+                // About 1.5 s of nothing happening after typing.
+                tr(T::WelcomeTryNot)
+            } else {
+                ""
+            };
+            if s.text_of(result) != shown {
+                s.set_text(result, shown);
+            }
         }
     });
     *win.handler.borrow_mut() = Some(handler);
 }
 
+/// Close the window and record that onboarding is done.
 fn finish(win: &Rc<Welcome>, first_run: bool) {
     if first_run {
         config::mark_onboarded();
+        // Save what the welcome window set up (a fresh install starts in Auto).
+        config::persist();
     }
+    close(win);
+}
+
+fn close(win: &Rc<Welcome>) {
     win.surface.detach();
     if let Some(h) = win.handler.borrow_mut().take() {
         nwg::unbind_event_handler(&h);
     }
+    win.timer.borrow_mut().take();
     win.window.close();
 }
 

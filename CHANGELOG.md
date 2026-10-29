@@ -41,6 +41,18 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   Snippets are laid out that way, and the folder buttons on Learned words are in
   their own card.
 
+## [2.6.4] — 2026-10-29
+
+### Changed
+
+- First-run welcome: a fresh install now starts in Auto, so the try-it box
+  fixes `l;ylfu` at the space. Existing installs keep their mode.
+- The welcome window has an English | ไทย switch (preselected from Windows),
+  shows which Thai and English keyboards Windows has installed (and what to do
+  if there is no Thai keyboard), and tells you live whether the word was fixed
+  or what to check when it was not.
+- Microsoft Store package (MSIX): run at startup uses a Windows startup task.
+
 ## [2.6.3] — 2026-10-28
 
 ### Fixed

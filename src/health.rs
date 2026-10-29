@@ -176,7 +176,8 @@ fn filter_keys() -> Check {
     }
 }
 
-fn keyboards() -> Check {
+/// How many Thai and English keyboards Windows has installed.
+pub fn keyboard_counts() -> (usize, usize) {
     use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyboardLayoutList, HKL};
     let list: Vec<u32> = unsafe {
         let n = GetKeyboardLayoutList(None).max(0) as usize;
@@ -186,6 +187,11 @@ fn keyboards() -> Check {
     };
     let thai = list.iter().filter(|h| *h & 0xFFFF == 0x041E).count();
     let english = list.iter().filter(|h| *h & 0x3FF == 0x09).count();
+    (thai, english)
+}
+
+fn keyboards() -> Check {
+    let (thai, english) = keyboard_counts();
     let names = format!(
         "{} {thai} · {} {english}",
         tr(T::HealthThai),

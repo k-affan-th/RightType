@@ -658,6 +658,11 @@ texts! {
     WelcomeSub => "Thai Kedmanee ↔ US English, in every app. Password fields, terminals and wallets are always left alone.", "ไทยเกษมณี ↔ อังกฤษ US ใช้ได้ทุกแอป และไม่ยุ่งกับช่องรหัสผ่าน เทอร์มินัล และกระเป๋าคริปโต";
     WelcomeExample => "l;ylfu  →  สวัสดี", "l;ylfu  →  สวัสดี";
     WelcomeTry => "Try it: type l;ylfu and a space on the English keyboard here", "ลองเลย: เปิดแป้นอังกฤษ แล้วพิมพ์ l;ylfu ตามด้วยเว้นวรรคในช่องนี้";
+    WelcomeTryManual => "Try it: type l;ylfu on the English keyboard, then press Shift+Backspace", "ลองเลย: เปิดแป้นอังกฤษ พิมพ์ l;ylfu แล้วกด Shift+Backspace ในช่องนี้";
+    WelcomeKeyboards => "Keyboards found: {kb}", "แป้นที่พบในเครื่อง: {kb}";
+    WelcomeNoThai => "No Thai keyboard is installed. Add one in Windows (Settings → Time & language → Language & region) so RightType can fix English typed by mistake.", "ยังไม่มีแป้นไทยในเครื่อง เพิ่มได้ที่ Windows (ตั้งค่า → เวลาและภาษา → ภาษาและภูมิภาค) เพื่อให้ RightType แก้ข้อความที่พิมพ์ผิดได้";
+    WelcomeTryOk => "✓ Fixed. This is what RightType does in every app.", "✓ แก้แล้ว RightType ทำแบบนี้ได้ในทุกแอป";
+    WelcomeTryNot => "Not fixed? Make sure the English (US) keyboard is active (Alt+Shift switches), then type l;ylfu and a space again.", "ยังไม่เปลี่ยน? ตรวจว่าเปิดแป้นอังกฤษ (US) อยู่ (สลับด้วย Alt+Shift) แล้วพิมพ์ l;ylfu ตามด้วยเว้นวรรคอีกครั้ง";
     HelpHeadline => "Hotkeys", "ปุ่มลัด";
     WelcomeMode => "Current mode: {mode}. Switch anytime with Ctrl+CapsLock.", "โหมดตอนนี้: {mode} สลับได้ทุกเมื่อด้วย Ctrl+CapsLock";
     BtnGetStarted => "Get started", "เริ่มใช้งาน";
