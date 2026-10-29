@@ -1,4 +1,4 @@
-"""Check the Support page: decode the two hard-coded 33x33 QR matrices in
+"""Check the Support page: decode the three hard-coded 33x33 QR matrices in
 src/settings.rs, compare them with the addresses beside them and verify their
 error-correction codewords. Stdlib only; reads, never writes.
 
@@ -91,13 +91,24 @@ def decode(m):
     if mode == 0b0100:  # byte
         count = int(bits[4:12], 2)
         text = bytes(int(bits[12 + 8 * i:20 + 8 * i], 2) for i in range(count)).decode("latin-1")
+    elif mode == 0b0010:  # alphanumeric
+        table = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
+        count, text, pos = int(bits[4:13], 2), "", 13
+        while count > 0:
+            if count >= 2:
+                v = int(bits[pos:pos + 11], 2)
+                text += table[v // 45] + table[v % 45]
+                pos, count = pos + 11, count - 2
+            else:
+                text += table[int(bits[pos:pos + 6], 2)]
+                count = 0
     else:
         text = f"<mode {mode:04b} not handled>"
     return level, mask, text
 
 
-for name, want_const in (("QR_LIGHTNING", "BTC_LIGHTNING"), ("QR_BITCOIN", "BTC_MAINNET")):
-    want = re.search(rf'{want_const}: &str = "([^"]+)"', src).group(1)
+for name, want_const in (("QR_PROMPTPAY", "PROMPTPAY_PAYLOAD"), ("QR_LIGHTNING", "BTC_LIGHTNING"), ("QR_BITCOIN", "BTC_MAINNET")):
+    want = re.search(rf'{want_const}: &str =\s*"([^"]+)"', src).group(1)
     level, mask, got = decode(matrix(name))
     print(f"{name}: EC {level}, mask {mask}, decodes to: {got!r}")
     print(f"  address in code: {want!r}")
@@ -159,7 +170,7 @@ def codewords(m):
     return ec, [int("".join(map(str, stream[i:i + 8])), 2) for i in range(0, len(stream) - 7, 8)]
 
 
-for name in ("QR_LIGHTNING", "QR_BITCOIN"):
+for name in ("QR_PROMPTPAY", "QR_LIGHTNING", "QR_BITCOIN"):
     ec, words = codewords(matrix(name))
     level, blocks = V4[ec]
     counts = [d for _, d in blocks]

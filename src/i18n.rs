@@ -633,8 +633,9 @@ texts! {
     AboutVersion => "RightType {v}", "RightType {v}";
     HeadSponsor => "Support RightType", "สนับสนุน RightType";
     SponsorFreeHead => "Free and open source", "แอปนี้ฟรีและเปิดซอร์ส";
-    SponsorFreeSub => "If this tool helps your workflow, feel free to support a coffee. Every feature remains 100% free as always.", "หาก RightType ช่วยให้คุณทำงานสะดวกขึ้น สามารถร่วมสนับสนุนค่ากาแฟได้ตามสะดวก โดยทุกฟีเจอร์ใช้งานฟรี 100% เสมอ";
+    SponsorFreeSub => "Support a coffee, or contribute on GitHub. Every feature stays 100% free.", "ร่วมสนับสนุนค่ากาแฟ หรือร่วมพัฒนาบน GitHub ได้ตามสะดวก ทุกฟีเจอร์ใช้งานฟรี 100% เสมอ";
     SponsorChannelHead => "Support options", "ช่องทางสนับสนุน";
+    SponsorPpDesc => "PromptPay QR · scan with any Thai banking app", "PromptPay QR · สแกนด้วยแอปธนาคารไทยได้ทุกธนาคาร";
     SponsorLnDesc => "Lightning Network · small tips, instant, low fee", "Lightning Network · ทิปเล็กน้อย โอนไว ค่าธรรมเนียมต่ำ";
     SponsorBtcDesc => "Bitcoin on-chain · for larger amounts", "Bitcoin on-chain · สำหรับยอดใหญ่";
     SponsorQrNote => "QR generated locally. App never connects and does not check balances.", "QR สร้างในเครื่อง RightType ไม่ต่อเน็ตและไม่เช็คยอดเงิน";
