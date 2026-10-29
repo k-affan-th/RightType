@@ -74,10 +74,11 @@ this?* Result: `Detected { language: Language, table: TableId }` or `None`.
 - `english_variant_of` recognises Dvorak and Colemak by their layout files
   (US Dvorak `KBDDV`, Colemak installed as a custom layout), same registry
   read the Thai side uses. Layouts not identified are `None` (stay off).
-- Other countries: English keyboards whose key positions equal US or UK are
-  mapped to those tables (Ireland follows UK; India, Singapore, Philippines
-  and similar follow US). Keyboards with different key positions (Canadian
-  French, German, French, etc.) stay unsupported and are listed as such.
+- Other countries: decided by Windows' layout file, not a country list. An
+  English keyboard whose layout file is the US one (`KBDUS`) or the UK one
+  (`KBDUK`) uses that table, whatever its country. Keyboards with different
+  key positions (Canadian French, German, French, Irish, etc.) stay
+  unsupported and are listed as such.
 - **Verification before claiming support.** Every place that assumes
   "typed character = US key" is audited for Dvorak/Colemak: key→char
   reading in `hook.rs`, character injection, ghost/predict, hotkey fix.
