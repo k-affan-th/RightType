@@ -65,8 +65,8 @@ fn on_mta<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T
 }
 
 fn packaged_is_enabled() -> bool {
-    use windows::ApplicationModel::{StartupTask, StartupTaskState};
     use windows::core::HSTRING;
+    use windows::ApplicationModel::{StartupTask, StartupTaskState};
     on_mta(|| {
         let task = StartupTask::GetAsync(&HSTRING::from(TASK_ID))?.get()?;
         let state = task.State()?;
@@ -79,8 +79,8 @@ fn packaged_is_enabled() -> bool {
 }
 
 fn packaged_set_enabled(on: bool) {
-    use windows::ApplicationModel::StartupTask;
     use windows::core::HSTRING;
+    use windows::ApplicationModel::StartupTask;
     // If the user turned it off in Settings > Apps > Startup, Windows refuses
     // RequestEnable; that is their choice, so ignore the result.
     let _ = on_mta(move || {
