@@ -36,6 +36,7 @@ mod fixer;
 mod focus;
 #[cfg(feature = "winos")]
 mod habits;
+#[cfg(feature = "winos")]
 mod health;
 #[cfg(feature = "winos")]
 mod hook;
