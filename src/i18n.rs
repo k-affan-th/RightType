@@ -146,7 +146,7 @@ texts! {
     CapsModeTap => "Tap switches", "แตะสลับ";
     CapsModeDisabled => "CapsLock off", "ปิดแคปส์";
     RowCapsMode => "CapsLock key", "ปุ่ม CapsLock";
-    SubCapsMode => "Tap switches language, hold types CAPS.", "แตะสลับภาษา กดค้างพิมพ์ตัวใหญ่";
+    SubCapsMode => "What a tap and a hold of Caps do.", "แตะและกดค้างปุ่ม Caps ทำอะไร";
     RowCapsHold => "CapsLock hold time", "เวลากดค้าง CapsLock";
     SubCapsHold => "How long to hold for CAPS.", "กดค้างนานแค่ไหนถึงเป็นตัวใหญ่";
     HoldShort => "0.3 s", "0.3 วิ";
