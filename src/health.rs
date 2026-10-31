@@ -224,17 +224,42 @@ fn switch_hotkey() -> String {
     "1".into()
 }
 
+/// Which keys Windows switches the input language with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowsSwitchKey {
+    AltShift,
+    CtrlShift,
+    None,
+    Grave,
+}
+
+/// The registry value ("1" Alt+Shift, "2" Ctrl+Shift, "3" none, "4" grave);
+/// anything else is Windows' default, Alt+Shift.
+pub fn parse_switch_key(v: &str) -> WindowsSwitchKey {
+    match v.trim() {
+        "2" => WindowsSwitchKey::CtrlShift,
+        "3" => WindowsSwitchKey::None,
+        "4" => WindowsSwitchKey::Grave,
+        _ => WindowsSwitchKey::AltShift,
+    }
+}
+
+/// Windows' language switch key as set now.
+pub fn windows_switch_key() -> WindowsSwitchKey {
+    parse_switch_key(&switch_hotkey())
+}
+
 fn switch_keys() -> Check {
-    match switch_hotkey().trim() {
-        "2" => Check {
+    match windows_switch_key() {
+        WindowsSwitchKey::CtrlShift => Check {
             title: T::HealthSwitch,
             ok: false,
             status: tr(T::HealthSwitchCtrlShift).to_string(),
             fix: Some((T::HealthUseAltShift, Fix::AltShift)),
         },
-        "3" => ok(T::HealthSwitch, tr(T::HealthSwitchNone).to_string()),
-        "4" => ok(T::HealthSwitch, tr(T::HealthSwitchGrave).to_string()),
-        _ => ok(T::HealthSwitch, "Alt+Shift".to_string()),
+        WindowsSwitchKey::None => ok(T::HealthSwitch, tr(T::HealthSwitchNone).to_string()),
+        WindowsSwitchKey::Grave => ok(T::HealthSwitch, tr(T::HealthSwitchGrave).to_string()),
+        WindowsSwitchKey::AltShift => ok(T::HealthSwitch, "Alt+Shift".to_string()),
     }
 }
 
@@ -423,5 +448,19 @@ fn set_reg_string(key: &str, name: &str, value: &str) {
             Some(data.as_ptr().cast()),
             (data.len() * 2) as u32,
         );
+    }
+}
+
+#[cfg(test)]
+mod switch_key_tests {
+    use super::*;
+
+    #[test]
+    fn parse_switch_key_maps_registry_values() {
+        assert_eq!(parse_switch_key("1"), WindowsSwitchKey::AltShift);
+        assert_eq!(parse_switch_key("2"), WindowsSwitchKey::CtrlShift);
+        assert_eq!(parse_switch_key("3"), WindowsSwitchKey::None);
+        assert_eq!(parse_switch_key(" 4 "), WindowsSwitchKey::Grave);
+        assert_eq!(parse_switch_key("x"), WindowsSwitchKey::AltShift);
     }
 }

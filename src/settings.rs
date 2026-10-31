@@ -218,7 +218,8 @@ const KB_PICK_Y: i32 = 98;
 const KB_TYPING_Y: i32 = 246;
 /// Taller than the General page's rows: a two-line description needs the room.
 const KB_ROW_H: i32 = 72;
-const KB_KEYS_Y: i32 = KB_TYPING_Y + 7 * KB_ROW_H + 8 + 56;
+const KB_SWITCH_Y: i32 = KB_TYPING_Y + 5 * KB_ROW_H + 8 + 56;
+const KB_KEYS_Y: i32 = KB_SWITCH_Y + 5 * KB_ROW_H + 8 + 56;
 const KB_DEV_Y: i32 = KB_KEYS_Y + 3 * KB_ROW_H + 8 + 56;
 const KB_SHOW_Y: i32 = KB_DEV_Y + 2 * KB_ROW_H + 8 + 56;
 const KB_CARET_Y: i32 = KB_SHOW_Y + 2 * KB_ROW_H + 8 + 56;
@@ -229,6 +230,8 @@ const HEALTH_Y: i32 = 294;
 const TOOLS_HEIGHT: i32 = HEALTH_Y + crate::health::COUNT as i32 * ROW_H + 8 + 24;
 /// The segment buttons at the right of a Keyboard-page row.
 const KB_SEG_W: i32 = 66;
+/// Wider ones for the CapsLock mode, whose labels are longer.
+const KB_CAPS_SEG_W: i32 = 92;
 
 /// The label of each hotkey action.
 pub fn action_label(action: Action) -> T {
@@ -295,6 +298,13 @@ struct Ids {
     kb_complete: u16,
     kb_grave: u16,
     kb_guard: u16,
+    /// CapsLock mode and hold time: three choices each.
+    kb_caps_mode: [u16; 3],
+    kb_caps_hold: [u16; 3],
+    /// Windows' switch key line, and the warning + button for the grave key.
+    kb_win_key: u16,
+    kb_win_warn: u16,
+    kb_win_fix: u16,
     kb_accents: u16,
     kb_shortcuts: u16,
     kb_ctrl_hold: u16,
@@ -761,52 +771,18 @@ fn open_on(page: u8) {
         p.surface,
         k,
     );
-    let kb_grave = s.toggle_icon(
-        tr(T::RowGrave),
-        tr(T::SubGraveShort),
-        icons::LANGUAGE_SWITCH,
-        kb_row(KB_TYPING_Y, 2),
-        p.surface,
-        k,
-    );
-    s.info_after(
-        tr(T::InfoMore),
-        tr(T::SubGrave),
-        kb_row(KB_TYPING_Y, 2),
-        true,
-        tr(T::RowGrave),
-        p.surface,
-        k,
-    );
-    let kb_guard = s.toggle_icon(
-        tr(T::RowGuardSwitch),
-        tr(T::SubGuardSwitchShort),
-        icons::UNDO,
-        kb_row(KB_TYPING_Y, 3),
-        p.surface,
-        k,
-    );
-    s.info_after(
-        tr(T::InfoMore),
-        tr(T::SubGuardSwitch),
-        kb_row(KB_TYPING_Y, 3),
-        true,
-        tr(T::RowGuardSwitch),
-        p.surface,
-        k,
-    );
     let kb_accents = s.toggle_icon(
         tr(T::RowHoldAccents),
         tr(T::SubHoldAccentsShort),
         icons::HOLD_KEY,
-        kb_row(KB_TYPING_Y, 4),
+        kb_row(KB_TYPING_Y, 2),
         p.surface,
         k,
     );
     s.info_after(
         tr(T::InfoMore),
         tr(T::SubHoldAccents),
-        kb_row(KB_TYPING_Y, 4),
+        kb_row(KB_TYPING_Y, 2),
         true,
         tr(T::RowHoldAccents),
         p.surface,
@@ -816,14 +792,14 @@ fn open_on(page: u8) {
         tr(T::RowShortcutsEnglish),
         tr(T::SubShortcutsEnglishShort),
         icons::SHORTCUTS,
-        kb_row(KB_TYPING_Y, 5),
+        kb_row(KB_TYPING_Y, 3),
         p.surface,
         k,
     );
     s.info_after(
         tr(T::InfoMore),
         tr(T::SubShortcutsEnglish),
-        kb_row(KB_TYPING_Y, 5),
+        kb_row(KB_TYPING_Y, 3),
         true,
         tr(T::RowShortcutsEnglish),
         p.surface,
@@ -833,16 +809,135 @@ fn open_on(page: u8) {
         tr(T::RowCtrlHold),
         tr(T::SubCtrlHoldShort),
         icons::KEYBOARD,
-        kb_row(KB_TYPING_Y, 6),
+        kb_row(KB_TYPING_Y, 4),
         p.surface,
         k,
     );
     s.info_after(
         tr(T::InfoMore),
         tr(T::SubCtrlHold),
-        kb_row(KB_TYPING_Y, 6),
+        kb_row(KB_TYPING_Y, 4),
         true,
         tr(T::RowCtrlHold),
+        p.surface,
+        k,
+    );
+    // A row with three choices: title and description left, the choices
+    // right where a toggle's switch would be.
+    let guard_row = |card: i32, i: i32, seg_w: i32, title: T, sub: T, labels: [T; 3]| -> [u16; 3] {
+        let top = card + 4 + i * KB_ROW_H;
+        let text_w = CW - 40 - 3 * seg_w - 16 - 44;
+        s.label(
+            tr(title),
+            TextStyle::Body,
+            (X0 + 20 + 44, top + 12, text_w, 22),
+            p.surface,
+            k,
+        );
+        s.label(
+            tr(sub),
+            TextStyle::Small,
+            (X0 + 20 + 44, top + 34, text_w, 36),
+            p.surface,
+            k,
+        );
+        let x = X0 + CW - 20 - 3 * seg_w;
+        labels
+            .iter()
+            .enumerate()
+            .map(|(j, label)| {
+                s.segment(
+                    tr(*label),
+                    j == 0,
+                    (x + j as i32 * seg_w, top + 18, seg_w, 32),
+                    p.inset,
+                    k,
+                )
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap_or([0; 3])
+    };
+    s.label(
+        tr(T::HeadSwitching),
+        TextStyle::Section(icons::LANGUAGE_SWITCH),
+        (X0, KB_SWITCH_Y - 28, CW, 20),
+        p.bg,
+        k,
+    );
+    let kb_grave = s.toggle_icon(
+        tr(T::RowGrave),
+        tr(T::SubGraveShort),
+        icons::LANGUAGE_SWITCH,
+        kb_row(KB_SWITCH_Y, 0),
+        p.surface,
+        k,
+    );
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubGrave),
+        kb_row(KB_SWITCH_Y, 0),
+        true,
+        tr(T::RowGrave),
+        p.surface,
+        k,
+    );
+    let kb_guard = s.toggle_icon(
+        tr(T::RowGuardSwitch),
+        tr(T::SubGuardSwitchShort),
+        icons::UNDO,
+        kb_row(KB_SWITCH_Y, 1),
+        p.surface,
+        k,
+    );
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubGuardSwitch),
+        kb_row(KB_SWITCH_Y, 1),
+        true,
+        tr(T::RowGuardSwitch),
+        p.surface,
+        k,
+    );
+    let kb_caps_mode = guard_row(
+        KB_SWITCH_Y,
+        2,
+        KB_CAPS_SEG_W,
+        T::RowCapsMode,
+        T::SubCapsMode,
+        [T::CapsModeOff, T::CapsModeTap, T::CapsModeDisabled],
+    );
+    let kb_caps_hold = guard_row(
+        KB_SWITCH_Y,
+        3,
+        KB_SEG_W,
+        T::RowCapsHold,
+        T::SubCapsHold,
+        [T::HoldShort, T::HoldMedium, T::HoldLong],
+    );
+    // Windows' own switch key, and (only for the grave key, which this app
+    // types) a warning with the fix.
+    let win_top = KB_SWITCH_Y + 4 + 4 * KB_ROW_H;
+    let win_btn_w = 150;
+    let win_text_w = CW - 40 - 44 - win_btn_w - 16;
+    let kb_win_key = s.label(
+        "",
+        TextStyle::Body,
+        (X0 + 20 + 44, win_top + 12, win_text_w, 22),
+        p.surface,
+        k,
+    );
+    let kb_win_warn = s.label(
+        tr(T::WarnSwitchGrave),
+        TextStyle::Small,
+        (X0 + 20 + 44, win_top + 34, win_text_w, 30),
+        p.surface,
+        k,
+    );
+    let kb_win_fix = s.button(
+        tr(T::BtnUseAltShift),
+        false,
+        (X0 + CW - 20 - win_btn_w, win_top + 18, win_btn_w, 32),
         p.surface,
         k,
     );
@@ -870,44 +965,22 @@ fn open_on(page: u8) {
         p.surface,
         k,
     );
-    // A row with three choices: title and description left, the choices
-    // right where a toggle's switch would be.
-    let guard_row = |i: i32, title: T, sub: T, last: T| -> [u16; 3] {
-        let top = KB_KEYS_Y + 4 + i * KB_ROW_H;
-        let text_w = CW - 40 - 3 * KB_SEG_W - 16 - 44;
-        s.label(
-            tr(title),
-            TextStyle::Body,
-            (X0 + 20 + 44, top + 12, text_w, 22),
-            p.surface,
-            k,
-        );
-        s.label(
-            tr(sub),
-            TextStyle::Small,
-            (X0 + 20 + 44, top + 34, text_w, 30),
-            p.surface,
-            k,
-        );
-        let x = X0 + CW - 20 - 3 * KB_SEG_W;
-        [T::GuardOff, T::GuardWarn, last]
-            .iter()
-            .enumerate()
-            .map(|(j, label)| {
-                s.segment(
-                    tr(*label),
-                    j == 0,
-                    (x + j as i32 * KB_SEG_W, top + 18, KB_SEG_W, 32),
-                    p.inset,
-                    k,
-                )
-            })
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap_or([0; 3])
-    };
-    let kb_numlock = guard_row(1, T::RowNumLock, T::SubNumLock, T::GuardFix);
-    let kb_insert = guard_row(2, T::RowInsertKey, T::SubInsertKey, T::GuardBlock);
+    let kb_numlock = guard_row(
+        KB_KEYS_Y,
+        1,
+        KB_SEG_W,
+        T::RowNumLock,
+        T::SubNumLock,
+        [T::GuardOff, T::GuardWarn, T::GuardFix],
+    );
+    let kb_insert = guard_row(
+        KB_KEYS_Y,
+        2,
+        KB_SEG_W,
+        T::RowInsertKey,
+        T::SubInsertKey,
+        [T::GuardOff, T::GuardWarn, T::GuardBlock],
+    );
     s.label(
         tr(T::HeadDevices),
         TextStyle::Section(icons::SCANNER),
@@ -1716,6 +1789,11 @@ fn open_on(page: u8) {
         kb_complete,
         kb_grave,
         kb_guard,
+        kb_caps_mode,
+        kb_caps_hold,
+        kb_win_key,
+        kb_win_warn,
+        kb_win_fix,
         kb_accents,
         kb_shortcuts,
         kb_ctrl_hold,
@@ -1786,6 +1864,7 @@ fn open_on(page: u8) {
         win.surface.set_checked(win.ids.nav[i], true);
     }
     win.surface.show_page(page);
+    sync_switch(&win);
     if page == PAGE_TOOLS {
         fill_health(&win);
     }
@@ -1910,6 +1989,7 @@ fn sync(win: &SettingsWindow) {
     for (j, id) in ids.kb_insert.iter().enumerate() {
         s.set_checked(*id, KEY_GUARDS[j] == hook::insert_mode());
     }
+    sync_switch(win);
     s.set_text(
         ids.folder_label,
         &match learn::folder() {
@@ -1976,6 +2056,7 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
             s.set_checked(btn, idx == i);
         }
         s.show_page(NAV[i].1);
+        sync_switch(win);
         if NAV[i].1 == PAGE_TOOLS {
             fill_health(win);
         }
@@ -2154,6 +2235,18 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
     } else if id == ids.kb_password_tag {
         crate::pwhint::set_enabled(s.checked(id));
         config::persist();
+    } else if let Some(j) = ids.kb_caps_mode.iter().position(|&b| b == id) {
+        hook::set_caps_mode(CAPS_MODES[j]);
+        config::persist();
+        sync_switch(win);
+    } else if let Some(j) = ids.kb_caps_hold.iter().position(|&b| b == id) {
+        hook::set_caps_hold_ms(HOLD_PRESETS_MS[j]);
+        config::persist();
+    } else if id == ids.kb_win_fix {
+        if confirm_switch_key(win) {
+            crate::health::apply(&crate::health::Fix::AltShift);
+        }
+        sync_switch(win);
     } else if let Some(j) = ids.kb_numlock.iter().position(|&b| b == id) {
         hook::set_numlock_mode(KEY_GUARDS[j]);
         config::persist();
@@ -2499,6 +2592,82 @@ fn selected_app(win: &SettingsWindow) -> Option<AppRow> {
 }
 
 /// Show the selected app's mode on the mode buttons.
+/// The CapsLock modes, in the order of their segments.
+const CAPS_MODES: [righttype::capskey::CapsMode; 3] = [
+    righttype::capskey::CapsMode::Off,
+    righttype::capskey::CapsMode::TapSwitches,
+    righttype::capskey::CapsMode::CapsDisabled,
+];
+/// The hold times offered, in ms, in the order of their segments.
+const HOLD_PRESETS_MS: [u32; 3] = [300, 500, 800];
+
+/// The segment closest to a stored hold time (any value 300-1000 is valid).
+fn hold_preset(ms: u32) -> usize {
+    (0..HOLD_PRESETS_MS.len())
+        .min_by_key(|&i| HOLD_PRESETS_MS[i].abs_diff(ms))
+        .unwrap_or(1)
+}
+
+/// The grave key warning is only for a Windows switch key this app now types.
+fn show_switch_warning(key: crate::health::WindowsSwitchKey, grave_types: bool) -> bool {
+    key == crate::health::WindowsSwitchKey::Grave && grave_types
+}
+
+fn switch_key_name(key: crate::health::WindowsSwitchKey) -> &'static str {
+    use crate::health::WindowsSwitchKey as K;
+    match key {
+        K::AltShift => "Alt+Shift",
+        K::CtrlShift => "Ctrl+Shift",
+        K::None => tr(T::SwitchKeyNone),
+        K::Grave => tr(T::SwitchKeyGrave),
+    }
+}
+
+/// The "Switching language" card's CapsLock choices and Windows line. A page
+/// change shows every control again, so this also runs after one.
+fn sync_switch(win: &SettingsWindow) {
+    let s = &win.surface;
+    let ids = &win.ids;
+    let mode = hook::caps_mode();
+    for (j, id) in ids.kb_caps_mode.iter().enumerate() {
+        s.set_checked(*id, CAPS_MODES[j] == mode);
+    }
+    let hold = hold_preset(hook::caps_hold_ms());
+    for (j, id) in ids.kb_caps_hold.iter().enumerate() {
+        s.set_checked(*id, j == hold);
+        s.set_enabled(*id, mode != righttype::capskey::CapsMode::Off);
+    }
+    let key = crate::health::windows_switch_key();
+    s.set_text(
+        ids.kb_win_key,
+        &trf(T::RowWindowsSwitch, &[("key", switch_key_name(key))]),
+    );
+    let warn = show_switch_warning(key, hook::grave_types());
+    s.set_shown(ids.kb_win_warn, warn && s.page() == PAGE_KEYBOARD);
+    s.set_shown(ids.kb_win_fix, warn && s.page() == PAGE_KEYBOARD);
+}
+
+/// Ask before changing Windows' language switch key (a per-PC setting).
+fn confirm_switch_key(win: &SettingsWindow) -> bool {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        MessageBoxW, IDYES, MB_DEFBUTTON2, MB_ICONQUESTION, MB_YESNO,
+    };
+    let text: Vec<u16> = format!("{}\0", tr(T::ConfirmSwitchKey))
+        .encode_utf16()
+        .collect();
+    let title: Vec<u16> = "RightType\0".encode_utf16().collect();
+    let r = unsafe {
+        MessageBoxW(
+            win.surface.hwnd,
+            PCWSTR(text.as_ptr()),
+            PCWSTR(title.as_ptr()),
+            MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2,
+        )
+    };
+    r == IDYES
+}
+
 fn sync_app_choice(win: &SettingsWindow) {
     let row = selected_app(win);
     for (i, id) in win.ids.app_seg.iter().enumerate() {
@@ -3058,6 +3227,7 @@ fn go_to(win: &SettingsWindow, page: u8) {
         win.surface.set_checked(*nav, NAV[i].1 == page);
     }
     win.surface.show_page(page);
+    sync_switch(win);
 }
 
 fn finish(win: &Rc<SettingsWindow>) {
@@ -3125,9 +3295,13 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             // The page scrolls: everything moves up by the scroll.
             let dy = ui::page_scroll();
             card(g, rect(X0, KB_PICK_Y - dy, CW, 100));
-            card(g, rect(X0, KB_TYPING_Y - dy, CW, 7 * KB_ROW_H + 8));
-            for i in 1..7 {
+            card(g, rect(X0, KB_TYPING_Y - dy, CW, 5 * KB_ROW_H + 8));
+            for i in 1..5 {
                 divider(hdc, X0 + 16, KB_TYPING_Y + i * KB_ROW_H + 2 - dy, CW - 32);
+            }
+            card(g, rect(X0, KB_SWITCH_Y - dy, CW, 5 * KB_ROW_H + 8));
+            for i in 1..5 {
+                divider(hdc, X0 + 16, KB_SWITCH_Y + i * KB_ROW_H + 2 - dy, CW - 32);
             }
             card(g, rect(X0, KB_KEYS_Y - dy, CW, 3 * KB_ROW_H + 8));
             card(g, rect(X0, KB_DEV_Y - dy, CW, 2 * KB_ROW_H + 8));
@@ -3139,24 +3313,31 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             divider(hdc, X0 + 16, KB_CARET_Y + 2 * KB_ROW_H + 2 - dy, CW - 32);
             for i in 1..3 {
                 divider(hdc, X0 + 16, KB_KEYS_Y + i * KB_ROW_H + 2 - dy, CW - 32);
-                let icon = [icons::NUMPAD, icons::INSERT_KEY][i as usize - 1];
+            }
+            // Rows with an icon tile at the left; the three-choice ones also
+            // have a track behind their choices.
+            let tiled = [
+                (KB_KEYS_Y, 1, icons::NUMPAD, KB_SEG_W),
+                (KB_KEYS_Y, 2, icons::INSERT_KEY, KB_SEG_W),
+                (KB_SWITCH_Y, 2, icons::LANGUAGE_SWITCH, KB_CAPS_SEG_W),
+                (KB_SWITCH_Y, 3, icons::HOLD_KEY, KB_SEG_W),
+                (KB_SWITCH_Y, 4, icons::KEYBOARD, 0),
+            ];
+            for (card_y, i, icon, seg_w) in tiled {
                 ui::icon_tile(
                     g,
                     hdc,
-                    rect(X0 + 16, KB_KEYS_Y + 4 + i * KB_ROW_H + 18 - dy, 32, 32),
+                    rect(X0 + 16, card_y + 4 + i * KB_ROW_H + 18 - dy, 32, 32),
                     icon,
                     false,
                 );
-                let x = X0 + CW - 24 - 3 * KB_SEG_W;
-                track(
-                    g,
-                    rect(
-                        x,
-                        KB_KEYS_Y + 4 + i * KB_ROW_H + 14 - dy,
-                        3 * KB_SEG_W + 8,
-                        40,
-                    ),
-                );
+                if seg_w > 0 {
+                    let x = X0 + CW - 24 - 3 * seg_w;
+                    track(
+                        g,
+                        rect(x, card_y + 4 + i * KB_ROW_H + 14 - dy, 3 * seg_w + 8, 40),
+                    );
+                }
             }
         }
         PAGE_HOTKEYS => {
@@ -3235,5 +3416,31 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             field(g, addr_box);
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod switch_card_tests {
+    use super::*;
+    use crate::health::WindowsSwitchKey as K;
+
+    #[test]
+    fn warning_only_for_grave_that_this_app_types() {
+        assert!(show_switch_warning(K::Grave, true));
+        assert!(!show_switch_warning(K::Grave, false));
+        for k in [K::AltShift, K::CtrlShift, K::None] {
+            assert!(!show_switch_warning(k, true));
+        }
+    }
+
+    #[test]
+    fn hold_time_rounds_to_the_nearest_preset() {
+        assert_eq!(hold_preset(300), 0);
+        assert_eq!(hold_preset(380), 0);
+        assert_eq!(hold_preset(500), 1);
+        assert_eq!(hold_preset(640), 1);
+        assert_eq!(hold_preset(700), 2);
+        assert_eq!(hold_preset(800), 2);
+        assert_eq!(hold_preset(1000), 2);
     }
 }
