@@ -74,6 +74,22 @@ with a hotkey:
 
 Every hotkey can be changed in Settings → Hotkeys (click **Change**, press the new keys).
 
+**CapsLock as the language key.** Settings → Keyboard → *Switching language* → *CapsLock key*:
+
+| Setting | Tap | Hold |
+| --- | --- | --- |
+| **Off** (default) | plain CapsLock | plain CapsLock |
+| **Tap switches** | switches Thai / English | after the hold time (0.3, 0.5 or 0.8 s; default 0.5 s): real CapsLock, with a `CAPS` badge at the text cursor |
+| **CapsLock off** | switches Thai / English | does nothing, so CapsLock is never turned on |
+
+- Pressing another key while CapsLock is down (fast `CapsLock`+letter) switches the language first, and the letter comes out in the **new** language. The word after such a switch is left alone by Auto correction.
+- It works in password fields too.
+- Holding `Ctrl`, `Alt` or `Win` with CapsLock is never a language switch: those stay the hotkeys above (`Ctrl`+`CapsLock` cycles the mode, `Ctrl`+`Alt`+`CapsLock` turns RightType off/on, …).
+- CapsLock stays plain CapsLock in full-screen and game contexts, in apps on the safety list, in apps where RightType is off, and while RightType is switched off.
+- Elevated (administrator) windows, the secure desktop (UAC, sign-in) and remote desktop sessions are not seen by RightType: CapsLock acts as native CapsLock there.
+- Settings → Keyboard also shows Windows' own language switch key. If Windows uses the grave key (`` ` ``) and that key still types its character, a warning offers **Use Alt+Shift**; after a Yes/No confirmation it changes Windows' setting. That is a per-machine registry write and is not synced.
+- `caps_mode` (`off` / `tap` / `disabled`) and `caps_hold_ms` (300–1000) in `config.toml` sync like other settings. The old `capslock_switches_language` key is read once and migrated, never written back; older builds ignore `caps_mode` (they read the old key), so there CapsLock stays plain. The command palette entry "CapsLock switches Thai/English" still works: it turns it off, or on as Tap switches.
+
 **Auto mode** — direction-aware, built for how each language is actually written:
 
 - **EN → TH (instant)**: the moment your in-flight keystrokes form a known Thai

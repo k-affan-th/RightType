@@ -13,9 +13,22 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   rules are tuned for US) are listed in the guide.
 - A table of supported keyboards in the guide and README, including which ones
   RightType stays off for.
+- Settings → Keyboard, *Switching language*: choose what the CapsLock key does
+  (Off, Tap switches, or CapsLock off) and the hold time (0.3, 0.5 or 0.8 s).
+  A hold gives real CapsLock with a `CAPS` badge at the text cursor. The card
+  also shows Windows' own language switch key, and when Windows uses the grave
+  key and that key types its character, warns and offers Alt+Shift after a
+  confirmation. Stored as `caps_mode` and `caps_hold_ms`; the old
+  `capslock_switches_language` key is migrated and no longer written, so older
+  builds see CapsLock as plain CapsLock. On a sync folder shared with an older
+  build, that build writes the old CapsLock setting and drops `caps_mode`, so
+  each sync from it resets the newer PC to Off and the default hold time.
 
 ### Changed
 
+- CapsLock as the language key is now a three-way choice instead of a switch
+  (the palette entry turns it off, or on as Tap switches). Ctrl, Alt or Win held with
+  CapsLock is never a language switch.
 - The Thai keyboard (Kedmanee, Pattachote, Manoonchai) is detected from the
   keyboard in use, so Settings → Keyboard no longer asks for it; it shows what
   was detected. The one used last is remembered for the next start. Switching
@@ -24,6 +37,11 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 
+- CapsLock tapped with a letter at once (`CapsLock`+letter) now types the letter
+  in the new language, and Auto correction leaves that word alone.
+- CapsLock switches the language in password fields too.
+- CapsLock no longer gets stuck half-pressed when the focus moves while it is
+  down; the hold now fires on time and shows the `CAPS` badge.
 - The list at the text cursor (Shift twice), the app's shortcut list and the list
   for a held key now close when you click anywhere outside them. They never take
   the keyboard focus, so a click elsewhere in the same window used to leave one
