@@ -233,10 +233,71 @@ fn caps_pressed() -> bool {
 }
 
 /// Forget the press in progress (focus moved, or CapsLock went somewhere
-/// the machine is not used) and stop its timer.
+/// the machine is not used) and stop its timer. The held flag goes too, so
+/// the next down is a fresh press even if this press's release is never
+/// seen.
 fn caps_reset() {
     caps_timer_kill();
     CAPS.with(|c| c.borrow_mut().focus_changed());
+    CAPS_HELD.with(|h| h.set(false));
+}
+
+/// A CapsLock down is an auto-repeat only while CapsLock is held and the
+/// machine has a press going: a held flag left over from a release the hook
+/// never saw (UAC, another hook) must not make the next tap a "repeat".
+fn caps_is_repeat(was_held: bool, down: bool, machine_pressed: bool) -> bool {
+    down && was_held && machine_pressed
+}
+
+/// A CapsLock release the hook skips (it came while RightType's own keys
+/// were being sent, so it reads as ours) must still end a press of the
+/// machine's: left Down, the hold timer would turn CapsLock on for what was
+/// a tap. Not our own tagged keys (`toggle_capslock`).
+///
+/// (`GetAsyncKeyState` cannot tell whether CapsLock is still held: a key
+/// the hook swallowed never reaches that state, so a real hold reads as
+/// "up" too.)
+fn skipped_release_ends_press(vk: u16, key_up: bool, tagged: bool, machine_pressed: bool) -> bool {
+    vk == VK_CAPITAL.0 && key_up && !tagged && machine_pressed
+}
+
+/// See [`skipped_release_ends_press`]: forget the press (no switch, no
+/// CapsLock). Runs inside the hook, maybe while our `SendInput` is in
+/// progress, so it only resets state and does no input of its own.
+fn caps_release_skipped(vk: u16, key_up: bool, tagged: bool) {
+    let pressed = CAPS.with(|c| c.try_borrow().is_ok_and(|c| c.is_pressed()));
+    if skipped_release_ends_press(vk, key_up, tagged, pressed) {
+        e2e_trace("CapsLock release came while sending keys: press forgotten".into());
+        caps_timer_kill();
+        CAPS.with(|c| {
+            if let Ok(mut c) = c.try_borrow_mut() {
+                c.focus_changed();
+            }
+        });
+        CAPS_HELD.with(|h| h.set(false));
+    }
+}
+
+/// Whether CapsLock is the language key, from what is true now. Ctrl, Alt
+/// or Win held makes it a chord, never a language switch (the hotkeys are
+/// matched before this).
+fn caps_gate(
+    enabled: bool,
+    mode_on: bool,
+    sensitive_app: bool,
+    full_screen: bool,
+    on_in_app: bool,
+    chord_modifier_held: bool,
+) -> bool {
+    enabled && mode_on && !sensitive_app && !full_screen && on_in_app && !chord_modifier_held
+}
+
+/// Ctrl, Alt or a Win key is held now.
+unsafe fn chord_modifier_held() -> bool {
+    is_down(VK_CONTROL)
+        || is_down(VK_MENU)
+        || is_down(VIRTUAL_KEY(0x5B))
+        || is_down(VIRTUAL_KEY(0x5C))
 }
 
 fn caps_timer_kill() {
@@ -412,12 +473,15 @@ unsafe fn caps_replay_now(keys: Vec<(u16, bool)>) {
 /// Whether CapsLock is the language key here; otherwise it is plain
 /// CapsLock. Password fields are deliberately not excluded: switching the
 /// language there is harmless and is what the typist pressed it for.
-fn caps_machine_here() -> bool {
-    is_enabled()
-        && caps_mode() != CapsMode::Off
-        && !STATE.with(|s| s.borrow().sensitive_app)
-        && !safety::is_full_screen()
-        && mode_here().is_some()
+unsafe fn caps_machine_here() -> bool {
+    caps_gate(
+        is_enabled(),
+        caps_mode() != CapsMode::Off,
+        STATE.with(|s| s.borrow().sensitive_app),
+        safety::is_full_screen(),
+        mode_here().is_some(),
+        chord_modifier_held(),
+    )
 }
 
 /// A key other than CapsLock and the modifiers went down. While CapsLock is
@@ -436,11 +500,7 @@ unsafe fn caps_other_key(vk: u16, repeat: bool) -> bool {
     if !caps_pressed() {
         return false;
     }
-    if is_down(VK_CONTROL)
-        || is_down(VK_MENU)
-        || is_down(VIRTUAL_KEY(0x5B))
-        || is_down(VIRTUAL_KEY(0x5C))
-    {
+    if chord_modifier_held() {
         // A shortcut (Alt+Tab, Ctrl+C) during the press, not typing: the
         // press is over and the key is the app's.
         trace_note("CapsLock press ended by a shortcut");
@@ -1958,6 +2018,11 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         }
         let ours =
             kb.dwExtraInfo == INJECT_TAG || injected_ignored || INJECTING.load(Ordering::Relaxed);
+        if ours {
+            let msg = wparam.0 as u32;
+            let up = msg != WM_KEYDOWN && msg != WM_SYSKEYDOWN;
+            caps_release_skipped(kb.vkCode as u16, up, kb.dwExtraInfo == INJECT_TAG);
+        }
         if ours && wparam.0 as u32 == WM_KEYDOWN {
             e2e_trace(format!(
                 "key vk={:#x} skipped (tag={} injecting={})",
@@ -2675,11 +2740,13 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // hotkey below takes): the language-key branch starts it again if it
     // gets there.
     let caps_repeat = if vk == VK_CAPITAL.0 {
-        let was = CAPS_HELD.with(|h| h.replace(down));
-        if down && !was {
-            caps_reset();
+        let was = CAPS_HELD.with(|h| h.get());
+        let repeat = caps_is_repeat(was, down, caps_pressed());
+        if down && !repeat {
+            caps_reset(); // also clears the held flag: set again just below
         }
-        down && was
+        CAPS_HELD.with(|h| h.set(down));
+        repeat
     } else {
         false
     };
@@ -2720,6 +2787,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         if vk == VK_CAPITAL.0 && caps_pressed() {
             caps_timer_kill();
             if caps_window_moved() {
+                trace_note("CapsLock released in another window: nothing done");
+                e2e_trace(format!(
+                    "CapsLock down in {:#x}, up in {:#x}",
+                    CAPS_WINDOW.with(|w| w.get()),
+                    GetForegroundWindow().0 as isize
+                ));
                 caps_reset();
             } else {
                 let action = CAPS.with(|c| c.borrow_mut().caps_up(Instant::now()));
@@ -2996,6 +3069,9 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     if vk == VK_CAPITAL.0 && action.is_none() {
         if caps_machine_here() {
             if !caps_repeat {
+                // A context change noticed on this very key (`sync_context`)
+                // reset the machine and the held flag: the key is down.
+                CAPS_HELD.with(|h| h.set(true));
                 CAPS.with(|c| c.borrow_mut().set_hold_ms(caps_hold_ms()));
                 CAPS_WINDOW.with(|w| w.set(GetForegroundWindow().0 as isize));
                 caps_timer_start(caps_hold_ms());
@@ -5146,8 +5222,45 @@ unsafe fn foreground_layout() -> HKL {
 
 #[cfg(test)]
 mod tests {
-    use super::{replay_unscheduled, shown_converter, Mode, OwnedRun, STATE};
+    use super::{
+        caps_gate, caps_is_repeat, replay_unscheduled, shown_converter, skipped_release_ends_press,
+        Mode, OwnedRun, STATE,
+    };
     use righttype::detect::{Confidence, Detection, Evidence};
+
+    #[test]
+    fn caps_down_is_a_repeat_only_while_a_press_is_going() {
+        assert!(caps_is_repeat(true, true, true)); // held, machine pressed
+        assert!(!caps_is_repeat(false, true, true)); // first down
+        assert!(!caps_is_repeat(false, true, false));
+        // Held flag stuck from a release the hook never saw, machine idle:
+        // the down is a fresh press.
+        assert!(!caps_is_repeat(true, true, false));
+        assert!(!caps_is_repeat(true, false, true)); // a release
+    }
+
+    #[test]
+    fn a_skipped_capslock_release_ends_the_press() {
+        // A release that read as ours (sent while we were sending keys)
+        // during a press: forget it, so the hold timer does not fire.
+        assert!(skipped_release_ends_press(0x14, true, false, true));
+        // Our own tagged CapsLock (the hold's toggle) does not.
+        assert!(!skipped_release_ends_press(0x14, true, true, true));
+        assert!(!skipped_release_ends_press(0x14, false, false, true)); // a down
+        assert!(!skipped_release_ends_press(0x14, true, false, false)); // no press
+        assert!(!skipped_release_ends_press(0x4B, true, false, true)); // not Caps
+    }
+
+    #[test]
+    fn capslock_with_ctrl_alt_or_win_is_never_the_language_key() {
+        assert!(caps_gate(true, true, false, false, true, false));
+        assert!(!caps_gate(true, true, false, false, true, true)); // chord
+        assert!(!caps_gate(false, true, false, false, true, false)); // disabled
+        assert!(!caps_gate(true, false, false, false, true, false)); // mode off
+        assert!(!caps_gate(true, true, true, false, true, false)); // blocked app
+        assert!(!caps_gate(true, true, false, true, true, false)); // full screen
+        assert!(!caps_gate(true, true, false, false, false, false)); // off in app
+    }
 
     /// Without a timer the rolled-over keys come out at once, in order, and
     /// nothing stays queued (a queued key makes the hook swallow every key).

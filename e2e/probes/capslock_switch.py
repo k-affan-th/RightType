@@ -57,6 +57,8 @@ LANG_TH = 0x041E
 THAI_K = "า"  # Kedmanee `k` types า
 THAI_SHIFT_K = "ษ"  # and Shift+K ษ
 VK_SHIFT = 0x10
+VK_LWIN = 0x5B
+VK_MASK = 0xE8  # unassigned: masks a Win release
 
 HOLD_MS = 500
 
@@ -109,7 +111,8 @@ def key(vk, up, focus=None):
     if focus:
         require_focus(focus)
     scan = user32.MapVirtualKeyW(vk, 0)
-    user32.keybd_event(vk, scan, KEYEVENTF_KEYUP if up else 0, 0)
+    flags = (KEYEVENTF_KEYUP if up else 0) | (1 if vk in (0x5B, 0x5C) else 0)  # EXTENDEDKEY
+    user32.keybd_event(vk, scan, flags, 0)
     if up:
         HELD.discard(vk)
     else:
@@ -123,9 +126,14 @@ def tap(vk, focus, hold_ms=40):
 
 
 def release_all():
+    if VK_LWIN in HELD:
+        # Mask the Win release so it cannot open the Start menu.
+        user32.keybd_event(VK_MASK, 0, 0, 0)
+        user32.keybd_event(VK_MASK, 0, KEYEVENTF_KEYUP, 0)
     for vk in list(HELD):
         scan = user32.MapVirtualKeyW(vk, 0)
-        user32.keybd_event(vk, scan, KEYEVENTF_KEYUP, 0)
+        ext = 1 if vk in (0x5B, 0x5C) else 0
+        user32.keybd_event(vk, scan, KEYEVENTF_KEYUP | ext, 0)
         HELD.discard(vk)
 
 
@@ -243,6 +251,16 @@ def check(name, got, want):
     ok = got == want
     results.append((name, "PASS" if ok else "FAIL"))
     print(("PASS " if ok else "FAIL ") + name + f"  got={got!r} want={want!r}", flush=True)
+    if not ok:
+        # What RightType traced around the failure (debug e2e trace: key
+        # codes and decisions, never typed text).
+        try:
+            tail = LOG.read_text(encoding="utf-8", errors="replace").splitlines()[-30:]
+        except OSError:
+            tail = ["(log not readable)"]
+        print("  --- last lines of the RightType log ---")
+        for line in tail:
+            print("  | " + line)
 
 
 def manual(name, why):
@@ -398,6 +416,20 @@ def run_cases():
     check("Ctrl+CapsLock still cycles mode", (mode0, read_mode()), ("manual", "auto"))
     check("Ctrl+CapsLock leaves CapsLock and layout",
           (_global_caps(), lang_name(layout_of(hwnd))), (caps0, "en"))
+
+    # 4b. Win+CapsLock is never a language switch: plain CapsLock. An
+    # unassigned key (vk E8) is tapped before Win is let go, so a Win
+    # release can never open the Start menu, whatever RightType does.
+    set_lang("notepad", "en")
+    caps0 = _global_caps()
+    key(VK_LWIN, False, "notepad")
+    tap(VK_CAPITAL, "notepad", 60)
+    tap(VK_MASK, "notepad", 10)
+    key(VK_LWIN, True, "notepad")
+    time.sleep(0.5)
+    check("Win+CapsLock is plain CapsLock, no switch",
+          (_global_caps(), lang_name(layout_of(hwnd))), (1 - caps0, "en"))
+    put_caps_back_now("notepad")
 
     # 5. Ctrl+Alt+CapsLock turns RightType off; Caps is then plain CapsLock
     key(VK_CONTROL, False, "notepad")
