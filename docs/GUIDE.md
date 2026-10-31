@@ -83,7 +83,8 @@ Every hotkey can be changed in Settings → Hotkeys (click **Change**, press the
 | **CapsLock off** | switches Thai / English | does nothing, so CapsLock is never turned on |
 
 - Pressing another key while CapsLock is down (fast `CapsLock`+letter) switches the language first, and the letter comes out in the **new** language. The word after such a switch is left alone by Auto correction.
-- It works in password fields too.
+- It works in password fields too: a tap switches the language there (so a language change before typing a password never leaves capitals in it) and a hold still toggles CapsLock. No badge is shown at a password field, and RightType still neither reads nor corrects what is typed there.
+- If you already turned CapsLock into a language key with another tool (a remapping utility, the registry), keep this set to **Off**: RightType then never sees CapsLock.
 - Holding `Ctrl`, `Alt` or `Win` with CapsLock is never a language switch: those stay the hotkeys above (`Ctrl`+`CapsLock` cycles the mode, `Ctrl`+`Alt`+`CapsLock` turns RightType off/on, …).
 - CapsLock stays plain CapsLock in full-screen and game contexts, in apps on the safety list, in apps where RightType is off, and while RightType is switched off.
 - Elevated (administrator) windows, the secure desktop (UAC, sign-in) and remote desktop sessions are not seen by RightType: CapsLock acts as native CapsLock there.
