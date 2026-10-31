@@ -353,23 +353,60 @@ unsafe fn caps_replay_later(vk: u16) {
     unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
         let _ = windows::Win32::UI::WindowsAndMessaging::KillTimer(None, id);
         let keys = CAPS_REPLAY.with(|q| std::mem::take(&mut *q.borrow_mut()));
-        for (vk, shifted) in keys {
-            // The key comes out with Shift as it was when it was pressed:
-            // Shift let go meanwhile is pressed with it, Shift pressed
-            // meanwhile (the next letter's) is let go around it.
-            let shift_now = is_down(VK_SHIFT);
-            if shifted && !shift_now {
-                inject::press_chord(&[VK_SHIFT.0, vk]);
-            } else if !shifted && shift_now {
-                inject::release_keys(&[VK_SHIFT.0]);
-                inject::replay_key(vk);
-                inject::hold_again(VK_SHIFT.0);
-            } else {
-                inject::replay_key(vk);
-            }
+        caps_replay_now(keys);
+    }
+    let id = if caps_replay_timer_fails_for_test() {
+        0
+    } else {
+        windows::Win32::UI::WindowsAndMessaging::SetTimer(None, 0, CAPS_REPLAY_DELAY_MS, Some(fire))
+    };
+    // No timer (Windows out of timers): nothing would ever empty the queue,
+    // and `caps_other_key` swallows every key while it is not empty. Type
+    // the waiting keys now instead. The switch was posted ahead of them, so
+    // they still come out in the new layout (0 ms passed in the probe), in
+    // order, none lost — dropping them would lose the typed key.
+    let keys = CAPS_REPLAY.with(|q| replay_unscheduled(&mut q.borrow_mut(), id));
+    if !keys.is_empty() {
+        trace_note("CapsLock rollover: no timer, key typed at once");
+        caps_replay_now(keys);
+    }
+}
+
+/// The keys to type at once: all those waiting when no timer was started
+/// for them (`timer` is 0), none otherwise. Keeps "the queue is not empty
+/// only while a timer will empty it".
+fn replay_unscheduled(queue: &mut Vec<(u16, bool)>, timer: usize) -> Vec<(u16, bool)> {
+    if timer == 0 {
+        std::mem::take(queue)
+    } else {
+        Vec::new()
+    }
+}
+
+/// Debug e2e builds: `RIGHTTYPE_E2E_REPLAY_TIMER_FAILS` makes the replay
+/// timer "fail", to exercise the path above. Always off in release.
+fn caps_replay_timer_fails_for_test() -> bool {
+    cfg!(debug_assertions)
+        && debug_e2e_accepts_injected()
+        && std::env::var_os("RIGHTTYPE_E2E_REPLAY_TIMER_FAILS").is_some()
+}
+
+/// Type rolled-over keys again, each with Shift as it was when it was
+/// pressed: Shift let go meanwhile is pressed with it, Shift pressed
+/// meanwhile (the next letter's) is let go around it.
+unsafe fn caps_replay_now(keys: Vec<(u16, bool)>) {
+    for (vk, shifted) in keys {
+        let shift_now = is_down(VK_SHIFT);
+        if shifted && !shift_now {
+            inject::press_chord(&[VK_SHIFT.0, vk]);
+        } else if !shifted && shift_now {
+            inject::release_keys(&[VK_SHIFT.0]);
+            inject::replay_key(vk);
+            inject::hold_again(VK_SHIFT.0);
+        } else {
+            inject::replay_key(vk);
         }
     }
-    windows::Win32::UI::WindowsAndMessaging::SetTimer(None, 0, CAPS_REPLAY_DELAY_MS, Some(fire));
 }
 
 /// Whether CapsLock is the language key here; otherwise it is plain
@@ -5109,8 +5146,23 @@ unsafe fn foreground_layout() -> HKL {
 
 #[cfg(test)]
 mod tests {
-    use super::{shown_converter, Mode, OwnedRun, STATE};
+    use super::{replay_unscheduled, shown_converter, Mode, OwnedRun, STATE};
     use righttype::detect::{Confidence, Detection, Evidence};
+
+    /// Without a timer the rolled-over keys come out at once, in order, and
+    /// nothing stays queued (a queued key makes the hook swallow every key).
+    #[test]
+    fn replay_queue_without_a_timer_is_emptied_at_once() {
+        let mut q = vec![(0x4B, false), (0x4A, true)];
+        assert_eq!(
+            replay_unscheduled(&mut q, 0),
+            vec![(0x4B, false), (0x4A, true)]
+        );
+        assert!(q.is_empty());
+        let mut q = vec![(0x4B, false)];
+        assert!(replay_unscheduled(&mut q, 7).is_empty());
+        assert_eq!(q, vec![(0x4B, false)]);
+    }
 
     /// The recent words call the converter while `STATE` is borrowed for
     /// writing. It must not read `STATE` itself: it did, and the app died with
