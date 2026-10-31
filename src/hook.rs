@@ -30,6 +30,7 @@ use std::time::{Duration, Instant};
 use zeroize::Zeroize;
 
 use righttype::buffer::{Key, WordBuffer};
+use righttype::capskey::{clamp_hold_ms, CapsMode, HOLD_DEFAULT_MS};
 use righttype::diag::{self, Shape};
 use righttype::hotkeys::{Action, Chord, Hotkeys};
 use righttype::layout::{auto_convert_with_layout, LayoutId};
@@ -163,19 +164,36 @@ unsafe fn capture_key(vk: u16) -> bool {
 /// straight through and touches nothing.
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
-/// CapsLock tapped on its own switches Thai/English (opt-in, from the
-/// palette); held for half a second it toggles CapsLock as usual.
-static CAPS_SWITCHES: AtomicBool = AtomicBool::new(false);
-/// How long CapsLock must be held to act as CapsLock when it switches
-/// languages.
-const CAPS_HOLD: Duration = Duration::from_millis(500);
+/// What the CapsLock key does (see `CapsMode`), as its discriminant.
+static CAPS_MODE: AtomicU8 = AtomicU8::new(0);
+/// How long CapsLock must be held to act as CapsLock, in milliseconds.
+static CAPS_HOLD_MS: AtomicU32 = AtomicU32::new(HOLD_DEFAULT_MS);
 
-pub fn caps_switches_language() -> bool {
-    CAPS_SWITCHES.load(Ordering::Relaxed)
+pub fn caps_mode() -> CapsMode {
+    match CAPS_MODE.load(Ordering::Relaxed) {
+        1 => CapsMode::TapSwitches,
+        2 => CapsMode::CapsDisabled,
+        _ => CapsMode::Off,
+    }
 }
 
-pub fn set_caps_switches_language(on: bool) {
-    CAPS_SWITCHES.store(on, Ordering::Relaxed);
+pub fn set_caps_mode(m: CapsMode) {
+    CAPS_MODE.store(
+        match m {
+            CapsMode::Off => 0,
+            CapsMode::TapSwitches => 1,
+            CapsMode::CapsDisabled => 2,
+        },
+        Ordering::Relaxed,
+    );
+}
+
+pub fn caps_hold_ms() -> u32 {
+    CAPS_HOLD_MS.load(Ordering::Relaxed)
+}
+
+pub fn set_caps_hold_ms(ms: u32) {
+    CAPS_HOLD_MS.store(clamp_hold_ms(ms), Ordering::Relaxed);
 }
 
 thread_local! {
@@ -187,7 +205,7 @@ thread_local! {
 /// CapsLock released after its key-down was swallowed for switching: a tap
 /// switches Thai/English, a hold toggles CapsLock.
 unsafe fn caps_released(down_at: Instant) {
-    if down_at.elapsed() >= CAPS_HOLD {
+    if down_at.elapsed() >= Duration::from_millis(u64::from(caps_hold_ms())) {
         inject::toggle_capslock();
         return;
     }
@@ -2899,7 +2917,7 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         // CapsLock alone (or a chord that is not a hotkey) is a normal toggle.
         // A word is kept as if CapsLock were off and shown with its state,
         // so one typed across a toggle is left alone.
-        if vk == VK_CAPITAL.0 && caps_switches_language() && is_enabled() {
+        if vk == VK_CAPITAL.0 && caps_mode() != CapsMode::Off && is_enabled() {
             // A language key now: the release decides (tap or hold).
             if !repeat {
                 CAPS_DOWN_AT.with(|c| c.set(Some(Instant::now())));

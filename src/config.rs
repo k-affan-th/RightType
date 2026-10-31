@@ -12,6 +12,7 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 
 use crate::{hook, learn, safety};
+use righttype::capskey::{clamp_hold_ms, CapsMode, HOLD_DEFAULT_MS};
 use righttype::i18n::Lang;
 use righttype::per_app::{normalize_exe, AppMode};
 
@@ -66,9 +67,17 @@ pub struct Config {
     /// monitor. Only settable by editing this file.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub selection_via_clipboard: bool,
-    /// CapsLock tapped switches Thai/English; held, it is CapsLock.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub capslock_switches_language: bool,
+    /// What CapsLock does: `off` (default, not written), `tap` (a tap
+    /// switches Thai/English) or `disabled`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caps_mode: Option<String>,
+    /// How long CapsLock is held to act as CapsLock, in milliseconds
+    /// (300..=1000). Not written when it is the default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caps_hold_ms: Option<u32>,
+    /// Legacy: read as `tap` / `off` when `caps_mode` is absent, never written.
+    #[serde(default, skip_serializing)]
+    pub capslock_switches_language: Option<bool>,
     /// The tray icon shows TH / EN.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tray_shows_language: bool,
@@ -206,7 +215,9 @@ impl Default for Config {
             hotkeys: BTreeMap::new(),
             thai_layout: None,
             selection_via_clipboard: false,
-            capslock_switches_language: false,
+            caps_mode: None,
+            caps_hold_ms: None,
+            capslock_switches_language: None,
             tray_shows_language: false,
             restart_after_crash: true,
             fix_spelling: false,
@@ -247,6 +258,23 @@ fn config_path() -> Option<PathBuf> {
     Some(p)
 }
 
+impl Config {
+    /// The CapsLock mode: `caps_mode` wins; else the legacy boolean
+    /// (true = tap, false = off); an unknown name is `Off`.
+    pub fn caps_mode_effective(&self) -> CapsMode {
+        match (&self.caps_mode, self.capslock_switches_language) {
+            (Some(name), _) => CapsMode::from_name(name).unwrap_or(CapsMode::Off),
+            (None, Some(true)) => CapsMode::TapSwitches,
+            _ => CapsMode::Off,
+        }
+    }
+
+    /// The CapsLock hold time, clamped; 500 ms when unset.
+    pub fn caps_hold_ms_effective(&self) -> u32 {
+        clamp_hold_ms(self.caps_hold_ms.unwrap_or(HOLD_DEFAULT_MS))
+    }
+}
+
 /// Load saved settings, or defaults if the file is missing or unreadable.
 pub fn load() -> Config {
     config_path()
@@ -275,7 +303,8 @@ pub fn apply(cfg: &Config) {
     set_language(cfg.language.as_deref().and_then(Lang::from_code));
     crate::caret::set_enabled(cfg.caret_hints);
     crate::manual::set_clipboard_fallback(cfg.selection_via_clipboard);
-    hook::set_caps_switches_language(cfg.capslock_switches_language);
+    hook::set_caps_mode(cfg.caps_mode_effective());
+    hook::set_caps_hold_ms(cfg.caps_hold_ms_effective());
     crate::tray::set_shows_language(cfg.tray_shows_language);
     SYNC_SETTINGS.store(cfg.sync_settings, std::sync::atomic::Ordering::Relaxed);
     hook::set_fixes_spelling(cfg.fix_spelling);
@@ -375,7 +404,10 @@ struct Shared {
     snippets: Vec<SnippetConfig>,
     caret_hints: bool,
     fix_spelling: bool,
-    capslock_switches_language: bool,
+    caps_mode: Option<String>,
+    caps_hold_ms: Option<u32>,
+    #[serde(skip_serializing)]
+    capslock_switches_language: Option<bool>,
     language: Option<String>,
     thai_layout: Option<String>,
     #[serde(default)]
@@ -392,6 +424,8 @@ impl Shared {
             snippets: cfg.snippets.clone(),
             caret_hints: cfg.caret_hints,
             fix_spelling: cfg.fix_spelling,
+            caps_mode: cfg.caps_mode.clone(),
+            caps_hold_ms: cfg.caps_hold_ms,
             capslock_switches_language: cfg.capslock_switches_language,
             language: cfg.language.clone(),
             thai_layout: cfg.thai_layout.clone(),
@@ -407,6 +441,8 @@ impl Shared {
         cfg.snippets = self.snippets;
         cfg.caret_hints = self.caret_hints;
         cfg.fix_spelling = self.fix_spelling;
+        cfg.caps_mode = self.caps_mode;
+        cfg.caps_hold_ms = self.caps_hold_ms;
         cfg.capslock_switches_language = self.capslock_switches_language;
         cfg.language = self.language;
         cfg.thai_layout = self.thai_layout;
@@ -554,7 +590,12 @@ fn snapshot() -> Config {
             .collect(),
         caret_hints: crate::caret::is_enabled(),
         selection_via_clipboard: crate::manual::clipboard_fallback(),
-        capslock_switches_language: hook::caps_switches_language(),
+        caps_mode: match hook::caps_mode() {
+            CapsMode::Off => None,
+            m => Some(m.name().to_string()),
+        },
+        caps_hold_ms: Some(hook::caps_hold_ms()).filter(|ms| *ms != HOLD_DEFAULT_MS),
+        capslock_switches_language: None,
         tray_shows_language: crate::tray::shows_language(),
         fix_spelling: hook::fixes_spelling(),
         fix_hyphens: hook::fixes_hyphens(),
@@ -647,6 +688,99 @@ pub fn persist_async() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parse(s: &str) -> Config {
+        toml::from_str(s).unwrap()
+    }
+
+    #[test]
+    fn legacy_capslock_true_loads_as_tap() {
+        let cfg = parse(
+            "capslock_switches_language = true
+",
+        );
+        assert_eq!(cfg.caps_mode_effective(), CapsMode::TapSwitches);
+    }
+
+    #[test]
+    fn legacy_capslock_false_loads_as_off() {
+        let cfg = parse(
+            "capslock_switches_language = false
+",
+        );
+        assert_eq!(cfg.caps_mode_effective(), CapsMode::Off);
+    }
+
+    #[test]
+    fn new_caps_mode_wins_over_legacy() {
+        let cfg = parse(
+            "capslock_switches_language = true
+caps_mode = \"off\"
+",
+        );
+        assert_eq!(cfg.caps_mode_effective(), CapsMode::Off);
+    }
+
+    #[test]
+    fn unknown_caps_mode_name_falls_back_to_off() {
+        let cfg = parse(
+            "caps_mode = \"banana\"
+",
+        );
+        assert_eq!(cfg.caps_mode_effective(), CapsMode::Off);
+    }
+
+    #[test]
+    fn caps_hold_ms_is_clamped() {
+        assert_eq!(
+            parse(
+                "caps_hold_ms = 5
+"
+            )
+            .caps_hold_ms_effective(),
+            300
+        );
+        assert_eq!(
+            parse(
+                "caps_hold_ms = 99999
+"
+            )
+            .caps_hold_ms_effective(),
+            1000
+        );
+        assert_eq!(parse("").caps_hold_ms_effective(), 500);
+    }
+
+    #[test]
+    fn defaults_do_not_write_caps_keys() {
+        let out = toml::to_string(&Config::default()).unwrap();
+        assert!(!out.contains("caps_mode"));
+        assert!(!out.contains("caps_hold_ms"));
+        assert!(!out.contains("capslock_switches_language"));
+    }
+
+    #[test]
+    fn caps_mode_round_trips_through_shared_sync() {
+        let cfg = Config {
+            caps_mode: Some("tap".into()),
+            caps_hold_ms: Some(800),
+            ..Config::default()
+        };
+        let encoded = toml::to_string(&Shared::of(&cfg)).unwrap();
+        let shared: Shared = toml::from_str(&encoded).unwrap();
+        let mut other = Config::default();
+        shared.put_into(&mut other);
+        assert_eq!(other.caps_mode_effective(), CapsMode::TapSwitches);
+        assert_eq!(other.caps_hold_ms_effective(), 800);
+        let legacy: Shared = toml::from_str(
+            "capslock_switches_language = true
+",
+        )
+        .unwrap();
+        let mut old = Config::default();
+        legacy.put_into(&mut old);
+        assert_eq!(old.caps_mode_effective(), CapsMode::TapSwitches);
+    }
 
     #[test]
     fn last_used_thai_keyboard_round_trips() {
