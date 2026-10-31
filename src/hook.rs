@@ -30,7 +30,7 @@ use std::time::{Duration, Instant};
 use zeroize::Zeroize;
 
 use righttype::buffer::{Key, WordBuffer};
-use righttype::capskey::{clamp_hold_ms, CapsMode, HOLD_DEFAULT_MS};
+use righttype::capskey::{clamp_hold_ms, Action as CapsAction, CapsKey, CapsMode, HOLD_DEFAULT_MS};
 use righttype::diag::{self, Shape};
 use righttype::hotkeys::{Action, Chord, Hotkeys};
 use righttype::layout::{auto_convert_with_layout, LayoutId};
@@ -193,33 +193,242 @@ pub fn caps_hold_ms() -> u32 {
 }
 
 pub fn set_caps_hold_ms(ms: u32) {
-    CAPS_HOLD_MS.store(clamp_hold_ms(ms), Ordering::Relaxed);
+    let ms = clamp_hold_ms(ms);
+    CAPS_HOLD_MS.store(ms, Ordering::Relaxed);
+    // The hook thread's machine; a call from another thread updates that
+    // thread's copy only, so the hook also syncs it at every press.
+    CAPS.with(|c| {
+        if let Ok(mut c) = c.try_borrow_mut() {
+            c.set_hold_ms(ms);
+        }
+    });
 }
+
+/// How long after the switch a rolled-over key is typed again: the target
+/// app must have taken the layout change first. Windows posts the change
+/// ahead of the replayed key, so even 0 worked in Notepad; 30 ms leaves room
+/// for a busy app (see the e2e probe `capslock_switch.py`).
+const CAPS_REPLAY_DELAY_MS: u32 = 30;
 
 thread_local! {
-    /// When a CapsLock that switches languages went down (its key-down was
-    /// swallowed; the release decides).
-    static CAPS_DOWN_AT: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+    /// CapsLock as the language key (see `righttype::capskey`). Lives on the
+    /// hook thread; its timers run there too.
+    static CAPS: RefCell<CapsKey> = RefCell::new(CapsKey::new(caps_hold_ms()));
+    /// The running hold timer (0: none).
+    static CAPS_TIMER: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// The foreground window when the press began: a press that ends in
+    /// another window does nothing.
+    static CAPS_WINDOW: std::cell::Cell<isize> = const { std::cell::Cell::new(0) };
+    /// CapsLock is physically down (a down seen, its release not yet), so a
+    /// down now is an auto-repeat. Kept apart from `HELD_KEY`, which a key
+    /// pressed during the press takes over.
+    static CAPS_HELD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Keys taken during a press, typed again once the layout has switched:
+    /// `(virtual key, Shift held when it was pressed)`.
+    static CAPS_REPLAY: RefCell<Vec<(u16, bool)>> = const { RefCell::new(Vec::new()) };
 }
 
-/// CapsLock released after its key-down was swallowed for switching: a tap
-/// switches Thai/English, a hold toggles CapsLock.
-unsafe fn caps_released(down_at: Instant) {
-    if down_at.elapsed() >= Duration::from_millis(u64::from(caps_hold_ms())) {
-        inject::toggle_capslock();
+fn caps_pressed() -> bool {
+    CAPS.with(|c| c.borrow().is_pressed())
+}
+
+/// Forget the press in progress (focus moved, or CapsLock went somewhere
+/// the machine is not used) and stop its timer.
+fn caps_reset() {
+    caps_timer_kill();
+    CAPS.with(|c| c.borrow_mut().focus_changed());
+}
+
+fn caps_timer_kill() {
+    let id = CAPS_TIMER.with(|t| t.replace(0));
+    if id != 0 {
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::KillTimer(None, id);
+        }
+    }
+}
+
+unsafe fn caps_timer_start(ms: u32) {
+    caps_timer_kill();
+    let id = windows::Win32::UI::WindowsAndMessaging::SetTimer(None, 0, ms, Some(caps_hold_fired));
+    CAPS_TIMER.with(|t| t.set(id));
+}
+
+/// The foreground window is no longer the one the press began in.
+unsafe fn caps_window_moved() -> bool {
+    GetForegroundWindow().0 as isize != CAPS_WINDOW.with(|w| w.get())
+}
+
+/// The hold timer: CapsLock held long enough acts at once (and says so),
+/// without waiting for the release.
+unsafe extern "system" fn caps_hold_fired(_: HWND, _: u32, id: usize, _: u32) {
+    let _ = windows::Win32::UI::WindowsAndMessaging::KillTimer(None, id);
+    if CAPS_TIMER.with(|t| t.get()) != id {
+        return; // replaced or cancelled meanwhile
+    }
+    CAPS_TIMER.with(|t| t.set(0));
+    if caps_window_moved() {
+        caps_reset();
         return;
     }
+    let action = CAPS.with(|c| c.borrow_mut().hold_elapsed(Instant::now()));
+    if action == CapsAction::None && caps_pressed() {
+        // A timer can come a tick early: look again shortly.
+        caps_timer_start(16);
+        return;
+    }
+    caps_act(action, None);
+}
+
+/// Switch Thai/English for a CapsLock tap. Returns whether a switch is on
+/// its way (not when no layout to switch to is installed).
+unsafe fn caps_switch() -> bool {
     let to = match policy::supported_layout_id(layout_id(effective_layout())) {
         Some(policy::InputLayout::ThaiKedmanee) => policy::InputLayout::UsQwerty,
         _ => policy::InputLayout::ThaiKedmanee,
     };
     activate_layout(to);
-    if crate::caret::is_enabled() {
+    let switched = policy::supported_layout_id(layout_id(effective_layout())) == Some(to);
+    if switched && crate::caret::is_enabled() && !caps_in_password_field() {
         crate::overlay::badge_at_caret(match to {
             policy::InputLayout::ThaiKedmanee => "ไทย",
             policy::InputLayout::UsQwerty => "ENG",
         });
     }
+    switched
+}
+
+/// No badge at a password field (the switch itself still happens there).
+unsafe fn caps_in_password_field() -> bool {
+    safety::is_password_field() || crate::focus::is_password_field()
+}
+
+/// Carry out what the CapsLock machine decided. No waiting: posts and one
+/// `SendInput` at most, so it fits in the hook's time.
+unsafe fn caps_act(action: CapsAction, vk: Option<u16>) {
+    match action {
+        CapsAction::None => {}
+        CapsAction::Switch => {
+            trace_note("CapsLock tap: language switched");
+            caps_switch();
+        }
+        CapsAction::ToggleCapsLock => {
+            // "CapsLock off" mode: a hold does nothing at all.
+            if caps_mode() == CapsMode::TapSwitches {
+                trace_note("CapsLock held: CapsLock toggled");
+                // Turning it on: say so before a sentence comes out in capitals.
+                let turning_on = !caps_on();
+                inject::toggle_capslock();
+                if turning_on && crate::caret::is_enabled() && !caps_in_password_field() {
+                    crate::overlay::badge_at_caret("CAPS");
+                }
+            }
+        }
+        CapsAction::SwitchThenReplay => {
+            // A key the switch could not apply to is dropped, never typed
+            // twice or in the old layout.
+            if caps_switch() {
+                if let Some(vk) = vk {
+                    trace_note("CapsLock rollover: key typed in the new layout");
+                    caps_replay_later(vk);
+                }
+            } else {
+                trace_note("CapsLock rollover: no layout to switch to, key dropped");
+            }
+        }
+    }
+}
+
+/// Type `vk` again after [`CAPS_REPLAY_DELAY_MS`], after any key already
+/// waiting (keys come out in the order they were pressed).
+unsafe fn caps_replay_later(vk: u16) {
+    let first = CAPS_REPLAY.with(|q| {
+        let mut q = q.borrow_mut();
+        q.push((vk, is_down(VK_SHIFT)));
+        q.len() == 1
+    });
+    if !first {
+        return; // the timer for the first one types them all
+    }
+    unsafe extern "system" fn fire(_: HWND, _: u32, id: usize, _: u32) {
+        let _ = windows::Win32::UI::WindowsAndMessaging::KillTimer(None, id);
+        let keys = CAPS_REPLAY.with(|q| std::mem::take(&mut *q.borrow_mut()));
+        for (vk, shifted) in keys {
+            // The key comes out with Shift as it was when it was pressed:
+            // Shift let go meanwhile is pressed with it, Shift pressed
+            // meanwhile (the next letter's) is let go around it.
+            let shift_now = is_down(VK_SHIFT);
+            if shifted && !shift_now {
+                inject::press_chord(&[VK_SHIFT.0, vk]);
+            } else if !shifted && shift_now {
+                inject::release_keys(&[VK_SHIFT.0]);
+                inject::replay_key(vk);
+                inject::hold_again(VK_SHIFT.0);
+            } else {
+                inject::replay_key(vk);
+            }
+        }
+    }
+    windows::Win32::UI::WindowsAndMessaging::SetTimer(None, 0, CAPS_REPLAY_DELAY_MS, Some(fire));
+}
+
+/// Whether CapsLock is the language key here; otherwise it is plain
+/// CapsLock. Password fields are deliberately not excluded: switching the
+/// language there is harmless and is what the typist pressed it for.
+fn caps_machine_here() -> bool {
+    is_enabled()
+        && caps_mode() != CapsMode::Off
+        && !STATE.with(|s| s.borrow().sensitive_app)
+        && !safety::is_full_screen()
+        && mode_here().is_some()
+}
+
+/// A key other than CapsLock and the modifiers went down. While CapsLock is
+/// down it is a rollover: the language switches and the key is typed again
+/// in the new one. Returns `true` to swallow the key.
+unsafe fn caps_other_key(vk: u16, repeat: bool) -> bool {
+    // Win counts as a modifier here (Caps+Win+key is a shortcut).
+    if is_modifier(vk) || vk == VK_CAPITAL.0 || vk == 0x5B || vk == 0x5C {
+        return false;
+    }
+    // A key behind a replay still waiting goes after it.
+    if !repeat && CAPS_REPLAY.with(|q| !q.borrow().is_empty()) {
+        caps_replay_later(vk);
+        return true;
+    }
+    if !caps_pressed() {
+        return false;
+    }
+    if is_down(VK_CONTROL)
+        || is_down(VK_MENU)
+        || is_down(VIRTUAL_KEY(0x5B))
+        || is_down(VIRTUAL_KEY(0x5C))
+    {
+        // A shortcut (Alt+Tab, Ctrl+C) during the press, not typing: the
+        // press is over and the key is the app's.
+        trace_note("CapsLock press ended by a shortcut");
+        caps_reset();
+        return false;
+    }
+    if repeat {
+        return false;
+    }
+    let action = CAPS.with(|c| c.borrow_mut().other_key_down(Instant::now()));
+    if action != CapsAction::SwitchThenReplay {
+        return false;
+    }
+    caps_timer_kill();
+    caps_act(action, Some(vk));
+    // The word starts with the replayed key, which the hook never sees (it
+    // is ours): the buffer would miss its first letter, so this word is the
+    // typist's and is left alone.
+    STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        st.buf.clear();
+        st.owned = None;
+        st.mark = TokenMark::Decided { learn: false };
+    });
+    true
 }
 
 /// How many more automatic fixes this session show the Shift+Backspace tip.
@@ -2424,6 +2633,22 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     };
     ctrl_hold_input(Some(vk), down, repeat);
     shift_tap_input(Some(vk), down);
+    // CapsLock's own repeat flag (see `CAPS_HELD`). A fresh press ends any
+    // press still pending (one whose release was never seen, or one a
+    // hotkey below takes): the language-key branch starts it again if it
+    // gets there.
+    let caps_repeat = if vk == VK_CAPITAL.0 {
+        let was = CAPS_HELD.with(|h| h.replace(down));
+        if down && !was {
+            caps_reset();
+        }
+        down && was
+    } else {
+        false
+    };
+    if down && caps_other_key(vk, repeat) {
+        return true;
+    }
     // Right Alt tapped on its own steps the last character through its set.
     if vk == 0xA5 {
         if down && !repeat {
@@ -2453,11 +2678,17 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             FLIP_DOWN.with(|f| f.set(None));
         }
         shortcut_keys_released(vk);
-        if vk == VK_CAPITAL.0 {
-            if let Some(at) = CAPS_DOWN_AT.with(|c| c.take()) {
-                caps_released(at);
-                return true;
+        // Its key-down was swallowed, so the release is too; the machine
+        // decides what the press was.
+        if vk == VK_CAPITAL.0 && caps_pressed() {
+            caps_timer_kill();
+            if caps_window_moved() {
+                caps_reset();
+            } else {
+                let action = CAPS.with(|c| c.borrow_mut().caps_up(Instant::now()));
+                caps_act(action, None);
             }
+            return true;
         }
         return false;
     }
@@ -2719,6 +2950,36 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     sync_context();
     note_keyboard(effective_layout());
 
+    // CapsLock as the language key (a tap switches, a hold is CapsLock, a key
+    // pressed meanwhile comes out in the new language). Ahead of the
+    // password-field guard on purpose: tapping it to change language before
+    // typing a password must not give capitals. Blocked and full-screen
+    // apps, apps RightType is off in, and the hotkeys above keep plain
+    // CapsLock.
+    if vk == VK_CAPITAL.0 && action.is_none() {
+        if caps_machine_here() {
+            if !caps_repeat {
+                CAPS.with(|c| c.borrow_mut().set_hold_ms(caps_hold_ms()));
+                CAPS_WINDOW.with(|w| w.set(GetForegroundWindow().0 as isize));
+                caps_timer_start(caps_hold_ms());
+                // Whatever the press turns out to be, the next keys type
+                // differently: the word in progress is over.
+                STATE.with(|s| {
+                    let mut st = s.borrow_mut();
+                    st.buf.clear();
+                    st.owned = None;
+                    st.mark = TokenMark::Plain;
+                });
+            }
+            let action = CAPS.with(|c| c.borrow_mut().caps_down(Instant::now(), caps_repeat));
+            caps_act(action, None);
+            return true;
+        }
+        // Plain CapsLock here: no press of the machine's may be left over to
+        // swallow this key's release.
+        caps_reset();
+    }
+
     // Never run where secrets are typed: blacklisted apps, or password fields
     // (native ES_PASSWORD, or UIA-detected ones in browsers/Electron/UWP).
     if STATE.with(|s| s.borrow().sensitive_app)
@@ -2914,22 +3175,10 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
             );
             return true;
         }
-        // CapsLock alone (or a chord that is not a hotkey) is a normal toggle.
-        // A word is kept as if CapsLock were off and shown with its state,
-        // so one typed across a toggle is left alone.
-        if vk == VK_CAPITAL.0 && caps_mode() != CapsMode::Off && is_enabled() {
-            // A language key now: the release decides (tap or hold).
-            if !repeat {
-                CAPS_DOWN_AT.with(|c| c.set(Some(Instant::now())));
-                STATE.with(|s| {
-                    let mut st = s.borrow_mut();
-                    st.buf.clear();
-                    st.owned = None;
-                    st.mark = TokenMark::Plain;
-                });
-            }
-            return true;
-        }
+        // CapsLock alone (or a chord that is not a hotkey), where it is not
+        // the language key (above), is a normal toggle. A word is kept as if
+        // CapsLock were off and shown with its state, so one typed across a
+        // toggle is left alone.
         if vk == VK_CAPITAL.0 {
             // Turning it on: say so where the eyes are, before a sentence
             // comes out in capitals (the state flips after this key).
@@ -4784,6 +5033,8 @@ unsafe fn sync_context() {
             );
             if changed || focus_changed {
                 st.undo = None;
+                // A CapsLock press that began elsewhere is not this field's.
+                caps_reset();
             }
             st.buf.clear();
             st.owned = None;
