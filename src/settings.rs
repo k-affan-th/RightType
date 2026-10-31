@@ -2591,7 +2591,6 @@ fn selected_app(win: &SettingsWindow) -> Option<AppRow> {
     win.apps.borrow().get(i).cloned()
 }
 
-/// Show the selected app's mode on the mode buttons.
 /// The CapsLock modes, in the order of their segments.
 const CAPS_MODES: [righttype::capskey::CapsMode; 3] = [
     righttype::capskey::CapsMode::Off,
@@ -2668,6 +2667,7 @@ fn confirm_switch_key(win: &SettingsWindow) -> bool {
     r == IDYES
 }
 
+/// Show the selected app's mode on the mode buttons.
 fn sync_app_choice(win: &SettingsWindow) {
     let row = selected_app(win);
     for (i, id) in win.ids.app_seg.iter().enumerate() {

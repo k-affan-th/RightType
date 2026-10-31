@@ -88,7 +88,7 @@ Every hotkey can be changed in Settings → Hotkeys (click **Change**, press the
 - CapsLock stays plain CapsLock in full-screen and game contexts, in apps on the safety list, in apps where RightType is off, and while RightType is switched off.
 - Elevated (administrator) windows, the secure desktop (UAC, sign-in) and remote desktop sessions are not seen by RightType: CapsLock acts as native CapsLock there.
 - Settings → Keyboard also shows Windows' own language switch key. If Windows uses the grave key (`` ` ``) and that key still types its character, a warning offers **Use Alt+Shift**; after a Yes/No confirmation it changes Windows' setting. That is a per-machine registry write and is not synced.
-- `caps_mode` (`off` / `tap` / `disabled`) and `caps_hold_ms` (300–1000) in `config.toml` sync like other settings. The old `capslock_switches_language` key is read once and migrated, never written back; older builds ignore `caps_mode` (they read the old key), so there CapsLock stays plain. The command palette entry "CapsLock switches Thai/English" still works and toggles Off ↔ Tap.
+- `caps_mode` (`off` / `tap` / `disabled`) and `caps_hold_ms` (300–1000) in `config.toml` sync like other settings. The old `capslock_switches_language` key is read once and migrated, never written back; older builds ignore `caps_mode` (they read the old key), so there CapsLock stays plain. The command palette entry "CapsLock switches Thai/English" still works: it turns it off, or on as Tap switches.
 
 **Auto mode** — direction-aware, built for how each language is actually written:
 

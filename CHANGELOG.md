@@ -20,12 +20,14 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   key and that key types its character, warns and offers Alt+Shift after a
   confirmation. Stored as `caps_mode` and `caps_hold_ms`; the old
   `capslock_switches_language` key is migrated and no longer written, so older
-  builds see CapsLock as plain CapsLock.
+  builds see CapsLock as plain CapsLock. On a sync folder shared with an older
+  build, that build writes the old CapsLock setting and drops `caps_mode`, so
+  each sync from it resets the newer PC to Off and the default hold time.
 
 ### Changed
 
 - CapsLock as the language key is now a three-way choice instead of a switch
-  (the palette entry still toggles Off and Tap). Ctrl, Alt or Win held with
+  (the palette entry turns it off, or on as Tap switches). Ctrl, Alt or Win held with
   CapsLock is never a language switch.
 - The Thai keyboard (Kedmanee, Pattachote, Manoonchai) is detected from the
   keyboard in use, so Settings → Keyboard no longer asks for it; it shows what
