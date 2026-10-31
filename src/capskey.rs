@@ -4,24 +4,32 @@
 //!
 //! Transitions (`hold` is the configured hold time):
 //!
-//! | state    | event                    | action             | next      |
-//! |----------|--------------------------|--------------------|-----------|
-//! | Idle     | down (fresh)             | None               | Down      |
-//! | Idle     | down (repeat)            | None               | Idle      |
-//! | Down     | down (fresh, stale)      | None               | Down(now) |
-//! | Down     | down (repeat)            | None               | Down      |
-//! | Down     | other key                | SwitchThenReplay   | Chorded   |
-//! | Down     | hold timer, age >= hold  | ToggleCapsLock     | HoldFired |
-//! | Down     | up, age < hold           | Switch             | Idle      |
-//! | Down     | up, age >= hold          | ToggleCapsLock     | Idle      |
-//! | Chorded  | other key / timer        | None               | Chorded   |
-//! | Chorded  | up                       | None               | Idle      |
-//! | HoldFired| other key / timer / up   | None               | HoldFired / Idle on up |
-//! | any      | focus changed            | None               | Idle      |
+//! | state     | event                     | action           | next      |
+//! |-----------|---------------------------|------------------|-----------|
+//! | Idle      | down (fresh)              | None             | Down      |
+//! | Idle      | down (repeat)             | None             | Idle      |
+//! | Down      | down (repeat)             | None             | Down      |
+//! | Down      | down (repeat, stale)      | None             | Down(now) |
+//! | Down      | other key                 | SwitchThenReplay | Chorded   |
+//! | Down      | hold timer, age >= hold   | ToggleCapsLock   | HoldFired |
+//! | Down      | hold timer, age < hold    | None             | Down      |
+//! | Down      | up, age < hold            | Switch           | Idle      |
+//! | Down      | up, age >= hold           | ToggleCapsLock   | Idle      |
+//! | Chorded   | down (repeat)             | None             | Chorded   |
+//! | Chorded   | other key / timer         | None             | Chorded   |
+//! | Chorded   | up                        | None             | Idle      |
+//! | HoldFired | down (repeat)             | None             | HoldFired |
+//! | HoldFired | other key / timer         | None             | HoldFired |
+//! | HoldFired | up                        | None             | Idle      |
+//! | non-Idle  | down (fresh)              | None             | Down(now) |
+//! | any       | focus changed             | None             | Idle      |
 //!
-//! A fresh (non-repeat) down in any non-Idle state is a stale press that
-//! never saw its release: it restarts from Down. A repeat down never changes
-//! state, unless the state is older than `hold + 1 s`, when it counts as fresh.
+//! A fresh (non-repeat) down in any non-Idle state is a press that never saw
+//! its release: it restarts from Down. A repeat down never changes state,
+//! except in Down when that state is older than `hold + 1 s` (a Down that
+//! missed its release): it restarts like a fresh press. While Caps is held in
+//! Chorded or HoldFired, auto-repeat downs keep arriving and are ignored at
+//! any age; those states clear on up, focus change or a fresh down.
 
 use std::time::{Duration, Instant};
 
@@ -73,8 +81,8 @@ pub enum Action {
 enum State {
     Idle,
     Down { since: Instant },
-    Chorded { since: Instant },
-    HoldFired { since: Instant },
+    Chorded,
+    HoldFired,
 }
 
 pub struct CapsKey {
@@ -94,19 +102,9 @@ impl CapsKey {
         self.hold = Duration::from_millis(clamp_hold_ms(ms) as u64);
     }
 
-    fn since(&self) -> Option<Instant> {
-        match self.state {
-            State::Idle => None,
-            State::Down { since } | State::Chorded { since } | State::HoldFired { since } => {
-                Some(since)
-            }
-        }
-    }
-
     pub fn caps_down(&mut self, now: Instant, repeat: bool) -> Action {
-        let stale = self
-            .since()
-            .is_some_and(|s| now.saturating_duration_since(s) > self.hold + Duration::from_secs(1));
+        let stale = matches!(self.state, State::Down { since }
+            if now.saturating_duration_since(since) > self.hold + Duration::from_secs(1));
         match (self.state, repeat) {
             (State::Idle, true) => {}
             (_, true) if !stale => {}
@@ -131,8 +129,8 @@ impl CapsKey {
 
     pub fn other_key_down(&mut self, _now: Instant) -> Action {
         match self.state {
-            State::Down { since } => {
-                self.state = State::Chorded { since };
+            State::Down { .. } => {
+                self.state = State::Chorded;
                 Action::SwitchThenReplay
             }
             _ => Action::None,
@@ -142,7 +140,7 @@ impl CapsKey {
     pub fn hold_elapsed(&mut self, now: Instant) -> Action {
         match self.state {
             State::Down { since } if now.saturating_duration_since(since) >= self.hold => {
-                self.state = State::HoldFired { since };
+                self.state = State::HoldFired;
                 Action::ToggleCapsLock
             }
             _ => Action::None,
@@ -214,7 +212,7 @@ mod tests {
         assert_eq!(k.other_key_down(t0 + ms(50)), Action::SwitchThenReplay);
         assert_eq!(k.other_key_down(t0 + ms(60)), Action::None);
         assert_eq!(k.hold_elapsed(t0 + ms(500)), Action::None);
-        assert_eq!(k.caps_up(t0 + ms(100)), Action::None);
+        assert_eq!(k.caps_up(t0 + ms(700)), Action::None);
     }
 
     #[test]
@@ -255,6 +253,46 @@ mod tests {
         k.caps_down(t0, false);
         k.focus_changed();
         assert_eq!(k.caps_up(t0 + ms(10)), Action::None);
+    }
+
+    #[test]
+    fn long_hold_repeats_do_not_reset_hold_fired() {
+        let t0 = Instant::now();
+        let mut k = CapsKey::new(500);
+        k.caps_down(t0, false);
+        assert_eq!(k.hold_elapsed(t0 + ms(500)), Action::ToggleCapsLock);
+        assert_eq!(k.caps_down(t0 + ms(1600), true), Action::None);
+        assert_eq!(k.caps_down(t0 + ms(3000), true), Action::None);
+        assert_eq!(k.caps_up(t0 + ms(3100)), Action::None);
+    }
+
+    #[test]
+    fn long_chord_repeats_do_not_reset_chorded() {
+        let t0 = Instant::now();
+        let mut k = CapsKey::new(500);
+        k.caps_down(t0, false);
+        assert_eq!(k.other_key_down(t0 + ms(50)), Action::SwitchThenReplay);
+        assert_eq!(k.caps_down(t0 + ms(3000), true), Action::None);
+        assert_eq!(k.other_key_down(t0 + ms(3010)), Action::None);
+        assert_eq!(k.caps_up(t0 + ms(3100)), Action::None);
+    }
+
+    #[test]
+    fn stale_repeat_in_down_resets() {
+        let t0 = Instant::now();
+        let mut k = CapsKey::new(500);
+        k.caps_down(t0, false);
+        assert_eq!(k.caps_down(t0 + ms(5000), true), Action::None);
+        assert_eq!(k.caps_up(t0 + ms(5100)), Action::Switch);
+    }
+
+    #[test]
+    fn early_hold_timer_is_ignored() {
+        let t0 = Instant::now();
+        let mut k = CapsKey::new(500);
+        k.caps_down(t0, false);
+        assert_eq!(k.hold_elapsed(t0 + ms(100)), Action::None);
+        assert_eq!(k.caps_up(t0 + ms(150)), Action::Switch);
     }
 
     #[test]
