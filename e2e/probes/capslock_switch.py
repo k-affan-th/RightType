@@ -80,6 +80,12 @@ def running(image):
 
 
 for image in ("notepad.exe", "righttype.exe"):
+    # A previous run's window may still be closing: give it a few seconds
+    # before concluding that someone else's is open.
+    for _ in range(10):
+        if not running(image):
+            break
+        time.sleep(1)
     if running(image):
         raise SystemExit(f"{image} is already running: close it first (this probe only "
                          "touches windows it starts)")
