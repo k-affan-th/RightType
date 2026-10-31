@@ -61,6 +61,9 @@ VK_LWIN = 0x5B
 VK_MASK = 0xE8  # unassigned: masks a Win release
 
 HOLD_MS = 500
+# `--only password` (or CAPS_PROBE_ONLY=password) runs just that case.
+ONLY = (sys.argv[sys.argv.index('--only') + 1] if '--only' in sys.argv
+        else os.environ.get('CAPS_PROBE_ONLY', ''))
 
 
 class Abort(Exception):
@@ -325,12 +328,108 @@ def put_caps_back_now(focus_name):
 
 # ---------------------------------------------------------------- cases
 
+def password_case(edge_app, edge_hwnd):
+    """7. password field: Caps switches the language, no capitals. Prints the
+    foreground window and layout before and after the tap, so a miss can be
+    told apart from a foreground change during the press."""
+    pw = None
+    for d in edge_app.top_window().descendants(control_type="Edit"):
+        try:
+            if d.element_info.element.CurrentIsPassword:
+                pw = d
+                break
+        except Exception:
+            pass
+    if pw is None:
+        manual("password field switches without capitals", "password box not found via UIA")
+        return
+    pw.click_input()
+    time.sleep(0.6)
+    require_focus("edge")
+    set_lang("edge", "en")
+    time.sleep(0.4)  # let a first-focus popup of the field settle before the tap
+    caps0 = _global_caps()
+    fg_before = foreground_root() or 0
+    lay_before = lang_name(layout_of(edge_hwnd))
+    tap(VK_CAPITAL, "edge", 80)
+    fg_mid = foreground_root() or 0
+    time.sleep(0.5)
+    fg_after = foreground_root() or 0
+    got = (lang_name(layout_of(edge_hwnd)), _global_caps())
+    ok = got == ("th", caps0)
+    print(f"  [password] fg before={fg_before:#x} (edge {edge_hwnd:#x}) right after tap="
+          f"{fg_mid:#x} after 0.5s={fg_after:#x}; layout before={lay_before} after={got[0]}",
+          flush=True)
+    check("password field switches without capitals", got, ("th", caps0))
+    if _global_caps() != caps0:
+        tap(VK_CAPITAL, "edge", 80)  # old build: it was a plain toggle
+        time.sleep(0.3)
+    set_lang("edge", "en")
+
+
+fs_proc = None
+
+
+def fullscreen_case(np):
+    """10. a full-screen window (borderless, topmost, whole primary monitor,
+    no text field) keeps plain CapsLock. The case only counts when RightType
+    itself traced that it saw a full-screen program; otherwise it is MANUAL,
+    never a vacuous PASS."""
+    global fs_proc
+    start_rt('caps_mode = "tap"\n')
+    log_mark = LOG.stat().st_size if LOG.exists() else 0
+    fs_proc = subprocess.Popen([sys.executable, str(Path(__file__).with_name(
+        "fullscreen_window.py"))], stdout=subprocess.PIPE, text=True)
+    line = fs_proc.stdout.readline().strip()
+    if not line.isdigit():
+        manual("full-screen app keeps plain CapsLock", "test window did not start")
+        return
+    OWN_WINDOWS["fullscreen"] = int(line)
+    deadline = time.time() + 6
+    seen = False
+    while time.time() < deadline:
+        time.sleep(0.5)
+        text = LOG.read_text(encoding="utf-8", errors="replace")[log_mark:]
+        if "full-screen program without a text cursor: true" in text:
+            seen = True
+            break
+    if foreground_root() != OWN_WINDOWS["fullscreen"]:
+        raise Abort(f"focus lost: full-screen window is not in front "
+                    f"(foreground {(foreground_root() or 0):#x})")
+    if not seen:
+        manual("full-screen app keeps plain CapsLock",
+               "RightType did not detect the test window as full screen")
+        return
+    set_lang("fullscreen", "en")
+    caps0 = _global_caps()
+    tap(VK_CAPITAL, "fullscreen", 80)
+    time.sleep(0.5)
+    check("full-screen app keeps plain CapsLock",
+          (_global_caps(), lang_name(layout_of(OWN_WINDOWS["fullscreen"]))), (1 - caps0, "en"))
+    tap(VK_CAPITAL, "fullscreen", 80)
+    time.sleep(0.4)
+
+
 def run_cases():
     global edge_app, edge_httpd
     np = start_notepad()
     hwnd = OWN_WINDOWS["notepad"]
     time.sleep(1.5)
     start_rt('caps_mode = "tap"\n')
+
+    if ONLY == "password":
+        edge_app, edge_httpd = lib.start_edge(lib.HERE / "target.html")
+        edge_hwnd = edge_app.top_window().handle
+        OWN_WINDOWS["edge"] = edge_hwnd
+        focus("edge", edge_app)
+        set_lang("edge", "en")
+        password_case(edge_app, edge_hwnd)
+        return
+    if ONLY == "fullscreen":
+        fullscreen_case(np)
+        return
+    if ONLY:
+        raise SystemExit(f"unknown case {ONLY!r} (known: password, fullscreen)")
 
     # 1. tap switches
     clear_notepad(np)
@@ -540,31 +639,7 @@ def run_cases():
               lang_name(layout_of(edge_hwnd))), (THAI_K, "th"))
         set_lang("edge", "en")
 
-    # 7. password field: Caps switches the language, no capitals
-    pw = None
-    for d in edge_app.top_window().descendants(control_type="Edit"):
-        try:
-            if d.element_info.element.CurrentIsPassword:
-                pw = d
-                break
-        except Exception:
-            pass
-    if pw is None:
-        manual("password field switches without capitals", "password box not found via UIA")
-    else:
-        pw.click_input()
-        time.sleep(0.6)
-        require_focus("edge")
-        set_lang("edge", "en")
-        caps0 = _global_caps()
-        tap(VK_CAPITAL, "edge", 80)
-        time.sleep(0.5)
-        check("password field switches without capitals",
-              (lang_name(layout_of(edge_hwnd)), _global_caps()), ("th", caps0))
-        if _global_caps() != caps0:
-            tap(VK_CAPITAL, "edge", 80)  # old build: it was a plain toggle
-            time.sleep(0.3)
-        set_lang("edge", "en")
+    password_case(edge_app, edge_hwnd)
 
     # 8. "disabled" mode: tap switches, a hold does nothing
     focus("notepad", np)
@@ -602,12 +677,13 @@ def run_cases():
         check(label, (_global_caps(), lang_name(layout_of(hwnd))), (1 - caps0, "en"))
         tap(VK_CAPITAL, "notepad", 80)
         time.sleep(0.4)
-    manual("full-screen app keeps plain CapsLock",
-           "needs a real full-screen game or presentation in front")
+    fullscreen_case(np)
 
 
 def cleanup():
     release_all()
+    if fs_proc is not None and fs_proc.poll() is None:
+        fs_proc.kill()
     stop_rt()
     restore_caps()
     if edge_app is not None:

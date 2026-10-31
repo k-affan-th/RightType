@@ -124,6 +124,7 @@ unsafe fn refresh_full_screen() -> bool {
             "full-screen program without a text cursor",
             &[("now", now.into())],
         );
+        crate::hook::e2e_trace(format!("full-screen program without a text cursor: {now}"));
     }
     now
 }
