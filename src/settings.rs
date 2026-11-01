@@ -218,7 +218,7 @@ const KB_PICK_Y: i32 = 98;
 const KB_TYPING_Y: i32 = 246;
 /// Taller than the General page's rows: a two-line description needs the room.
 const KB_ROW_H: i32 = 72;
-const KB_KEYS_Y: i32 = KB_TYPING_Y + 7 * KB_ROW_H + 8 + 56;
+const KB_KEYS_Y: i32 = KB_TYPING_Y + 8 * KB_ROW_H + 8 + 56;
 const KB_DEV_Y: i32 = KB_KEYS_Y + 3 * KB_ROW_H + 8 + 56;
 const KB_SHOW_Y: i32 = KB_DEV_Y + 2 * KB_ROW_H + 8 + 56;
 const KB_CARET_Y: i32 = KB_SHOW_Y + 2 * KB_ROW_H + 8 + 56;
@@ -292,6 +292,7 @@ struct Ids {
     keys_reset: u16,
     kb_detected: u16,
     kb_addresses: u16,
+    kb_short_numbers: u16,
     kb_complete: u16,
     kb_grave: u16,
     kb_guard: u16,
@@ -829,18 +830,35 @@ fn open_on(page: u8) {
         p.surface,
         k,
     );
-    let kb_ctrl_hold = s.toggle_icon(
-        tr(T::RowCtrlHold),
-        tr(T::SubCtrlHoldShort),
-        icons::KEYBOARD,
+    let kb_short_numbers = s.toggle_icon(
+        tr(T::RowShortNumbers),
+        tr(T::SubShortNumbersShort),
+        icons::WEB_ADDRESSES,
         kb_row(KB_TYPING_Y, 6),
         p.surface,
         k,
     );
     s.info_after(
         tr(T::InfoMore),
-        tr(T::SubCtrlHold),
+        tr(T::SubShortNumbers),
         kb_row(KB_TYPING_Y, 6),
+        true,
+        tr(T::RowShortNumbers),
+        p.surface,
+        k,
+    );
+    let kb_ctrl_hold = s.toggle_icon(
+        tr(T::RowCtrlHold),
+        tr(T::SubCtrlHoldShort),
+        icons::KEYBOARD,
+        kb_row(KB_TYPING_Y, 7),
+        p.surface,
+        k,
+    );
+    s.info_after(
+        tr(T::InfoMore),
+        tr(T::SubCtrlHold),
+        kb_row(KB_TYPING_Y, 7),
         true,
         tr(T::RowCtrlHold),
         p.surface,
@@ -1713,6 +1731,7 @@ fn open_on(page: u8) {
         keys_reset,
         kb_detected,
         kb_addresses,
+        kb_short_numbers,
         kb_complete,
         kb_grave,
         kb_guard,
@@ -1890,6 +1909,10 @@ fn sync(win: &SettingsWindow) {
     sync_app_choice(win);
     s.set_text(ids.kb_detected, &detected_keyboards_line());
     s.set_checked(ids.kb_addresses, righttype::policy::fixes_addresses());
+    s.set_checked(
+        ids.kb_short_numbers,
+        righttype::policy::reads_short_numbers(),
+    );
     s.set_checked(ids.kb_complete, hook::completes_thai());
     s.set_checked(ids.kb_grave, hook::grave_types());
     s.set_checked(ids.kb_guard, hook::guards_switch());
@@ -2111,6 +2134,9 @@ fn clicked(win: &Rc<SettingsWindow>, id: u16) {
         }
     } else if id == ids.kb_addresses {
         righttype::policy::set_fixes_addresses(s.checked(id));
+        config::persist();
+    } else if id == ids.kb_short_numbers {
+        righttype::policy::set_reads_short_numbers(s.checked(id));
         config::persist();
     } else if id == ids.kb_complete {
         hook::set_completes_thai(s.checked(id));
@@ -3125,8 +3151,8 @@ fn paint(g: &Gfx, hdc: HDC, _client: windows::Win32::Foundation::RECT, page: u8)
             // The page scrolls: everything moves up by the scroll.
             let dy = ui::page_scroll();
             card(g, rect(X0, KB_PICK_Y - dy, CW, 100));
-            card(g, rect(X0, KB_TYPING_Y - dy, CW, 7 * KB_ROW_H + 8));
-            for i in 1..7 {
+            card(g, rect(X0, KB_TYPING_Y - dy, CW, 8 * KB_ROW_H + 8));
+            for i in 1..8 {
                 divider(hdc, X0 + 16, KB_TYPING_Y + i * KB_ROW_H + 2 - dy, CW - 32);
             }
             card(g, rect(X0, KB_KEYS_Y - dy, CW, 3 * KB_ROW_H + 8));

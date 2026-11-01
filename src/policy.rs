@@ -90,6 +90,19 @@ pub fn set_fixes_addresses(on: bool) {
     FIXES_ADDRESSES.store(on, Ordering::Relaxed);
 }
 
+/// Short symbol-only text typed on the Thai keyboard (`-/` for 32, `-` for 3)
+/// read as the number. Off by default: such a token is also real Thai
+/// punctuation and a lone number-row letter.
+static READS_SHORT_NUMBERS: AtomicBool = AtomicBool::new(false);
+
+pub fn reads_short_numbers() -> bool {
+    READS_SHORT_NUMBERS.load(Ordering::Relaxed)
+}
+
+pub fn set_reads_short_numbers(on: bool) {
+    READS_SHORT_NUMBERS.store(on, Ordering::Relaxed);
+}
+
 /// Whether `hkl` is the keyboard whose table is in use: the Thai and the
 /// English keyboard last seen (both are noted from the keyboard in use).
 pub fn is_preferred_layout(hkl: u32) -> bool {
@@ -174,6 +187,11 @@ pub fn detect_token(
                 .filter(|d| !weak_evidence(token, &d.corrected, en, th))
         }
         InputLayout::ThaiKedmanee => {
+            if reads_short_numbers() && !has_latin {
+                if let Some(d) = thai_layout_short_number(token, th) {
+                    return Some(d);
+                }
+            }
             if !has_thai || has_latin {
                 return None;
             }
@@ -394,6 +412,24 @@ fn thai_layout_number(token: &str, th: &Dictionary) -> Option<Detection> {
         && no_double_sep
         && commas_valid;
     (digits >= 2 && shaped && !th.contains(token)).then_some(Detection {
+        corrected: keys,
+        confidence: Confidence::High,
+        evidence: Evidence::ExactDictionary,
+    })
+}
+
+/// Opt-in (see `reads_short_numbers`): one to three number-row keys typed on
+/// the Thai keyboard (`-/` is 32, `ๅ` is 1, `ภถ` is 45) read as the digits when
+/// the screen is not a Thai word. The keys must all give digits, so no Thai
+/// letter outside the number row is ever involved.
+fn thai_layout_short_number(token: &str, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    let keys = crate::layout::th_to_en(token);
+    let short = (1..=3).contains(&token.chars().count());
+    let digits = !keys.is_empty() && keys.chars().all(|c| c.is_ascii_digit());
+    let typed_as_is = token.chars().any(|c| c.is_ascii_digit());
+    let is_thai = th.contains(token) || segment::is_fully_known(token, th);
+    (short && digits && !typed_as_is && !is_thai).then_some(Detection {
         corrected: keys,
         confidence: Confidence::High,
         evidence: Evidence::ExactDictionary,
@@ -1529,6 +1565,14 @@ mod tests {
             "คมขุ".to_string(),
         ] {
             assert!(thai_layout_number(&word, th).is_none(), "{word}");
+        }
+        // The opt-in short-number reading leaves them alone too.
+        for word in ["ภาค", "จุด", "คุมภ", "คมขุ", "ที่"] {
+            assert!(thai_layout_short_number(word, th).is_none(), "{word}");
+        }
+        for (typed, digits) in [("-/", "32"), ("-", "3"), ("ถ", "5"), ("ภถ", "45")] {
+            let d = thai_layout_short_number(typed, th);
+            assert_eq!(d.map(|d| d.corrected).as_deref(), Some(digits), "{typed}");
         }
         // No Thai dictionary word reads as an address or a number (the
         // other Thai keyboards: examples/false_positive_audit.rs).
