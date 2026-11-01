@@ -37,5 +37,20 @@ at about 35 keys a second, one run per version:
 
 Up to 2.3.0 the hook itself sent the corrected text when Space was typed, and
 stalled that long. From 2.4.0 it does not. Windows' own limit is a few hundred
-milliseconds. The p99 of about 8 ms, twenty times the median, is not yet
-explained.
+milliseconds.
+
+## Where the p99 of about 8 ms comes from (2026-11-02)
+
+A release build with a timer round each part of the key path (a scratch copy, not
+in the repo), typing into Notepad: the keys that take 5-14 ms are the ones that
+change text. `reconcile_run`, which shows a Thai reading while a word is still being
+typed, sends the backspaces and characters with `SendInput` before the hook returns:
+7 ms median, 13.5 ms at most, on 60 of 300 words typed. `detect_token` is not the
+cost: 1-3 microseconds for the same words, 34 microseconds at the 99th percentile over
+random letters. Keys that change nothing stay near 0.4 ms.
+
+This is the design (the typed key must wait for the text that replaces it), and the
+time is far below Windows' limit, so it is documented rather than changed. Moving the
+send off the hook thread would let typed-ahead keys overtake the correction.
+Not measured: other apps (Notepad answers quickly), and a slow text box, where the
+hook also waits for the box (`focus::settle`, up to 60 ms).
