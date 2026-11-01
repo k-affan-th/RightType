@@ -105,6 +105,9 @@ pub struct Config {
     /// Web addresses, email addresses and numbers typed with the Thai
     /// keyboard on are put back.
     pub fix_addresses: bool,
+    /// Short symbol-only text typed with the Thai keyboard on (`-/`) is read
+    /// as a number (32). Off by default.
+    pub short_numbers: bool,
     /// A language switch that comes with a shortcut (Ctrl/Alt + Shift + a
     /// key) is undone.
     pub guard_switch: bool,
@@ -220,6 +223,7 @@ impl Default for Config {
             app_keyboards: BTreeMap::new(),
             grave_types: false,
             fix_addresses: true,
+            short_numbers: false,
             guard_switch: false,
             complete_thai: false,
             debounce_keys: Vec::new(),
@@ -296,6 +300,7 @@ pub fn apply(cfg: &Config) {
     );
     hook::set_grave_types(cfg.grave_types);
     righttype::policy::set_fixes_addresses(cfg.fix_addresses);
+    righttype::policy::set_reads_short_numbers(cfg.short_numbers);
     hook::set_guards_switch(cfg.guard_switch);
     hook::set_completes_thai(cfg.complete_thai);
     hook::set_fixes_scanners(cfg.fix_scanners);
@@ -570,6 +575,7 @@ fn snapshot() -> Config {
             .collect(),
         grave_types: hook::grave_types(),
         fix_addresses: righttype::policy::fixes_addresses(),
+        short_numbers: righttype::policy::reads_short_numbers(),
         guard_switch: hook::guards_switch(),
         complete_thai: hook::completes_thai(),
         fix_scanners: hook::fixes_scanners(),
