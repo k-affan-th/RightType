@@ -16,6 +16,7 @@
 use crate::buffer::{Key, WordBuffer};
 use crate::dict::Dictionary;
 use crate::layout::en_to_th;
+use crate::ledger::{Cause, Direction, Ending, Field, Len, Outcome, Path};
 use crate::policy::{self, InputLayout, Reading};
 use crate::render;
 use crate::secret::SeedTracker;
@@ -65,6 +66,8 @@ pub struct Engine<'d> {
     /// The focused text box.
     pub screen: String,
     pub counters: Counters,
+    /// What became of each rewrite, by cause (no text).
+    pub ledger: crate::ledger::Ledger,
     /// CapsLock is on: letters on the English layout show in the other case.
     pub caps: bool,
 }
@@ -82,6 +85,7 @@ impl<'d> Engine<'d> {
             seed: SeedTracker::new(),
             screen: String::new(),
             counters: Counters::default(),
+            ledger: crate::ledger::Ledger::new(),
             caps: false,
         }
     }
@@ -157,6 +161,55 @@ impl<'d> Engine<'d> {
         self.caps = !self.caps;
     }
 
+    fn note(&mut self, path: Path, direction: Direction, end: Option<char>, word: &str) {
+        self.note_outcome(path, direction, end, word, Outcome::Kept);
+    }
+
+    fn note_outcome(
+        &mut self,
+        path: Path,
+        direction: Direction,
+        end: Option<char>,
+        word: &str,
+        outcome: Outcome,
+    ) {
+        let ending = match end {
+            Some(c) if c == char::from(10u8) => Ending::Enter,
+            Some(c) if c == char::from(9u8) => Ending::Tab,
+            Some(_) => Ending::Space,
+            None => Ending::None,
+        };
+        let cause = Cause {
+            path,
+            direction,
+            ending,
+            field: Field::Edit,
+            len: Len::of(word.chars().count()),
+        };
+        self.ledger.record(cause, outcome);
+    }
+
+    /// The caret may have moved: a click, an arrow key, Escape or a Ctrl/Alt
+    /// chord. `hook::caret_may_have_moved`: the word in progress is dropped and
+    /// a run we own is left on screen as it is, never judged at a boundary.
+    pub fn caret_moved(&mut self) {
+        if self.enabled {
+            if let Some(run) = &self.owned {
+                let word = run.rendered.clone();
+                self.note_outcome(
+                    Path::LiveKept,
+                    Direction::EnglishToThai,
+                    None,
+                    &word,
+                    Outcome::CaretMovedWhileLive,
+                );
+            }
+            self.buf.clear();
+            self.owned = None;
+            self.mark = Mark::Plain;
+        }
+    }
+
     /// Backspace.
     pub fn backspace(&mut self) {
         if !self.enabled {
@@ -201,12 +254,24 @@ impl<'d> Engine<'d> {
                 self.owned = None;
                 self.caps = false;
                 self.counters.live_anchors += 1;
+                self.note(
+                    Path::LiveKept,
+                    Direction::EnglishToThai,
+                    Some(boundary),
+                    &word,
+                );
                 self.request_layout(InputLayout::ThaiKedmanee);
                 self.screen.push(boundary);
                 return;
             }
             // The word cannot end as Thai after all: put the keys back and
             // judge it like any other word.
+            self.note(
+                Path::LiveWithdrawn,
+                Direction::EnglishToThai,
+                Some(boundary),
+                &word,
+            );
             self.withdraw_owned_run_to(&word);
         }
 
@@ -269,6 +334,17 @@ impl<'d> Engine<'d> {
                 if thai {
                     self.caps = false;
                 }
+                let path = if converted {
+                    Path::Revised
+                } else {
+                    Path::Boundary
+                };
+                let direction = if thai {
+                    Direction::EnglishToThai
+                } else {
+                    Direction::ThaiToEnglish
+                };
+                self.note(path, direction, Some(boundary), &word);
                 self.request_layout(if thai {
                     InputLayout::ThaiKedmanee
                 } else {
@@ -453,6 +529,25 @@ mod tests {
             }
         }
         e.screen
+    }
+
+    #[test]
+    fn a_caret_move_leaves_a_live_run_on_screen_unjudged() {
+        // The live reading stays as it is (no boundary check ever runs on it),
+        // and the next word starts clean.
+        let en = crate::dict::Dictionary::from_words(["log"]);
+        let th = crate::dict::Dictionary::from_words(["พำ", "สน", "เร", "เรือ"]);
+        let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
+        for c in "relogi".chars() {
+            e.key(c);
+        }
+        assert_eq!(e.screen, "พำสนเร");
+        e.caret_moved();
+        e.boundary(' ');
+        assert_eq!(
+            e.screen, "พำสนเร ",
+            "nothing is put back after the caret moved"
+        );
     }
 
     #[test]
