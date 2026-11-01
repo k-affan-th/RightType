@@ -255,6 +255,41 @@ mod tests {
     }
 
     #[test]
+    fn a_kept_rewrite_can_be_backspaced_over_once() {
+        let mut l = Ledger::new();
+        let c = cause(Path::LiveKept, Len::ThreeToFour);
+        l.record(c, Outcome::Kept);
+        l.change(c, Outcome::Kept, Outcome::BackspacedOver);
+        l.change(c, Outcome::Kept, Outcome::BackspacedOver);
+        let n = l.sum(|_| true);
+        assert_eq!((n.kept, n.backspaced_over, n.total()), (0, 1, 1));
+        assert_eq!(n.doubtful(), 1);
+    }
+
+    #[test]
+    fn the_field_kind_names_a_cell_and_stays_text_free() {
+        let mut l = Ledger::new();
+        for field in [Field::Edit, Field::Search, Field::Combo, Field::Address] {
+            l.record(
+                Cause {
+                    field,
+                    ..cause(Path::Boundary, Len::Two)
+                },
+                Outcome::Kept,
+            );
+        }
+        assert_eq!(l.cells().count(), 4);
+        assert_eq!(l.sum(|c| c.field == Field::Search).total(), 1);
+        let lines = l.lines();
+        for name in ["Edit", "Search", "Combo", "Address"] {
+            assert!(lines.iter().any(|x| x.contains(&format!("field={name} "))));
+        }
+        assert!(lines.iter().all(|x| x
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || " =_".contains(c))));
+    }
+
+    #[test]
     fn length_buckets() {
         let buckets: Vec<Len> = [1, 2, 3, 4, 5, 8, 9, 40].map(Len::of).to_vec();
         assert_eq!(

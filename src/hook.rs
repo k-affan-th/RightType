@@ -33,7 +33,7 @@ use righttype::buffer::{Key, WordBuffer};
 use righttype::diag::{self, Shape};
 use righttype::hotkeys::{Action, Chord, Hotkeys};
 use righttype::layout::{auto_convert_with_layout, LayoutId};
-use righttype::ledger::{Cause, Direction, Ending, Field, Len, Outcome, Path};
+use righttype::ledger::{Cause, Direction, Ending, Len, Outcome, Path};
 use righttype::per_app::AppMode;
 use righttype::recent::Recent;
 use righttype::render;
@@ -183,6 +183,9 @@ thread_local! {
     /// The last rewrite counted in the ledger, so an Undo right after it is
     /// charged to it.
     static LAST_REWRITE: std::cell::Cell<Option<(Cause, Instant)>> = const { std::cell::Cell::new(None) };
+    /// Backspaces that may still pass before one reaches into the last
+    /// rewrite: the first removes the Space/Enter/Tab that ended the word.
+    static REWRITE_BS_SKIP: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
 }
 
 fn ending_of(vk: Option<u16>) -> Ending {
@@ -199,7 +202,9 @@ fn ledger_cause(path: Path, direction: Direction, ending: Ending, chars: usize) 
         path,
         direction,
         ending,
-        field: Field::Edit,
+        // Read where a rewrite is counted (rare), from what the focus worker
+        // already learnt when the focus moved: no UI Automation call here.
+        field: crate::focus::field_kind(),
         len: Len::of(chars),
     }
 }
@@ -209,6 +214,33 @@ fn ledger_rewrite(path: Path, direction: Direction, ending: Ending, chars: usize
     let cause = ledger_cause(path, direction, ending, chars);
     crate::stats::ledger_rewrite(cause);
     LAST_REWRITE.with(|l| l.set(Some((cause, Instant::now()))));
+    REWRITE_BS_SKIP.with(|s| s.set(u8::from(ending != Ending::None)));
+}
+
+/// A key reached the app after the last counted rewrite. Typing or a caret
+/// move closes the watch; a Backspace that gets past the word's ending and
+/// into the rewritten text changes that rewrite from Kept to BackspacedOver,
+/// once (the same 30 s window as Undo).
+fn watch_rewrite(key: Key) -> Option<Cause> {
+    match key {
+        Key::Backspace => {
+            let (cause, at) = LAST_REWRITE.with(|l| l.get())?;
+            if at.elapsed() > Duration::from_secs(30) {
+                LAST_REWRITE.with(|l| l.set(None));
+                return None;
+            }
+            if REWRITE_BS_SKIP.with(|s| s.get()) > 0 {
+                REWRITE_BS_SKIP.with(|s| s.set(0));
+                return None;
+            }
+            LAST_REWRITE.with(|l| l.set(None));
+            Some(cause)
+        }
+        _ => {
+            LAST_REWRITE.with(|l| l.set(None));
+            None
+        }
+    }
 }
 
 thread_local! {
@@ -1645,6 +1677,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
 /// the recent words and a pending suggestion.
 fn caret_may_have_moved() {
     ghost_tail_forget();
+    LAST_REWRITE.with(|l| l.set(None));
     let offered = GHOST.with(|g| g.try_borrow_mut().ok().and_then(|mut g| g.take()));
     if offered.is_some() {
         crate::overlay::dismiss();
@@ -1667,15 +1700,57 @@ fn caret_may_have_moved() {
     });
     // A live reading still on screen is never judged at a word's end now.
     if let Some(chars) = live_len {
-        let cause = ledger_cause(
-            Path::LiveKept,
+        ledger_never_judged(chars);
+    }
+}
+
+/// A live reading was left on screen without a word end to judge it at.
+fn ledger_never_judged(chars: usize) {
+    let cause = ledger_cause(
+        Path::LiveKept,
+        Direction::EnglishToThai,
+        Ending::None,
+        chars,
+    );
+    crate::stats::ledger_rewrite(cause);
+    crate::stats::ledger_change(cause, Outcome::Kept, Outcome::CaretMovedWhileLive);
+}
+
+/// The caret is about to move by the keyboard (an arrow key, Home/End, Esc,
+/// Delete, a Ctrl/Alt chord) while a live reading is on screen. The keys typed
+/// are still known, so this is judged like a word end: a reading that would
+/// not be kept there goes back to the keys, before the key reaches the app.
+/// One that would be kept stays, counted as never judged. A mouse click does
+/// not come here: where the caret went is unknown, so nothing is injected.
+unsafe fn keyboard_caret_move() {
+    let seen = STATE.with(|s| {
+        let st = s.try_borrow().ok()?;
+        let owned = st.owned.as_ref()?;
+        let run = st.buf.current().to_string();
+        let back = !st.buf.is_poisoned()
+            && !run.is_empty()
+            && policy::run_goes_back(&run, &owned.rendered, dict::english(), dict::thai());
+        Some((run, owned.rendered.chars().count(), back))
+    });
+    let Some((mut run, shown_chars, back)) = seen else {
+        return;
+    };
+    if back {
+        ledger_rewrite(
+            Path::LiveWithdrawn,
             Direction::EnglishToThai,
             Ending::None,
-            chars,
+            run.chars().count(),
         );
-        crate::stats::ledger_rewrite(cause);
-        crate::stats::ledger_change(cause, Outcome::Kept, Outcome::CaretMovedWhileLive);
+        diag::note(
+            "caret moved: live Thai put back to the keys",
+            &[("keys", Shape::of(&run).into())],
+        );
+        withdraw_owned_run_to(&run);
+    } else {
+        ledger_never_judged(shown_chars);
     }
+    run.zeroize();
 }
 
 /// How long the keyboard hook takes per key, for the `hook-timing` build: a
@@ -3143,6 +3218,14 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     // would delete what was just typed instead of what we changed.
     if matches!(key, Key::Char(_) | Key::Backspace | Key::Boundary) {
         STATE.with(|s| s.borrow_mut().undo = None);
+    }
+    // A caret move by key, with a live reading still shown: judged now, while
+    // the typed keys are still known (the buffer is reset just below).
+    if key == Key::Reset {
+        keyboard_caret_move();
+    }
+    if let Some(cause) = watch_rewrite(key) {
+        crate::stats::ledger_change(cause, Outcome::Kept, Outcome::BackspacedOver);
     }
 
     // Drive the buffer; only a boundary can return a completed word.
@@ -4994,6 +5077,36 @@ unsafe fn foreground_layout() -> HKL {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_backspace_into_the_last_rewrite_is_counted_once() {
+        use super::*;
+        let word = |ending| {
+            let c = ledger_cause(Path::Boundary, Direction::EnglishToThai, ending, 4);
+            LAST_REWRITE.with(|l| l.set(Some((c, Instant::now()))));
+            REWRITE_BS_SKIP.with(|s| s.set(u8::from(ending != Ending::None)));
+            c
+        };
+        // Ended by a Space: the first Backspace only takes the Space off.
+        let c = word(Ending::Space);
+        assert_eq!(watch_rewrite(Key::Backspace), None);
+        assert_eq!(watch_rewrite(Key::Backspace), Some(c));
+        assert_eq!(watch_rewrite(Key::Backspace), None, "once per rewrite");
+        // Typing in between closes the watch.
+        word(Ending::Space);
+        assert_eq!(watch_rewrite(Key::Backspace), None);
+        assert_eq!(watch_rewrite(Key::Char('a')), None);
+        assert_eq!(watch_rewrite(Key::Backspace), None);
+        // No ending to take off: the first Backspace is already inside.
+        let c = word(Ending::None);
+        assert_eq!(watch_rewrite(Key::Backspace), Some(c));
+        // Too late (past the Undo window).
+        let c = word(Ending::None);
+        LAST_REWRITE.with(|l| {
+            l.set(Some((c, Instant::now() - Duration::from_secs(31))));
+        });
+        assert_eq!(watch_rewrite(Key::Backspace), None);
+    }
+
     use super::{shown_converter, Mode, OwnedRun, STATE};
     use righttype::detect::{Confidence, Detection, Evidence};
 

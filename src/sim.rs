@@ -70,6 +70,8 @@ pub struct Engine<'d> {
     pub ledger: crate::ledger::Ledger,
     /// CapsLock is on: letters on the English layout show in the other case.
     pub caps: bool,
+    /// The kind of field being typed in, as the ledger names it.
+    pub field: Field,
 }
 
 impl<'d> Engine<'d> {
@@ -87,6 +89,7 @@ impl<'d> Engine<'d> {
             counters: Counters::default(),
             ledger: crate::ledger::Ledger::new(),
             caps: false,
+            field: Field::Edit,
         }
     }
 
@@ -183,7 +186,7 @@ impl<'d> Engine<'d> {
             path,
             direction,
             ending,
-            field: Field::Edit,
+            field: self.field,
             len: Len::of(word.chars().count()),
         };
         self.ledger.record(cause, outcome);
@@ -208,6 +211,28 @@ impl<'d> Engine<'d> {
             self.owned = None;
             self.mark = Mark::Plain;
         }
+    }
+
+    /// The caret moved by the keyboard (an arrow key, Home/End, Escape,
+    /// Delete, a Ctrl/Alt chord): `hook::keyboard_caret_move`. Unlike a click,
+    /// the keys typed are still known, so a live reading that would not be
+    /// kept at a word end is put back to them rather than left behind
+    /// unjudged; one that would be kept stays, counted as never judged.
+    pub fn caret_moved_by_key(&mut self) {
+        if self.enabled {
+            if let Some(run) = &self.owned {
+                let word = self.buf.current().to_string();
+                let rendered = run.rendered.clone();
+                if !self.buf.is_poisoned()
+                    && !word.is_empty()
+                    && policy::run_goes_back(&word, &rendered, self.en, self.th)
+                {
+                    self.note(Path::LiveWithdrawn, Direction::EnglishToThai, None, &word);
+                    self.withdraw_owned_run_to(&word);
+                }
+            }
+        }
+        self.caret_moved();
     }
 
     /// Backspace.
@@ -548,6 +573,60 @@ mod tests {
             e.screen, "พำสนเร ",
             "nothing is put back after the caret moved"
         );
+    }
+
+    #[test]
+    fn a_caret_move_by_key_puts_back_a_reading_that_would_not_be_kept() {
+        // `relogin` shows พำสนเรื, which at a word end would go back to the
+        // keys. An arrow key is such an end: the keys come back, nothing
+        // unverified is left in the box.
+        let en = crate::dict::Dictionary::from_words(["log"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "พำสนเรือ"]);
+        let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
+        for c in "relogin".chars() {
+            e.key(c);
+        }
+        assert_eq!(e.screen, "พำสนเรื");
+        e.caret_moved_by_key();
+        assert_eq!(e.screen, "relogin");
+        assert_eq!(e.counters.withdrawals, 1);
+        let c = e.ledger.sum(|c| c.path == Path::LiveWithdrawn);
+        assert_eq!((c.kept, c.caret_moved_while_live), (1, 0));
+        assert_eq!(e.ledger.sum(|_| true).total(), 1);
+    }
+
+    #[test]
+    fn a_caret_move_by_key_keeps_a_reading_that_would_be_kept() {
+        let en = crate::dict::Dictionary::from_words(["log"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "สวัสดี"]);
+        let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
+        for c in "relogin".chars() {
+            e.key(c);
+        }
+        let shown = e.screen.clone();
+        assert!(!shown.is_empty());
+        e.owned = Some(Owned {
+            rendered: "สวัสดี".into(),
+            stable: 0,
+        });
+        e.screen = "สวัสดี".into();
+        e.caret_moved_by_key();
+        assert_eq!(e.screen, "สวัสดี", "a finished Thai word stays");
+        let c = e.ledger.sum(|_| true);
+        assert_eq!((c.caret_moved_while_live, c.total()), (1, 1));
+    }
+
+    #[test]
+    fn the_field_kind_reaches_the_ledger() {
+        let en = crate::dict::Dictionary::from_words(["log"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "พำสนเรือ"]);
+        let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
+        e.field = Field::Search;
+        for c in "relogin".chars() {
+            e.key(c);
+        }
+        e.caret_moved_by_key();
+        assert!(e.ledger.cells().all(|(c, _)| c.field == Field::Search));
     }
 
     #[test]
