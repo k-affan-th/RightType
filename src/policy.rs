@@ -199,9 +199,19 @@ pub fn detect_token(
             let is_thai = th.contains(token)
                 || segment::is_fully_known(token, th)
                 || crate::abbrev::reads_as_abbreviation(token, th);
-            (!is_thai && fixes_addresses())
-                .then(|| thai_layout_address(token).or_else(|| thai_layout_number(token, th)))
+            // A Thai word and then the letter a closing `:` or `?` gives on this
+            // layout: the mark, before the keys are read as an English word
+            // (`ทำไม?` has the keys `mew,?`, and `mew` is English).
+            (!is_thai)
+                .then(|| trailing_mark_after_word(token, th))
                 .flatten()
+                .or_else(|| {
+                    (!is_thai && fixes_addresses())
+                        .then(|| {
+                            thai_layout_address(token).or_else(|| thai_layout_number(token, th))
+                        })
+                        .flatten()
+                })
                 .or_else(|| detect::detect(token, en, th))
                 .or_else(|| thai_layout_compound(token, th))
                 .or_else(|| thai_layout_technical(token, en, th))
@@ -434,6 +444,27 @@ fn thai_layout_short_number(token: &str, th: &Dictionary) -> Option<Detection> {
         confidence: Confidence::High,
         evidence: Evidence::ExactDictionary,
     })
+}
+
+/// A live Thai reading, still ours at the word's end, that ends in the letter a
+/// closing `:` or `?` gives (the keys end in that mark): the reading with the
+/// mark in its place (`ทำไมฦ` from the keys `mew,?` becomes `ทำไม?`), or `None`.
+pub fn closing_mark_for_live_run(keys: &str, rendered: &str, th: &Dictionary) -> Option<String> {
+    if !keys.ends_with([':', '?']) {
+        return None;
+    }
+    trailing_mark_after_word(rendered, th).map(|d| d.corrected)
+}
+
+/// [`thai_layout_trailing_mark`] when what comes before the mark's letter is
+/// itself a Thai dictionary word: strong enough to outrank the keys reading as
+/// an English word.
+fn trailing_mark_after_word(token: &str, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    let last = token.chars().last()?;
+    th.contains(&token[..token.len() - last.len_utf8()])
+        .then(|| thai_layout_trailing_mark(token, th))
+        .flatten()
 }
 
 fn thai_layout_trailing_mark(token: &str, th: &Dictionary) -> Option<Detection> {
@@ -985,6 +1016,9 @@ pub fn shown_with_caps(keys: &str, caps: bool) -> String {
 /// are a known English word with a prefix or suffix ([`english::is_affixed`])
 /// unless the Thai itself is a dictionary word.
 pub fn revise_converted(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
+    if let Some(d) = trailing_mark_after_word(token, th) {
+        return Some(d);
+    }
     let raw = th_to_en(token.trim());
     // Trailing sentence punctuation may follow a word (`middleware,`), but on
     // this layout most ASCII punctuation is a Thai letter (`[` is บ, `;` is น),
@@ -1265,6 +1299,9 @@ mod tests {
         // often splits that way too (the audit's unknown-Thai budget holds the
         // line). A long second word is: `คำสำคัญ:` is a heading.
         assert_eq!(fix("คำสำคัญซ").as_deref(), Some("คำสำคัญ:"));
+        // The keys of ทำไม spell the English word `mew`, which must not win.
+        assert_eq!(fix("ทำไมฦ").as_deref(), Some("ทำไม?"));
+        assert_eq!(fix("ขอบคุณซ").as_deref(), Some("ขอบคุณ:"));
         // Real words that end in ซ stay.
         assert_eq!(fix("ก๊าซ"), None);
         // Not a known word before the ซ: no guess.
@@ -1507,6 +1544,7 @@ mod tests {
         let (en, th) = (crate::dict::english(), crate::dict::thai());
         let back = |t: &str| revise_converted(t, en, th).map(|d| d.corrected);
         assert_eq!(back("คำสำคัญซ").as_deref(), Some("คำสำคัญ:"));
+        assert_eq!(back("ทำไมฦ").as_deref(), Some("ทำไม?"));
         assert_eq!(
             back("เขาไปโรงเรียนหรือไม่ฦ").as_deref(),
             Some("เขาไปโรงเรียนหรือไม่?")

@@ -276,6 +276,13 @@ impl<'d> Engine<'d> {
                 .map(|o| o.rendered.clone())
                 .unwrap_or_default();
             if !policy::run_goes_back(&word, &rendered, self.en, self.th) {
+                if let Some(fixed) = policy::closing_mark_for_live_run(&word, &rendered, self.th) {
+                    let delta = render::delta(&rendered, &fixed);
+                    for _ in 0..delta.backspaces {
+                        self.screen.pop();
+                    }
+                    self.screen.push_str(&delta.insert);
+                }
                 self.owned = None;
                 self.caps = false;
                 self.counters.live_anchors += 1;
@@ -627,6 +634,15 @@ mod tests {
         }
         e.caret_moved_by_key();
         assert!(e.ledger.cells().all(|(c, _)| c.field == Field::Search));
+    }
+
+    #[test]
+    fn a_question_mark_after_live_thai_is_kept_as_a_question_mark() {
+        // `ทำไม?` typed on the English layout: the keys `mew,?` read as the
+        // English word `mew` and a comma, and the Shift+/ after the live Thai
+        // gives ฦ. The word is Thai and the mark is the mark.
+        assert_eq!(type_blind("ทำไม? ", InputLayout::UsQwerty), "ทำไม? ");
+        assert_eq!(type_blind("ภาษาไทย: ", InputLayout::UsQwerty), "ภาษาไทย: ");
     }
 
     #[test]

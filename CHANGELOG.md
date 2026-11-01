@@ -28,6 +28,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 
+- `ทำไม?` typed on the English layout came out `ทำไมฦ`: the keys of ทำไม (`mew,`)
+  are an English word, so the closing mark was never put right. A Thai word followed by
+  the letter a closing `:` or `?` gives now keeps the mark, also for a word still shown
+  as Thai while it is typed.
 - A half-typed name or a typo of an English word is no longer turned into Thai.
   `clau` (on its way to Claude), `figm`, `logi` and `itme` read as two or three tiny
   Thai words, which almost any run of letters does; a search box that searches as

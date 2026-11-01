@@ -3337,6 +3337,11 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         );
         withdraw_owned_run_to(&word);
     }
+    // A live reading kept to the word's end can still end in the letter a
+    // closing `:` or `?` gives on the Thai layout: put the mark there.
+    if !back {
+        close_live_run_with_mark(&word);
+    }
     // Otherwise its reading has already been applied to the screen, so the
     // boundary path must not correct it a second time — its backspace count
     // assumes the screen still holds the raw keystrokes.
@@ -4566,6 +4571,28 @@ unsafe fn convert_last_word() {
 unsafe fn withdraw_owned_run() -> bool {
     let run = STATE.with(|s| s.borrow().buf.current().to_string());
     withdraw_owned_run_to(&run)
+}
+
+/// The run we own ends in ซ or ฦ where its keys ended in `:` or `?`
+/// ([`policy::closing_mark_for_live_run`]): write the mark.
+unsafe fn close_live_run_with_mark(word: &str) {
+    let Some((old, new)) = STATE.with(|s| {
+        let st = s.borrow();
+        let owned = st.owned.as_ref()?;
+        let new = policy::closing_mark_for_live_run(word, &owned.rendered, dict::thai())?;
+        Some((owned.rendered.clone(), new))
+    }) else {
+        return;
+    };
+    let delta = render::delta(&old, &new);
+    inject::expect_before_caret(&old);
+    if delta.is_empty() || inject::apply(delta.backspaces, &delta.insert, None) {
+        STATE.with(|s| {
+            if let Some(owned) = s.borrow_mut().owned.as_mut() {
+                owned.rendered = new;
+            }
+        });
+    }
 }
 
 /// Put `run` (the keys as typed) back in place of the run we own.
