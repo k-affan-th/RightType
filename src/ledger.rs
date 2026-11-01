@@ -108,6 +108,15 @@ pub struct Counts {
 }
 
 impl Counts {
+    fn slot(&mut self, outcome: Outcome) -> &mut u32 {
+        match outcome {
+            Outcome::Kept => &mut self.kept,
+            Outcome::Undone => &mut self.undone,
+            Outcome::BackspacedOver => &mut self.backspaced_over,
+            Outcome::CaretMovedWhileLive => &mut self.caret_moved_while_live,
+        }
+    }
+
     pub fn total(&self) -> u32 {
         self.kept + self.undone + self.backspaced_over + self.caret_moved_while_live
     }
@@ -136,13 +145,21 @@ impl Ledger {
         if !self.cells.contains_key(&cause) && self.cells.len() >= MAX_CELLS {
             return;
         }
-        let counts = self.cells.entry(cause).or_default();
-        let n = match outcome {
-            Outcome::Kept => &mut counts.kept,
-            Outcome::Undone => &mut counts.undone,
-            Outcome::BackspacedOver => &mut counts.backspaced_over,
-            Outcome::CaretMovedWhileLive => &mut counts.caret_moved_while_live,
+        let n = self.cells.entry(cause).or_default().slot(outcome);
+        *n = n.saturating_add(1);
+    }
+
+    /// A rewrite counted as `from` turned out to be `to` (a Kept one the typist
+    /// then undid, say). Does nothing if no such rewrite is counted.
+    pub fn change(&mut self, cause: Cause, from: Outcome, to: Outcome) {
+        let Some(counts) = self.cells.get_mut(&cause) else {
+            return;
         };
+        if *counts.slot(from) == 0 {
+            return;
+        }
+        *counts.slot(from) -= 1;
+        let n = counts.slot(to);
         *n = n.saturating_add(1);
     }
 
@@ -215,6 +232,26 @@ mod tests {
         let b = l.sum(|c| c.path == Path::Boundary);
         assert_eq!((b.kept, b.undone, b.total(), b.doubtful()), (2, 1, 3, 1));
         assert_eq!(l.sum(|_| true).total(), 4);
+    }
+
+    #[test]
+    fn a_kept_rewrite_can_turn_out_undone() {
+        let mut l = Ledger::new();
+        let c = cause(Path::Boundary, Len::Two);
+        l.record(c, Outcome::Kept);
+        l.record(c, Outcome::Kept);
+        l.change(c, Outcome::Kept, Outcome::Undone);
+        let n = l.sum(|_| true);
+        assert_eq!((n.kept, n.undone, n.total()), (1, 1, 2));
+        // Nothing to move: no change, no new cell.
+        l.change(c, Outcome::BackspacedOver, Outcome::Undone);
+        l.change(
+            cause(Path::Revised, Len::One),
+            Outcome::Kept,
+            Outcome::Undone,
+        );
+        assert_eq!(l.sum(|_| true).total(), 2);
+        assert_eq!(l.cells().count(), 1);
     }
 
     #[test]

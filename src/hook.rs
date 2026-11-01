@@ -33,6 +33,7 @@ use righttype::buffer::{Key, WordBuffer};
 use righttype::diag::{self, Shape};
 use righttype::hotkeys::{Action, Chord, Hotkeys};
 use righttype::layout::{auto_convert_with_layout, LayoutId};
+use righttype::ledger::{Cause, Direction, Ending, Field, Len, Outcome, Path};
 use righttype::per_app::AppMode;
 use righttype::recent::Recent;
 use righttype::render;
@@ -176,6 +177,38 @@ pub fn caps_switches_language() -> bool {
 
 pub fn set_caps_switches_language(on: bool) {
     CAPS_SWITCHES.store(on, Ordering::Relaxed);
+}
+
+thread_local! {
+    /// The last rewrite counted in the ledger, so an Undo right after it is
+    /// charged to it.
+    static LAST_REWRITE: std::cell::Cell<Option<(Cause, Instant)>> = const { std::cell::Cell::new(None) };
+}
+
+fn ending_of(vk: Option<u16>) -> Ending {
+    match vk {
+        Some(v) if v == VK_RETURN.0 => Ending::Enter,
+        Some(v) if v == VK_TAB.0 => Ending::Tab,
+        Some(_) => Ending::Space,
+        None => Ending::None,
+    }
+}
+
+fn ledger_cause(path: Path, direction: Direction, ending: Ending, chars: usize) -> Cause {
+    Cause {
+        path,
+        direction,
+        ending,
+        field: Field::Edit,
+        len: Len::of(chars),
+    }
+}
+
+/// Count a rewrite in the outcome ledger (names and counts, never text).
+fn ledger_rewrite(path: Path, direction: Direction, ending: Ending, chars: usize) {
+    let cause = ledger_cause(path, direction, ending, chars);
+    crate::stats::ledger_rewrite(cause);
+    LAST_REWRITE.with(|l| l.set(Some((cause, Instant::now()))));
 }
 
 thread_local! {
@@ -1332,6 +1365,13 @@ unsafe fn undo_last_correction() {
             if let Some(exe) = current_app() {
                 crate::stats::app_event(&exe, righttype::app_quality::Event::Undone);
             }
+            if matches!(rec.kind, UndoKind::AutoWord | UndoKind::AutoMidToken) {
+                if let Some((cause, at)) = LAST_REWRITE.with(|l| l.take()) {
+                    if at.elapsed() <= Duration::from_secs(30) {
+                        crate::stats::ledger_change(cause, Outcome::Kept, Outcome::Undone);
+                    }
+                }
+            }
         }
         let mut kept_spelling = None;
         match rec.kind {
@@ -1609,12 +1649,13 @@ fn caret_may_have_moved() {
     if offered.is_some() {
         crate::overlay::dismiss();
     }
-    STATE.with(|s| {
+    let live_len = STATE.with(|s| {
         // Never re-entered from inside the keyboard path, but do not panic if
         // a nested hook call ever finds the state borrowed.
         let Ok(mut st) = s.try_borrow_mut() else {
-            return;
+            return None;
         };
+        let live = st.owned.as_ref().map(|o| o.rendered.chars().count());
         st.buf.clear();
         st.owned = None;
         st.mark = TokenMark::Plain;
@@ -1622,7 +1663,19 @@ fn caret_may_have_moved() {
         st.recent.clear();
         st.suggestion = None;
         st.live_hint = None;
+        live
     });
+    // A live reading still on screen is never judged at a word's end now.
+    if let Some(chars) = live_len {
+        let cause = ledger_cause(
+            Path::LiveKept,
+            Direction::EnglishToThai,
+            Ending::None,
+            chars,
+        );
+        crate::stats::ledger_rewrite(cause);
+        crate::stats::ledger_change(cause, Outcome::Kept, Outcome::CaretMovedWhileLive);
+    }
 }
 
 /// How long the keyboard hook takes per key, for the `hook-timing` build: a
@@ -3189,6 +3242,12 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
     });
     if back {
         e2e_trace(format!("boundary: {word:?} cannot end as Thai, withdrawn"));
+        ledger_rewrite(
+            Path::LiveWithdrawn,
+            Direction::EnglishToThai,
+            ending_of(Some(vk)),
+            word.chars().count(),
+        );
         diag::note(
             "word end: live Thai put back to the keys",
             &[("keys", Shape::of(&word).into())],
@@ -4464,6 +4523,12 @@ unsafe fn anchor_owned_run(run: &str, boundary_vk: u16) -> Option<String> {
         inject::toggle_capslock();
     }
     crate::stats::record_auto();
+    ledger_rewrite(
+        Path::LiveKept,
+        Direction::EnglishToThai,
+        ending_of(Some(boundary_vk)),
+        owned.rendered.chars().count(),
+    );
     activate_layout(policy::InputLayout::ThaiKedmanee);
     Some(owned.rendered.clone())
 }
@@ -4620,6 +4685,12 @@ where
                 set_undo(target.chars().count(), &shown, UndoKind::AutoMidToken);
                 shown.zeroize();
                 crate::stats::record_auto();
+                ledger_rewrite(
+                    Path::LiveKept,
+                    Direction::EnglishToThai,
+                    Ending::None,
+                    target.chars().count(),
+                );
                 STATE.with(|s| {
                     let mut st = s.borrow_mut();
                     st.owned = None;
@@ -4686,6 +4757,16 @@ where
         UndoKind::AutoWord,
     );
     crate::stats::record_auto();
+    ledger_rewrite(
+        Path::Boundary,
+        if has_thai(&corrected) {
+            Direction::EnglishToThai
+        } else {
+            Direction::ThaiToEnglish
+        },
+        ending_of(boundary_vk),
+        word.chars().count(),
+    );
     restore.zeroize();
 
     // Switch to whichever language the word ends in, so the rest of the sentence

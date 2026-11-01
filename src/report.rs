@@ -42,7 +42,7 @@ pub fn e2e_write() {
 /// Settings and system facts at the top of the report. No words, no paths.
 fn about() -> Vec<(&'static str, String)> {
     let yes = |b: bool| if b { "yes" } else { "no" }.to_string();
-    vec![
+    let mut about = vec![
         ("version", env!("CARGO_PKG_VERSION").to_string()),
         ("windows", windows_version()),
         ("keyboards", keyboards()),
@@ -57,7 +57,14 @@ fn about() -> Vec<(&'static str, String)> {
             "of it waiting for text boxes",
             righttype::timing::WAITING.summary().to_string(),
         ),
-    ]
+    ];
+    // What became of each rewrite, by cause: enum names and counts, no text.
+    about.extend(
+        crate::stats::ledger_lines()
+            .into_iter()
+            .map(|l| ("rewrites", l)),
+    );
+    about
 }
 
 /// Installed keyboards by layout id (0409 US, 041E Thai, 0809 UK, …).
