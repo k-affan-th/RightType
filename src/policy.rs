@@ -393,8 +393,13 @@ fn thai_layout_trailing_mark(token: &str, th: &Dictionary) -> Option<Detection> 
     // likely a slip of the finger as a colon.
     // A long phrase needs at least three known words: a single misspelt
     // word followed by a stray ซ must not read as a phrase and a colon.
+    // Two words are enough when the second is a long one (`คำสำคัญ`): two
+    // short words are what a misspelt word most often splits into.
     let head_is_thai = th.contains(head)
-        || (segment::is_fully_known(head, th) && segment::segment(head, th).len() >= 3);
+        || (segment::is_fully_known(head, th) && {
+            let words = segment::segment(head, th);
+            words.len() >= 3 || (words.len() == 2 && words[1].text.chars().count() >= 4)
+        });
     if head.chars().count() < 4
         || !head_is_thai
         || th.contains(token)
@@ -1195,9 +1200,10 @@ mod tests {
             fix("เขาไปโรงเรียนหรือไม่ฦ").as_deref(),
             Some("เขาไปโรงเรียนหรือไม่?")
         );
-        // Two known words before the ซ are not enough: a misspelt word often
-        // splits that way too (the audit's unknown-Thai budget holds the line).
-        assert_eq!(fix("คำสำคัญซ"), None);
+        // Two short known words before the ซ are not enough: a misspelt word
+        // often splits that way too (the audit's unknown-Thai budget holds the
+        // line). A long second word is: `คำสำคัญ:` is a heading.
+        assert_eq!(fix("คำสำคัญซ").as_deref(), Some("คำสำคัญ:"));
         // Real words that end in ซ stay.
         assert_eq!(fix("ก๊าซ"), None);
         // Not a known word before the ซ: no guess.
