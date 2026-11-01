@@ -28,6 +28,16 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 
+- A half-typed name or a typo of an English word is no longer turned into Thai.
+  `clau` (on its way to Claude), `figm`, `logi` and `itme` read as two or three tiny
+  Thai words, which almost any run of letters does; a search box that searches as
+  you type, or one ended with Enter, got Thai it could not find. Letters-only text
+  whose Thai reading is not itself a word, and whose known pieces are all one or two
+  letters long (or that can still grow into an English word), is left as typed.
+  Across 2,686 half-typed names the changes went from 13 to 0, and English typos
+  that turn Thai at the space from 2.49% to 0.73%. Thai typed on the wrong layout
+  still comes back: single words are unchanged, and 20 in 100,000 phrases of common
+  words are now left as typed.
 - A colon typed right after a heading made of two Thai words, the second a long
   one (`คำสำคัญ:`), now comes back as `:` instead of staying `ซ`. Two short words
   before the ซ are still left alone, as a misspelt word splits that way too.

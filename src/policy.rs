@@ -171,6 +171,7 @@ pub fn detect_token(
                 .filter(|d| !english::is_affixed(token, en) || th.contains(&d.corrected))
                 .or_else(|| us_layout_mixed_token(token, en, th))
                 .or_else(|| us_layout_tolerant_sentence(token, en, th))
+                .filter(|d| !weak_evidence(token, &d.corrected, en, th))
         }
         InputLayout::ThaiKedmanee => {
             if !has_thai || has_latin {
@@ -241,6 +242,30 @@ fn us_layout_letterless(token: &str, th: &Dictionary) -> Option<Detection> {
         confidence: Confidence::High,
         evidence: Evidence::ExactDictionary,
     })
+}
+
+/// A Thai reading too thin to rewrite what was typed. The keys are letters only
+/// and the reading is not itself a Thai word, and either every known piece of it
+/// is one or two letters long (`clau` reads แส+ฟี, `itme` ระ+ทำ: almost any run of
+/// letters reads as a few tiny Thai words) or the keys can still grow into an
+/// English word (`logi` on its way to `login`). Left as typed; a suggestion can
+/// still offer it. Keys with a punctuation key in them (`;` `,` `'` `[`) are
+/// strong evidence for Thai and never weak.
+fn weak_evidence(keys: &str, reading: &str, en: &Dictionary, th: &Dictionary) -> bool {
+    let keys = keys.trim();
+    if th.contains(reading.trim())
+        || keys.is_empty()
+        || !keys.chars().all(|c| c.is_ascii_alphabetic())
+    {
+        return false;
+    }
+    let longest_known = segment::segment(reading, th)
+        .iter()
+        .filter(|s| s.known)
+        .map(|s| s.text.chars().count())
+        .max()
+        .unwrap_or(0);
+    longest_known <= 2 || english::has_continuation(keys, en)
 }
 
 /// Punctuation the typist meant as ASCII even when it is typed next to a
@@ -1418,6 +1443,24 @@ mod tests {
     fn english_with_punctuation_on_the_english_layout_stays_english() {
         for english in ["\"it\"", "adc:", "(me)", "hello?", "\"so\""] {
             assert_eq!(on_us(english), None, "{english}");
+        }
+    }
+
+    #[test]
+    fn a_name_or_typo_that_only_reads_as_short_thai_words_stays() {
+        // Half-typed names and typos of English words: their Thai reading is
+        // two or three tiny known words, which is what almost anything reads as.
+        let (en, th) = (crate::dict::english(), crate::dict::thai());
+        let on_us = |t: &str| detect_token(t, InputLayout::UsQwerty, en, th).map(|d| d.corrected);
+        for typed in ["clau", "figm", "logi", "itme", "wrok", "Makro"] {
+            assert_eq!(on_us(typed), None, "{typed}");
+        }
+        // Thai that is a word, or segments into words longer than two letters,
+        // still comes back.
+        for thai in ["สวัสดี", "ขอบคุณ", "ภาษาไทย", "คำสำคัญ", "ทำไม", "ประเทศไทย"]
+        {
+            let keys = crate::layout::th_to_en(thai);
+            assert_eq!(on_us(&keys).as_deref(), Some(thai), "{keys}");
         }
     }
 

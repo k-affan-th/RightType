@@ -536,7 +536,7 @@ mod tests {
         // The live reading stays as it is (no boundary check ever runs on it),
         // and the next word starts clean.
         let en = crate::dict::Dictionary::from_words(["log"]);
-        let th = crate::dict::Dictionary::from_words(["พำ", "สน", "เร", "เรือ"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "พำสนเรือ"]);
         let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
         for c in "relogi".chars() {
             e.key(c);
@@ -557,17 +557,17 @@ mod tests {
 
     #[test]
     fn a_word_that_only_starts_like_thai_goes_back_at_space() {
-        // `relogi` reads พำ + สน + เร, three known Thai words, so it turns
+        // `relogi` reads พำสนเร, a known Thai word, so it turns
         // Thai mid-word; with the `n` the reading ends in a stray vowel, and
         // at the space the keys go back to what was typed.
         let en = crate::dict::Dictionary::from_words(["log"]);
-        let th = crate::dict::Dictionary::from_words(["พำ", "สน", "เร", "เรือ"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "พำสนเรือ"]);
         let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
         for c in "relogi".chars() {
             e.key(c);
         }
         assert_eq!(e.screen, "พำสนเร");
-        // Still the start of a Thai word (เรือ), so it stays Thai while typed.
+        // Still the start of a Thai word (พำสนเรือ), so it stays Thai while typed.
         e.key('n');
         assert_eq!(e.screen, "พำสนเรื");
         e.boundary(' ');
@@ -656,7 +656,7 @@ mod tests {
         // Converted mid-word, then put back at the space: the keys come back
         // as they were shown.
         let en = crate::dict::Dictionary::from_words(["log"]);
-        let th = crate::dict::Dictionary::from_words(["พำ", "สน", "เร", "เรือ"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "พำสนเรือ"]);
         let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
         e.caps = true;
         for c in "relogin".chars() {
