@@ -159,6 +159,50 @@ pub fn completes_inline() -> bool {
     INLINE_COMPLETION.load(Ordering::Relaxed)
 }
 
+/// The kind of field the focus is in, for the outcome ledger only. Read at a
+/// rewrite (rare), set where the focus change is already looked at; nothing
+/// on the keyboard path asks UI Automation for it.
+pub fn field_kind() -> righttype::ledger::Field {
+    use righttype::ledger::Field;
+    match FIELD_KIND.load(Ordering::Relaxed) {
+        1 => Field::Search,
+        2 => Field::Combo,
+        3 => Field::Address,
+        _ => Field::Edit,
+    }
+}
+
+static FIELD_KIND: AtomicU8 = AtomicU8::new(0);
+
+/// Tell the kinds of field apart by what UI Automation already reported for
+/// the focused element: its class, automation id and whether its control type
+/// is a combo box. An address bar wins over a search box (a browser's omnibox
+/// is both).
+fn classify_field(
+    class_name: &str,
+    automation_id: &str,
+    is_combo_type: bool,
+) -> righttype::ledger::Field {
+    use righttype::ledger::Field;
+    let has = |needle: &str| {
+        class_name.to_ascii_lowercase().contains(needle)
+            || automation_id.to_ascii_lowercase().contains(needle)
+    };
+    if is_inline_completing(class_name, automation_id)
+        || has("omnibox")
+        || has("urlbar")
+        || has("addressband")
+    {
+        Field::Address
+    } else if is_combo_type || has("combobox") || has("comboex") || has("combolbox") {
+        Field::Combo
+    } else if has("search") {
+        Field::Search
+    } else {
+        Field::Edit
+    }
+}
+
 /// Address bars that complete inline, by UI Automation class name
 /// (Chromium: Chrome, Edge, Brave, Opera, Vivaldi) or automation id (Firefox).
 fn is_inline_completing(class_name: &str, automation_id: &str) -> bool {
@@ -448,6 +492,7 @@ unsafe fn on_focus_inner() {
             TEXT_FIELD.store(false, Ordering::Relaxed);
             EDITING.store(false, Ordering::Relaxed);
             INLINE_COMPLETION.store(false, Ordering::Relaxed);
+            FIELD_KIND.store(0, Ordering::Relaxed);
             crate::hook::e2e_trace("field status: RightType's own window".to_string());
         } else {
             refresh_status();
@@ -540,6 +585,7 @@ fn is_list_row(control_type: UIA_CONTROLTYPE_ID) -> bool {
 
 unsafe fn refresh_status() {
     let mut inline = false;
+    let mut field_kind = righttype::ledger::Field::Edit;
     let mut text_field = false;
     let mut editing = false;
     let uia = uia_here();
@@ -557,6 +603,11 @@ unsafe fn refresh_status() {
                     .unwrap_or_default();
                 inline = is_inline_completing(&class, &id);
                 let kind = el.CurrentControlType().ok();
+                field_kind = classify_field(
+                    &class,
+                    &id,
+                    kind == Some(windows::Win32::UI::Accessibility::UIA_ComboBoxControlTypeId),
+                );
                 text_field = kind.is_some_and(|t| {
                     t == windows::Win32::UI::Accessibility::UIA_EditControlTypeId
                         || t == windows::Win32::UI::Accessibility::UIA_DocumentControlTypeId
@@ -587,6 +638,15 @@ unsafe fn refresh_status() {
     TEXT_FIELD.store(text_field, Ordering::Relaxed);
     EDITING.store(editing, Ordering::Relaxed);
     INLINE_COMPLETION.store(inline, Ordering::Relaxed);
+    FIELD_KIND.store(
+        match field_kind {
+            righttype::ledger::Field::Edit => 0,
+            righttype::ledger::Field::Search => 1,
+            righttype::ledger::Field::Combo => 2,
+            righttype::ledger::Field::Address => 3,
+        },
+        Ordering::Relaxed,
+    );
 }
 
 /// This thread's UI Automation client, made on first use. The UI thread's
@@ -1472,8 +1532,8 @@ fn uia_caret_rect() -> Option<windows::Win32::Foundation::RECT> {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_inline_completing, is_list_row, status_is_protected, FIELD_PASSWORD, FIELD_SAFE,
-        FIELD_UNKNOWN,
+        classify_field, is_inline_completing, is_list_row, status_is_protected, FIELD_PASSWORD,
+        FIELD_SAFE, FIELD_UNKNOWN,
     };
 
     #[test]
@@ -1495,6 +1555,24 @@ mod tests {
         assert!(!is_inline_completing("Chrome_RenderWidgetHostHWND", ""));
         assert!(!is_inline_completing("RichEditD2DPT", ""));
         assert!(!is_inline_completing("", ""));
+    }
+
+    #[test]
+    fn fields_are_told_apart_by_class_and_id() {
+        use righttype::ledger::Field;
+        assert_eq!(
+            classify_field("OmniboxViewViews", "", false),
+            Field::Address
+        );
+        assert_eq!(classify_field("", "urlbar-input", false), Field::Address);
+        assert_eq!(
+            classify_field("Edit", "SearchEditBox", false),
+            Field::Search
+        );
+        assert_eq!(classify_field("ComboBox", "", false), Field::Combo);
+        assert_eq!(classify_field("Edit", "", true), Field::Combo);
+        assert_eq!(classify_field("RichEditD2DPT", "", false), Field::Edit);
+        assert_eq!(classify_field("", "", false), Field::Edit);
     }
 
     #[test]
