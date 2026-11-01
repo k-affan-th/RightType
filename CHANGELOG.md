@@ -27,6 +27,8 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 - A colon typed right after a heading made of two Thai words, the second a long
   one (`คำสำคัญ:`), now comes back as `:` instead of staying `ซ`. Two short words
   before the ซ are still left alone, as a misspelt word splits that way too.
+  This also holds when the heading is typed on the English layout and turns Thai
+  while it is typed.
 - The list at the text cursor (Shift twice), the app's shortcut list and the list
   for a held key now close when you click anywhere outside them. They never take
   the keyboard focus, so a click elsewhere in the same window used to leave one

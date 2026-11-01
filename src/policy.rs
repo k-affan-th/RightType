@@ -942,7 +942,7 @@ pub fn revise_converted(token: &str, en: &Dictionary, th: &Dictionary) -> Option
             evidence: Evidence::ExactDictionary,
         });
     }
-    thai_layout_mixed_token(token, en, th)
+    thai_layout_mixed_token(token, en, th).or_else(|| thai_layout_trailing_mark(token, th))
 }
 
 /// Learning is allowed only for ordinary text produced under exact US QWERTY
@@ -1419,6 +1419,22 @@ mod tests {
         for english in ["\"it\"", "adc:", "(me)", "hello?", "\"so\""] {
             assert_eq!(on_us(english), None, "{english}");
         }
+    }
+
+    #[test]
+    fn a_closing_colon_after_live_thai_comes_back() {
+        // Typed on the English layout, the heading turns Thai while it is typed
+        // and Windows then gives ซ for the Shift+; that follows.
+        let (en, th) = (crate::dict::english(), crate::dict::thai());
+        let back = |t: &str| revise_converted(t, en, th).map(|d| d.corrected);
+        assert_eq!(back("คำสำคัญซ").as_deref(), Some("คำสำคัญ:"));
+        assert_eq!(
+            back("เขาไปโรงเรียนหรือไม่ฦ").as_deref(),
+            Some("เขาไปโรงเรียนหรือไม่?")
+        );
+        // A real word ending in ซ, and a head that is not Thai, get no colon.
+        assert_ne!(back("ก๊าซ").as_deref(), Some("ก๊า:"));
+        assert_ne!(back("กขฃซ").as_deref(), Some("กขฃ:"));
     }
 
     #[test]
