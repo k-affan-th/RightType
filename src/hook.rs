@@ -1625,7 +1625,80 @@ fn caret_may_have_moved() {
     });
 }
 
+/// How long the keyboard hook takes per key, for the `hook-timing` build: a
+/// key waits for this function, and Windows removes a low-level hook that is
+/// too slow. Only durations are kept, never which key or what was typed, and
+/// they are written out only when `RIGHTTYPE_PERF_FILE` names a file.
+/// `tools/hook_timing.py` summarises it; see docs/HOOK_TIMING.md.
+#[cfg(feature = "hook-timing")]
+mod timing {
+    use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+
+    const KEYS_KEPT: usize = 1 << 16;
+    const SPACES_KEPT: usize = 1 << 12;
+    /// Write the files after this many keys (the write is not timed).
+    const WRITE_EVERY: usize = 250;
+
+    #[allow(clippy::declare_interior_mutable_const)]
+    const ZERO: AtomicU32 = AtomicU32::new(0);
+    static KEYS: [AtomicU32; KEYS_KEPT] = [ZERO; KEYS_KEPT];
+    static SPACES: [AtomicU32; SPACES_KEPT] = [ZERO; SPACES_KEPT];
+    static KEYS_N: AtomicUsize = AtomicUsize::new(0);
+    static SPACES_N: AtomicUsize = AtomicUsize::new(0);
+
+    /// One call of the hook took `nanos`; `space` marks a typed Space, where
+    /// the word being finished is judged.
+    pub fn record(nanos: u128, space: bool) {
+        let ns = nanos.min(u32::MAX as u128) as u32;
+        let i = KEYS_N.fetch_add(1, Ordering::Relaxed);
+        KEYS[i % KEYS_KEPT].store(ns, Ordering::Relaxed);
+        if space {
+            let j = SPACES_N.fetch_add(1, Ordering::Relaxed);
+            SPACES[j % SPACES_KEPT].store(ns, Ordering::Relaxed);
+        }
+        if (i + 1) % WRITE_EVERY == 0 {
+            write_files();
+        }
+    }
+
+    fn lines(samples: &[AtomicU32], count: usize) -> String {
+        let mut out = String::new();
+        for sample in &samples[..count.min(samples.len())] {
+            out.push_str(&sample.load(Ordering::Relaxed).to_string());
+            out.push(char::from(10u8));
+        }
+        out
+    }
+
+    fn write_files() {
+        let Some(path) = std::env::var_os("RIGHTTYPE_PERF_FILE") else {
+            return;
+        };
+        let _ = std::fs::write(&path, lines(&KEYS, KEYS_N.load(Ordering::Relaxed)));
+        let mut spaces = path;
+        spaces.push(".space");
+        let _ = std::fs::write(spaces, lines(&SPACES, SPACES_N.load(Ordering::Relaxed)));
+    }
+}
+
+/// The `hook-timing` build times [`ll_proc_untimed`]; every other build
+/// installs it as it is.
+#[cfg(feature = "hook-timing")]
 unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    let started = Instant::now();
+    let result = ll_proc_untimed(code, wparam, lparam);
+    if code == HC_ACTION as i32 {
+        let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
+        let space =
+            kb.vkCode == 0x20 && wparam.0 as u32 == WM_KEYDOWN && kb.dwExtraInfo != INJECT_TAG;
+        timing::record(started.elapsed().as_nanos(), space);
+    }
+    result
+}
+#[cfg(not(feature = "hook-timing"))]
+use ll_proc_untimed as ll_proc;
+
+unsafe extern "system" fn ll_proc_untimed(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
         LAST_HOOK_TICK.store(kb.time, Ordering::Relaxed);

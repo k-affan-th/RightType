@@ -6,6 +6,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Added
 
+- `hook-timing`, a cargo feature that is off in every release: it times the keyboard
+  hook per key (durations only, nothing about what was typed) so a slow release
+  shows up as numbers. `tools/hook_timing.py` summarises it; see
+  docs/HOOK_TIMING.md.
 - English keyboards **Dvorak** and **Colemak**: words typed on the wrong
   language are fixed in both directions, live and in Fix text. Any country's
   English on the US or UK keyboard is recognised from its Windows layout file.
