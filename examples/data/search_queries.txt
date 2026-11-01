@@ -1,0 +1,31 @@
+# Short search-box queries typed on the US layout. One per line; used by examples/sim_audit.rs.
+best pizza near me
+weather tomorrow
+how to tie a tie
+cheap flights to tokyo
+python list comprehension
+rust borrow checker
+iphone 15 case
+macbook air m2 review
+nearest pharmacy open now
+bts concert tickets
+thai green curry recipe
+bangkok to chiang mai train
+exchange rate usd thb
+what is a tensor
+react useeffect cleanup
+windows 11 keyboard shortcuts
+free online pdf merge
+how long to boil eggs
+python vs rust speed
+best running shoes 2026
+youtube downloader
+git undo last commit
+nvidia driver update
+resume template
+song lyrics generator
+lego star wars
+coffee shop wifi
+pad thai calories
+mechanical keyboard switches
+sunset time today

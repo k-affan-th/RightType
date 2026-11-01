@@ -38,6 +38,10 @@ jobs:
     # benchmark word may be changed, and recall may not fall below its floor.
     - name: False-positive audit
       run: cargo run --release --example false_positive_audit -- --check
+    # The same, through the live replay: half-typed names, English typos and
+    # per-category text corpora (examples/data) may not exceed their floors.
+    - name: Simulation audit
+      run: cargo run --release --example sim_audit -- --check
     - name: Typing benchmark
       run: cargo run --release --example typing_benchmark -- --check
 

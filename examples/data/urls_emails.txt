@@ -1,0 +1,21 @@
+# URLs and email addresses, typed on the US layout.
+https://github.com
+https://www.google.com/search?q=rust
+http://localhost:3000
+www.example.com
+example.com/about
+github.com/rust-lang/rust
+https://docs.rs/serde
+youtube.com/watch?v=abc123
+john.doe@example.com
+support@company.co.th
+sales@shop.com
+user123@gmail.com
+info@my-site.org
+https://en.wikipedia.org/wiki/Thailand
+ftp://files.example.com
+192.168.1.1
+localhost:8080
+reddit.com/r/rust
+https://t.co/abc
+mailto:me@example.com
