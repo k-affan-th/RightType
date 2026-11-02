@@ -189,6 +189,9 @@ can have its own mode (Settings → Apps).
   English** while the Thai keyboard is on (opt-in); **hold a key** for … – ฿ ฯ
   and accents (opt-in); **show shortcuts on screen** for recordings (opt-in,
   never letters); a **rest reminder** (opt-in).
+- **Short numbers on the Thai keyboard** (opt-in, Settings → Keyboard): with it on, one to three
+  number-row keys typed with the Thai keyboard on, such as `-/` for 32 or `-` for 3, come back as
+  the digits. Off by default, because such short text can also be real Thai.
 - **Barcode scanners** work with the Thai keyboard on, and a device that types a
   command faster than any hand is held back.
 

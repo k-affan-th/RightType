@@ -30,7 +30,15 @@ use righttype::layout::en_to_th;
 use righttype::policy::InputLayout;
 use righttype::sim::Engine;
 
-const ARTICLE: &str = include_str!("data/academic_th_en.txt");
+const ARTICLE_RAW: &str = include_str!("data/academic_th_en.txt");
+
+/// The sample with LF line ends: a Windows checkout may turn them into CRLF,
+/// and a typist can only type what a key makes.
+fn article() -> &'static str {
+    static LF: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    LF.get_or_init(|| ARTICLE_RAW.replace("\r\n", "\n"))
+}
+
 const RUNS: u64 = 50;
 
 /// Wrong-layout words RightType must fix by itself (mean over runs) when the
@@ -204,7 +212,7 @@ fn run(s: Scenario, seed: u64) -> Outcome {
     // Words with their separator (space or newline); blank lines are Enters.
     let mut words: Vec<(String, char)> = Vec::new();
     let mut cur = String::new();
-    for c in ARTICLE.chars() {
+    for c in article().chars() {
         if c == ' ' || c == '\n' {
             if !cur.is_empty() {
                 words.push((std::mem::take(&mut cur), c));
@@ -310,7 +318,7 @@ fn run(s: Scenario, seed: u64) -> Outcome {
             }
         }
     }
-    o.final_ok = e.screen.trim_end() == ARTICLE.trim_end();
+    o.final_ok = e.screen.trim_end() == article().trim_end();
     o
 }
 
@@ -323,9 +331,9 @@ fn main() {
     let check = std::env::args().any(|a| a == "--check");
     let mut failures: Vec<String> = Vec::new();
     righttype::english::warm();
-    let chars = ARTICLE.trim_end().chars().count();
-    let words = ARTICLE.split_whitespace().count();
-    let thai_words = ARTICLE
+    let chars = article().trim_end().chars().count();
+    let words = article().split_whitespace().count();
+    let thai_words = article()
         .split_whitespace()
         .filter(|w| w.chars().any(is_thai))
         .count();
@@ -365,7 +373,7 @@ fn main() {
         }
         let cpm = chars as f64 / (secs / 60.0);
         // One keystroke per character (Shift chords count once) is the floor.
-        let ideal_keys = ARTICLE.trim_end().chars().count() as f64 + 1.0;
+        let ideal_keys = article().trim_end().chars().count() as f64 + 1.0;
         let extra = f(&|o| (o.keys + o.backspaces) as f64) - ideal_keys;
         assert!(
             outcomes.iter().all(|o| o.final_ok),

@@ -290,6 +290,9 @@ texts! {
     RowGrave => "Grave key (`) types its character", "ปุ่มตัวหนอน (`) พิมพ์ตัวอักษร";
     SubGraveShort => "Switch language with Alt+Shift or CapsLock.", "สลับภาษาด้วย Alt+Shift หรือ CapsLock แทน";
     SubGrave => "Instead of switching language. Switch with Alt+Shift, or let CapsLock switch it.", "แทนการสลับภาษา ใช้ Alt+Shift หรือ CapsLock สลับภาษาแทน";
+    RowShortNumbers => "Read short symbol-only text as a number", "อ่านข้อความสั้น ๆ ที่เป็นแต่สัญลักษณ์บนแป้นไทยเป็นตัวเลข";
+    SubShortNumbersShort => "Off by default: -/ becomes 32, - becomes 3.", "ปิดไว้ก่อน: -/ เป็น 32, - เป็น 3";
+    SubShortNumbers => "One to three number-row keys typed with the Thai keyboard on, such as -/ for 32. Short text like this can also be real Thai, so it is off unless you turn it on.", "พิมพ์ปุ่มแถวตัวเลข 1-3 ตัวตอนแป้นไทยเปิดอยู่ เช่น -/ แทน 32 ข้อความสั้นแบบนี้อาจเป็นภาษาไทยจริงได้ จึงปิดไว้จนกว่าจะเปิดเอง";
     RowGuardSwitch => "Undo a language switch made by a shortcut", "เปลี่ยนภาษากลับเมื่อสลับเพราะปุ่มลัด";
     SubGuardSwitchShort => "Puts the language back after a stray shortcut.", "เปลี่ยนภาษากลับเมื่อกดปุ่มลัดพลาด";
     SubGuardSwitch => "Ctrl/Alt + Shift + a key can switch the language by accident; it is put back.", "Ctrl/Alt + Shift + ปุ่ม อาจสลับภาษาโดยไม่ตั้งใจ RightType จะเปลี่ยนกลับให้";
