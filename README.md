@@ -10,6 +10,9 @@
 
 ~~แนพพำแะ~~ → **correct**  ·  ~~l;ylfu~~ → **สวัสดี**
 
+**รองรับแป้นพิมพ์หลายแบบ และตรวจให้เองอัตโนมัติ** ไม่ต้องตั้งค่าว่าคุณใช้แป้นไหน<br>
+ไทย: Kedmanee · Pattachote · Manoonchai  |  อังกฤษ: US · UK · Dvorak · Colemak
+
 [![Release](https://img.shields.io/github/v/release/k-affan-th/RightType?style=flat-square&labelColor=14181f&color=3f6fd1)](https://github.com/k-affan-th/RightType/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/k-affan-th/RightType/total?style=flat-square&labelColor=14181f&color=3f6fd1)](https://github.com/k-affan-th/RightType/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/k-affan-th/RightType/rust.yml?branch=main&style=flat-square&labelColor=14181f&label=CI)](https://github.com/k-affan-th/RightType/actions/workflows/rust.yml)
@@ -60,6 +63,18 @@ down; the full guide is in [docs/GUIDE.md](docs/GUIDE.md).*
 2. ดับเบิลคลิก ถ้า Windows ขึ้น "Windows protected your PC" ให้กด **More info → Run anyway**
    (ไฟล์ยังไม่ได้ลงลายเซ็นดิจิทัล จึงขึ้นคำเตือนนี้ทุกครั้ง) ไม่ต้องใช้สิทธิ์ admin
 3. RightType อยู่ที่มุมขวาล่างของจอ (ไอคอน **Aก**) คลิกเพื่อเปิดเมนูและหน้าตั้งค่า
+
+**ติดตั้งจากที่อื่นก็ได้** (สถานะ ณ 2 พ.ย. 2026)
+
+| ช่องทาง | สถานะ | วิธี |
+| --- | --- | --- |
+| Microsoft Store | พร้อมใช้ | [เปิดหน้า RightType ใน Store](https://apps.microsoft.com/detail/9P0XS6XQLMNC) |
+| Scoop | พร้อมใช้ | `scoop bucket add righttype https://github.com/k-affan-th/scoop-bucket` แล้ว `scoop install righttype` |
+| winget | รอ Microsoft ตรวจ | ยังติดตั้งด้วย `winget install` ไม่ได้ |
+| Chocolatey | รอผู้ดูแลตรวจ | ยังติดตั้งด้วย `choco install` ไม่ได้ |
+
+เลขรุ่นของแต่ละช่องทางอาจไม่เท่ากัน เพราะแต่ละที่อนุมัติไม่พร้อมกัน ดูรุ่นล่าสุดได้ที่
+[Releases](https://github.com/k-affan-th/RightType/releases/latest)
 
 อยากตรวจว่าไฟล์ไม่เสียหายระหว่างโหลด? เทียบกับ `SHA256.txt` ในหน้าเดียวกัน:
 
@@ -254,6 +269,9 @@ pwsh -File packaging\build_release.ps1       # installer + zip + SHA256.txt ล�
 
 - เขาใช้ตรรกะแก้ภาษา พจนานุกรม และรายการคำสะกดผิดของที่นี่ (`src/` และ `assets/`) ตามที่เขียนไว้ใน README ของเขา
   แล้วเพิ่มส่วนของ Mac เองทั้งหมด (ตัวเชื่อมกับ Swift แอปเมนูบาร์ และสคริปต์ติดตั้ง)
+- **เริ่มจากฐานรุ่นไหน:** แอป Mac รุ่น 0.1.0 (ปล่อยเมื่อ 28 ต.ค. 2026) สร้างบนแกนของ RightType **2.6.2** ดูจากเลขรุ่นใน
+  `Cargo.toml` ของเขา (เขาไม่ได้เขียนไว้ใน README) ฝั่ง Windows ที่นี่ตอนนี้ไปถึง 2.6.6 แล้ว การแก้ไขและแป้นพิมพ์ที่เพิ่มหลัง
+  2.6.2 (เช่น Dvorak และ Colemak) จึงยังไม่อยู่ในแอป Mac จนกว่าเขาจะอัปเดตฐาน
 - ไลเซนส์เดียวกัน (MIT หรือ Apache-2.0) และไม่มีโค้ดเชื่อมต่ออินเทอร์เน็ตเหมือนกัน
 - เป็นโปรเจกต์ของเขา แยกจากที่นี่ ถ้าเจอปัญหาหรืออยากขอฟีเจอร์ของแอป Mac แจ้งที่
   [issues ของเขา](https://github.com/lungkao/RightType-mac/issues) จะถึงมือคนทำที่สุด
