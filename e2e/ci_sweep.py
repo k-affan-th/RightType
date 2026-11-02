@@ -198,12 +198,19 @@ def hold_flip(seconds=0.8):
     user32.keybd_event(SHIFT, 0, 2, 0)
 
 
-def traced(steps, what):
-    """Run `steps`; did the trace say `what` meanwhile?"""
+def traced(steps, what, within=0.6):
+    """Run `steps`; did the trace say `what` within `within` seconds of them
+    (it returns as soon as it did)? A case that expects `what` and could be
+    slow on a busy runner passes a longer `within`; one that expects it NOT to
+    be said keeps the short wait, which is also how long it takes."""
     start = fs.log_size()
     steps()
-    time.sleep(0.6)
-    return "yes" if what in fs.log_since(start) else "no"
+    deadline = time.time() + within
+    while what not in fs.log_since(start):
+        if time.time() >= deadline:
+            return "no"
+        time.sleep(0.1)
+    return "yes"
 
 
 def keyboard_states(t):
@@ -273,7 +280,8 @@ def thai_text_tools(t):
            then=[lambda: tap(BACK)])
     fs.check(t.name, "why? says an English word was left as typed",
              traced(lambda: (fs.type_keys("hello "), time.sleep(0.5),
-                             palette_search("why")()), "why: KeptEnglish"), "yes")
+                             palette_search("why")()), "why: KeptEnglish",
+                    within=4.0), "yes")
     fs.run(t, "rest of a long Thai word with Tab", "xit=kly,ry", "ประชาสัมพันธ์",
            layout=HKL_TH, then=[lambda: tap(0x09)])
     fs.check(t.name, "mode set to manual", str(fs.set_mode("manual")), "True")
@@ -444,7 +452,7 @@ def caret_list(t):
     t.layout(fs.HKL_EN)
     time.sleep(0.3)
     fs.check(t.name, "Shift twice opens the list at the cursor",
-             traced(shift_twice, "caret list: open"), "yes")
+             traced(shift_twice, "caret list: open", within=4.0), "yes")
     time.sleep(0.4)
     type_keys("degree")
     time.sleep(0.5)
