@@ -8,6 +8,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Added
 
+- Settings → Keyboard: **Read short symbol-only text as a number** (off by default). With it on,
+  `32`, `3` and `5` typed on the Thai keyboard come back as digits instead of `-/`, `-` and `ถ`.
+- The problem report (tray → Save a problem report) lists what became of each automatic rewrite
+  by cause (kept, undone, backspaced over, caret moved away): names and counts only, no text.
 - `hook-timing`, a cargo feature that is off in every release: it times the keyboard
   hook per key (durations only, nothing about what was typed) so a slow release
   shows up as numbers. `tools/hook_timing.py` summarises it; see
@@ -43,6 +47,9 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 
+- Moving the caret by keyboard (arrows, Home/End, Esc, Delete, a Ctrl or Alt shortcut) while a word
+  is still shown as Thai, and its keys would not have been kept as Thai at a word's end, puts the
+  typed keys back instead of leaving the Thai behind. A mouse click changes nothing.
 - CapsLock tapped with a letter at once (`CapsLock`+letter) now types the letter
   in the new language, and Auto correction leaves that word alone.
 - CapsLock switches the language in password fields too.
