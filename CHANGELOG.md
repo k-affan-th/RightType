@@ -4,6 +4,8 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [2.6.7] — 2026-11-02
+
 ### Added
 
 - `hook-timing`, a cargo feature that is off in every release: it times the keyboard
