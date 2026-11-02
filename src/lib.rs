@@ -53,6 +53,7 @@ pub mod keyboard;
 pub mod keycast;
 pub mod latex;
 pub mod layout;
+pub mod ledger;
 pub mod macros;
 pub mod mathsimple;
 pub mod motion;

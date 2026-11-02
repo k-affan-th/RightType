@@ -16,6 +16,7 @@
 use crate::buffer::{Key, WordBuffer};
 use crate::dict::Dictionary;
 use crate::layout::en_to_th;
+use crate::ledger::{Cause, Direction, Ending, Field, Len, Outcome, Path};
 use crate::policy::{self, InputLayout, Reading};
 use crate::render;
 use crate::secret::SeedTracker;
@@ -65,8 +66,12 @@ pub struct Engine<'d> {
     /// The focused text box.
     pub screen: String,
     pub counters: Counters,
+    /// What became of each rewrite, by cause (no text).
+    pub ledger: crate::ledger::Ledger,
     /// CapsLock is on: letters on the English layout show in the other case.
     pub caps: bool,
+    /// The kind of field being typed in, as the ledger names it.
+    pub field: Field,
 }
 
 impl<'d> Engine<'d> {
@@ -82,7 +87,9 @@ impl<'d> Engine<'d> {
             seed: SeedTracker::new(),
             screen: String::new(),
             counters: Counters::default(),
+            ledger: crate::ledger::Ledger::new(),
             caps: false,
+            field: Field::Edit,
         }
     }
 
@@ -157,6 +164,77 @@ impl<'d> Engine<'d> {
         self.caps = !self.caps;
     }
 
+    fn note(&mut self, path: Path, direction: Direction, end: Option<char>, word: &str) {
+        self.note_outcome(path, direction, end, word, Outcome::Kept);
+    }
+
+    fn note_outcome(
+        &mut self,
+        path: Path,
+        direction: Direction,
+        end: Option<char>,
+        word: &str,
+        outcome: Outcome,
+    ) {
+        let ending = match end {
+            Some(c) if c == char::from(10u8) => Ending::Enter,
+            Some(c) if c == char::from(9u8) => Ending::Tab,
+            Some(_) => Ending::Space,
+            None => Ending::None,
+        };
+        let cause = Cause {
+            path,
+            direction,
+            ending,
+            field: self.field,
+            len: Len::of(word.chars().count()),
+        };
+        self.ledger.record(cause, outcome);
+    }
+
+    /// The caret may have moved: a click, an arrow key, Escape or a Ctrl/Alt
+    /// chord. `hook::caret_may_have_moved`: the word in progress is dropped and
+    /// a run we own is left on screen as it is, never judged at a boundary.
+    pub fn caret_moved(&mut self) {
+        if self.enabled {
+            if let Some(run) = &self.owned {
+                let word = run.rendered.clone();
+                self.note_outcome(
+                    Path::LiveKept,
+                    Direction::EnglishToThai,
+                    None,
+                    &word,
+                    Outcome::CaretMovedWhileLive,
+                );
+            }
+            self.buf.clear();
+            self.owned = None;
+            self.mark = Mark::Plain;
+        }
+    }
+
+    /// The caret moved by the keyboard (an arrow key, Home/End, Escape,
+    /// Delete, a Ctrl/Alt chord): `hook::keyboard_caret_move`. Unlike a click,
+    /// the keys typed are still known, so a live reading that would not be
+    /// kept at a word end is put back to them rather than left behind
+    /// unjudged; one that would be kept stays, counted as never judged.
+    pub fn caret_moved_by_key(&mut self) {
+        if self.enabled {
+            if let Some(run) = &self.owned {
+                let word = self.buf.current().to_string();
+                let rendered = run.rendered.clone();
+                if !self.buf.is_poisoned()
+                    && !word.is_empty()
+                    && policy::run_goes_back(&word, &rendered, self.en, self.th)
+                {
+                    self.note(Path::LiveWithdrawn, Direction::EnglishToThai, None, &word);
+                    self.withdraw_owned_run_to(&word);
+                }
+            }
+        }
+        self.caret_moved();
+    }
+
     /// Backspace.
     pub fn backspace(&mut self) {
         if !self.enabled {
@@ -198,15 +276,34 @@ impl<'d> Engine<'d> {
                 .map(|o| o.rendered.clone())
                 .unwrap_or_default();
             if !policy::run_goes_back(&word, &rendered, self.en, self.th) {
+                if let Some(fixed) = policy::closing_mark_for_live_run(&word, &rendered, self.th) {
+                    let delta = render::delta(&rendered, &fixed);
+                    for _ in 0..delta.backspaces {
+                        self.screen.pop();
+                    }
+                    self.screen.push_str(&delta.insert);
+                }
                 self.owned = None;
                 self.caps = false;
                 self.counters.live_anchors += 1;
+                self.note(
+                    Path::LiveKept,
+                    Direction::EnglishToThai,
+                    Some(boundary),
+                    &word,
+                );
                 self.request_layout(InputLayout::ThaiKedmanee);
                 self.screen.push(boundary);
                 return;
             }
             // The word cannot end as Thai after all: put the keys back and
             // judge it like any other word.
+            self.note(
+                Path::LiveWithdrawn,
+                Direction::EnglishToThai,
+                Some(boundary),
+                &word,
+            );
             self.withdraw_owned_run_to(&word);
         }
 
@@ -269,6 +366,17 @@ impl<'d> Engine<'d> {
                 if thai {
                     self.caps = false;
                 }
+                let path = if converted {
+                    Path::Revised
+                } else {
+                    Path::Boundary
+                };
+                let direction = if thai {
+                    Direction::EnglishToThai
+                } else {
+                    Direction::ThaiToEnglish
+                };
+                self.note(path, direction, Some(boundary), &word);
                 self.request_layout(if thai {
                     InputLayout::ThaiKedmanee
                 } else {
@@ -456,23 +564,105 @@ mod tests {
     }
 
     #[test]
+    fn a_caret_move_leaves_a_live_run_on_screen_unjudged() {
+        // The live reading stays as it is (no boundary check ever runs on it),
+        // and the next word starts clean.
+        let en = crate::dict::Dictionary::from_words(["log"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "พำสนเรือ"]);
+        let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
+        for c in "relogi".chars() {
+            e.key(c);
+        }
+        assert_eq!(e.screen, "พำสนเร");
+        e.caret_moved();
+        e.boundary(' ');
+        assert_eq!(
+            e.screen, "พำสนเร ",
+            "nothing is put back after the caret moved"
+        );
+    }
+
+    #[test]
+    fn a_caret_move_by_key_puts_back_a_reading_that_would_not_be_kept() {
+        // `relogin` shows พำสนเรื, which at a word end would go back to the
+        // keys. An arrow key is such an end: the keys come back, nothing
+        // unverified is left in the box.
+        let en = crate::dict::Dictionary::from_words(["log"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "พำสนเรือ"]);
+        let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
+        for c in "relogin".chars() {
+            e.key(c);
+        }
+        assert_eq!(e.screen, "พำสนเรื");
+        e.caret_moved_by_key();
+        assert_eq!(e.screen, "relogin");
+        assert_eq!(e.counters.withdrawals, 1);
+        let c = e.ledger.sum(|c| c.path == Path::LiveWithdrawn);
+        assert_eq!((c.kept, c.caret_moved_while_live), (1, 0));
+        assert_eq!(e.ledger.sum(|_| true).total(), 1);
+    }
+
+    #[test]
+    fn a_caret_move_by_key_keeps_a_reading_that_would_be_kept() {
+        let en = crate::dict::Dictionary::from_words(["log"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "สวัสดี"]);
+        let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
+        for c in "relogin".chars() {
+            e.key(c);
+        }
+        let shown = e.screen.clone();
+        assert!(!shown.is_empty());
+        e.owned = Some(Owned {
+            rendered: "สวัสดี".into(),
+            stable: 0,
+        });
+        e.screen = "สวัสดี".into();
+        e.caret_moved_by_key();
+        assert_eq!(e.screen, "สวัสดี", "a finished Thai word stays");
+        let c = e.ledger.sum(|_| true);
+        assert_eq!((c.caret_moved_while_live, c.total()), (1, 1));
+    }
+
+    #[test]
+    fn the_field_kind_reaches_the_ledger() {
+        let en = crate::dict::Dictionary::from_words(["log"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "พำสนเรือ"]);
+        let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
+        e.field = Field::Search;
+        for c in "relogin".chars() {
+            e.key(c);
+        }
+        e.caret_moved_by_key();
+        assert!(e.ledger.cells().all(|(c, _)| c.field == Field::Search));
+    }
+
+    #[test]
+    fn a_question_mark_after_live_thai_is_kept_as_a_question_mark() {
+        // `ทำไม?` typed on the English layout: the keys `mew,?` read as the
+        // English word `mew` and a comma, and the Shift+/ after the live Thai
+        // gives ฦ. The word is Thai and the mark is the mark.
+        assert_eq!(type_blind("ทำไม? ", InputLayout::UsQwerty), "ทำไม? ");
+        assert_eq!(type_blind("ภาษาไทย: ", InputLayout::UsQwerty), "ภาษาไทย: ");
+    }
+
+    #[test]
     fn a_thai_word_on_the_english_layout_arrives_as_thai() {
         assert_eq!(type_blind("สวัสดีครับ ", InputLayout::UsQwerty), "สวัสดีครับ ");
     }
 
     #[test]
     fn a_word_that_only_starts_like_thai_goes_back_at_space() {
-        // `relogi` reads พำ + สน + เร, three known Thai words, so it turns
+        // `relogi` reads พำสนเร, a known Thai word, so it turns
         // Thai mid-word; with the `n` the reading ends in a stray vowel, and
         // at the space the keys go back to what was typed.
         let en = crate::dict::Dictionary::from_words(["log"]);
-        let th = crate::dict::Dictionary::from_words(["พำ", "สน", "เร", "เรือ"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "พำสนเรือ"]);
         let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
         for c in "relogi".chars() {
             e.key(c);
         }
         assert_eq!(e.screen, "พำสนเร");
-        // Still the start of a Thai word (เรือ), so it stays Thai while typed.
+        // Still the start of a Thai word (พำสนเรือ), so it stays Thai while typed.
         e.key('n');
         assert_eq!(e.screen, "พำสนเรื");
         e.boundary(' ');
@@ -561,7 +751,7 @@ mod tests {
         // Converted mid-word, then put back at the space: the keys come back
         // as they were shown.
         let en = crate::dict::Dictionary::from_words(["log"]);
-        let th = crate::dict::Dictionary::from_words(["พำ", "สน", "เร", "เรือ"]);
+        let th = crate::dict::Dictionary::from_words(["พำสนเร", "พำสนเรือ"]);
         let mut e = Engine::new(&en, &th, InputLayout::UsQwerty);
         e.caps = true;
         for c in "relogin".chars() {

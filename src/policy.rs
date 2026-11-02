@@ -90,6 +90,19 @@ pub fn set_fixes_addresses(on: bool) {
     FIXES_ADDRESSES.store(on, Ordering::Relaxed);
 }
 
+/// Short symbol-only text typed on the Thai keyboard (`-/` for 32, `-` for 3)
+/// read as the number. Off by default: such a token is also real Thai
+/// punctuation and a lone number-row letter.
+static READS_SHORT_NUMBERS: AtomicBool = AtomicBool::new(false);
+
+pub fn reads_short_numbers() -> bool {
+    READS_SHORT_NUMBERS.load(Ordering::Relaxed)
+}
+
+pub fn set_reads_short_numbers(on: bool) {
+    READS_SHORT_NUMBERS.store(on, Ordering::Relaxed);
+}
+
 /// Whether `hkl` is the keyboard whose table is in use: the Thai and the
 /// English keyboard last seen (both are noted from the keyboard in use).
 pub fn is_preferred_layout(hkl: u32) -> bool {
@@ -171,8 +184,14 @@ pub fn detect_token(
                 .filter(|d| !english::is_affixed(token, en) || th.contains(&d.corrected))
                 .or_else(|| us_layout_mixed_token(token, en, th))
                 .or_else(|| us_layout_tolerant_sentence(token, en, th))
+                .filter(|d| !weak_evidence(token, &d.corrected, en, th))
         }
         InputLayout::ThaiKedmanee => {
+            if reads_short_numbers() && !has_latin {
+                if let Some(d) = thai_layout_short_number(token, th) {
+                    return Some(d);
+                }
+            }
             if !has_thai || has_latin {
                 return None;
             }
@@ -180,9 +199,19 @@ pub fn detect_token(
             let is_thai = th.contains(token)
                 || segment::is_fully_known(token, th)
                 || crate::abbrev::reads_as_abbreviation(token, th);
-            (!is_thai && fixes_addresses())
-                .then(|| thai_layout_address(token).or_else(|| thai_layout_number(token, th)))
+            // A Thai word and then the letter a closing `:` or `?` gives on this
+            // layout: the mark, before the keys are read as an English word
+            // (`ทำไม?` has the keys `mew,?`, and `mew` is English).
+            (!is_thai)
+                .then(|| trailing_mark_after_word(token, th))
                 .flatten()
+                .or_else(|| {
+                    (!is_thai && fixes_addresses())
+                        .then(|| {
+                            thai_layout_address(token).or_else(|| thai_layout_number(token, th))
+                        })
+                        .flatten()
+                })
                 .or_else(|| detect::detect(token, en, th))
                 .or_else(|| thai_layout_compound(token, th))
                 .or_else(|| thai_layout_technical(token, en, th))
@@ -241,6 +270,30 @@ fn us_layout_letterless(token: &str, th: &Dictionary) -> Option<Detection> {
         confidence: Confidence::High,
         evidence: Evidence::ExactDictionary,
     })
+}
+
+/// A Thai reading too thin to rewrite what was typed. The keys are letters only
+/// and the reading is not itself a Thai word, and either every known piece of it
+/// is one or two letters long (`clau` reads แส+ฟี, `itme` ระ+ทำ: almost any run of
+/// letters reads as a few tiny Thai words) or the keys can still grow into an
+/// English word (`logi` on its way to `login`). Left as typed; a suggestion can
+/// still offer it. Keys with a punctuation key in them (`;` `,` `'` `[`) are
+/// strong evidence for Thai and never weak.
+fn weak_evidence(keys: &str, reading: &str, en: &Dictionary, th: &Dictionary) -> bool {
+    let keys = keys.trim();
+    if th.contains(reading.trim())
+        || keys.is_empty()
+        || !keys.chars().all(|c| c.is_ascii_alphabetic())
+    {
+        return false;
+    }
+    let longest_known = segment::segment(reading, th)
+        .iter()
+        .filter(|s| s.known)
+        .map(|s| s.text.chars().count())
+        .max()
+        .unwrap_or(0);
+    longest_known <= 2 || english::has_continuation(keys, en)
 }
 
 /// Punctuation the typist meant as ASCII even when it is typed next to a
@@ -375,6 +428,45 @@ fn thai_layout_number(token: &str, th: &Dictionary) -> Option<Detection> {
     })
 }
 
+/// Opt-in (see `reads_short_numbers`): one to three number-row keys typed on
+/// the Thai keyboard (`-/` is 32, `ๅ` is 1, `ภถ` is 45) read as the digits when
+/// the screen is not a Thai word. The keys must all give digits, so no Thai
+/// letter outside the number row is ever involved.
+fn thai_layout_short_number(token: &str, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    let keys = crate::layout::th_to_en(token);
+    let short = (1..=3).contains(&token.chars().count());
+    let digits = !keys.is_empty() && keys.chars().all(|c| c.is_ascii_digit());
+    let typed_as_is = token.chars().any(|c| c.is_ascii_digit());
+    let is_thai = th.contains(token) || segment::is_fully_known(token, th);
+    (short && digits && !typed_as_is && !is_thai).then_some(Detection {
+        corrected: keys,
+        confidence: Confidence::High,
+        evidence: Evidence::ExactDictionary,
+    })
+}
+
+/// A live Thai reading, still ours at the word's end, that ends in the letter a
+/// closing `:` or `?` gives (the keys end in that mark): the reading with the
+/// mark in its place (`ทำไมฦ` from the keys `mew,?` becomes `ทำไม?`), or `None`.
+pub fn closing_mark_for_live_run(keys: &str, rendered: &str, th: &Dictionary) -> Option<String> {
+    if !keys.ends_with([':', '?']) {
+        return None;
+    }
+    trailing_mark_after_word(rendered, th).map(|d| d.corrected)
+}
+
+/// [`thai_layout_trailing_mark`] when what comes before the mark's letter is
+/// itself a Thai dictionary word: strong enough to outrank the keys reading as
+/// an English word.
+fn trailing_mark_after_word(token: &str, th: &Dictionary) -> Option<Detection> {
+    let token = token.trim();
+    let last = token.chars().last()?;
+    th.contains(&token[..token.len() - last.len_utf8()])
+        .then(|| thai_layout_trailing_mark(token, th))
+        .flatten()
+}
+
 fn thai_layout_trailing_mark(token: &str, th: &Dictionary) -> Option<Detection> {
     let token = token.trim();
     let last = token.chars().last()?;
@@ -393,8 +485,13 @@ fn thai_layout_trailing_mark(token: &str, th: &Dictionary) -> Option<Detection> 
     // likely a slip of the finger as a colon.
     // A long phrase needs at least three known words: a single misspelt
     // word followed by a stray ซ must not read as a phrase and a colon.
+    // Two words are enough when the second is a long one (`คำสำคัญ`): two
+    // short words are what a misspelt word most often splits into.
     let head_is_thai = th.contains(head)
-        || (segment::is_fully_known(head, th) && segment::segment(head, th).len() >= 3);
+        || (segment::is_fully_known(head, th) && {
+            let words = segment::segment(head, th);
+            words.len() >= 3 || (words.len() == 2 && words[1].text.chars().count() >= 4)
+        });
     if head.chars().count() < 4
         || !head_is_thai
         || th.contains(token)
@@ -919,6 +1016,9 @@ pub fn shown_with_caps(keys: &str, caps: bool) -> String {
 /// are a known English word with a prefix or suffix ([`english::is_affixed`])
 /// unless the Thai itself is a dictionary word.
 pub fn revise_converted(token: &str, en: &Dictionary, th: &Dictionary) -> Option<Detection> {
+    if let Some(d) = trailing_mark_after_word(token, th) {
+        return Some(d);
+    }
     let raw = th_to_en(token.trim());
     // Trailing sentence punctuation may follow a word (`middleware,`), but on
     // this layout most ASCII punctuation is a Thai letter (`[` is บ, `;` is น),
@@ -937,7 +1037,7 @@ pub fn revise_converted(token: &str, en: &Dictionary, th: &Dictionary) -> Option
             evidence: Evidence::ExactDictionary,
         });
     }
-    thai_layout_mixed_token(token, en, th)
+    thai_layout_mixed_token(token, en, th).or_else(|| thai_layout_trailing_mark(token, th))
 }
 
 /// Learning is allowed only for ordinary text produced under exact US QWERTY
@@ -1195,9 +1295,13 @@ mod tests {
             fix("เขาไปโรงเรียนหรือไม่ฦ").as_deref(),
             Some("เขาไปโรงเรียนหรือไม่?")
         );
-        // Two known words before the ซ are not enough: a misspelt word often
-        // splits that way too (the audit's unknown-Thai budget holds the line).
-        assert_eq!(fix("คำสำคัญซ"), None);
+        // Two short known words before the ซ are not enough: a misspelt word
+        // often splits that way too (the audit's unknown-Thai budget holds the
+        // line). A long second word is: `คำสำคัญ:` is a heading.
+        assert_eq!(fix("คำสำคัญซ").as_deref(), Some("คำสำคัญ:"));
+        // The keys of ทำไม spell the English word `mew`, which must not win.
+        assert_eq!(fix("ทำไมฦ").as_deref(), Some("ทำไม?"));
+        assert_eq!(fix("ขอบคุณซ").as_deref(), Some("ขอบคุณ:"));
         // Real words that end in ซ stay.
         assert_eq!(fix("ก๊าซ"), None);
         // Not a known word before the ซ: no guess.
@@ -1416,6 +1520,41 @@ mod tests {
     }
 
     #[test]
+    fn a_name_or_typo_that_only_reads_as_short_thai_words_stays() {
+        // Half-typed names and typos of English words: their Thai reading is
+        // two or three tiny known words, which is what almost anything reads as.
+        let (en, th) = (crate::dict::english(), crate::dict::thai());
+        let on_us = |t: &str| detect_token(t, InputLayout::UsQwerty, en, th).map(|d| d.corrected);
+        for typed in ["clau", "figm", "logi", "itme", "wrok", "Makro"] {
+            assert_eq!(on_us(typed), None, "{typed}");
+        }
+        // Thai that is a word, or segments into words longer than two letters,
+        // still comes back.
+        for thai in ["สวัสดี", "ขอบคุณ", "ภาษาไทย", "คำสำคัญ", "ทำไม", "ประเทศไทย"]
+        {
+            let keys = crate::layout::th_to_en(thai);
+            assert_eq!(on_us(&keys).as_deref(), Some(thai), "{keys}");
+        }
+    }
+
+    #[test]
+    fn a_closing_colon_after_live_thai_comes_back() {
+        // Typed on the English layout, the heading turns Thai while it is typed
+        // and Windows then gives ซ for the Shift+; that follows.
+        let (en, th) = (crate::dict::english(), crate::dict::thai());
+        let back = |t: &str| revise_converted(t, en, th).map(|d| d.corrected);
+        assert_eq!(back("คำสำคัญซ").as_deref(), Some("คำสำคัญ:"));
+        assert_eq!(back("ทำไมฦ").as_deref(), Some("ทำไม?"));
+        assert_eq!(
+            back("เขาไปโรงเรียนหรือไม่ฦ").as_deref(),
+            Some("เขาไปโรงเรียนหรือไม่?")
+        );
+        // A real word ending in ซ, and a head that is not Thai, get no colon.
+        assert_ne!(back("ก๊าซ").as_deref(), Some("ก๊า:"));
+        assert_ne!(back("กขฃซ").as_deref(), Some("กขฃ:"));
+    }
+
+    #[test]
     fn thai_on_the_english_layout_keeps_punctuation_typed_in_english() {
         // `:` typed where it belongs after a Thai word typed on the wrong
         // layout, and Kedmanee's own `"` (the W key).
@@ -1464,6 +1603,14 @@ mod tests {
             "คมขุ".to_string(),
         ] {
             assert!(thai_layout_number(&word, th).is_none(), "{word}");
+        }
+        // The opt-in short-number reading leaves them alone too.
+        for word in ["ภาค", "จุด", "คุมภ", "คมขุ", "ที่"] {
+            assert!(thai_layout_short_number(word, th).is_none(), "{word}");
+        }
+        for (typed, digits) in [("-/", "32"), ("-", "3"), ("ถ", "5"), ("ภถ", "45")] {
+            let d = thai_layout_short_number(typed, th);
+            assert_eq!(d.map(|d| d.corrected).as_deref(), Some(digits), "{typed}");
         }
         // No Thai dictionary word reads as an address or a number (the
         // other Thai keyboards: examples/false_positive_audit.rs).

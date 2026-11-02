@@ -50,6 +50,39 @@ pub fn app_event(exe: &str, event: righttype::app_quality::Event) {
     }
 }
 
+/// What became of each rewrite, by cause, this session (memory only, no text).
+static LEDGER: Mutex<Option<righttype::ledger::Ledger>> = Mutex::new(None);
+
+/// Count a rewrite. Called from the keyboard hook, so it never waits: if the
+/// ledger is busy (the report is being written) the count is skipped.
+pub fn ledger_rewrite(cause: righttype::ledger::Cause) {
+    if let Ok(mut l) = LEDGER.try_lock() {
+        l.get_or_insert_with(Default::default)
+            .record(cause, righttype::ledger::Outcome::Kept);
+    }
+}
+
+/// A counted rewrite turned out otherwise (undone, caret moved away).
+pub fn ledger_change(
+    cause: righttype::ledger::Cause,
+    from: righttype::ledger::Outcome,
+    to: righttype::ledger::Outcome,
+) {
+    if let Ok(mut l) = LEDGER.try_lock() {
+        l.get_or_insert_with(Default::default)
+            .change(cause, from, to);
+    }
+}
+
+/// The ledger as report lines: names and numbers only.
+pub fn ledger_lines() -> Vec<String> {
+    LEDGER
+        .lock()
+        .ok()
+        .and_then(|l| l.as_ref().map(|l| l.lines()))
+        .unwrap_or_default()
+}
+
 pub fn app_rows() -> Vec<(String, righttype::app_quality::Quality)> {
     QUALITY
         .lock()

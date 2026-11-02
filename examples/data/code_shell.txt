@@ -1,0 +1,41 @@
+# Code identifiers and shell commands, typed on the US layout.
+git status
+git commit -m fix
+git checkout -b feature/login
+git push origin main
+cargo build --release
+cargo test --all-targets
+npm install
+npm run dev
+docker ps -a
+docker compose up -d
+ls -la
+cd ..
+grep -rn TODO src
+pip install requests
+python -m venv .venv
+kubectl get pods
+curl -s localhost:8080
+ssh user@host
+chmod +x run.sh
+get_user_name
+getUserName
+user_id
+MAX_RETRY_COUNT
+isEmpty
+parseInt
+toString
+HashMap
+Vec<String>
+println!
+self.value
+const x = 5;
+let mut count = 0;
+for i in range(10):
+def main():
+fn main()
+if (x == y)
+return None
+import numpy as np
+SELECT name FROM users
+tmp_buf

@@ -1,0 +1,21 @@
+# Correct English sentences, typed on the US layout.
+The quick brown fox jumps over the lazy dog.
+Please send me the report by Friday.
+I think the meeting went well today.
+We are planning a trip to the mountains next month.
+The new update fixes several bugs and improves performance.
+Could you review my pull request when you have a moment?
+She reads a book every week and writes notes about it.
+The train to the airport leaves at half past nine.
+Our team shipped the feature ahead of schedule.
+He asked whether the restaurant takes reservations.
+Remember to back up your files before upgrading.
+The weather was warm and the streets were quiet.
+This function returns an error when the input is empty.
+Thank you for your patience while we investigate the issue.
+They decided to try a different approach to the problem.
+The library opens early on weekdays.
+I will call you after the interview.
+Many people prefer to work from home on Fridays.
+The documentation explains how to configure the server.
+It is important to test the code before releasing it.

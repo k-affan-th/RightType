@@ -1,0 +1,25 @@
+# @mentions and #tags, typed on the US layout.
+@john
+@sarah_k
+@dev_team
+@everyone
+@mike thanks
+@anna can you look
+@support help
+#python
+#rustlang
+#webdev
+#blessed
+#throwback
+#tbt
+#ootd
+#coding
+#100daysofcode
+#bangkok
+#foodie
+thanks @john #python
+cc @sarah_k @mike
+#fyi @team
+@bot ping
+@admin please check
+#travel #photography

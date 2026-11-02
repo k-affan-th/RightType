@@ -6,6 +6,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Added
 
+- `hook-timing`, a cargo feature that is off in every release: it times the keyboard
+  hook per key (durations only, nothing about what was typed) so a slow release
+  shows up as numbers. `tools/hook_timing.py` summarises it; see
+  docs/HOOK_TIMING.md.
 - English keyboards **Dvorak** and **Colemak**: words typed on the wrong
   language are fixed in both directions, live and in Fix text. Any country's
   English on the US or UK keyboard is recognised from its Windows layout file.
@@ -24,6 +28,25 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 
+- `ทำไม?` typed on the English layout came out `ทำไมฦ`: the keys of ทำไม (`mew,`)
+  are an English word, so the closing mark was never put right. A Thai word followed by
+  the letter a closing `:` or `?` gives now keeps the mark, also for a word still shown
+  as Thai while it is typed.
+- A half-typed name or a typo of an English word is no longer turned into Thai.
+  `clau` (on its way to Claude), `figm`, `logi` and `itme` read as two or three tiny
+  Thai words, which almost any run of letters does; a search box that searches as
+  you type, or one ended with Enter, got Thai it could not find. Letters-only text
+  whose Thai reading is not itself a word, and whose known pieces are all one or two
+  letters long (or that can still grow into an English word), is left as typed.
+  Across 2,686 half-typed names the changes went from 13 to 0, and English typos
+  that turn Thai at the space from 2.49% to 0.73%. Thai typed on the wrong layout
+  still comes back: single words are unchanged, and 20 in 100,000 phrases of common
+  words are now left as typed.
+- A colon typed right after a heading made of two Thai words, the second a long
+  one (`คำสำคัญ:`), now comes back as `:` instead of staying `ซ`. Two short words
+  before the ซ are still left alone, as a misspelt word splits that way too.
+  This also holds when the heading is typed on the English layout and turns Thai
+  while it is typed.
 - The list at the text cursor (Shift twice), the app's shortcut list and the list
   for a held key now close when you click anywhere outside them. They never take
   the keyboard focus, so a click elsewhere in the same window used to leave one
