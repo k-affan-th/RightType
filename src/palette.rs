@@ -15,6 +15,7 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 use zeroize::Zeroize;
 
 use native_windows_gui as nwg;
+use righttype::capskey::CapsMode;
 use righttype::i18n::{tr, trf, T};
 use righttype::per_app::AppMode;
 use windows::Win32::Foundation::{HWND, POINT, RECT};
@@ -1084,7 +1085,7 @@ fn commands(app: Option<&str>, words: &[String], selection: Option<&str>) -> Vec
         (T::PaletteHyphens, hook::fixes_hyphens(), Command::Hyphens),
         (
             T::PaletteCapsSwitch,
-            hook::caps_switches_language(),
+            hook::caps_mode() != CapsMode::Off,
             Command::CapsSwitch,
         ),
         (
@@ -1640,8 +1641,12 @@ fn run(command: Command, app: Option<&str>) {
             config::persist();
         }
         Command::CapsSwitch => {
-            let on = !hook::caps_switches_language();
-            hook::set_caps_switches_language(on);
+            let on = hook::caps_mode() == CapsMode::Off;
+            hook::set_caps_mode(if on {
+                CapsMode::TapSwitches
+            } else {
+                CapsMode::Off
+            });
             config::persist();
             overlay::show(tr(if on {
                 T::ToastCapsSwitchOn

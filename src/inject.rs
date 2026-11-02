@@ -26,8 +26,9 @@ use std::mem::size_of;
 use std::sync::atomic::Ordering;
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-    KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_BACK, VK_DELETE, VK_SPACE,
+    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+    KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_BACK, VK_DELETE,
+    VK_SPACE,
 };
 
 use crate::hook::{held_modifiers, INJECTING, INJECT_TAG};
@@ -318,6 +319,28 @@ pub unsafe fn release_keys(keys: &[u16]) {
 /// Calls `SendInput`.
 pub unsafe fn toggle_capslock() {
     let _ = send(&[key(0x14, false), key(0x14, true)]);
+}
+
+/// Type `vk` once more (down, then up, in one batch), tagged as ours so the
+/// hook lets it through: a key pressed during a CapsLock tap, typed again
+/// once the layout has switched. Modifiers the typist holds apply as usual.
+///
+/// # Safety
+/// Calls `SendInput`.
+pub unsafe fn replay_key(vk: u16) -> bool {
+    let mut down = key(vk, false);
+    if is_extended(vk) {
+        down.Anonymous.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
+    }
+    let mut up = down;
+    up.Anonymous.ki.dwFlags |= KEYEVENTF_KEYUP;
+    send(&[down, up])
+}
+
+/// Keys that need the extended flag to be told apart from the numeric
+/// keypad's (arrows, the Insert/Home/PgUp block, Divide, Apps).
+fn is_extended(vk: u16) -> bool {
+    matches!(vk, 0x21..=0x28 | 0x2D | 0x2E | 0x6F | 0x5D)
 }
 
 /// Debug e2e builds: a switch the test harness sets. Always off in release.

@@ -2323,7 +2323,13 @@ impl Surface {
             }
             Kind::Segment { icon } => {
                 let pill = inset(rc, px(3));
-                if checked {
+                if disabled {
+                    // Greyed out: the choice shows but cannot be changed.
+                    if checked {
+                        g.fill_round(pill, radius, p.button);
+                    }
+                    label_with_icon(hdc, &f, &label, *icon, pill, f.body, p.text_dim);
+                } else if checked {
                     g.fill_round(pill, radius, p.accent);
                     label_with_icon(hdc, &f, &label, *icon, pill, f.body_strong, p.on_accent);
                 } else {
@@ -2994,6 +3000,21 @@ impl Surface {
 
     pub fn text_of(&self, id: u16) -> String {
         window_text(self.hwnd_of(id))
+    }
+
+    /// Enable or grey out a control.
+    pub fn set_enabled(&self, id: u16, on: bool) {
+        unsafe {
+            let _ = windows::Win32::UI::Input::KeyboardAndMouse::EnableWindow(self.hwnd_of(id), on);
+            let _ = InvalidateRect(self.hwnd_of(id), None, true);
+        }
+    }
+
+    /// Show or hide a control (a page change shows them all again).
+    pub fn set_shown(&self, id: u16, on: bool) {
+        unsafe {
+            let _ = ShowWindow(self.hwnd_of(id), if on { SW_SHOW } else { SW_HIDE });
+        }
     }
 
     pub fn set_text(&self, id: u16, s: &str) {

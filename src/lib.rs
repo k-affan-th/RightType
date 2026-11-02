@@ -20,6 +20,7 @@
 //! - [`diag`] — recent decisions, with no typed text, for a problem report.
 //! - [`code`] — Code mode: what to fix in a code editor.
 //! - [`buffer`] — current-word input buffer (zeroized on every word boundary).
+//! - [`capskey`] — CapsLock as a language key: tap, hold and rollover state machine.
 //! - [`segment`] — Thai word segmentation (maximal matching) for space-less Thai.
 //! - [`motion`] — how the overlay pill fades and rises in and out.
 //! - [`render`] — reconciling on-screen text with the run's current best reading.
@@ -36,6 +37,7 @@ pub mod app_quality;
 pub mod atcaret;
 pub mod breaks;
 pub mod buffer;
+pub mod capskey;
 pub mod chars;
 pub mod charsets;
 pub mod chatter;
