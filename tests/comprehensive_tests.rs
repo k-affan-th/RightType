@@ -494,16 +494,10 @@ fn english_typed_on_the_english_layout_is_never_eaten_mid_word() {
 #[test]
 fn a_token_that_can_still_grow_into_english_is_held_not_committed() {
     // `diffe` -> `different`, `wri` -> `write`: a live English continuation
-    // exists, so the answer is never Commit. Ambiguous is the guard in
-    // `live_decision`; None is the Thai reading being too thin to detect at all
-    // (`weak_evidence`), which comes first for keys whose Thai is tiny words.
-    for pending in ["diffe", "wri", "orde"] {
-        assert_ne!(
-            live_decision_for(pending),
-            policy::LiveDecision::Commit,
-            "{pending:?} can still grow into English"
-        );
-    }
+    // exists, so the only non-destructive answer is Ambiguous.
+    assert_eq!(live_decision_for("diffe"), policy::LiveDecision::Ambiguous);
+    assert_eq!(live_decision_for("wri"), policy::LiveDecision::Ambiguous);
+    assert_eq!(live_decision_for("orde"), policy::LiveDecision::Ambiguous);
 }
 
 #[test]
@@ -591,9 +585,11 @@ fn a_mistyped_english_word_is_put_back_when_the_thai_reading_dies() {
     // earlier still: `ada` + `v…` reads as a compound in progress, D-009.)
     for typo in ["lsiten", "wroking", "dfiferent", "soemone"] {
         // Horizon 1 is the D-007 one-shot commit: cemented, unrecoverable.
-        // Some of these typos no longer reach it (`weak_evidence` leaves a
-        // letters-only reading of tiny Thai words alone), so only the
-        // revisable window below is asserted for all of them.
+        assert_ne!(
+            owned_run_screen(typo, 1),
+            typo,
+            "{typo:?} should be mangled by a one-shot commit"
+        );
         // With a revisable window the next keystroke kills the Thai reading and
         // the run converges on what was actually typed.
         assert_eq!(

@@ -143,9 +143,11 @@ fn prefixes(report: &mut Report) {
         }
     }
     println!("Name prefixes typed on the US layout: {total}");
-    for ((label, _), n) in ends.iter().zip(changed) {
-        // Floor 0: a half-typed name must never be rewritten.
-        report.count(&format!("name prefix changed at {label}"), n, 0);
+    // Without weak_evidence (reverted for 2.6.8 to keep live Thai responsiveness),
+    // 13 prefixes change at Enter/Space/Tab and 2 at caret move.
+    let floors = [13usize, 13, 13, 2];
+    for (((label, _), n), floor) in ends.iter().zip(changed).zip(floors) {
+        report.count(&format!("name prefix changed at {label}"), n, floor);
     }
 }
 
@@ -197,14 +199,14 @@ fn typos(report: &mut Report) {
         }
     }
     println!("English typos typed on the US layout (not words themselves): {total}");
-    // Floors set in the CI-gate task: HEAD measured 0.73% and 1.30%.
+    // Floors set for 2.6.8 (without weak_evidence): HEAD measured 2.49% and 3.74%.
     report.pct(
         "English typos turned Thai at the space",
         at_space,
         total,
-        0.80,
+        2.55,
     );
-    report.pct("English typos showing Thai mid-word", mid_word, total, 1.40);
+    report.pct("English typos showing Thai mid-word", mid_word, total, 3.80);
 }
 
 /// One text category: its corpus, the layout it is typed on, and the floors.

@@ -395,6 +395,18 @@ pub fn is_crash(code: u32) -> bool {
     code >= 0xC000_0000 || code == 101
 }
 
+/// Tell Windows Restart Manager to relaunch RightType when an update (MSIX /
+/// Microsoft Store / installer) closes it, or after an OS update reboot.
+/// Crashes are handled by our own watchdog (RESTART_NO_CRASH).
+pub fn register_restart_on_update() {
+    use windows::Win32::System::Recovery::{
+        RegisterApplicationRestart, RESTART_NO_CRASH, RESTART_NO_HANG,
+    };
+    unsafe {
+        let _ = RegisterApplicationRestart(PCWSTR::null(), RESTART_NO_CRASH | RESTART_NO_HANG);
+    }
+}
+
 /// Start the watchdog for this process (Settings → restart after a crash).
 /// `restarts` is how many crash restarts led to this run.
 pub fn start_watchdog(restarts: u32) {

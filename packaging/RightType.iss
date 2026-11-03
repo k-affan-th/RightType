@@ -6,7 +6,7 @@
 
 #define MyAppName "RightType"
 #ifndef MyAppVersion
-  #define MyAppVersion "2.6.7"
+  #define MyAppVersion "2.6.8"
 #endif
 #define MyAppExe "righttype.exe"
 ; x64 (default) or arm64; build_release.ps1 -Arch passes it, with where the exe is.
@@ -21,9 +21,9 @@
 AppId={{8C6B9A2E-52C1-4E63-9B7A-7C1F4A2B9D33}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-; Setup (and the uninstaller) wait for RightType to be closed rather than kill it.
-AppMutex=Local\RightType.Running
-CloseApplications=no
+; Restart Manager closes a running RightType cleanly and relaunches the new version.
+CloseApplications=yes
+RestartApplications=yes
 DefaultDirName={autopf}\RightType
 PrivilegesRequired=lowest
 OutputDir=..\dist

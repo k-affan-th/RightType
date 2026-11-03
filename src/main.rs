@@ -128,6 +128,7 @@ fn main() {
         instance::Start::Run { replaced } => replaced,
     };
     instance::set_notice(replaced, restarts);
+    instance::register_restart_on_update();
     if config::load().restart_after_crash && instance::watchdog_allowed() {
         instance::start_watchdog(restarts.unwrap_or(0));
     }

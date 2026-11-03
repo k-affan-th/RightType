@@ -660,6 +660,16 @@ pub fn run() {
         }
         // The session retry timer doubles as a cheap refresh, so the tooltip
         // follows hotkey and Settings changes without waiting for the menu.
+        if msg == WM_QUERYENDSESSION {
+            crate::instance::register_restart_on_update();
+            return Some(1);
+        }
+        if msg == WM_ENDSESSION && w != 0 {
+            crate::habits::save();
+            crate::stats::save();
+            nwg::stop_thread_dispatch();
+            return Some(0);
+        }
         if msg == WM_TIMER {
             sync_state(&ui_t);
             crate::rest::tick();
@@ -710,6 +720,8 @@ pub fn run() {
     nwg::unbind_event_handler(&handler);
 }
 
+const WM_QUERYENDSESSION: u32 = 0x0011;
+const WM_ENDSESSION: u32 = 0x0016;
 const WM_TIMER: u32 = 0x0113;
 
 /// Posted to the tray window to have its thread (the one with the windows)

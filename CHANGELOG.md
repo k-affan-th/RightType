@@ -4,6 +4,13 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [2.6.8] — 2026-11-03
+
+### Fixed
+
+- Restore 2.6.6 live Thai typing responsiveness: letters-only Thai words and phrases typed on the English layout are converted immediately again without the weak_evidence hold introduced in 2.6.7.
+- Automatically relaunch RightType after an update (Microsoft Store / MSIX or installer) closes the running instance (RegisterApplicationRestart and WM_QUERYENDSESSION/WM_ENDSESSION).
+
 ## [2.6.7] — 2026-11-02
 
 ### Added
